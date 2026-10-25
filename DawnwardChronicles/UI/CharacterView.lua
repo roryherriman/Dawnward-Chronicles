@@ -165,12 +165,138 @@ local function create(parent)
 	end
 
 	function section:Refresh(view)
+		self.theme = view.theme
+		if self.editor:IsShown() then
+			self.ThemeEditor(view.theme)
+			return
+		end
 		self:RenderList(view)
 	end
 
 	section.getRow = getRow
+	CharacterView.AttachEditing(section)
 	CharacterView.section = section
 	return section
+end
+
+--- Editing ---------------------------------------------------------------------
+
+--- Adds per-field Edit and visibility buttons and the field editor.
+function CharacterView.AttachEditing(section)
+	local f = section.frame
+	local Actions = ns.Actions
+
+	function section.decorateRow(row)
+		row.vis = Widgets.VisibilityButton(row, function(level)
+			local _, message = Actions.SetFieldVisibility(ns.ctx, row.spec.field.key, level)
+			MainWindow.SetStatus(message)
+			MainWindow.Refresh()
+		end)
+		row.vis:SetPoint("TOPRIGHT", -2, -2)
+		row.edit = Widgets.Button(row, "Edit", EDIT_WIDTH - 4, 20)
+		row.edit:SetPoint("RIGHT", row.vis, "LEFT", -4, 0)
+		row.edit:SetScript("OnClick", function() section:OpenEditor(row.spec.field) end)
+	end
+
+	-- Fields always offer Edit; visibility only once a value exists.
+	function section.updateFieldActions(row, spec)
+		row.edit:Show()
+		if spec.entry then
+			row.vis:Show()
+			row.vis:SetLevel(spec.entry.visibility)
+		else
+			row.vis:Hide()
+		end
+	end
+
+	local editor = CreateFrame("Frame", nil, f)
+	editor:SetAllPoints(f)
+	editor:Hide()
+	section.editor = editor
+
+	editor.heading = Widgets.Label(editor, "GameFontNormalLarge")
+	editor.heading:SetPoint("TOPLEFT", INSET, -10)
+	editor.hint = Widgets.Label(editor, "GameFontHighlightSmall", true)
+	editor.hint:SetPoint("TOPLEFT", INSET, -36)
+	editor.hint:SetWidth(540)
+
+	editor.line = Widgets.EditLine(editor, 101)
+	editor.line:SetPoint("TOPLEFT", INSET + 6, -64)
+	editor.line:SetPoint("TOPRIGHT", -INSET, -64)
+	editor.area = Widgets.TextArea(editor, 2001)
+	editor.area.frame:SetPoint("TOPLEFT", INSET, -64)
+	editor.area.frame:SetPoint("BOTTOMRIGHT", -INSET, 44)
+
+	editor.cancel = Widgets.Button(editor, "Cancel", 90, 22)
+	editor.cancel:SetPoint("BOTTOMRIGHT", -INSET, 12)
+	editor.save = Widgets.Button(editor, "Save", 90, 22)
+	editor.save:SetPoint("RIGHT", editor.cancel, "LEFT", -6, 0)
+	editor.clear = Widgets.Button(editor, "Clear", 90, 22)
+	editor.clear:SetPoint("BOTTOMLEFT", INSET, 12)
+
+	function section.ThemeEditor(theme)
+		Widgets.TextColor(editor.heading, theme.accent)
+		Widgets.TextColor(editor.hint, theme.muted)
+		Widgets.SetColor(editor.area.well, { 0, 0, 0 })
+		editor.area.edit:SetTextColor(theme.text[1], theme.text[2], theme.text[3])
+		editor.line:SetTextColor(theme.text[1], theme.text[2], theme.text[3])
+	end
+
+	local function input()
+		return editor.field.kind == "long" and editor.area.edit or editor.line
+	end
+
+	function section:OpenEditor(field)
+		local char = Actions.Character(ns.ctx)
+		local entry = char and char.fields[field.key]
+		editor.field = field
+		editor.heading:SetText(field.label)
+		editor.hint:SetText(field.kind == "long"
+			and "A few sentences are plenty. New fields start private; change visibility from the list."
+			or "One line. New fields start private; change visibility from the list.")
+		local long = field.kind == "long"
+		editor.area.frame:SetShown(long)
+		editor.line:SetShown(not long)
+		editor.clear:SetShown(entry ~= nil)
+		input():SetText(entry and entry.value or "")
+		section.scroll:Hide()
+		editor:Show()
+		if self.theme then
+			self.ThemeEditor(self.theme)
+		end
+		input():SetFocus()
+		MainWindow.SetStatus("")
+	end
+
+	function section.CloseEditor()
+		editor:Hide()
+		editor.line:ClearFocus()
+		editor.area.edit:ClearFocus()
+		section.scroll:Show()
+		MainWindow.Refresh()
+	end
+
+	function section.SaveEditor()
+		local ok, message = Actions.SetField(ns.ctx, editor.field.key, input():GetText())
+		if ok then
+			section.CloseEditor()
+		end
+		MainWindow.SetStatus(message)
+	end
+
+	function section.ConfirmClear()
+		local field = editor.field
+		Widgets.Confirm("Clear " .. field.label .. "?\n\nThis removes the saved value.", "Clear", function()
+			local _, message = Actions.ClearField(ns.ctx, field.key)
+			section.CloseEditor()
+			MainWindow.SetStatus(message)
+		end)
+	end
+
+	editor.save:SetScript("OnClick", section.SaveEditor)
+	editor.cancel:SetScript("OnClick", section.CloseEditor)
+	editor.clear:SetScript("OnClick", section.ConfirmClear)
+	editor.line:SetScript("OnEnterPressed", section.SaveEditor)
 end
 
 MainWindow.RegisterSection({ id = "character", label = "Character", order = 2, create = create })
