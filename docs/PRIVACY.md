@@ -1,0 +1,35 @@
+# Privacy model
+
+A character's history is the player's creative work. Some of it is meant for other players to see, and much of it is not. Dawnward keeps a hard line between **private character history** and **public profile information**.
+
+## Visibility levels
+
+Every fact Dawnward stores (a family member, a backstory paragraph, a journal entry, a trait reason) has one visibility level:
+
+| Level | Inside Dawnward | Shareable export | TRP3 | Default for |
+|---|---|---|---|---|
+| `public` | ✅ | ✅ | ✅ (when sync is enabled) | Nothing. Making something public is always an explicit choice. |
+| `private` | ✅ | ❌, unless "include private" is ticked for a personal backup | ❌ | Backstory, family, journal |
+| `secret` | ✅ | ❌, unless "include secrets" is ticked separately, with a warning | ❌ **never** | Facts the player marks as secret |
+
+## The public projection
+
+The **only** way character data leaves the core is `Projection.GetPublic(characterKey)`. It returns a newly built, deep-copied table that contains `public` facts only. The TRP3 integration and the shareable export both work from this projection and never see the core database.
+
+Tests will check that:
+
+- `private` and `secret` values never appear in any projection or TRP3 payload;
+- changing the projection cannot change the core data;
+- marking a fact as `secret` removes it from the very next projection.
+
+## What Dawnward never does
+
+- It never sends character data over the network. Only TRP3 (or MSP) transmits a profile, and only what TRP3 already holds.
+- It never reads other players' private data. Reading other players' TRP3 profiles is out of scope.
+- It never stores account names, BattleTags, real names or email addresses.
+
+## Development data
+
+Real character data used during development, such as Kyssarra Dawnward's detailed backstory, lives in `private/`, which git ignores.
+
+You can also list private terms (NPC names, family names) one per line in `private/hygiene-denylist.txt`. `tools/check.py` then fails if any file that could be committed contains one of them.
