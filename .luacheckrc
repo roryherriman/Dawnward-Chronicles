@@ -49,4 +49,5 @@ files["DawnwardChronicles/Integrations/"] = {
 }
 
 -- Tests run outside WoW and may use the full standard library.
-files["tests/"] = { read_globals = { "arg", "jit", "setfenv" } }
+-- Fakes mirror method-style APIs, so an unused `self` is expected there.
+files["tests/"] = { read_globals = { "arg", "jit", "setfenv" }, self = false }
