@@ -44,6 +44,30 @@ Migrations.steps[1] = function(db)
 	return db
 end
 
+-- 2 -> 3 (v0.3): add empty character foundations to every character
+-- (including import backups). Only empty containers are added; everything
+-- that already exists is left exactly as it was.
+Migrations.steps[2] = function(db)
+	for _, mapName in ipairs({ "characters", "importBackups" }) do
+		local map = db[mapName]
+		if type(map) == "table" then
+			for _, char in pairs(map) do
+				if type(char) == "table" then
+					if type(char.sources) ~= "table" then
+						char.sources = Schema.NewSources()
+					end
+					for _, key in ipairs({ "interpretations", "interpretationKeys", "facts", "wizard" }) do
+						if type(char[key]) ~= "table" then
+							char[key] = {}
+						end
+					end
+				end
+			end
+		end
+	end
+	return db
+end
+
 local function readOnly(reason, version)
 	return Schema.NewDatabase(), { status = "readOnly", reason = reason, from = version, notes = {} }
 end

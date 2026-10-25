@@ -21,23 +21,8 @@ Transfer.KIND_SHARE = "share"
 local KIND_CODE = { backup = "B", share = "S" }
 local CODE_KIND = { B = "backup", S = "share" }
 
---- Adler-32 as 8 hex digits. Formatted as two halves because %x on numbers
--- above 2^31 is not portable across Lua 5.1 builds.
-function Transfer.Checksum(text)
-	local a, b = 1, 0
-	local len = #text
-	local i = 1
-	while i <= len do
-		local chunkEnd = math.min(i + 3999, len)
-		local bytes = { text:byte(i, chunkEnd) }
-		for j = 1, #bytes do
-			a = (a + bytes[j]) % 65521
-			b = (b + a) % 65521
-		end
-		i = chunkEnd + 1
-	end
-	return string.format("%04x%04x", b, a)
-end
+-- Kept as an alias: the checksum moved to Util so biography hashes can share it.
+Transfer.Checksum = Util.Checksum
 
 --- opts: { includeSecrets = bool, addonVersion = string }
 function Transfer.Export(char, kind, opts)

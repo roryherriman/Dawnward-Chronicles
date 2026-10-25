@@ -39,7 +39,7 @@ return function(t, expect)
 			local db, info = Migrations.Load(raw)
 			expect.equal(info.status, "migrated")
 			expect.equal(info.from, 1)
-			expect.equal(db.schemaVersion, 2)
+			expect.equal(db.schemaVersion, Schema.VERSION)
 			expect.deepEqual(raw, before, "the saved v1 table is never modified")
 
 			local char = db.characters["Aelin-Realm"]
@@ -76,8 +76,8 @@ return function(t, expect)
 			expect.deepEqual(thrice, twice)
 		end)
 
-		t:it("treats schema 3 data as newer and leaves it alone", function()
-			local raw = { schemaVersion = 3, characters = {} }
+		t:it("treats data from a newer schema as newer and leaves it alone", function()
+			local raw = { schemaVersion = Schema.VERSION + 1, characters = {} }
 			local _, info = Migrations.Load(raw)
 			expect.equal(info.status, "readOnly")
 		end)
