@@ -59,13 +59,46 @@ This checklist will be filled in for each release from v0.1 onward. For each run
 - the date;
 - pass, fail or n/a for each item.
 
-v0.1 items (draft):
+### v0.1 checklist
 
-- [ ] Addon appears in the AddOns list and loads without Lua errors (`/console scriptErrors 1`)
-- [ ] `/dawnward` opens, creates and edits a character profile and family history entries
-- [ ] Data survives `/reload` and relog. `schemaVersion` is present.
-- [ ] Export produces text that imports back identically into a fresh character
-- [ ] Simulation mode writes only to `DawnwardChroniclesSimDB`, and turning it off restores real data
-- [ ] With TRP3 installed: the status shows the version, the active profile name, and "default profile" correctly. Nothing in TRP3 changes.
-- [ ] Without TRP3: no errors, and the integration shows as unavailable
-- [ ] In combat: no taint errors and no popups
+**Setup**
+
+1. Run `python tools/package.py`.
+2. Extract `dist/DawnwardChronicles-0.1.0.zip` into `World of Warcraft\_classic_era_\Interface\AddOns\`, so that you have `AddOns\DawnwardChronicles\DawnwardChronicles.toc`.
+3. Turn on Lua errors with `/console scriptErrors 1`.
+4. Use a test character if possible.
+
+**Record before you start**
+
+- `/dump GetBuildInfo()`. The 4th value is the interface number. The TOC says `11509`; note the real value.
+- The TRP3 version shown in its settings.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 1 | Open the AddOns list at character select | Dawnward Chronicles is listed and not marked out of date (if it is, note the interface number) | |
+| 2 | Log in | No Lua errors. No chat messages from Dawnward unless something needed repairing. | |
+| 3 | `/dawnward` | Status: version 0.1.0, "WoW Classic Era", real data, "Profile: none yet", a TRP3 line | |
+| 4 | `/dawnward set name <name>`, then `/dawnward show` | Name shown as `[private]` | |
+| 5 | `/dawnward vis name public`, `/dawnward set summary Some text`, `/dawnward show public` | Only the name is listed | |
+| 6 | `/dawnward family add mother Test Name`, `/dawnward family set 1 status living`, `/dawnward family list` | `#1 mother: Test Name (living) [private]` | |
+| 7 | `/dawnward history add Joined the guard`, `/dawnward history set 2 when Year 3` | Listed as `#2 Year 3: Joined the guard` | |
+| 8 | `/dawnward family remove 1` | Asks for `confirm` and nothing is removed. Then `... remove 1 confirm` removes it. | |
+| 9 | `/reload`, then `/dawnward show` | Everything is still there | |
+| 10 | Log out fully and back in, then `/dawnward show` | Everything is still there | |
+| 11 | `/dawnward export backup` | A window opens with selected text starting `!DWC1!B!`. Ctrl+C copies it. Typing in the box doesn't change it. Escape closes it. | |
+| 12 | `/dawnward set name Changed`, `/dawnward import`, paste, **Check** | Shows "Ready to import" with your original name. The Import button appears. | |
+| 13 | Press **Import**, then `/dawnward show` | The original name is back | |
+| 14 | `/dawnward import undo`, then `/dawnward show` | Shows "Changed" again. Run undo once more to swap back. | |
+| 15 | Paste a damaged export (delete a few characters), then **Check** | Rejected with a checksum message. No Import button. | |
+| 16 | `/dawnward sim on`, `/dawnward set name Sim`, `/dawnward sim off`, `/dawnward show` | The real name is unchanged | |
+| 17 | `/dawnward sim reset confirm` | Reports that simulation data was wiped. Real data is unchanged. | |
+| 18 | With TRP3 enabled: `/dawnward trp3` | Shows `3.4.1`, "source audited, not yet tested in game", the active TRP3 profile name, and flags the TRP3 default profile if it is active | |
+| 19 | Open TRP3's own profile pages after steps 3–18 | Nothing in TRP3 has changed | |
+| 20 | Disable TRP3, `/reload`, `/dawnward trp3` | "installed but not loaded" (or "not installed"). No errors. | |
+| 21 | Fight a mob while using a few `/dawnward` commands and the export window | No errors and no "action blocked" messages | |
+| 22 | `/dwc status` | Same output as `/dawnward` | |
+
+**Notes for the tester**
+
+- TRP3 rewrites its own saved file at every logout. For example, it regenerates the default profile ID at each login. So comparing TRP3's SavedVariables file before and after is not a valid test for step 19. Check TRP3's pages in game instead.
+- Dawnward's data is in `WTF\Account\<account>\SavedVariables\DawnwardChronicles.lua`. Don't post that file publicly: it contains your private character data.

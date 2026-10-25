@@ -23,7 +23,7 @@ Any operation that could destroy data, and any change to TRP3 profile data, need
 - **SavedVariables schema versions are separate from the addon version.** Any schema change needs a migration and an L1 test.
 
 ## Releases
-- The release zip contains only `DawnwardChronicles/`. Tests, tools, docs and dot-files are never packaged.
+- `python tools/package.py` builds `dist/DawnwardChronicles-<version>.zip`. It contains only git-tracked files under `DawnwardChronicles/`; tests, tools, docs and dot-files are never packaged. The script refuses to run if the addon folder has untracked files.
 - A release whose highest verified level is below L3 is marked as a GitHub **pre-release**.
 
 ## Local setup
