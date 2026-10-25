@@ -49,6 +49,8 @@ function Transfer.Export(char, kind, opts)
 	elseif kind == Transfer.KIND_BACKUP then
 		includesSecrets = opts.includeSecrets == true
 		data = Projection.Filter(char, { public = true, private = true, secret = includesSecrets })
+		-- A personal backup keeps milestone keys so a restore cannot re-record old milestones.
+		data.journalKeys = Util.DeepCopy(char.journalKeys)
 	else
 		return nil, "unknown export kind '" .. tostring(kind) .. "'"
 	end
@@ -94,8 +96,9 @@ function Transfer.Decode(text)
 	if type(data.schemaVersion) ~= "number" or data.schemaVersion > Schema.VERSION then
 		return nil, "this export comes from a newer version of Dawnward Chronicles"
 	end
-	-- Schema 1 is the only version so far; older character formats would be
-	-- migrated here before normalising.
+	-- Schema 2 only added parts to a character, so schema 1 exports normalise
+	-- directly (with an empty journal and the neutral theme). A future change
+	-- that reshapes characters must migrate older exports here first.
 	local report = {}
 	local character = Schema.NormalizeCharacter(data.character, report)
 	return {
@@ -123,9 +126,11 @@ function Transfer.MergeForImport(current, imported, includesSecrets, now)
 				carried = carried + 1
 			end
 		end
-		for listName, spec in pairs(Schema.LISTS) do
-			for _, item in ipairs(current[listName]) do
-				if item.visibility == Privacy.SECRET and #result[listName] < spec.limit then
+		local limits = { family = Schema.LISTS.family.limit, history = Schema.LISTS.history.limit,
+			journal = Schema.JOURNAL.limit }
+		for _, listName in ipairs({ "family", "history", "journal" }) do
+			for _, item in ipairs(current[listName] or {}) do
+				if item.visibility == Privacy.SECRET and #result[listName] < limits[listName] then
 					local copy = Util.DeepCopy(item)
 					copy.id = result.nextId
 					result.nextId = result.nextId + 1
@@ -135,6 +140,21 @@ function Transfer.MergeForImport(current, imported, includesSecrets, now)
 				end
 			end
 		end
+		table.sort(result.journal, function(a, b)
+			if a.createdAt ~= b.createdAt then
+				return a.createdAt < b.createdAt
+			end
+			return a.id < b.id
+		end)
+	end
+	-- Milestones already recorded on either side stay recorded.
+	if current then
+		for key, at in pairs(current.journalKeys or {}) do
+			if result.journalKeys[key] == nil then
+				result.journalKeys[key] = at
+			end
+		end
+		Schema.CapJournalKeys(result.journalKeys)
 	end
 	return result, carried
 end
@@ -144,8 +164,8 @@ function Transfer.Describe(plan)
 	local char = plan.character
 	local counts = Character.CountByVisibility(char)
 	local name = char.fields.name and char.fields.name.value or "(unnamed)"
-	return string.format("%s: %d fields, %d family, %d history (%d public, %d private, %d secret)%s",
-		name, Util.CountKeys(char.fields), #char.family, #char.history,
+	return string.format("%s: %d fields, %d family, %d history, %d journal (%d public, %d private, %d secret)%s",
+		name, Util.CountKeys(char.fields), #char.family, #char.history, #char.journal,
 		counts.public, counts.private, counts.secret,
 		plan.includesSecrets and "" or "; secrets not included in this backup")
 end

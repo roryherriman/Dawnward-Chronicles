@@ -8,12 +8,13 @@
 --   version       addon version string
 --   client        result of Platform Detect (optional)
 --   trp3Status()  read-only TRP3 status table (optional)
---   ui            { ShowExport(title, text), ShowImport() } (optional)
+--   zone()        current zone name, for simulated milestones (optional)
+--   ui            { ShowExport(title, text), ShowImport(), ToggleJournal() } (all optional)
 --
 -- Anything that deletes or replaces data requires the word "confirm".
 local _, ns = ...
-local Util, Schema, Character, Projection, Transfer =
-	ns.Util, ns.Schema, ns.Character, ns.Projection, ns.Transfer
+local Util, Schema, Character, Projection, Transfer, Journal, Actions, Themes =
+	ns.Util, ns.Schema, ns.Character, ns.Projection, ns.Transfer, ns.Journal, ns.Actions, ns.Themes
 
 local Commands = {}
 ns.Commands = Commands
@@ -21,15 +22,17 @@ ns.Commands = Commands
 local SHOW_LIMIT = 180 -- bytes of long text shown per line in chat
 
 local HELP = {
-	"Dawnward Chronicles commands (/dawnward or /dwc):",
-	"  status | show [public] | fields | trp3",
+	"Dawnward Chronicles: /dawnward (or /dwc) opens and closes the journal.",
+	"  status | show [public] | fields | trp3 | theme [neutral|silverhand|arcane]",
+	"  journal list | journal add <text> | journal edit <#> <text> | journal vis <#> <level>",
+	"  journal remove <#> confirm",
 	"  set <field> <text> | vis <field> public|private|secret | clear <field> confirm",
 	"  family add <relation> <name> | family list | family set <#> relation|name|status|notes <text>",
 	"  family vis <#> <level> | family remove <#> confirm",
 	"  history add <text> | history list | history set <#> when|text <text>",
 	"  history vis <#> <level> | history remove <#> confirm",
 	"  export backup [secrets] | export share | import | import confirm | import undo",
-	"  sim on | sim off | sim copy confirm | sim reset confirm",
+	"  sim on | sim off | sim copy confirm | sim reset confirm | sim levelup <level>",
 }
 
 local function out(ctx, line)
@@ -146,29 +149,113 @@ handlers.status = function(ctx)
 	handlers.trp3(ctx)
 end
 
-handlers.trp3 = function(ctx)
-	local status = ctx.trp3Status and ctx.trp3Status()
+--- Read-only TRP3 status as display lines (used by chat and the settings panel).
+function Commands.Trp3Lines(status)
 	if not status then
-		out(ctx, "Total RP 3: status unavailable")
-		return
+		return { "Total RP 3: status unavailable" }
 	end
 	if status.error then
-		out(ctx, "Total RP 3: could not be read safely (" .. status.error .. "). Integration disabled.")
-		return
+		return { "Total RP 3: could not be read safely (" .. status.error .. "). Integration disabled." }
 	end
 	if not status.loaded then
-		out(ctx, "Total RP 3: " .. (status.installed and "installed but not loaded" or "not installed"))
+		return { "Total RP 3: " .. (status.installed and "installed but not loaded" or "not installed") }
+	end
+	local lines = {}
+	local vp = status.versionProfile or {}
+	lines[#lines + 1] = string.format("Total RP 3 %s: %s", tostring(status.version or "?"), vp.label or "unknown version")
+	if status.profile then
+		lines[#lines + 1] = string.format("  Active profile: %s%s", status.profile.name or "?",
+			status.profile.isDefault and " (TRP3 default profile - Dawnward will never write to it)" or "")
+	elseif status.api and not status.api.getCurrentUser then
+		lines[#lines + 1] = "  Public API not found; integration unavailable for this version."
+	end
+	lines[#lines + 1] = "  Dawnward only reads from Total RP 3. It never changes your TRP3 profiles."
+	return lines
+end
+
+handlers.trp3 = function(ctx)
+	for _, line in ipairs(Commands.Trp3Lines(ctx.trp3Status and ctx.trp3Status())) do
+		out(ctx, line)
+	end
+end
+
+handlers.theme = function(ctx, rest)
+	local id = Util.NextWord(rest):lower()
+	if id == "" then
+		local char = Actions.Character(ctx)
+		local current = Actions.ThemeOf(char)
+		local names = {}
+		for _, theme in ipairs(Themes.LIST) do
+			names[#names + 1] = theme.id
+		end
+		out(ctx, "Theme: " .. current.name .. ". Available: " .. table.concat(names, ", ")
+			.. ". Themes only change how the journal looks.")
 		return
 	end
-	local vp = status.versionProfile or {}
-	out(ctx, string.format("Total RP 3 %s: %s", tostring(status.version or "?"), vp.label or "unknown version"))
-	if status.profile then
-		out(ctx, string.format("  Active profile: %s%s", status.profile.name or "?",
-			status.profile.isDefault and " (TRP3 default profile - Dawnward will never write to it)" or ""))
-	elseif status.api and not status.api.getCurrentUser then
-		out(ctx, "  Public API not found; integration unavailable for this version.")
+	local _, message = Actions.SetTheme(ctx, id)
+	out(ctx, message)
+end
+
+local function journalLine(entry)
+	local label
+	if entry.kind == "event" then
+		label = "[auto] "
+	else
+		label = entry.title and (entry.title .. ": ") or ""
 	end
-	out(ctx, "  Dawnward v0.1 only reads from Total RP 3. It never changes your TRP3 profiles.")
+	return string.format("  #%d %s%s [%s]", entry.id, label, preview(entry.text or ""), entry.visibility)
+end
+
+handlers.journal = function(ctx, rest)
+	local sub, args = Util.NextWord(rest)
+	sub = sub:lower()
+	if sub == "" or sub == "list" then
+		local char = Actions.Character(ctx)
+		if not char or #char.journal == 0 then
+			out(ctx, "The journal is empty (" .. modeLabel(ctx) .. ").")
+			return
+		end
+		local entries = Journal.NewestFirst(char)
+		out(ctx, string.format("Journal, newest first (%d of %d):", math.min(#entries, 10), #entries))
+		for i = 1, math.min(#entries, 10) do
+			out(ctx, journalLine(entries[i]))
+		end
+		return
+	end
+	if sub == "add" then
+		if args == "" then
+			out(ctx, "Usage: /dawnward journal add <text>")
+			return
+		end
+		local _, message = Actions.AddNote(ctx, nil, args, nil)
+		out(ctx, message)
+		return
+	end
+	local idText, tail = Util.NextWord(args)
+	local id = tonumber(idText)
+	if not Util.IsPositiveInteger(id) then
+		out(ctx, "Usage: /dawnward journal edit|vis|remove <#> ...   (see /dawnward journal list)")
+		return
+	end
+	local message
+	if sub == "edit" then
+		if tail == "" then
+			out(ctx, "Usage: /dawnward journal edit <#> <new text>")
+			return
+		end
+		_, message = Actions.UpdateNote(ctx, id, nil, tail, nil)
+	elseif sub == "vis" then
+		_, message = Actions.SetEntryVisibility(ctx, id, Util.NextWord(tail):lower())
+	elseif sub == "remove" then
+		if Util.NextWord(tail):lower() ~= "confirm" then
+			out(ctx, string.format("This deletes journal entry #%d. Type: /dawnward journal remove %d confirm", id, id))
+			return
+		end
+		_, message = Actions.RemoveNote(ctx, id)
+	else
+		message = "Unknown journal command '" .. sub .. "'. Try /dawnward help"
+	end
+	out(ctx, message)
 end
 
 handlers.show = function(ctx, rest)
@@ -433,10 +520,21 @@ handlers.sim = function(ctx, rest)
 		end
 		local ok, err = store:ResetSimulation()
 		report(ctx, ok, err, "Simulation data wiped. Real data was not touched.")
+	elseif sub == "levelup" then
+		-- Lets testers exercise milestone recording and duplicate prevention
+		-- without levelling a character. Writes to simulation data only.
+		local level = tonumber((Util.NextWord(tail))) -- parentheses: NextWord returns two values
+		if not level then
+			out(ctx, "Usage: /dawnward sim levelup <level>   (simulation mode only)")
+			return
+		end
+		local _, message = Actions.RecordSimulatedMilestone(ctx, "levelup",
+			{ level = level, zone = ctx.zone and ctx.zone() or nil })
+		out(ctx, message)
 	elseif sub == "" or sub == "status" then
 		out(ctx, "Simulation mode is " .. (store:IsSimulation() and "ON" or "OFF") .. ".")
 	else
-		out(ctx, "Usage: /dawnward sim on | off | copy confirm | reset confirm")
+		out(ctx, "Usage: /dawnward sim on | off | copy confirm | reset confirm | levelup <level>")
 	end
 end
 
@@ -444,6 +542,12 @@ function Commands.Execute(ctx, message)
 	local command, rest = Util.NextWord(message)
 	command = command:lower()
 	if command == "" then
+		-- The bare command opens or closes the journal; without a window
+		-- (tests, or a UI failure) it falls back to the status report.
+		if ctx.ui and ctx.ui.ToggleJournal then
+			ctx.ui.ToggleJournal()
+			return
+		end
 		command = "status"
 	end
 	local handler = handlers[command]

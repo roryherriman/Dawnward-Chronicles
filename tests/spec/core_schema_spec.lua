@@ -83,7 +83,7 @@ return function(t, expect)
 		end)
 
 		t:it("loads and normalises current data", function()
-			local raw = { schemaVersion = 1, characters = { ["A-Realm"] = { fields = { name = { value = "A" } } } } }
+			local raw = { schemaVersion = 2, characters = { ["A-Realm"] = { fields = { name = { value = "A" } } } } }
 			local db, info = Migrations.Load(raw)
 			expect.equal(info.status, "ok")
 			expect.equal(db.characters["A-Realm"].fields.name.value, "A")
