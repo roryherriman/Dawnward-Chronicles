@@ -27,12 +27,51 @@ function Methods:Enable() self.__enabled = true end
 function Methods:Disable() self.__enabled = false end
 function Methods:IsEnabled() return self.__enabled end
 function Methods:GetName() return self.__name end
-function Methods:CreateFontString(name) return self.__mock.newFrame("FontString", name, self) end
-function Methods:CreateTexture(name) return self.__mock.newFrame("Texture", name, self) end
+function Methods:CreateFontString(name, layer)
+	local fs = self.__mock.newFrame("FontString", name, self)
+	fs.__layer = layer
+	return fs
+end
+function Methods:CreateTexture(name, layer, _, sublevel)
+	local tex = self.__mock.newFrame("Texture", name, self)
+	tex.__layer, tex.__sublevel = layer, sublevel
+	self.__textures = self.__textures or {}
+	self.__textures[#self.__textures + 1] = tex
+	return tex
+end
+
+-- Layout and layering state, recorded so UI tests can check it.
+function Methods:SetFrameStrata(strata) self.__strata = strata end
+function Methods:GetFrameStrata() return self.__strata or "MEDIUM" end
+function Methods:SetToplevel(on) self.__toplevel = on end
+function Methods:Raise() self.__raised = (self.__raised or 0) + 1 end
+function Methods:SetBackdrop(backdrop) self.__backdrop = backdrop end
+function Methods:SetColorTexture(r, g, b, a) self.__color = { r, g, b, a or 1 } end
+function Methods:SetTextInsets(l, r, t, b) self.__insets = { l, r, t, b } end
+function Methods:SetWidth(w) self.__width = w end
+function Methods:GetWidth() return self.__width or 0 end
+function Methods:SetHeight(h) self.__height = h end
+function Methods:GetHeight() return self.__height or 0 end
+function Methods:SetSize(w, h) self.__width, self.__height = w, h end
+function Methods:ClearAllPoints() self.__points = {} end
+function Methods:SetPoint(...)
+	self.__points = self.__points or {}
+	self.__points[#self.__points + 1] = { ... }
+end
+function Methods:SetVerticalScroll(v) self.__vscroll = v end
+function Methods:GetVerticalScroll() return self.__vscroll or 0 end
+function Methods:SetWordWrap(on) self.__wordWrap = on end
 
 local FrameMT = {
 	__index = function(_, key)
-		return Methods[key] or noop
+		if Methods[key] then
+			return Methods[key]
+		end
+		-- Recorded state ("__x") reads as nil until set; any other method is a no-op.
+		if type(key) == "string" and key:sub(1, 2) == "__" then
+			return nil
+		end
+		return noop
 	end,
 }
 
