@@ -72,6 +72,8 @@ Total RP 3 3.4.1 has public setters for small fields such as Currently, OOC, nam
 
 ## Roadmap
 
+> A revised plan for v0.3–v0.6, the **Living Character System**, is under review: [`docs/VISION.md`](docs/VISION.md) and [`docs/planning/living-character/`](docs/planning/living-character/). The table below is the original roadmap.
+
 | Version | Milestone |
 |---|---|
 | 0.1 | Foundation: saved data and migrations, character and family-history model, export/import, simulation mode, read-only Total RP 3 detection |
