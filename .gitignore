@@ -1,0 +1,49 @@
+# --- Local development tooling (never distributed) ---
+.tooling/
+__pycache__/
+*.pyc
+
+# --- Third-party addon source: inspect locally, never commit ---
+AddOns.zip
+*.zip
+totalRP3/
+totalRP3_Data/
+totalRP3*/
+RaiderIO*/
+# A stray copy of another addon's Libs folder at repo root (bundled libs, if ever
+# added, would live under DawnwardChronicles/Libs/ and be listed in THIRD_PARTY_NOTICES.md)
+/Libs/
+
+# --- Private character data and local review drafts ---
+private/
+review/
+
+# --- WoW client data: SavedVariables, WTF, logs, caches ---
+WTF/
+SavedVariables/
+*.lua.bak
+*.bak
+Logs/
+Cache/
+
+# --- Build output ---
+dist/
+build/
+
+# --- Secrets and local configuration ---
+.env
+.env.*
+*.pem
+*.key
+*.token
+secrets.*
+.vscode/
+.idea/
+*.code-workspace
+
+# --- OS / editor noise ---
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
