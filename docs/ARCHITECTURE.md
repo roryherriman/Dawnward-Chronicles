@@ -1,6 +1,6 @@
 # Architecture
 
-Status: **v0.2 (journal window) implemented and mock-tested (L0–L2). Not yet tested in game.** v0.1 reached partial L3; see [COMPATIBILITY.md](COMPATIBILITY.md).
+Status: **v0.2 (journal window) implemented, tested at L0–L2, and passed its L3 acceptance checklist on Classic Era** (all mandatory items; UI scaling untested). See [COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## Layers
 
