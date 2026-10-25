@@ -17,6 +17,13 @@ return function(t, expect)
 				end
 			end
 			expect.deepEqual(core, Loader.CORE)
+			local trp3 = {}
+			for _, path in ipairs(files) do
+				if path:match("^Integrations/TRP3/") then
+					trp3[#trp3 + 1] = path
+				end
+			end
+			expect.deepEqual(trp3, Loader.TRP3)
 		end)
 
 		t:it("declares the expected metadata", function()
