@@ -38,6 +38,11 @@ Loader.TRP3 = {
 	"Integrations/TRP3/Status.lua",
 	"Integrations/TRP3/Ledger.lua",
 	"Integrations/TRP3/AboutBlock.lua",
+	"Integrations/TRP3/TraitPlan.lua",
+	"Integrations/TRP3/Shape.lua",
+	"Integrations/TRP3/Adapter.lua",
+	"Integrations/TRP3/Sync.lua",
+	"Integrations/TRP3/Commands.lua",
 }
 
 local SAFE_GLOBALS = {
