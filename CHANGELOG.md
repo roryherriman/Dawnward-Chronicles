@@ -12,7 +12,66 @@ Every release entry has a **Verified** line naming the highest test level reache
 
 A feature is never called "tested" or "compatible" in this file unless it reached L3 or L4.
 
-## [Unreleased]: 0.1.0 (foundation)
+## [Unreleased]: 0.2.0 (journal window)
+
+### Added
+- **Journal window.** `/dawnward` (or `/dwc`) opens and closes a compact, draggable journal.
+  - Three sections only: **Journal**, **Character** and **Story**.
+  - The window stays on screen and remembers its position.
+  - It sits below game dialogs and tooltips, and the export window opens above it.
+- **Journal:**
+  - Entries show newest first, ten per page.
+  - Write entries with an optional title; edit them, and delete them after confirming.
+  - Every entry has a visibility: Public, Private or Secret.
+- **Automatic level-up entries** record the level, zone and subzone, the time, and the source event.
+  - A level is recorded only once, even after its entry is pruned.
+  - Real level-ups always go to your real journal.
+  - `/dawnward sim levelup <n>` adds simulated ones to simulation data, for testing.
+- **Journal retention:**
+  - At most 500 entries per character.
+  - When the journal is full, the oldest automatic entry makes room.
+  - Entries you wrote are never removed automatically; if they fill the journal, adding more is refused with an explanation.
+- **Character section:** edit profile fields (single-line or multi-line) and change their visibility. Clearing a field asks for confirmation. Family and history are shown in readable form; they are still edited with commands.
+- **Story section:** an empty state explaining that story decisions are coming later.
+- **Settings panel** behind a gear button, not a fourth section:
+  - theme choice;
+  - export backup, export for sharing, and import;
+  - simulation on/off and a confirmed reset;
+  - read-only Total RP 3 status.
+- **Cosmetic themes, chosen per character:** Neutral (the default for every new character), Silver Hand and Arcane. They change colours and the border tint only. Every text colour is tested for at least 4.5:1 contrast. No theme is chosen from class or race.
+- **Commands:**
+  - `/dawnward status` for diagnostics (the bare command now opens the journal);
+  - `journal list|add|edit|vis|remove`;
+  - `theme <id>`;
+  - `sim levelup <n>`.
+- **Saved data schema 2:** an additive, idempotent upgrade from schema 1 that preserves every v0.1 profile, family entry, history entry, privacy setting and import backup.
+- **Docs:**
+  - the story interpretation architecture (`docs/STORY_ARCHITECTURE.md`);
+  - an updated architecture document, including the retention policy;
+  - the v0.2 in-game checklist.
+
+### Changed
+- Exports and imports now include the journal, under the same privacy rules. Backups also keep milestone keys, so a restore can't record old milestones again. v0.1 exports still import.
+- Read-only Total RP 3 status text is shared between chat and the settings panel.
+
+### Known limitations
+- Only level-ups are recorded automatically. Quests, discoveries and other milestones are planned, and the milestone registry is ready for them.
+- Family and history are edited with slash commands, not in the window.
+- Automatic entries can't be edited or deleted (only their visibility changes). This keeps the record factual.
+- No story decisions, personality development or Total RP 3 writes yet.
+- English only.
+- Once v0.2 has upgraded saved data to schema 2, v0.1 opens it read-only rather than changing it.
+
+### Known issues
+- **KI-1:** a one-time return to character select happened shortly after entering the world in the first v0.2 test session. It is **unresolved, not reproduced, and has no confirmed connection to Dawnward**. It does not block development unless it recurs. See `docs/COMPATIBILITY.md`.
+
+**Verified:**
+- L0, L1 and L2: 180 tests, run locally.
+- **L3 (Classic Era 1.15.9):** all 24 mandatory acceptance items pass, including a real level-up, backup/import integrity and coexistence with TRP3 3.4.1 (read-only, TRP3 unchanged). See `docs/TESTING.md`.
+- **Untested:** optional checks O1–O6, including UI scaling and the remembered window position. The interface number wasn't reported.
+- Not tested on Forever (L4).
+
+## 0.1.0 (foundation): merged, not released
 
 ### Added
 - The first installable addon (`DawnwardChronicles/`) for Classic Era (TOC interface 11509).

@@ -1,40 +1,10 @@
 -- L2: loads the whole addon in TOC order against the WoW mock and drives it
 -- through the same entry points the client uses (events and /dawnward).
 local Loader = require("support.loader")
-local Mock = require("support.wow_mock")
+local Boot = require("support.boot")
 local Fake = require("fakes.trp3_341")
 
-local TOC_PATH = "DawnwardChronicles/DawnwardChronicles.toc"
-
-local function readToc()
-	local f = assert(io.open(TOC_PATH, "rb"))
-	local text = f:read("*a")
-	f:close()
-	local files, meta = {}, {}
-	for line in text:gmatch("[^\r\n]+") do
-		local key, value = line:match("^## ([%w%-]+): (.+)$")
-		if key then
-			meta[key] = value
-		elseif not line:match("^#") and line:match("%S") then
-			files[#files + 1] = line:gsub("\\", "/")
-		end
-	end
-	return files, meta
-end
-
-local function boot(opts)
-	local files = readToc()
-	local mock = Mock.new(opts)
-	local env = Loader.NewEnv(mock.env)
-	local ns = Loader.Load(files, env, {})
-	return mock, env, ns
-end
-
-local function login(mock)
-	mock.Fire("ADDON_LOADED", "SomeOtherAddon")
-	mock.Fire("ADDON_LOADED", "DawnwardChronicles")
-	mock.Fire("PLAYER_LOGIN")
-end
+local readToc, boot, login = Boot.ReadToc, Boot.Load, Boot.Login
 
 return function(t, expect)
 	t:describe("TOC", function()
@@ -51,7 +21,7 @@ return function(t, expect)
 
 		t:it("declares the expected metadata", function()
 			local _, meta = readToc()
-			expect.equal(meta.Version, "0.1.0")
+			expect.equal(meta.Version, "0.2.0")
 			expect.equal(meta.SavedVariables, "DawnwardChroniclesDB, DawnwardChroniclesSimDB")
 			expect.equal(meta.OptionalDeps, "totalRP3")
 		end)
@@ -65,7 +35,7 @@ return function(t, expect)
 			local output = mock.Slash("set name Aelin")
 			expect.truthy(output:find("Set name"), output)
 			local db = env.DawnwardChroniclesDB
-			expect.equal(db.schemaVersion, 1)
+			expect.equal(db.schemaVersion, 2)
 			expect.equal(db.characters["Testchar-TestRealm"].fields.name.value, "Aelin")
 			expect.truthy(mock.Slash("status"):find("WoW Classic Era"))
 		end)

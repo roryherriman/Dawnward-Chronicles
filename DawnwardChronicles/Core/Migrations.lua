@@ -12,9 +12,37 @@ local Migrations = {}
 ns.Migrations = Migrations
 
 -- steps[n] upgrades a database from schema n to n + 1. Each step receives a
--- private deep copy and returns the upgraded table.
--- Schema 1 is the first release, so there are no steps yet.
+-- private deep copy and returns the upgraded table. Steps only add or reshape
+-- data; Schema.NormalizeDatabase then validates the result.
 Migrations.steps = {}
+
+-- 1 -> 2 (v0.2): add an empty journal, journal keys and the neutral theme to
+-- every character (including import backups), and window preferences.
+-- Existing fields, family, history and visibility are not touched.
+Migrations.steps[1] = function(db)
+	for _, mapName in ipairs({ "characters", "importBackups" }) do
+		local map = db[mapName]
+		if type(map) == "table" then
+			for _, char in pairs(map) do
+				if type(char) == "table" then
+					if type(char.journal) ~= "table" then
+						char.journal = {}
+					end
+					if type(char.journalKeys) ~= "table" then
+						char.journalKeys = {}
+					end
+					if char.theme == nil then
+						char.theme = ns.Themes.DEFAULT
+					end
+				end
+			end
+		end
+	end
+	if type(db.ui) ~= "table" then
+		db.ui = {}
+	end
+	return db
+end
 
 local function readOnly(reason, version)
 	return Schema.NewDatabase(), { status = "readOnly", reason = reason, from = version, notes = {} }

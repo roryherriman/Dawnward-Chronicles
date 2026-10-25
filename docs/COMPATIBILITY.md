@@ -15,10 +15,26 @@ This matrix records **observed** results only. Levels are defined in [TESTING.md
 
 | Client | Interface | Role | Highest level reached |
 |---|---|---|---|
-| WoW Classic Era 1.15.9 | The TOC says `11509`. Not yet confirmed with `GetBuildInfo()`. | Primary development client | L3, partial (see below) |
+| WoW Classic Era 1.15.9 | The TOC says `11509`. The number from `GetBuildInfo()` has not been reported yet. | Primary development client | **L3**: the v0.2 acceptance checklist passed all mandatory items (see below and `TESTING.md`) |
 | WoW Forever 1.60.1 | Believed to be 16001. **Unverified.** | Final deployment target | — (shown as "provisional", no client-specific features) |
 
-### L3 results: Classic Era 1.15.9 (build 70003), Total RP 3 3.4.1, 2026-10-25
+### L3 results: v0.2 acceptance, Classic Era 1.15.9, 2026-10-25
+
+Addon code `f973931`. **All 24 mandatory checklist items pass**:
+
+- loading and the v1→v2 data upgrade;
+- journal create, edit and delete;
+- character fields and privacy;
+- simulated level-up isolation, and a **real level-up**;
+- backup, import and undo, and checksum rejection;
+- share-export privacy;
+- theme persistence;
+- coexisting with TRP3 read-only, and TRP3 left unchanged;
+- game dialogs above the journal, and no errors in combat.
+
+Optional cosmetic checks (O1–O6, including UI scale) were not reported. The tester reported results by group; details are in `TESTING.md`. The interface number from `GetBuildInfo()` was not reported.
+
+### L3 results: v0.1, Classic Era 1.15.9 (build 70003), Total RP 3 3.4.1, 2026-10-25
 
 Test build `1fdb724`. The client build was read from the installed `.build.info`.
 
@@ -56,11 +72,25 @@ Test build `14669c3`.
 
 v0.1 uses no client-specific gameplay APIs, so the same code runs on any client that has the APIs below. That does **not** make it verified anywhere.
 
+## Known issues
+
+### KI-1: one-time return to character select after entering the world (v0.2 test session)
+- **Status:** Unresolved. **Not reproduced.** **No confirmed connection to Dawnward.** It is **not** fixed.
+- **Impact on development:** does **not** block development or the v0.2 merge. It becomes blocking only if it happens again, in which case investigation resumes before further release steps.
+- **Seen:** 2026-10-25, Classic Era 1.15.9, Total RP 3 3.4.1, during the first v0.2 session. The game returned to character select about 21 seconds after entering the world (client logs: entered at 02:11:20, returned at 02:11:41). There was no error message, and the next session was stable.
+- **What was checked (read-only):**
+  - No installed addon (Dawnward, Total RP 3, RaiderIO, including bundled libraries) calls `Logout`, `Quit` or `ForceQuit`.
+  - Dawnward sends no network traffic and has no timers or hooks.
+  - The v1→v2 data upgrade completed correctly in that session.
+  - The client's connection logs were empty.
+- **Context:** the client process had been running since before three different Dawnward builds were installed under it. The incident followed a fresh account-level login.
+- **If it happens again:** note the time, enable `/chatlog`, and compare runs with Dawnward enabled and disabled from cold client starts. A separate logout-diagnostic addon was proposed but not built.
+
 ## Total RP 3
 
 | Version | Source audited | Tier 0 (read) | Tier A (public setters) | Tier B (manual export) | Tier C (owned direct write) |
 |---|---|---|---|---|---|
-| 3.4.1 | Yes, see [TRP3_INTEGRATION.md](TRP3_INTEGRATION.md) | L3, partial: the default profile was detected. Profile name and version output weren't reported. Full behaviour is L2. | Not built | Not built | Research only |
+| 3.4.1 | Yes, see [TRP3_INTEGRATION.md](TRP3_INTEGRATION.md) | **L3**: v0.2 acceptance items M20–M22 confirmed the version and active-profile status, coexistence, and TRP3 left unchanged | Not built | Not built | Research only |
 | 3.5.3 | No | Reported as "not audited", status only | — | — | — |
 | Any other version | No | Read only, if capability checks pass | Off | — | Off |
 
@@ -86,11 +116,32 @@ Every name below is also in the per-directory lists in `.luacheckrc`.
 | `UIPanelCloseButton`, `UIPanelScrollFrameTemplate`, `UIPanelButtonTemplate`, multi-line `EditBox` | Copy window | L3 | — |
 | `ChatFontNormal`, `GameFontNormal`, `GameFontHighlightSmall`, `UISpecialFrames`, `tinsert` | Copy window | L3 | — |
 | `AddOn_TotalRP3.Player.GetCurrentUser()` → `IsProfileDefault` | TRP3 default-profile warning | L3 (TRP3 3.4.1) | — |
-| `AddOn_TotalRP3.Player.GetCurrentUser()` → `GetProfileName`, `GetRoleplayingName` | TRP3 status (read only) | L2 against the 3.4.1 fake. The in-game name output wasn't reported. | — |
+| `AddOn_TotalRP3.Player.GetCurrentUser()` → `GetProfileName`, `GetRoleplayingName` | TRP3 status (read only) | L3 (`GetProfileName`, from v0.2 M20); `GetRoleplayingName` is L2 only | — |
+
+## Client APIs added in v0.2 (journal window)
+
+**L3 (implied)** means a passed v0.2 acceptance item depends on the API; the item number is given. Anything not exercised by a passed item stays **assumed**.
+
+| API or event | Used for | Classic Era | Forever |
+|---|---|---|---|
+| `PLAYER_LEVEL_UP` (arg 1 = new level) | Level-up milestones | L3 (M12, real level-up) | — |
+| `GetRealZoneText`, `GetSubZoneText` | Zone and subzone on milestones | L3 (implied: M10, M12) | — |
+| `date` | Entry dates in the journal | L3 (implied: M3) | — |
+| `InputBoxTemplate` EditBox, `EditBox:SetMaxBytes` | Title and field editors | L3 (implied: M3, M7) | — |
+| `StaticPopupDialogs` / `StaticPopup_Show` | Delete and reset confirmations | L3 (implied: M6, M9, M11) | — |
+| `GameTooltip` | Visibility and settings tooltips | Assumed | — |
+| `Frame:SetBackdropBorderColor` | Theme border tint | L3 (implied: M17) | — |
+| `MEDIUM` strata with `SetToplevel`/`Raise` | Journal window layering below game dialogs | L3 (implied: M21, M23) | — |
+| `SetUserPlaced`, `GetLeft`/`GetTop` | Remembered window position | Assumed (O2 not reported) | — |
+| `FontString:GetStringHeight`, `SetWordWrap`, `SetNonSpaceWrap` (optional) | Variable-height journal rows | L3 (implied: M3–M7) | — |
+| `Region:SetShown`, `Button:SetEnabled` | Showing and hiding controls | L3 (implied: M5, M17) | — |
+| Icon texture `INV_Misc_Gear_01`, `ButtonHilight-Square` | Gear button | L3 (implied: M11, M17) | — |
+| Icon texture `INV_Misc_Book_09` | Story empty state | Assumed (not part of a mandatory item) | — |
+| `GameFontNormalLarge`, `GameFontHighlight` | Headings and body text | L3 (implied: M2–M7) | — |
 
 ## Planned APIs (not used yet)
 
 | API or event | Planned for |
 |---|---|
-| `InCombatLockdown`, `PLAYER_REGEN_ENABLED/DISABLED` | Combat queue (v0.3) |
-| `PLAYER_LEVEL_UP`, `QUEST_TURNED_IN`, `ZONE_CHANGED_NEW_AREA`, `PLAYER_DEAD`, `ENCOUNTER_END` / `BOSS_KILL` | Journal (v0.2) |
+| `InCombatLockdown`, `PLAYER_REGEN_ENABLED/DISABLED` | Combat queue for story popups (v0.3) |
+| `QUEST_TURNED_IN`, `ZONE_CHANGED_NEW_AREA`, `PLAYER_DEAD`, `ENCOUNTER_END` / `BOSS_KILL` | More milestone types (later; each needs a registered type and an L3 check) |

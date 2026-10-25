@@ -12,6 +12,12 @@ Every fact Dawnward stores (a family member, a backstory paragraph, a journal en
 | `private` | ✅ | ❌, unless "include private" is ticked for a personal backup | ❌ | Backstory, family, journal |
 | `secret` | ✅ | ❌, unless "include secrets" is ticked separately, with a warning | ❌ **never** | Facts the player marks as secret |
 
+## The journal (v0.2)
+- Every journal entry has a visibility. Entries you write and automatic milestones both start **private**.
+- Milestone entries record only what the game reports: level, zone, subzone and time. Nothing about other players is recorded.
+- The cosmetic **theme** isn't personal information, so it is included in every export.
+- **Milestone keys** (for example `levelup:23`, used to avoid duplicates) are included in personal backups only, never in share exports.
+
 ## The public projection
 
 The **only** way character data leaves the core is `Projection.GetPublic(characterKey)`. It returns a newly built, deep-copied table that contains `public` facts only. The TRP3 integration and the shareable export both work from this projection and never see the core database.

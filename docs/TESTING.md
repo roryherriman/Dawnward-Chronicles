@@ -121,3 +121,80 @@ No Lua errors were seen during the re-test session.
 
 - TRP3 rewrites its own saved file at every logout. For example, it regenerates the default profile ID at each login. So comparing TRP3's SavedVariables file before and after is not a valid test for step 19. Check TRP3's pages in game instead.
 - Dawnward's data is in `WTF\Account\<account>\SavedVariables\DawnwardChronicles.lua`. Don't post that file publicly: it contains your private character data.
+
+### v0.2 acceptance checklist (journal window)
+
+**Merge rule:** every **Mandatory** item must pass before v0.2 is merged. An item marked *may be deferred* can instead be recorded as **untested**, and the release notes must then say so. **Optional** items never block the merge; their findings become issues for later.
+
+**Before you start**
+
+1. Fully exit Classic Era, then launch it. A `/reload` isn't enough after an install.
+2. Type `/console scriptErrors 1` and `/chatlog`.
+3. Type `/dump select(4, GetBuildInfo())` and note the number.
+4. Write down the exact text of any Lua error and which step caused it. **Any Lua error fails the step it happened in.**
+
+#### Mandatory (release-blocking)
+
+| # | Area | Steps | Pass when |
+|---|---|---|---|
+| M1 | **Migration and load** | Log in on a character with v0.1 data. Run `/dawnward show`, then `/dawnward status`. | No errors at login. All v0.1 fields, family, history and visibilities are unchanged. Status says 0.2.0. |
+| M2 | **Open and close** | Run `/dawnward`, then `/dawnward`, then `/dwc`, then press Escape | It opens on Journal, closes, opens again, then closes with Escape |
+| M3 | **Journal: create** | **New entry**: add a title and text, click visibility to **Public**, then **Save** | The entry is at the top with a date, title, text and "Public" |
+| M4 | **Journal: validation** | **New entry** with empty text, then **Save** | Refused with a message, and the editor stays open |
+| M5 | **Journal: edit** | **Edit** the M3 entry, change the text, **Save** | The new text shows, and the date line says "edited" |
+| M6 | **Journal: delete** | **Delete** an entry, **Cancel**, then **Delete** again and confirm | Cancel keeps it. Confirming removes it. |
+| M7 | **Character: fields** | **Character** tab: **Edit** Name (one line), **Edit** Summary (multi-line, two lines of text) | Both save. Name updates the window title. The line break shows in Summary. |
+| M8 | **Character: privacy** | Click Name's visibility until **Public**, leave Summary **Private**, then run `/dawnward show public` | Only Name is listed. Summary is not. (Public journal entries are checked in M16.) |
+| M9 | **Character: clear** | **Edit** a set field, **Clear**, confirm | Asks first; then the value is gone |
+| M10 | **Simulated level-up** | `/dawnward sim on`, `/dawnward sim levelup 5`, `/dawnward sim levelup 5`, `/dawnward sim off` | The first records "Reached level 5 in <zone>" in the simulated journal. The second says duplicate prevented. After `sim off`, the **real** journal doesn't show it. |
+| M11 | **Simulation reset** | Gear → simulation **Turn on**, **Reset test data**, confirm, **Turn off** | Asks first. The real journal and fields are unchanged afterwards. |
+| M12 | **Real level-up** *(may be deferred if no character can level)* | Gain a level on any character | One automatic entry with level, zone (subzone), date and "recorded automatically". No Edit/Delete; visibility can change. |
+| M13 | **Backup integrity** | Gear → **Export backup**, copy the text (Ctrl+C). Change Name and delete a journal entry. Gear → **Import backup**, paste, **Check**, **Import**. | Name, journal entries, family, history and theme are restored exactly as before the changes |
+| M14 | **Import undo** | `/dawnward import undo`, then `/dawnward import undo` | The first brings back the changed state, the second restores the backup again |
+| M15 | **Damaged import** | **Import backup**, paste the backup with a few characters deleted from the middle, **Check** | Rejected with a checksum message, and no Import button appears |
+| M16 | **Share export privacy** | Gear → **Export for sharing** | Contains the public Name and public entry only. No private Summary, no secrets. |
+| M17 | **Theme persistence** | Gear → **Arcane**, `/reload`, open the journal. Log out to character select and back in, then open it again. | Arcane is still applied both times, and the button for the current theme is greyed out |
+| M18 | **Theme per character** | Log in on a different character and open the journal | It uses its own theme (Neutral if never set) |
+| M19 | **Reload persistence** | `/reload`, then log out fully and back in. Open the journal and Character. | All entries, fields and visibilities from M3–M9 are still there |
+| M20 | **TRP3 read-only status** | Gear → Total RP 3 section | Shows 3.4.1, "source audited, not yet tested in game", the active profile name, and a Default profile warning if that profile is active |
+| M21 | **TRP3 coexistence** | Open TRP3's main window and the journal together. Click each one, then open **Export backup**. | Both work. Clicking one brings it to the front. The export window is above both. |
+| M22 | **TRP3 untouched** | After all the steps above, open TRP3's profile pages (characteristics, About, personality) | Nothing in TRP3 has changed |
+| M23 | **Game dialogs on top** | With the journal open, trigger a game dialog (for example, try to delete an item, then cancel) | The game dialog appears above the journal |
+| M24 | **Combat** | Open the journal and add an entry during combat | No errors and no "action blocked" messages |
+
+#### Optional (cosmetic and comfort, never blocking)
+
+| # | Check | Notes to record |
+|---|---|---|
+| O1 | Theme readability: Neutral, Silver Hand, Arcane | Any text that is hard to read, and where |
+| O2 | Window position: drag the window, `/reload`, reopen | Whether it reopens in the same place |
+| O3 | Screen edge: drag the window partly off screen | Whether it is held on screen |
+| O4 | Paging: add 12 or more entries (`/dawnward journal add Test 1` and so on) | Whether Older/Newer and "Page x of y" feel right |
+| O5 | UI scale: `/console useUiScale 1`, then `/console uiScale 0.8` and `1.0`, then restore yours (`/dump GetCVar("uiScale")` before you start) | Overlaps, clipping, or a window that doesn't fit. **Untested is acceptable.** |
+| O6 | Spacing, fonts, wording, tooltips, the Story empty state | Anything that feels cluttered, unclear or out of place |
+
+**Known issue during testing:** KI-1 (a one-time return to character select) is unresolved and not reproduced. If it happens again, note the time and stop. It then becomes blocking (see `COMPATIBILITY.md`).
+
+**Report format:** the build number, the TRP3 version, and then for each item **Pass**, **Fail** (with what happened) or **Untested**.
+
+### v0.2 acceptance results: Classic Era (build not reported), 2026-10-25
+
+Reported by the tester in groups. Addon code under test: `f973931`, unchanged since installation. The interface number and TRP3 version were not reported in this round.
+
+| Group | Items | Result |
+|---|---|---|
+| Loading and navigation | M1–M2 | **Pass** |
+| Journal | M3–M6 | **Pass** |
+| Character and privacy | M7–M9 | **Pass** |
+| Simulation | M10–M11 | **Pass** |
+| Real level-up | M12 | **Pass** |
+| Backup and import | M13–M15 | **Pass** |
+| Sharing privacy | M16 | **Pass** |
+| Themes and persistence | M17–M19 | **Pass** |
+| TRP3 compatibility | M20–M22 | **Pass**. First reported as untested, then as pass in an updated report the same day. |
+| UI safety | M23–M24 | **Pass** |
+| Optional | O1–O6 | Not reported |
+
+**Outcome:** all 24 mandatory items pass, so v0.2 meets the merge rule. Optional items O1–O6 (including UI scale) remain unreported, which does not block the merge.
+
+Notes from the tester: none. No Lua errors were reported. KI-1 did not recur.

@@ -61,24 +61,51 @@ end
 function Methods:SetVerticalScroll(v) self.__vscroll = v end
 function Methods:GetVerticalScroll() return self.__vscroll or 0 end
 function Methods:SetWordWrap(on) self.__wordWrap = on end
+function Methods:SetShown(on) self.__shown = on and true or false end
+function Methods:SetEnabled(on) self.__enabled = on and true or false end
+function Methods:GetLeft() return self.__left or 100 end
+function Methods:GetTop() return self.__top or 600 end
+function Methods:SetTextColor(r, g, b) self.__textColor = { r, g, b } end
+function Methods:GetFontString()
+	self.__fontString = self.__fontString or self.__mock.newFrame("FontString", nil, self)
+	return self.__fontString
+end
+-- Rough text height: one 14px line per 60 characters of width-independent text.
+function Methods:GetStringHeight()
+	local text = self.__text or ""
+	if text == "" then return 0 end
+	return 14 * math.max(1, math.ceil(#text / 60))
+end
 
 local FrameMT = {
 	__index = function(_, key)
 		if Methods[key] then
 			return Methods[key]
 		end
-		-- Recorded state ("__x") reads as nil until set; any other method is a no-op.
-		if type(key) == "string" and key:sub(1, 2) == "__" then
-			return nil
+		-- Like the real client, unknown fields read as nil. Widget methods are
+		-- PascalCase, so any unmodelled method is accepted as a no-op; our own
+		-- fields (lowercase) and recorded state ("__x") stay nil until set.
+		if type(key) == "string" and key:match("^%u") then
+			return noop
 		end
-		return noop
+		return nil
 	end,
 }
 
 --- opts: { interface = number, project = number, savedVariables = table, extra = table }
 function Mock.new(opts)
 	opts = opts or {}
-	local mock = { eventFrames = {}, framesByName = {}, chat = {}, clock = 1700000000 }
+	local mock = { eventFrames = {}, framesByName = {}, chat = {}, clock = 1700000000, popups = {},
+		zone = "Elwynn Forest", subzone = "Goldshire" }
+
+	--- Accepts the most recent confirmation dialog, like clicking its first button.
+	function mock.AcceptPopup()
+		local popup = table.remove(mock.popups)
+		assert(popup, "no confirmation dialog is open")
+		local def = mock.env.StaticPopupDialogs[popup.name]
+		def.OnAccept(nil, popup.data)
+		return popup
+	end
 
 	function mock.newFrame(kind, name, parent)
 		local f = setmetatable({
@@ -106,6 +133,16 @@ function Mock.new(opts)
 		GameFontNormal = {},
 		GameFontHighlightSmall = {},
 		InCombatLockdown = function() return false end,
+		GameFontNormalLarge = {},
+		GameFontHighlight = {},
+		GameTooltip = mock.newFrame("GameTooltip", "GameTooltip"),
+		StaticPopupDialogs = {},
+		StaticPopup_Show = function(name, textArg, _, data)
+			mock.popups[#mock.popups + 1] = { name = name, text = textArg, data = data }
+		end,
+		date = function(fmt, t) return "date(" .. tostring(fmt) .. "," .. tostring(t) .. ")" end,
+		GetRealZoneText = function() return mock.zone end,
+		GetSubZoneText = function() return mock.subzone end,
 		UnitName = function() return "Testchar" end,
 		GetRealmName = function() return "Test Realm" end,
 		GetNormalizedRealmName = function() return "TestRealm" end,

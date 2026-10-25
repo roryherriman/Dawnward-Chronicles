@@ -14,13 +14,17 @@ Loader.ROOT = "DawnwardChronicles/"
 Loader.CORE = {
 	"Core/Util.lua",
 	"Core/Privacy.lua",
+	"Core/Themes.lua",
 	"Core/Schema.lua",
 	"Core/Migrations.lua",
 	"Core/Character.lua",
+	"Core/Journal.lua",
+	"Core/Milestones.lua",
 	"Core/Projection.lua",
 	"Core/Serializer.lua",
 	"Core/Transfer.lua",
 	"Core/Store.lua",
+	"Core/Actions.lua",
 	"Core/Commands.lua",
 }
 

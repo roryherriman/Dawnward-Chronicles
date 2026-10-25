@@ -1,8 +1,8 @@
 -- Connects the core to the WoW client: saved variables, events and /dawnward.
 -- Loaded last. Event-driven only; nothing polls.
 local addonName, ns = ...
-local Migrations, Store, Commands, Detect, CopyBox, TRP3Status =
-	ns.Migrations, ns.Store, ns.Commands, ns.Detect, ns.CopyBox, ns.TRP3Status
+local Migrations, Store, Commands, Detect, CopyBox, TRP3Status, MainWindow, Events =
+	ns.Migrations, ns.Store, ns.Commands, ns.Detect, ns.CopyBox, ns.TRP3Status, ns.MainWindow, ns.Events
 
 local PREFIX = "|cffe6c35cDawnward:|r "
 
@@ -56,16 +56,23 @@ local function buildContext()
 		trp3Status = function()
 			return TRP3Status.Read(_G)
 		end,
+		zone = function()
+			return (Events.Location())
+		end,
 	}
 	ctx.ui = {
 		ShowExport = CopyBox.ShowExport,
 		ShowImport = function()
 			CopyBox.ShowImport(
 				function(text) return Commands.StageImport(ctx, text) end,
-				function() Commands.Execute(ctx, "import confirm") end,
+				function()
+					Commands.Execute(ctx, "import confirm")
+					MainWindow.Refresh()
+				end,
 				function() ctx.pendingImport = nil end
 			)
 		end,
+		ToggleJournal = MainWindow.Toggle,
 	}
 	return ctx
 end
@@ -99,6 +106,7 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
 			loadSavedVariables()
 		end
 		ns.ctx = buildContext()
+		Events.Init(ns.ctx, MainWindow.Refresh)
 		announceLoad()
 	end
 end)
@@ -111,4 +119,6 @@ SlashCmdList.DAWNWARD = function(message)
 		return
 	end
 	Commands.Execute(ns.ctx, message)
+	-- Commands may change data the open journal is showing.
+	MainWindow.Refresh()
 end

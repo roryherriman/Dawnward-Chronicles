@@ -161,8 +161,8 @@ function Character.CountByVisibility(char)
 		local level = Privacy.Normalize(entry.visibility)
 		counts[level] = counts[level] + 1
 	end
-	for listName in pairs(Schema.LISTS) do
-		for _, item in ipairs(char[listName]) do
+	for _, listName in ipairs({ "family", "history", "journal" }) do
+		for _, item in ipairs(char[listName] or {}) do
 			local level = Privacy.Normalize(item.visibility)
 			counts[level] = counts[level] + 1
 		end

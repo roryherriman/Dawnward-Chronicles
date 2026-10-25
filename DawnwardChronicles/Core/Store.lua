@@ -46,14 +46,12 @@ function Store:GetCharacter(key)
 	return self:Root().characters[key]
 end
 
---- Returns the character, creating it if needed. Fails when read-only or full.
-function Store:EnsureCharacter(key, now)
-	local root = self:Root()
+local function ensureIn(root, readOnlyReason, key, now)
 	local char = root.characters[key]
 	if char then
 		return char
 	end
-	if self:ReadOnlyReason() then
+	if readOnlyReason then
 		return nil, "saved data is read-only"
 	end
 	if Util.CountKeys(root.characters) >= Schema.LIMITS.characters then
@@ -62,6 +60,17 @@ function Store:EnsureCharacter(key, now)
 	char = Schema.NewCharacter(now)
 	root.characters[key] = char
 	return char
+end
+
+--- Returns the active character, creating it if needed. Fails when read-only or full.
+function Store:EnsureCharacter(key, now)
+	return ensureIn(self:Root(), self:ReadOnlyReason(), key, now)
+end
+
+--- Real gameplay events always belong to the real character, even while
+-- simulation mode is on; simulation is for testing, not for hiding events.
+function Store:EnsureRealCharacter(key, now)
+	return ensureIn(self.real, self.realReadOnly, key, now)
 end
 
 --- Replaces a character, keeping the previous one as the single undo slot.

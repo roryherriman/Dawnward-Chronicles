@@ -27,6 +27,9 @@ local WOW_READ = {
 	"GetNormalizedRealmName", "time", "DEFAULT_CHAT_FRAME", "BackdropTemplateMixin",
 	"UISpecialFrames", "tinsert", "ChatFontNormal", "GameFontNormal", "GameFontHighlightSmall",
 	"InCombatLockdown",
+	-- v0.2 journal window and milestones
+	"GameTooltip", "StaticPopup_Show", "date", "GetRealZoneText", "GetSubZoneText",
+	"GameFontNormalLarge", "GameFontHighlight",
 }
 
 files["DawnwardChronicles/Platform/"] = {
@@ -41,6 +44,8 @@ files["DawnwardChronicles/Platform/"] = {
 files["DawnwardChronicles/UI/"] = {
 	not_globals = NOT_IN_WOW,
 	read_globals = WOW_READ,
+	-- Our confirmation dialog is registered in the shared StaticPopupDialogs table.
+	globals = { "StaticPopupDialogs" },
 }
 
 -- The TRP3 adapter receives its environment explicitly; it reads no globals itself.
