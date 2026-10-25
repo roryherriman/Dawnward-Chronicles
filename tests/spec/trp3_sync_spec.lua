@@ -405,4 +405,118 @@ return function(t, expect)
 			expect.equal(w.Sync.Run(w.deps)[1].state, "noop")
 		end)
 	end)
+
+	t:describe("TRP3 sync: review regressions", function()
+		t:it("rollback applies the write guards (version, simulation, combat, editor)", function()
+			local w = world()
+			w.publicFact("origin", "Born in Stormwind")
+			w.enable("about")
+			w.Sync.Run(w.deps)
+			local written = w.about().T1.TX
+			w.setCombat(true)
+			expect.falsy(w.Sync.Rollback(w.deps))
+			w.setCombat(false)
+			w.store:SetSimulation(true)
+			expect.falsy(w.Sync.Rollback(w.deps))
+			w.store:SetSimulation(false)
+			w.fake.openEditor("about")
+			expect.falsy(w.Sync.Rollback(w.deps))
+			w.fake.cancelEditor("about")
+			w.fake.env.C_AddOns.GetAddOnMetadata = function(name, field)
+				if name == "totalRP3" and field == "Version" then return "3.5.0" end
+			end
+			expect.falsy(w.Sync.Rollback(w.deps))
+			expect.equal(w.about().T1.TX, written)
+		end)
+
+		t:it("rollback restores ownership with the data, so no duplicate section appears", function()
+			local w = world()
+			w.publicFact("origin", "Born in Stormwind")
+			w.enable("about")
+			w.Sync.Run(w.deps)           -- backup #1: before insert
+			w.publicFact("belief", "Protect the weak")
+			w.Sync.Run(w.deps)           -- backup #2: holds the first section
+			assert(w.Sync.Rollback(w.deps, 2))
+			w.enable("about")
+			expect.equal(w.Sync.Run(w.deps)[1].state, "written")
+			local _, count = w.about().T1.TX:gsub("Chronicle", "")
+			expect.equal(count, 1, w.about().T1.TX)
+			assert(w.Sync.Release(w.deps, "about"))
+			expect.equal(w.about().T1.TX, "Private about text")
+		end)
+
+		t:it("refuses a second character's opt-in on a shared profile", function()
+			local w = world()
+			w.enable("about")
+			w.deps.characterKey = "Alt-TestRealm"
+			local ok, err = w.Sync.SetOptIn(w.deps, "about", true)
+			expect.falsy(ok)
+			expect.truthy(err:find("already synced by Testchar%-TestRealm"))
+			expect.truthy(w.Sync.SetOptIn(w.deps, "traits", true), "a different feature is fine")
+		end)
+
+		t:it("resolve keep switches the feature off for every character on the profile", function()
+			local w = world()
+			w.publicFact("origin", "Born in Stormwind")
+			w.enable("about")
+			w.Sync.Run(w.deps)
+			w.deps.ledger.optIn["Alt-TestRealm"] = { about = true, traits = false, profileId = w.fake.profileId }
+			w.about().T1.TX = "edited by the player"
+			w.Sync.Run(w.deps)
+			assert(w.Sync.Resolve(w.deps, "about", "keep"))
+			expect.falsy(w.deps.ledger.optIn["Alt-TestRealm"].about)
+		end)
+
+		t:it("a failed notification restores the data and says so honestly", function()
+			local w = world({ triggerFails = true })
+			w.publicFact("origin", "Born in Stormwind")
+			w.enable("about")
+			local r = w.Sync.Run(w.deps)[1]
+			expect.equal(r.state, "failed")
+			expect.truthy(r.message:find("restored from the backup"), r.message)
+			expect.equal(w.about().T1.TX, "Private about text")
+			expect.falsy(w.deps.ledger.log[#w.deps.ledger.log].text:find("RESTORE FAILED"))
+		end)
+
+		t:it("release never removes the character from Dawnward's store, even briefly", function()
+			local w = world()
+			w.publicFact("origin", "Born in Stormwind")
+			w.enable("about")
+			w.Sync.Run(w.deps)
+			local seen = true
+			w.fake.env.TRP3_API.RegisterCallback(w.fake.env.TRP3_Addon, "REGISTER_DATA_UPDATED", function()
+				seen = seen and w.store.real.characters[KEY] ~= nil
+			end)
+			assert(w.Sync.Release(w.deps, "about"))
+			expect.truthy(seen)
+		end)
+
+		t:it("refuses profile IDs the ledger cannot store instead of crashing", function()
+			local w = world({ profileId = "bad|id" })
+			local ok, err = w.Sync.SetOptIn(w.deps, "about", true)
+			expect.falsy(ok)
+			expect.truthy(err:find("not one Dawnward can track"), err)
+		end)
+
+		t:it("a restyled template 2 frame is not removed", function()
+			local w = world({ about = { v = 1, TE = 2, T2 = { { TX = "Mine", IC = "X", BK = 3 } } } })
+			w.publicFact("origin", "Born in Stormwind")
+			w.enable("about")
+			w.Sync.Run(w.deps)
+			w.about().T2[2].IC = "Player_Choice"
+			local ok = w.Sync.Release(w.deps, "about")
+			expect.falsy(ok)
+			expect.equal(#w.about().T2, 2)
+		end)
+
+		t:it("trp3 commands never raise into /dawnward", function()
+			local w = world()
+			local lines = {}
+			local ctx = { print = function(l) lines[#lines + 1] = l end,
+				trp3Deps = function() error("boom") end }
+			w.ns.TRP3Commands.Command(ctx, "preview")
+			expect.truthy(lines[1]:find("failed safely"))
+			expect.truthy(w.ns.TRP3Commands.StatusLines(ctx)[1]:find("unavailable"))
+		end)
+	end)
 end

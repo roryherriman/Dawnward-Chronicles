@@ -208,16 +208,28 @@ function Adapter.DriverFor(env, section, probe)
 	return "manual"
 end
 
+-- Fires TRP3's update notification separately from the write, so a failing
+-- listener is reported as "not notified" rather than "not written".
+-- Returns nil, or an error message.
+local function notify(addon, playerId, profileId, section)
+	local ok, err = pcall(addon.TriggerEvent, addon, addon.Events.REGISTER_DATA_UPDATED, playerId, profileId, section)
+	if not ok then
+		return "Total RP 3 could not be notified (" .. tostring(err) .. ")"
+	end
+	return nil
+end
+
 --- Experimental driver: replaces the player's live section with data,
 -- giving it a new version, then fires TRP3's update notification exactly as
 -- TRP3's own setters do. Refuses unless the active profile is still
 -- expectedProfileId and data passes the shape check. Returns the version
--- written, or nil plus a reason. Callers must have taken a backup.
+-- written (plus, third, an error if TRP3 could not be notified), or nil plus
+-- a reason. Callers must have taken a backup.
 function Adapter.WriteSection(env, section, data, expectedProfileId)
 	if not Adapter.SECTIONS[section] then
 		return nil, "unknown section"
 	end
-	local ok, result, err = pcall(function()
+	local ok, result, err, addon, playerId = pcall(function()
 		local player, user = livePlayer(env)
 		if not player then
 			return nil, user
@@ -247,13 +259,15 @@ function Adapter.WriteSection(env, section, data, expectedProfileId)
 		for k, v in pairs(copy) do
 			live[k] = v
 		end
-		addon:TriggerEvent(addon.Events.REGISTER_DATA_UPDATED, playerId, expectedProfileId, section)
-		return copy.v
+		return copy.v, nil, addon, playerId
 	end)
 	if not ok then
 		return nil, "Total RP 3 behaved unexpectedly while writing (" .. tostring(result) .. ")"
 	end
-	return result, err
+	if not result then
+		return nil, err
+	end
+	return result, nil, notify(addon, playerId, expectedProfileId, section)
 end
 
 --- Asks TRP3 to tell us about profile switches and profile edits. The

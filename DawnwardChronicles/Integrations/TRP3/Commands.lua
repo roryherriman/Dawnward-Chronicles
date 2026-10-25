@@ -73,8 +73,7 @@ local function describeCheck(ctx, check)
 	end
 end
 
---- Extra lines for /dawnward trp3 and status.
-function TRP3Commands.StatusLines(ctx)
+local function statusLines(ctx)
 	local deps = ctx.trp3Deps()
 	local entry = deps.ledger.optIn[deps.characterKey]
 	if not entry or not (entry.about or entry.traits) then
@@ -88,6 +87,15 @@ function TRP3Commands.StatusLines(ctx)
 				STATE_LABEL[check.state] or check.state,
 				#check.reasons > 0 and (" - " .. table.concat(check.reasons, "; ")) or "")
 		end
+	end
+	return lines
+end
+
+--- Extra lines for /dawnward trp3 and status.
+function TRP3Commands.StatusLines(ctx)
+	local ok, lines = pcall(statusLines, ctx)
+	if not ok then
+		return { "  Automatic profile sync: status unavailable (" .. tostring(lines) .. ")" }
 	end
 	return lines
 end
@@ -110,7 +118,7 @@ local function runSync(ctx, deps)
 	end
 end
 
-function TRP3Commands.Command(ctx, rest)
+local function command(ctx, rest)
 	local sub, args = Util.NextWord(rest)
 	sub = sub:lower()
 	local deps = ctx.trp3Deps()
@@ -197,5 +205,13 @@ function TRP3Commands.Command(ctx, rest)
 		end
 	else
 		out(ctx, "Unknown trp3 command '" .. sub .. "'. Try /dawnward trp3 help")
+	end
+end
+
+--- Entry point: a TRP3 surprise must never break /dawnward.
+function TRP3Commands.Command(ctx, rest)
+	local ok, err = pcall(command, ctx, rest)
+	if not ok then
+		ctx.print("Total RP 3 command failed safely: " .. tostring(err))
 	end
 end

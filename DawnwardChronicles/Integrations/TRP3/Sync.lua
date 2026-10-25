@@ -54,6 +54,16 @@ local function deepEqual(a, b)
 end
 Sync.DeepEqual = deepEqual
 
+-- Switches a feature off for every character opted in on this profile, so
+-- "stop managing it" holds even when characters share a profile.
+local function disableForProfile(deps, profileId, feature)
+	for _, entry in pairs(deps.ledger.optIn) do
+		if entry.profileId == profileId then
+			entry[feature] = false
+		end
+	end
+end
+
 local function realCharacter(deps)
 	return deps.store.real.characters[deps.characterKey]
 end
@@ -101,7 +111,9 @@ end
 --- Works out what a run would do, without writing anything.
 -- Returns { feature, state, reasons, plan, section, probe, profileId } where
 -- state is "off", "blocked", "deferred", "conflict", "noop" or "ready".
-function Sync.Check(deps, feature)
+-- publicOverride replaces the character's public projection (Release uses
+-- an empty one to plan "remove Dawnward's content").
+function Sync.Check(deps, feature, publicOverride)
 	local spec = Sync.FEATURES[feature]
 	local result = { feature = feature, reasons = {} }
 	local probe, reasons, deferred = guards(deps, feature)
@@ -115,13 +127,18 @@ function Sync.Check(deps, feature)
 	local profileId = probe.profile.id
 	result.profileId = profileId
 	local record = Ledger.Profile(deps.ledger, profileId)
+	if not record then
+		result.state = "blocked"
+		result.reasons = { "the active Total RP 3 profile ID is not one Dawnward can track" }
+		return result
+	end
 	if record.conflicts[feature] then
 		result.state = "conflict"
 		result.reasons = { record.conflicts[feature] }
 		return result
 	end
 	local char = realCharacter(deps)
-	local public = char and Projection.GetPublic(char) or { facts = {}, personality = {} }
+	local public = publicOverride or (char and Projection.GetPublic(char)) or { facts = {}, personality = {} }
 	local section, err = Adapter.ReadSection(deps.env, spec.section)
 	if not section then
 		result.state = "blocked"
@@ -142,23 +159,22 @@ function Sync.Check(deps, feature)
 	return result
 end
 
-local function disable(deps, feature)
-	local entry = optIn(deps)
-	if entry then
-		entry[feature] = false
-	end
-end
-
 --- Restores a section from backup data through the experimental driver.
+-- Returns ok, note: ok when the data is back in place (note says if TRP3
+-- could not be told about it).
 local function restore(deps, profileId, sectionName, data)
-	return Adapter.WriteSection(deps.env, sectionName, data, profileId)
+	local version, err, notifyErr = Adapter.WriteSection(deps.env, sectionName, data, profileId)
+	if not version then
+		return nil, err
+	end
+	return true, notifyErr
 end
 
 --- Runs one feature. Returns { feature, state, message } where state is one
 -- of the Check states, or "written", "failed" (rolled back).
-function Sync.RunFeature(deps, feature)
+function Sync.RunFeature(deps, feature, publicOverride)
 	local spec = Sync.FEATURES[feature]
-	local check = Sync.Check(deps, feature)
+	local check = Sync.Check(deps, feature, publicOverride)
 	local now = deps.now()
 	if check.state == "conflict" then
 		local record = Ledger.Profile(deps.ledger, check.profileId)
@@ -174,24 +190,27 @@ function Sync.RunFeature(deps, feature)
 	end
 
 	local profileId = check.profileId
+	local ownerRecord = Ledger.Profile(deps.ledger, profileId)[feature]
 	local backup, berr = Ledger.AddBackup(deps.ledger, profileId, spec.section, check.section,
-		{ reason = "before " .. check.plan.action .. " " .. feature, characterKey = deps.characterKey }, now)
+		{ reason = "before " .. check.plan.action .. " " .. feature, characterKey = deps.characterKey,
+			ownerFeature = feature, owner = ownerRecord }, now)
 	if not backup then
 		Ledger.Log(deps.ledger, now, feature .. ": not written: " .. tostring(berr))
 		return { feature = feature, state = "blocked", message = berr }
 	end
 
 	local planned = check.plan[spec.planned]
-	local version, werr = Adapter.WriteSection(deps.env, spec.section, planned, profileId)
+	local version, werr, notifyErr = Adapter.WriteSection(deps.env, spec.section, planned, profileId)
 	local readBack = version and Adapter.ReadSection(deps.env, spec.section)
 	local expected = Util.DeepCopy(planned)
 	expected.v = version
-	if not version or not readBack or not deepEqual(readBack, expected) then
-		local why = werr or "the profile did not read back as written"
-		local restored = restore(deps, profileId, spec.section, check.section)
-		disable(deps, feature)
+	if not version or notifyErr or not readBack or not deepEqual(readBack, expected) then
+		local why = werr or notifyErr or "the profile did not read back as written"
+		local restored, rnote = restore(deps, profileId, spec.section, check.section)
+		disableForProfile(deps, profileId, feature)
 		Ledger.Log(deps.ledger, now, feature .. ": write failed (" .. why .. "); "
-			.. (restored and "restored backup #" .. backup.id or "RESTORE FAILED, use /dawnward trp3 rollback"))
+			.. (restored and ("restored backup #" .. backup.id .. (rnote and " (TRP3 not notified)" or ""))
+				or "RESTORE FAILED, use /dawnward trp3 rollback"))
 		return { feature = feature, state = "failed", message = "Total RP 3 " .. spec.label .. " update failed ("
 			.. why .. "). " .. (restored and "Your profile was restored from the backup"
 				or "Restoring failed: run /dawnward trp3 rollback confirm")
@@ -244,6 +263,16 @@ function Sync.SetOptIn(deps, feature, on)
 		return nil, table.concat(probe.experimental.reasons, "; ")
 	end
 	local id = probe.profile.id
+	if not Ledger.IsStorableProfileId(id) then
+		return nil, "the active Total RP 3 profile ID is not one Dawnward can track"
+	end
+	-- One character per profile and feature: two characters writing to one
+	-- shared profile would keep replacing each other's content.
+	for key, other in pairs(deps.ledger.optIn) do
+		if key ~= deps.characterKey and other.profileId == id and other[feature] then
+			return nil, "this Total RP 3 profile is already synced by " .. key .. "; turn it off there first"
+		end
+	end
 	if not entry or entry.profileId ~= id then
 		entry = { about = false, traits = false, profileId = id }
 		deps.ledger.optIn[deps.characterKey] = entry
@@ -268,35 +297,36 @@ function Sync.Release(deps, feature)
 	if not entry or not entry[feature] then
 		return nil, "turn sync on first (it is needed to write); then release"
 	end
-	local real = deps.store.real
-	local saved = real.characters[deps.characterKey]
-	-- Plan against an empty character: nothing public means "remove owned content".
-	real.characters[deps.characterKey] = nil
-	local ok, result = pcall(Sync.RunFeature, deps, feature)
-	real.characters[deps.characterKey] = saved
-	if not ok then
-		return nil, tostring(result)
-	end
+	-- Plan against an empty projection: nothing public means "remove owned content".
+	local result = Sync.RunFeature(deps, feature, { facts = {}, personality = {} })
 	if result.state == "written" or result.state == "noop" then
-		entry[feature] = false
+		disableForProfile(deps, entry.profileId, feature)
 		return true, "Removed Dawnward's " .. spec.label .. " from Total RP 3 and switched sync off."
 	end
 	return nil, result.message
 end
 
---- Restores the newest backup for the active profile (optionally one
--- section). The current state is backed up first, so a rollback can itself
--- be undone. Ownership records for the section are cleared and its feature
--- switched off.
+--- Restores the newest backup for the active profile (or a chosen one).
+-- The same guards as a sync apply (except the opt-in, so recovery works
+-- after sync was switched off). The current state is backed up first, so a
+-- rollback can itself be undone, and the ownership record saved with the
+-- backup is restored with it, so Dawnward still recognises its own content.
+-- The feature is switched off for the profile.
 function Sync.Rollback(deps, backupId)
 	if deps.ledgerReadOnly then
 		return nil, deps.ledgerReadOnly
 	end
-	local probe = Adapter.Probe(deps.env)
-	local id = probe.profile and probe.profile.id
-	if not id or probe.profile.isDefault then
-		return nil, "no suitable Total RP 3 profile is active"
+	if deps.store:IsSimulation() then
+		return nil, "turn simulation mode off first"
 	end
+	local probe = Adapter.Probe(deps.env)
+	if not probe.experimental.allowed then
+		return nil, table.concat(probe.experimental.reasons, "; ")
+	end
+	if deps.inCombat and deps.inCombat() then
+		return nil, "wait until you are out of combat"
+	end
+	local id = probe.profile.id
 	local backup = backupId and Ledger.FindBackup(deps.ledger, backupId) or Ledger.LatestBackup(deps.ledger, id)
 	if not backup then
 		return nil, "there is no Dawnward backup for this Total RP 3 profile"
@@ -304,7 +334,7 @@ function Sync.Rollback(deps, backupId)
 	if backup.profileId ~= id then
 		return nil, "that backup belongs to another Total RP 3 profile; switch to it first"
 	end
-	if probe.editorOpen and probe.editorOpen[backup.section] ~= false then
+	if probe.editorOpen[backup.section] ~= false then
 		return nil, "close the Total RP 3 editor first"
 	end
 	local data, derr = Ledger.BackupData(backup)
@@ -315,26 +345,29 @@ function Sync.Rollback(deps, backupId)
 	if not current then
 		return nil, cerr
 	end
+	local record = Ledger.Profile(deps.ledger, id)
+	local feature
+	for name, spec in pairs(Sync.FEATURES) do
+		if spec.section == backup.section then feature = name end
+	end
 	local safety, serr = Ledger.AddBackup(deps.ledger, id, backup.section, current,
-		{ reason = "before rollback to #" .. backup.id, characterKey = deps.characterKey }, deps.now())
+		{ reason = "before rollback to #" .. backup.id, characterKey = deps.characterKey,
+			ownerFeature = feature, owner = record[feature] }, deps.now())
 	if not safety then
 		return nil, serr
 	end
-	local version, werr = restore(deps, id, backup.section, data)
-	if not version then
-		return nil, werr
+	local restored, rerr = restore(deps, id, backup.section, data)
+	if not restored then
+		return nil, rerr
 	end
-	local record = Ledger.Profile(deps.ledger, id)
-	for feature, spec in pairs(Sync.FEATURES) do
-		if spec.section == backup.section then
-			record[feature] = nil
-			record.conflicts[feature] = nil
-			disable(deps, feature)
-		end
-	end
+	record[feature] = backup.ownerFeature == feature and Util.DeepCopy(backup.owner) or nil
+	record.conflicts[feature] = nil
+	disableForProfile(deps, id, feature)
 	Ledger.Log(deps.ledger, deps.now(), "rollback: restored " .. backup.section .. " from backup #" .. backup.id)
-	return true, string.format("Restored your Total RP 3 %s from backup #%d. The state before this rollback is "
-		.. "backup #%d. Automatic sync for it is off.", backup.section, backup.id, safety.id)
+	return true, string.format("Restored your Total RP 3 %s from backup #%d (this also undoes any other edits "
+		.. "made to that section since then). The state before this rollback is backup #%d. Automatic sync for "
+		.. "it is off.%s", backup.section, backup.id, safety.id,
+		rerr and " Total RP 3 could not be notified; /reload to refresh it." or "")
 end
 
 --- Settles a conflict. "keep": the player's version stays and Dawnward
@@ -359,7 +392,7 @@ function Sync.Resolve(deps, feature, choice)
 	if choice == "keep" then
 		record.conflicts[feature] = nil
 		record[feature] = nil
-		disable(deps, feature)
+		disableForProfile(deps, id, feature)
 		return true, "Kept your version. Dawnward no longer manages it; sync is off."
 	end
 	if feature == "traits" then
@@ -386,7 +419,8 @@ function Sync.Resolve(deps, feature, choice)
 		end
 		record[feature] = next(owned) and { owned = owned, at = deps.now() } or nil
 		record.conflicts[feature] = nil
-		return true, "Dawnward manages its own traits again and will update them on the next sync."
+		return true, "Dawnward again manages the traits carrying its own labels (for your public axes) and will "
+			.. "update them on the next sync."
 	end
 	record.conflicts[feature] = nil
 	record[feature] = nil

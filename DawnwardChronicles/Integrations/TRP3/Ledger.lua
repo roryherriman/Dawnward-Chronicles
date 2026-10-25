@@ -23,10 +23,10 @@ Ledger.VERSION = 1
 Ledger.LIMITS = {
 	backups = 20,          -- section backups kept in total, oldest dropped first
 	backupBytes = 65536,   -- a section too large to back up is never written
-	block = 4000,          -- bytes of Dawnward-owned biography text
+	block = 4100,          -- bytes of an owned biography string (section cap plus separator, with margin)
 	ownedTraits = 8,       -- Dawnward-owned personality traits per profile
 	log = 30,
-	profiles = 50,
+	profiles = 200,
 	text = 200,            -- short labels and reasons
 }
 
@@ -116,6 +116,8 @@ local function normalizeProfile(raw)
 	return out
 end
 
+local OWNER_NORMALIZERS = { about = normalizeAbout, traits = normalizeTraits }
+
 local function normalizeBackup(raw)
 	if type(raw) ~= "table" or not Util.IsPositiveInteger(raw.id) or not Ledger.IsStorableProfileId(raw.profileId)
 		or not Ledger.SECTIONS[raw.section] or type(raw.data) ~= "string" or #raw.data > Ledger.LIMITS.backupBytes then
@@ -125,7 +127,7 @@ local function normalizeBackup(raw)
 	if type(Serializer.Decode(raw.data)) ~= "table" then
 		return nil
 	end
-	return {
+	local out = {
 		id = raw.id,
 		at = timestamp(raw.at),
 		profileId = raw.profileId,
@@ -134,6 +136,14 @@ local function normalizeBackup(raw)
 		reason = shortText(raw.reason),
 		characterKey = shortText(raw.characterKey),
 	}
+	-- Which content Dawnward owned when the backup was taken, so a rollback
+	-- restores ownership along with the data.
+	local normalizeOwner = OWNER_NORMALIZERS[raw.ownerFeature]
+	if normalizeOwner then
+		out.ownerFeature = raw.ownerFeature
+		out.owner = normalizeOwner(raw.owner)
+	end
+	return out
 end
 
 --- Returns a cleaned copy of the ledger. Unknown or damaged parts are dropped.
@@ -217,7 +227,8 @@ function Ledger.Log(ledger, now, text)
 	end
 end
 
---- Stores a backup of a whole TRP3 section. Returns the backup, or nil plus
+--- Stores a backup of a whole TRP3 section. meta: { reason, characterKey,
+-- ownerFeature ("about" | "traits"), owner (that feature's ownership record) }. Returns the backup, or nil plus
 -- a reason (for example too large), in which case the caller must not write.
 function Ledger.AddBackup(ledger, profileId, section, data, meta, now)
 	if not Ledger.IsStorableProfileId(profileId) or not Ledger.SECTIONS[section] then
@@ -234,6 +245,10 @@ function Ledger.AddBackup(ledger, profileId, section, data, meta, now)
 		id = ledger.nextBackupId, at = now or 0, profileId = profileId, section = section, data = text,
 		reason = shortText(meta and meta.reason), characterKey = shortText(meta and meta.characterKey),
 	}
+	if meta and OWNER_NORMALIZERS[meta.ownerFeature] then
+		backup.ownerFeature = meta.ownerFeature
+		backup.owner = OWNER_NORMALIZERS[meta.ownerFeature](Util.DeepCopy(meta.owner))
+	end
 	ledger.nextBackupId = ledger.nextBackupId + 1
 	ledger.backups[#ledger.backups + 1] = backup
 	while #ledger.backups > Ledger.LIMITS.backups do

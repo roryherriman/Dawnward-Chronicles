@@ -143,6 +143,7 @@ function AboutBlock.Plan(about, record, block)
 			holder = about.T3.HI
 		end
 		local text, newOwned, action = planText(holder.TX, owned, block)
+		assert(not newOwned or #newOwned <= AboutBlock.MAX_BYTES + #AboutBlock.SEPARATOR, "owned block too long")
 		if not text then
 			return { action = "conflict", record = record, reason = newOwned }
 		end
@@ -174,6 +175,12 @@ function AboutBlock.Plan(about, record, block)
 		if block == "" then
 			if not index then
 				return { action = "noop", about = about }
+			end
+			local frame = frames[index]
+			if frame.IC ~= AboutBlock.FRAME_ICON or frame.BK ~= AboutBlock.FRAME_BACKGROUND then
+				-- The player restyled the frame; removing it would lose their choice.
+				return { action = "conflict", record = record,
+					reason = "the Dawnward frame's icon or background was changed in Total RP 3" }
 			end
 			table.remove(frames, index)
 			return { action = "remove", about = about }
