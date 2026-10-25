@@ -112,7 +112,7 @@ All of them are under `Integrations/TRP3/`:
 | Template | What Dawnward owns | How it's identified |
 |---|---|---|
 | T1 | A block appended to `T1.TX`, including the blank-line separator Dawnward added | Exact match of the ledger's last-written string, ending at a line break or the end of the text |
-| T2 | One whole frame Dawnward added (book icon, background 1) | Exact `TX` match |
+| T2 | One whole frame Dawnward added (book icon, background 1) | Exact `TX` match. A frame the player restyled is never removed (conflict). |
 | T3 | A block appended to the history text `T3.HI.TX` | As for T1 |
 | Traits | One custom trait per public axis, with Dawnward's own pole labels (for example Cautious/Bold) | Exact `LT`/`RT` pair, and `V2` equal to the value Dawnward last wrote |
 
@@ -152,7 +152,7 @@ Removing the owned block (release) restores the player's text **byte for byte** 
 ### Recovery
 | Command | What it does |
 |---|---|
-| `/dawnward trp3 rollback [#] confirm` | Restores the newest (or a chosen) backup for the **active** profile. It refuses another profile's backup and an open editor, backs up the current state first (so a rollback can be undone), clears ownership for that section and switches its sync off. |
+| `/dawnward trp3 rollback [#] confirm` | Restores the newest (or a chosen) backup for the **active** profile. It applies the same guards as a write (allowlisted version, not simulation, not combat, editor closed), and refuses another profile's backup. It also undoes any other edits made to that section since the backup. It backs up the current state first (so a rollback can be undone), restores the ownership record saved with the backup (so Dawnward still recognises its own content), and switches sync for that section off. |
 | `/dawnward trp3 release about\|traits confirm` | Removes only Dawnward's content and switches sync off |
 | `/dawnward trp3 backups`, `/dawnward trp3 log` | Inspect backups and diagnostics |
 | `/dawnward trp3 paste` | The manual path: the same section and suggested traits as text to paste into TRP3 yourself (always available, any TRP3 version) |
@@ -184,8 +184,8 @@ Removing the owned block (release) restores the player's text **byte for byte** 
 
 - **Not validated in game.** Every sync claim above is source analysis (S/I) or mocked tests (L2).
 - **Other players don't see changes instantly.** TRP3 is pull-only: they see the update when their client next checks your profile (mouse-over or target, at most every 10 s, and only after their cached version differs).
-- **Shared profiles:** every character using that profile shows the same section. Opting in names the other characters.
-- **A literal copy of Dawnward's section** pasted elsewhere in the same text field makes the block ambiguous. That's a conflict, never a guess.
+- **Shared profiles:** every character using that profile shows the same section, and only **one character per profile** can sync each feature. A second character's opt-in is refused, because the two would keep replacing each other's content. Opting in names the other characters. Keep, rollback, release and a failed write switch the feature off for every character on that profile.
+- **A literal copy of Dawnward's section** pasted elsewhere in the same text field makes the block ambiguous. That's a conflict, never a guess. But if the player deletes Dawnward's section and keeps an identical copy of it, Dawnward treats the copy as its own. The same applies to a trait with Dawnward's labels and value.
 - **If a TRP3 editor was opened and the window closed without saving**, sync waits until the editor is cancelled or saved. That is deliberate.
 - **Simulation data is never published.** Turning simulation on pauses sync.
 
