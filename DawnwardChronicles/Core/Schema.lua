@@ -9,8 +9,8 @@
 --   2  adds per-character journal, journal event keys and theme, and
 --      account-wide window preferences (v0.2). Purely additive.
 --   3  adds per-character character foundations (v0.3): verbatim biography
---      sources, open interpretations, interpretation key memory, canon facts
---      and a reserved wizard table. Purely additive. Frozen when v0.3 ships;
+--      sources, open interpretations, interpretation key memory, canon facts,
+--      personality axis values and a reserved wizard table. Purely additive. Frozen when v0.3 ships;
 --      until then later v0.3 milestones may add fields within v3.
 local _, ns = ...
 local Util, Privacy, Themes = ns.Util, ns.Privacy, ns.Themes
@@ -125,6 +125,21 @@ Schema.FACT_ORIGINS = {
 	profile = true, journal = true, decision = true, player = true,
 }
 
+-- Personality axes: 0 is the left pole, 20 the right. Dawnward's own labels.
+Schema.PERSONALITY_AXES = {
+	{ id = "courage", left = "Cautious", right = "Bold", order = 1 },
+	{ id = "compassion", left = "Hard-hearted", right = "Compassionate", order = 2 },
+	{ id = "discipline", left = "Impulsive", right = "Disciplined", order = 3 },
+	{ id = "faith", left = "Sceptical", right = "Devout", order = 4 },
+	{ id = "honour", left = "Pragmatic", right = "Principled", order = 5 },
+	{ id = "sociability", left = "Reserved", right = "Outgoing", order = 6 },
+}
+
+Schema.PERSONALITY_AXIS_BY_ID = {}
+for _, axis in ipairs(Schema.PERSONALITY_AXES) do
+	Schema.PERSONALITY_AXIS_BY_ID[axis.id] = axis
+end
+
 Schema.SOURCE_KINDS = { trp3 = true, paste = true, written = true, answers = true }
 Schema.INTERPRETATION_KINDS = { candidate = true, insight = true }
 Schema.KEY_STATUS = { rejected = true, promoted = true }
@@ -156,6 +171,7 @@ function Schema.NewCharacter(now)
 		interpretations = {},
 		interpretationKeys = {},
 		facts = {},
+		personality = {},
 		wizard = {},
 	}
 end
@@ -664,6 +680,23 @@ local function normalizeInterpretations(raw, keys, report)
 	return out
 end
 
+local function normalizePersonality(raw)
+	local out = {}
+	if type(raw) ~= "table" then
+		return out
+	end
+	for axisId, entry in pairs(raw) do
+		if Schema.PERSONALITY_AXIS_BY_ID[axisId] and type(entry) == "table" then
+			local v = entry.value
+			if type(v) == "number" and v == math.floor(v) and v >= 0 and v <= 20 then
+				out[axisId] = { value = v, visibility = Privacy.Normalize(entry.visibility),
+					updatedAt = normalizeTimestamp(entry.updatedAt) }
+			end
+		end
+	end
+	return out
+end
+
 local function normalizeFacts(raw, report, usedIds)
 	local out = {}
 	if type(raw) ~= "table" then
@@ -720,6 +753,7 @@ function Schema.NormalizeCharacter(raw, report)
 	char.journal = normalizeJournal(raw.journal, report, usedIds)
 	char.journalKeys = normalizeJournalKeys(raw.journalKeys, report)
 	char.facts = normalizeFacts(raw.facts, report, usedIds)
+	char.personality = normalizePersonality(raw.personality)
 	char.sources = normalizeSources(raw.sources, report)
 	char.interpretationKeys = normalizeInterpretationKeys(raw.interpretationKeys, report)
 	char.interpretations = normalizeInterpretations(raw.interpretations, char.interpretationKeys, report)

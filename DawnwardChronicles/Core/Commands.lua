@@ -10,11 +10,14 @@
 --   trp3Status()  read-only TRP3 status table (optional)
 --   zone()        current zone name, for simulated milestones (optional)
 --   ui            { ShowExport(title, text), ShowImport(), ToggleJournal() } (all optional)
+--   trp3          TRP3 sync integration: { Command(ctx, rest), StatusLines(ctx) } (optional;
+--                 provided by Integrations/TRP3, so the core never touches TRP3 itself)
 --
 -- Anything that deletes or replaces data requires the word "confirm".
 local _, ns = ...
-local Util, Schema, Character, Projection, Transfer, Journal, Actions, Themes, Facts =
-	ns.Util, ns.Schema, ns.Character, ns.Projection, ns.Transfer, ns.Journal, ns.Actions, ns.Themes, ns.Facts
+local Util, Schema, Character, Projection, Transfer, Journal, Actions, Themes, Facts, Personality =
+	ns.Util, ns.Schema, ns.Character, ns.Projection, ns.Transfer, ns.Journal, ns.Actions, ns.Themes, ns.Facts,
+	ns.Personality
 
 local Commands = {}
 ns.Commands = Commands
@@ -32,6 +35,8 @@ local HELP = {
 	"  history add <text> | history list | history set <#> when|text <text>",
 	"  history vis <#> <level> | history remove <#> confirm",
 	"  fact list | fact add <category> <statement> | fact vis <#> <level> | fact remove <#> confirm",
+	"  personality list | personality set <axis> <0-20> | personality vis <axis> <level>",
+	"  personality clear <axis> confirm",
 	"  export backup [secrets] [biography] | export share | import | import confirm | import undo",
 	"  sim on | sim off | sim copy confirm | sim reset confirm | sim levelup <level>",
 }
@@ -177,9 +182,18 @@ function Commands.Trp3Lines(status)
 	return lines
 end
 
-handlers.trp3 = function(ctx)
+handlers.trp3 = function(ctx, rest)
+	if rest and rest ~= "" and ctx.trp3 and ctx.trp3.Command then
+		ctx.trp3.Command(ctx, rest)
+		return
+	end
 	for _, line in ipairs(Commands.Trp3Lines(ctx.trp3Status and ctx.trp3Status())) do
 		out(ctx, line)
+	end
+	if ctx.trp3 and ctx.trp3.StatusLines then
+		for _, line in ipairs(ctx.trp3.StatusLines(ctx)) do
+			out(ctx, line)
+		end
 	end
 end
 
@@ -306,6 +320,47 @@ handlers.fact = function(ctx, rest)
 			return
 		end
 		_, message = Actions.RemoveFact(ctx, id)
+	end
+	out(ctx, message)
+end
+
+handlers.personality = function(ctx, rest)
+	local sub, args = Util.NextWord(rest)
+	sub = sub:lower()
+	if sub == "" or sub == "list" then
+		local char = Actions.Character(ctx)
+		local list = char and Personality.List(char) or {}
+		out(ctx, "Personality (0 = left, 20 = right). Axes: " .. Personality.AxisList())
+		if #list == 0 then
+			out(ctx, "  (no values set) Try: /dawnward personality set courage 14")
+		end
+		for _, item in ipairs(list) do
+			out(ctx, string.format("  %s: %s %d/20 %s [%s]", item.axis.id, item.axis.left, item.value, item.axis.right,
+				item.visibility))
+		end
+		return
+	end
+	local axisId, tail = Util.NextWord(args)
+	axisId = axisId:lower()
+	local word = Util.NextWord(tail):lower()
+	local message
+	if sub == "set" then
+		local value = tonumber(word)
+		if axisId == "" or not value then
+			out(ctx, "Usage: /dawnward personality set <axis> <0-20>   Axes: " .. Personality.AxisList())
+			return
+		end
+		_, message = Actions.SetPersonality(ctx, axisId, value)
+	elseif sub == "vis" then
+		_, message = Actions.SetPersonalityVisibility(ctx, axisId, word)
+	elseif sub == "clear" then
+		if word ~= "confirm" then
+			out(ctx, "This clears the value. Type: /dawnward personality clear " .. axisId .. " confirm")
+			return
+		end
+		_, message = Actions.ClearPersonality(ctx, axisId)
+	else
+		message = "Usage: /dawnward personality list | set <axis> <0-20> | vis <axis> <level> | clear <axis> confirm"
 	end
 	out(ctx, message)
 end

@@ -13,7 +13,13 @@ local ITEM_LISTS = { "family", "history", "journal", "facts" }
 -- The cosmetic theme is always included. Journal event keys, biography
 -- sources, interpretations and their key memory never are.
 function Projection.Filter(char, allowed)
-	local out = { fields = {}, family = {}, history = {}, journal = {}, facts = {}, theme = char.theme }
+	local out = { fields = {}, family = {}, history = {}, journal = {}, facts = {}, personality = {},
+		theme = char.theme }
+	for axisId, entry in pairs(char.personality or {}) do
+		if Privacy.Allows(allowed, entry.visibility) then
+			out.personality[axisId] = Util.DeepCopy(entry)
+		end
+	end
 	for key, entry in pairs(char.fields) do
 		if Privacy.Allows(allowed, entry.visibility) then
 			out.fields[key] = Util.DeepCopy(entry)

@@ -23,6 +23,7 @@ Loader.CORE = {
 	"Core/Facts.lua",
 	"Core/Sources.lua",
 	"Core/Interpretations.lua",
+	"Core/Personality.lua",
 	"Core/Projection.lua",
 	"Core/Serializer.lua",
 	"Core/Transfer.lua",

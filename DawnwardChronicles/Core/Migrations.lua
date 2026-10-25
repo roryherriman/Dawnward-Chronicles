@@ -56,7 +56,7 @@ Migrations.steps[2] = function(db)
 					if type(char.sources) ~= "table" then
 						char.sources = Schema.NewSources()
 					end
-					for _, key in ipairs({ "interpretations", "interpretationKeys", "facts", "wizard" }) do
+					for _, key in ipairs({ "interpretations", "interpretationKeys", "facts", "personality", "wizard" }) do
 						if type(char[key]) ~= "table" then
 							char[key] = {}
 						end
