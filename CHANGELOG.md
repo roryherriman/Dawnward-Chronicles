@@ -12,7 +12,45 @@ Every release entry has a **Verified** line naming the highest test level reache
 
 A feature is never called "tested" or "compatible" in this file unless it reached L3 or L4.
 
-## [Unreleased]: 0.2.0 (journal window)
+## [Unreleased]: 0.3.0-dev (character foundations, experimental TRP3 sync)
+
+**Verified: L2** (mocked). Nothing in this section has been tested in game yet; see the v0.3 checklist in [`docs/TESTING.md`](docs/TESTING.md#v03-in-game-checklist-l3).
+
+### Added
+- **Schema v3: character foundations.** Each character gains biography sources, suggestions (interpretations) and their key memory, canon facts, personality values and a reserved wizard table.
+  - The v2 → v3 migration only adds empty containers; every v2 value is preserved (L1, L2).
+  - v0.2 builds open v3 data read-only.
+- **Facts (canon):** nine categories; private by default; at most 200, and canon is never removed automatically.
+  - Commands: `/dawnward fact list | add <category> <statement> | vis <#> <level> | remove <#> confirm`.
+  - Facts are only created by the player or by explicit promotion of a suggestion; an architecture test enforces this.
+- **Biography sources:** stored verbatim (three versions; the current one is never dropped; over 16 KB is refused, never truncated). There are display-only tag-stripping and sentence-splitting helpers.
+- **Suggestions:** stable keys; rejected and promoted suggestions are remembered, so unchanged re-imports suggest nothing twice. No automatic promotion exists.
+- **Personality axes:** six Dawnward axes, 0–20, private by default: `/dawnward personality list | set <axis> <0-20> | vis <axis> <level> | clear <axis> confirm`. The evolution model is still under review; values are set by the player for now.
+- **Exports:**
+  - Share exports include public facts and personality only.
+  - Backups include facts, suggestions and key memory, and the biography only with `/dawnward export backup biography`.
+  - Restoring a backup without a biography keeps the current one. Secret facts carry over.
+- `/dawnward status` shows a Foundations line.
+- **Experimental Total RP 3 sync (off by default; TRP3 3.4.1 only; L2 only).** Dawnward can keep two things up to date in your own TRP3 profile:
+  - its own **Chronicle** section of public facts in the About page;
+  - its own personality traits.
+
+  It never changes your text, layout or traits. Safeguards:
+  - **Per-character opt-in:** `/dawnward trp3 enable about|traits confirm`, bound to one TRP3 profile. Never on the default profile.
+  - **Before each write:** backup and compare-before-write.
+  - **After each write:** read-back, with automatic restore on any mismatch.
+  - **Conflicts:** they are detected and never silently overwritten (`/dawnward trp3 resolve about|traits keep|reclaim`).
+  - **Waits:** no writes while a TRP3 editor holds a draft, in combat, in simulation mode, or after a profile switch.
+  - **No churn:** unchanged content writes nothing.
+  - **Recovery:** `/dawnward trp3 rollback [#] confirm`, `release`, `backups`, `log`, `preview`.
+  - **Manual fallback:** `/dawnward trp3 paste`.
+  - The new saved variable is `DawnwardChroniclesTRP3DB`.
+
+### Changed
+- The Adler-32 checksum moved to `Util.Checksum`; `Transfer.Checksum` remains as an alias.
+- Export text now declares schema 3, so v0.2 builds refuse v0.3 exports as "newer".
+
+## 0.2.0 (journal window)
 
 ### Added
 - **Journal window.** `/dawnward` (or `/dwc`) opens and closes a compact, draggable journal.

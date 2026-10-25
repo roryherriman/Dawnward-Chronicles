@@ -1,133 +1,196 @@
 # Total RP 3 integration
 
-Status: **audit and design only, no code.** Findings come from reading the TRP3 **3.4.1** Lua source. They have not been run or tested in game. TRP3 is Apache-2.0 and is not included in this repository.
+**Status (v0.3.0-dev):** read-only status (tested in game, v0.1/v0.2), plus **experimental automatic sync** of a Dawnward-owned biography section and Dawnward-owned personality traits.
+
+The sync is **built and tested against mocks only (L2)**:
+- It is **off by default**. Each character has to opt in with `/dawnward trp3 enable about|traits confirm`.
+- It is **allowlisted for TRP3 3.4.1 only**.
+- **Nothing in this document about sync has been validated in game yet.** The checklist is in [TESTING.md](TESTING.md#v03-in-game-checklist-l3).
+
+Findings come from reading the TRP3 **3.4.1** Lua source (tag `3.4.1`, commit `4c25cb0`), compared with upstream `main`. TRP3 is Apache-2.0 and is not included in this repository.
+
+Evidence labels:
+- **S**: confirmed from source.
+- **L2**: confirmed by Dawnward's mocked tests.
+- **I**: inferred from source; not proven.
+- **L3**: confirmed in game.
 
 ## Rules
 
 1. TRP3 is an independent addon. Dawnward never modifies its files, never edits SavedVariables on disk, and never patches or replaces TRP3 functions.
-2. The public API comes first. Anything outside `AddOn_TotalRP3` is treated as internal and may change without warning. Each internal dependency is listed below with its risk.
-3. No write without a capability check, a backup, a read-back check and the player's approval.
-4. Only the public projection is used (see [PRIVACY.md](PRIVACY.md)). Private and secret facts can never reach TRP3.
-5. A failure in the integration cannot reach the core. See the isolation rule in [ARCHITECTURE.md](ARCHITECTURE.md#saved-data).
+2. **Public API first.** Anything outside `AddOn_TotalRP3` is internal and may change without warning. Each internal dependency is listed below with its risk.
+3. **Experimental internal writes are off by default.** They need all of these:
+   - the TRP3 version is allowlisted;
+   - the character has opted in, bound to one exact profile ID;
+   - every runtime capability and shape check passes.
+4. **No write without a backup, a read-back check, and automatic restore on mismatch.**
+5. Only the **public projection** reaches TRP3 (see [PRIVACY.md](PRIVACY.md)). Private and secret facts, simulation data and unapproved suggestions can never reach it.
+6. Dawnward changes **only content it owns**, proven by an exact match against its ledger. It never changes the player's text, template choice, layout, preset traits or the player's own traits. When in doubt, it stops and asks.
+7. A failure in the integration cannot reach the core: every TRP3 access is wrapped in `pcall` and type-checked.
 
-## What 3.4.1 offers
+## Public API capabilities (TRP3 3.4.1 and `main`), issue #8
 
-### Reading
-- `AddOn_TotalRP3.Player.GetCurrentUser()` gives a `CurrentUser` with `GetProfileID`, `GetProfileName`, `IsProfileDefault`, name, title, race, class, icon and colour getters, `GetRoleplayStatus`, `GetCurrentlyText`, `GetMiscFields` and `GetCustomPronouns`.
-- `GetProfile()` and `GetCharacteristics()` return **live** SavedVariables tables. Dawnward deep-copies them and never changes them.
-- **There is no public reader for the About page or for personality traits.** `GetInfo(path)` can read them, but the source marks it `TODO Deprecate`. → Classed as an *internal read*.
-
-### Writing (public setters)
-- **Fields with a setter:** `SetCurrentlyText`, `SetOutOfCharacterInfo`, `SetTitle`, `SetFullTitle`, `SetFirstName`, `SetLastName`, `SetCustomRace`, `SetCustomClass`, `SetCustomClassColor`, `SetCustomIcon`, `SetRoleplayStatus`, `SetWalkup`, `SetRoleplayExperience`.
-- On the **default profile**, the setters do nothing and give no error, except for RP status and walk-up. Each setter bumps the section version `v` (it wraps from 99 back to 1) and fires `REGISTER_DATA_UPDATED`, which is how other players and MSP addons learn of the change.
-- **No public setter exists for `about` (biography) or `characteristics.PS` (personality traits).**
-
-### Events (semi-public)
-These come through the CallbackHandler registry on the global `TRP3_Addon`:
-
-| Event | When it fires |
-|---|---|
-| `REGISTER_PROFILES_LOADED` | The player switched profile |
-| `REGISTER_DATA_UPDATED(unitID, profileID, dataType)` | Profile data changed |
-| `REGISTER_PROFILE_DELETED` | A profile was deleted |
-| `WORKFLOW_ON_FINISH` | TRP3 has finished starting up |
-
-### Profiles
-- **The default profile's ID ends in `*` and is regenerated at every login.** Dawnward never stores it and never writes to it.
-- **Profiles can be shared by several characters.** Before the first sync, Dawnward shows which characters share the profile.
-- Since 3.4.0, TRP3's own import always creates a *new* profile.
-
-### Data formats (relevant parts)
-- **about**
-  - `TE` is the template number, 1 to 3.
-  - Template 1 is a single text, `T1.TX`.
-  - Template 2 is a list of frames, `T2[i] = {TX, IC, BK}`.
-  - Template 3 is `T3.PH/PS/HI = {TX, IC, BK}` (physical, psychological, history).
-  - Section version is `v`. Text uses TRP3 tag markup such as `{h1}` and `{col:rrggbb}`.
-- **characteristics.PS** is a list of traits.
-  - A preset trait is `{ID, V2}`.
-  - A custom trait is `{LT, RT, V2, LI, RI, LC, RC}`, where `V2` runs 0 to 20 (default 10).
-- **Size:** TRP3 sets no text limit, but large profiles are slow for other players to receive. Dawnward caps its generated biography block at 4,000 characters, which is our own policy.
-
-## Sync tiers
-
-| Tier | What it does | Planned for | Default |
+| Data | Public read | Public write | Notes |
 |---|---|---|---|
-| 0 | Detect TRP3, read through the public API, preview what would change | v0.1 | On |
-| A | Public setters for Currently, OOC, Title and Full title, with field backup and rollback | v0.5 | Off (opt-in) |
-| B | Copy-and-paste: Dawnward builds biography and trait text in TRP3 markup, and the player pastes it into TRP3's own editor | v0.5 | **Always available. The supported path for biography and personality.** |
-| C | Version-specific direct write of Dawnward-owned biography and trait content | **Research.** Long-term goal. | Off. Needs separate approval. |
+| Profile identity | `GetProfileID`, `GetProfileName`, `IsProfileDefault`, `GetCharacterID` **S** | `SetProfileID` (select only) **S** | Default profile IDs end in `*` and change every login **S** |
+| Names, title, full title, race, class, colour, icon | getters **S** | `SetFirstName`, `SetLastName`, `SetTitle`, `SetFullTitle`, `SetCustomRace`, `SetCustomClass`, `SetCustomClassColor`, `SetCustomIcon` **S** | Refused silently on the default profile **S** |
+| Currently, OOC, RP status, walk-up, RP experience | getters **S** | `SetCurrentlyText`, `SetOutOfCharacterInfo`, `SetRoleplayStatus`, `SetWalkup`, `SetRoleplayExperience` **S** | The setters (`UpdateProfileField`): no-op if unchanged, bump `v`, fire `REGISTER_DATA_UPDATED(player_id, profileID, section)` **S** |
+| **About / biography** | none (`GetProfile().about` is the live table) **S** | **none** **S** | Same in `main` **S** |
+| **Personality traits** (`characteristics.PS`) | none (`GetCharacteristics().PS`, live table) **S** | **none** **S** | Same in `main` **S** |
 
-### Current limitation (documented for players)
-> Total RP 3 has no supported way for another addon to change your About page or personality traits. Until a safe, version-checked method has been tested, Dawnward gives you the text to paste in yourself.
+**Missing setters that would make biography and trait sync supported:**
+- a way to write or register an addon-owned About section;
+- a way to write addon-owned personality traits;
+- an "editor has unsaved draft" query.
 
-## Research: a version-specific adapter for fields with no public setter (Tier C)
+A draft proposal is in [planning/living-character/trp3-upstream-proposal.md](planning/living-character/trp3-upstream-proposal.md). It has **not been submitted**, and Dawnward does not contact the TRP3 maintainers.
 
-Automatic biography and personality sync is a **long-term goal**. The design below is research only. It is not implemented, and it will only be built after Tiers A and B are verified in game and you have signed off on the risks.
+**Replaceability:** when an official setter appears:
+1. Add its method name to `TRP3Adapter.PUBLIC_SECTION_WRITERS` (`Integrations/TRP3/Adapter.lua`). `DriverFor` then prefers it over the experimental driver.
+2. Planning, ownership, the ledger, backups and conflicts don't change.
 
-### 1. Version profiles, not version guessing
-Each TRP3 version gets its own adapter profile, kept in `Integrations/TRP3/VersionProfiles.lua`:
+## What TRP3 3.4.1 does (verified from source)
 
-```lua
--- illustrative only
-["3.4.1"] = {
-	audited = true,               -- source has been read
-	verified = nil,               -- "L3" / "L4" once tested in game
-	tiers = { read = true, publicSetters = true, manualExport = true, ownedWrite = false },
-}
-```
+### Storage and profiles
+- Your own profiles live in `TRP3_Profiles[id]`, with data under `.player` **S**.
+- `TRP3_Characters[characterID].profileID` links characters to profiles, so **several characters can share one profile table** **S**.
+- `CurrentUser:GetProfile()` returns the live `.player` table **S**.
 
-- The version is read with the client's `GetAddOnMetadata("totalRP3", "Version")` (or `C_AddOns.GetAddOnMetadata`), not from TRP3 internals.
-- A version that isn't listed gets Tier 0 and Tier B only.
-- `ownedWrite` is switched on per version, only after that version's source has been audited and tested in game.
-- **3.4.1 and 3.5.3 are both design targets. Only versions that have been audited and tested ever get `ownedWrite = true`.**
+### About (`player.about`)
+- The layout is `{ v, TE = 1|2|3, BK, MU, T1 = {TX}, T2 = { {TX, IC, BK}, … }, T3 = { PH, PS, HI = {TX, BK, IC} } }` **S**.
+- Only the active template is sent to other players **S**.
 
-### 2. Capability checks run each time, before every write
-A write is refused, with the reason shown, unless **all** of these hold:
+### Characteristics (`player.characteristics`)
+- `PS` is a list. A preset trait is `{ID, V2}`; a custom trait is `{LT, RT, LI, RI, LC, RC, V2}` **S**.
+- `V2` runs from 0 to 20 (default 10). It is the number of points toward the **left** trait; the right trait gets `20 - V2` (`refreshPsycho`) **S**.
+- There is no limit on the number of traits **S**.
 
-- The TRP3 version profile allows `ownedWrite`, and the expected functions and tables exist with the expected types.
-- TRP3 has finished starting up (`WORKFLOW_ON_FINISH` has fired).
-- The player is not in combat.
-- The active profile ID equals the bound profile ID, and it is not the default profile.
-- **TRP3's main window is closed**, so its editor cannot be holding a draft that would overwrite our change. Checking that the frame is hidden avoids relying on the internal `isEditMode` flag.
-- The player has seen a preview showing the change, with removed and added text, and confirmed it.
+### Editors
+- The About and characteristics editors work on a **draft copied when the editor opens** **S**.
+- **Save** wipes the live section, copies the draft back, sets `v = draft.v + 1`, and fires `REGISTER_DATA_UPDATED(player_id, nil, section)`. The profile ID is nil on the player's own page **S**.
+- **So anything written to the live section while an editor holds a draft is lost on Save.**
 
-### 3. Ownership without visible markers
-Dawnward never changes text it didn't write. Visible markers in the text would show up for other players, so ownership is tracked in `DawnwardChroniclesTRP3DB` instead:
+### Version rule
+`Utils.math.incrementNumber(v, 2)`: +1, with 100 wrapping to 1 **S**.
 
+### Events
+- They come through the `TRP3_Addon` registry, via `TRP3_API.RegisterCallback(TRP3_Addon, event, fn)` **S**.
+- Callback argument positions differ between TRP3's own listeners and its comments. **Dawnward treats these events as hints only and never reads their arguments.**
+
+### Exchange
+- The exchange is **pull-only**:
+  - other clients send a version query with your `characteristics.v`, `about.v`, `misc.v` and `character.v`, and re-fetch only a section whose number differs **S**;
+  - `REGISTER_DATA_UPDATED` doesn't broadcast; it only refreshes local UI and the MSP fields **S**.
+- Another player sees an update the next time they mouse over or target you. TRP3 queries at most once per 10 s per unit **S**.
+- There is no hard size limit, only a "profile too heavy" warning **S**.
+
+### MSP bridge (MyRolePlay/XRP)
+- It rebuilds only when `REGISTER_DATA_UPDATED` fires with your own unit ID **S**.
+- Field mapping **S**:
+  - `DE` is the About text: T1, or T2 frames joined, or T3 physical plus personality.
+  - `HI` is the T3 history.
+  - Traits are sent as `[trait value=V2/20 …]`.
+- So after an outside write, firing the event exactly as TRP3's setters do is what keeps MSP users up to date.
+
+## The sync design (as built)
+
+### Modules
+All of them are under `Integrations/TRP3/`:
+
+| Module | Role |
+|---|---|
+| `Adapter.lua` | **The only module that touches TRP3 for sync.** `Probe` re-reads everything on every call: version, profile ID, default, linked characters, update-event API and editor state. `ReadSection` returns validated deep copies. `WriteSection` is the experimental driver. `Listen` registers the hints. |
+| `Shape.lua` | Fail-closed layout checks for About and characteristics (unknown extra fields are preserved), and the version rule |
+| `AboutBlock.lua` | Composes the Dawnward section from public facts, and plans insert, replace, remove, no-op or conflict (pure) |
+| `TraitPlan.lua` | Maps public Dawnward personality axes to owned custom traits, and plans changes (pure) |
+| `Ledger.lua` | `DawnwardChroniclesTRP3DB`: opt-ins, ownership records, conflicts, backups and log |
+| `Sync.lua` | The transaction, plus rollback, release and resolve |
+| `Commands.lua` | `/dawnward trp3 …` |
+| `Platform/TRP3Bridge.lua` | Saved variable, debounced automatic runs, event hints |
+
+### Ownership without visible markers
 | Template | What Dawnward owns | How it's identified |
 |---|---|---|
-| T2 (frames) | One whole frame that Dawnward added | The exact `TX` text matches the ledger's record of what was last written |
-| T1, or T3 history (`HI`) | One trailing block that Dawnward appended | An exact suffix match against the last-written block |
-| Traits (`PS`) | Custom traits that Dawnward added | Exact `LT`/`RT` pair from the ledger |
+| T1 | A block appended to `T1.TX`, including the blank-line separator Dawnward added | Exact match of the ledger's last-written string, ending at a line break or the end of the text |
+| T2 | One whole frame Dawnward added (book icon, background 1) | Exact `TX` match |
+| T3 | A block appended to the history text `T3.HI.TX` | As for T1 |
+| Traits | One custom trait per public axis, with Dawnward's own pole labels (for example Cautious/Bold) | Exact `LT`/`RT` pair, and `V2` equal to the value Dawnward last wrote |
 
-If the owned content can't be found **exactly** (because the player edited it), Dawnward stops and asks. The edited content then belongs to the player. Dawnward never changes the player's template choice (`TE`), never touches preset traits or traits the player created, and never deletes anything it doesn't own.
+These cases are a **conflict**:
+- The owned content is missing, appears more than once, or was edited.
+- The template changed.
+- The player already has a trait with Dawnward's labels.
 
-### 4. Transaction
-1. Deep-copy the affected section into a backup in `DawnwardChroniclesTRP3DB`, keeping at most N per profile.
-2. Apply only the owned-content change to TRP3's in-memory section.
-3. Bump the section's `v` with TRP3's rule (+1, wrapping 99 → 1), then fire `REGISTER_DATA_UPDATED(player_id, profileID, "about" or "characteristics")`. This copies what TRP3's own editor does when it saves, so it is a documented internal dependency.
-4. Read the section back and compare. If anything outside the owned content differs, restore the backup at once and turn Tier C off.
-5. Keep the backup as the rollback point (`/dawnward trp3 rollback`).
+On a conflict, Dawnward writes nothing and pauses that feature until the player runs `/dawnward trp3 resolve about|traits keep|reclaim`:
+- **keep**: the player's version stays and Dawnward stops managing it.
+- **reclaim**: for the biography, the edited text becomes the player's and Dawnward appends a fresh section. For traits, Dawnward takes back its labelled traits at their current values.
 
-### 5. Internal dependencies and their risk
+Removing the owned block (release) restores the player's text **byte for byte** (L2).
 
-| Dependency | Why it's needed | Risk if TRP3 changes |
+### Guards (re-checked on every run)
+1. The ledger loaded (a ledger from a newer build stays untouched and blocks sync).
+2. Not in simulation mode, and saved data is writable.
+3. TRP3 is loaded, the version is on the allowlist (`VersionProfiles`: `experimentalWrite`), and the public API, profile data and update event exist. **A matching version number alone is never enough.**
+4. The active profile has an ID, is **not the default profile**, and is **exactly the profile the character opted in with**. Switching profile pauses sync.
+5. The editor panel for the section is not shown. Dawnward checks the panel's own shown flag, which stays set even if TRP3's window was closed in the middle of editing.
+6. Not in combat.
+7. No unresolved conflict, and the section passes the shape check.
+
+### Transaction
+1. Plan against a **copy**. A **no-op writes nothing**: no backup, no version bump, no event.
+2. **Back up** the whole section (serialised) into the ledger.
+   - At most 20 backups are kept.
+   - A section too large to back up (over 64 KB serialised) is **never written**.
+3. Write the owned change: replace the live section's contents in place, as TRP3's editors do.
+4. Bump `v` by **two** steps.
+   - TRP3's editors save `draft.v + 1`. Skipping a number means an editor save from an older draft can never reuse the version other clients already fetched from Dawnward **I**.
+   - Without this, those clients would keep showing stale data.
+5. Fire `REGISTER_DATA_UPDATED(player_id, profileID, section)` exactly as TRP3's own setters do. This updates TRP3's UI and the MSP fields.
+6. **Read back** and compare with the expected section.
+7. On any mismatch or error: restore the backup, switch the feature off, log it, and tell the player.
+
+### Recovery
+| Command | What it does |
+|---|---|
+| `/dawnward trp3 rollback [#] confirm` | Restores the newest (or a chosen) backup for the **active** profile. It refuses another profile's backup and an open editor, backs up the current state first (so a rollback can be undone), clears ownership for that section and switches its sync off. |
+| `/dawnward trp3 release about\|traits confirm` | Removes only Dawnward's content and switches sync off |
+| `/dawnward trp3 backups`, `/dawnward trp3 log` | Inspect backups and diagnostics |
+| `/dawnward trp3 paste` | The manual path: the same section and suggested traits as text to paste into TRP3 yourself (always available, any TRP3 version) |
+
+### Automatic runs
+- Runs are requested after login, after any `/dawnward` command, and when TRP3 reports a profile switch or edit.
+- Requests are merged into one run 5 s later (`C_Timer.After`).
+- A run that has to wait (editor open, combat) retries every 30 s, up to 20 times.
+- A persistent state (blocked, conflict) is reported once.
+
+## Internal dependencies and their risk
+
+| Dependency | Why | If TRP3 changes |
 |---|---|---|
-| `GetInfo("about")`, `GetInfo("characteristics")` (deprecated) | No public reader for these sections | The reader disappears → Tier C turns itself off |
-| Section shape (`TE/T1/T2/T3`, `PS` fields) | To find owned content | A Flyway migration reshapes the data → the version profile blocks the write |
-| The `v` bump rule and the `REGISTER_DATA_UPDATED` event | So other players see the change | The change stays local → caught by an L3 check with a second client |
-| `TRP3_Addon:TriggerEvent` | Firing the update event | A signature change → caught by the capability check |
+| `CurrentUser:GetProfile()` returning the live table | No public section reader or writer | Probe or shape check fails → sync blocked |
+| About / PS layout (above) | To find owned content | Shape check fails closed → sync blocked |
+| `TRP3_Addon:TriggerEvent`, `TRP3_Addon.Events.REGISTER_DATA_UPDATED`, `TRP3_API.globals.player_id` | So TRP3's UI, MSP and the exchange see the change | Probe fails → sync blocked |
+| Version rule (+1, wrap at 100) | Other clients re-fetch on a different number | Remote clients may not re-fetch → caught by the two-client L3 test |
+| Editor frame names `TRP3_RegisterAbout_AboutPanel_Edit`, `TRP3_RegisterCharact_Edit_NamePanel` | To avoid writing under an open draft | Frame missing → "cannot tell whether the editor is open" → sync blocked |
+| `TRP3_API.RegisterCallback` | Hints only | Missing → still works on Dawnward's own triggers |
+| `TRP3_Characters` (read only) | To warn about shared profiles | Missing → no warning |
 
-### 6. Before enabling Tier C for any version (3.4.1 or 3.5.3)
-- [ ] Audit that version's source: `Core/Player.lua`, `Core/Profiles.lua`, `RegisterAbout.lua`, `RegisterCharacteristics.lua`, `RegisterExchange.lua`, the MSP bridge, and the Flyway patches.
-- [ ] Build an L2 fake that matches that version's data shapes and behaviour, then test the ownership, transaction and rollback paths.
-- [ ] L3/L4 in game: TRP3's own page shows the change after the write, and opening and saving TRP3's editor afterwards keeps the change.
-- [ ] L3/L4 with a second client: another player receives the update, and MSP addons see it.
-- [ ] L3/L4: the write is refused while the editor is open, while in combat, and on the default profile.
-- [ ] You review and approve the results.
+**Newer TRP3 (3.5.x / `main`):**
+- Same setters and save path.
+- Icons are now stored as numeric file IDs.
+- **Not allowlisted.** It needs its own audit and an in-game test first.
+
+## Known limits and risks
+
+- **Not validated in game.** Every sync claim above is source analysis (S/I) or mocked tests (L2).
+- **Other players don't see changes instantly.** TRP3 is pull-only: they see the update when their client next checks your profile (mouse-over or target, at most every 10 s, and only after their cached version differs).
+- **Shared profiles:** every character using that profile shows the same section. Opting in names the other characters.
+- **A literal copy of Dawnward's section** pasted elsewhere in the same text field makes the block ambiguous. That's a conflict, never a guess.
+- **If a TRP3 editor was opened and the window closed without saving**, sync waits until the editor is cancelled or saved. That is deliberate.
+- **Simulation data is never published.** Turning simulation on pauses sync.
 
 ## Open questions (to verify in game)
-- Does Classic Era expose `C_AddOns.GetAddOnMetadata`, `GetAddOnMetadata`, or both?
-- Does TRP3's open profile page refresh by itself when the update event fires for the player?
-- Does TRP3 3.5.3 support the Forever client, and does Forever have `C_EncodingUtil` (which TRP3 3.4.1 needs for its own import and export)?
+
+- Does TRP3's open profile page refresh by itself after the update event?
+- Does a second client (and an MSP client) receive the update after mouse-over?
+- Are the editor panels' shown flags reliable in every path (cancel, tab switch, `/reload` while editing)?

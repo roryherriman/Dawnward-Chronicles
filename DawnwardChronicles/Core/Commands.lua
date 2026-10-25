@@ -178,7 +178,8 @@ function Commands.Trp3Lines(status)
 	elseif status.api and not status.api.getCurrentUser then
 		lines[#lines + 1] = "  Public API not found; integration unavailable for this version."
 	end
-	lines[#lines + 1] = "  Dawnward only reads from Total RP 3. It never changes your TRP3 profiles."
+	lines[#lines + 1] = "  Dawnward never changes your TRP3 profile unless you turn on experimental sync"
+		.. " (/dawnward trp3 help)."
 	return lines
 end
 

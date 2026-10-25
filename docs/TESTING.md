@@ -198,3 +198,105 @@ Reported by the tester in groups. Addon code under test: `f973931`, unchanged si
 **Outcome:** all 24 mandatory items pass, so v0.2 meets the merge rule. Optional items O1–O6 (including UI scale) remain unreported, which does not block the merge.
 
 Notes from the tester: none. No Lua errors were reported. KI-1 did not recur.
+
+### v0.3 in-game checklist (L3)
+
+This covers v0.3 M1 (character foundations) and the **experimental** Total RP 3 sync (issues #3–#7). Nothing here has been run yet. Everything built so far reached **L2** (mocked) only.
+
+**Guardrails:**
+- Run the TRP3 write tests (Part C onward) **only on a disposable, non-default TRP3 profile** created for this purpose.
+- Don't enable sync on your real profile until Parts C–F pass and you've approved it.
+- If anything unexpected happens:
+  1. Run `/dawnward trp3 rollback confirm`.
+  2. If that fails, restore the saved-variable backups from step A1.
+
+**Before you start**
+
+1. Fully exit Classic Era, then launch it.
+2. Type `/console scriptErrors 1` and `/chatlog`.
+3. Record `/dump select(4, GetBuildInfo())` and the TRP3 version (`/dawnward trp3`).
+4. Any Lua error fails the step it happened in. Write down the exact text.
+
+#### Part A: Upgrade and character foundations (M1, acceptance criterion 19)
+
+| # | Steps | Pass when |
+|---|---|---|
+| A1 | With the game closed, back up `WTF/Account/<account>/SavedVariables/DawnwardChronicles.lua` and `totalRP3.lua` (copy them somewhere safe). Install the build. | Copies exist |
+| A2 | Log in on the character with v0.2 data. `/dawnward status`, `/dawnward show`, open the journal. | No errors. Status says 0.3.0-dev and shows `Foundations: 0 facts, 0 suggestions, biography stored: no`. All v0.2 data unchanged. Chat may say "upgraded from schema 2". |
+| A3 | `/dawnward fact add belief Protect those who cannot protect themselves`, `/dawnward fact list`, `/dawnward fact vis 1 public` | Added as private, listed under Belief, then public |
+| A4 | `/reload`, then `/dawnward fact list`; log out and in, then list again | The fact and its visibility persist |
+| A5 | `/dawnward export share`, then `/dawnward export backup` | Share contains the public fact. Backup contains it, and the window title has **no** "(with stored biography)". |
+| A6 | `/dawnward fact remove 1`, then `/dawnward fact remove 1 confirm` | Asks first, then removes it |
+| A7 | `/dawnward personality set courage 15`, `/dawnward personality vis courage public`, `/dawnward personality list` | Shows `courage: Cautious 15/20 Bold [public]` |
+| A8 | v0.2 spot check: add a journal entry, edit a character field, `/dawnward sim on` then `sim off` | All behave as before |
+
+#### Part B: Adapter and safe fallback (issue #3)
+
+| # | Steps | Pass when |
+|---|---|---|
+| B1 | On the TRP3 **default** profile: `/dawnward trp3 enable about confirm` | Refused: "default profile". `/dawnward trp3 backups` shows none. |
+| B2 | `/dawnward trp3 preview` | "biography: off …", and nothing written |
+| B3 | `/dawnward trp3 paste` | A window shows the Chronicle section and suggested traits (public data only) |
+| B4 | *(optional)* Disable TRP3 at the character screen, log in, `/dawnward trp3 enable about confirm` | Refused: "not loaded". No Lua errors. |
+
+#### Part C: Disposable-profile biography test (issues #4 and #5)
+
+Create a new TRP3 profile named for example "Dawnward Test" and switch to it.
+- Give it some About text on **template 1**, with a heading and two paragraphs.
+- Screenshot the About page.
+
+| # | Steps | Pass when |
+|---|---|---|
+| C1 | Add two public facts (Part A commands). `/dawnward trp3 enable about` | Shows the EXPERIMENTAL warning and asks for confirm. Nothing written. |
+| C2 | `/dawnward trp3 enable about confirm`, wait about 10 s | Chat: "Updated your Total RP 3 biography (insert)". The About page shows your text unchanged, followed by **Chronicle** and the two facts. |
+| C3 | `/dawnward trp3 backups`, `/dawnward trp3 log` | One backup (#1 about); the log shows `insert (version N …)` |
+| C4 | `/dawnward status` twice, wait 10 s | No new "Updated" message; the log shows no new write (no-op) |
+| C5 | Add another public fact, wait 10 s | The section updates in place. Your own text is unchanged. |
+| C6 | `/reload`, then log out and in. Open the About page. | Your text plus the section persist |
+| C7 | Open TRP3's About **editor** (don't save). Add a public fact. Wait 40 s. | No write while the editor is open (`/dawnward trp3 preview` says the editor is open) |
+| C8 | Cancel the editor, wait about 30 s | The pending update is written |
+| C9 | In TRP3's editor, change one word **inside** the Chronicle section and save. Add a public fact. Wait 10 s. | Chat says sync is paused (conflict). Your edit is **kept**, nothing else changes. The message is shown once. |
+| C10 | `/dawnward trp3 resolve about reclaim`, wait 10 s | Your edited section stays, and a fresh Chronicle section is appended below it |
+| C11 | Open the editor, then **Save** without changes | The section is still there |
+| C12 | Switch template to **2** in the editor and save; add a public fact | Conflict ("template was changed"); nothing written |
+| C13 | `/dawnward trp3 rollback confirm` | Restores the About page as it was before the last Dawnward write. Compare with your screenshots. |
+| C14 | `/dawnward trp3 rollback <# of the "before rollback" backup> confirm` | Undoes the rollback |
+| C15 | `/dawnward trp3 release about confirm` | Dawnward's section is removed; your text is exactly as before C2 |
+
+#### Part D: Disposable-profile personality test (issue #6)
+
+Give the test profile two personality traits of your own: one preset and one custom.
+
+| # | Steps | Pass when |
+|---|---|---|
+| D1 | Set two axes public (`personality set` / `vis`). `/dawnward trp3 enable traits confirm`, wait 10 s | Two new custom traits (for example Cautious/Bold) appear **after** yours. Your traits are unchanged. Slider positions match (15 toward Bold shows 5 on the Cautious side). |
+| D2 | Change one axis, wait 10 s | Only that slider moves |
+| D3 | `/dawnward status`, wait 10 s | No new write (no-op) |
+| D4 | Move a Dawnward slider yourself in TRP3's editor and save; change that axis in Dawnward | Conflict; your slider position is kept |
+| D5 | `/dawnward trp3 resolve traits reclaim`, wait | Dawnward updates its own traits again |
+| D6 | Set an axis back to private, wait | Its trait is removed; others stay |
+| D7 | `/reload` and relog | Traits persist |
+| D8 | `/dawnward trp3 release traits confirm` | Only Dawnward's traits are removed |
+
+#### Part E: Profile switching, shared profiles, combat, simulation
+
+| # | Steps | Pass when |
+|---|---|---|
+| E1 | With sync on for the test profile, switch to another TRP3 profile and add a public fact | Chat: sync paused (not the profile it was enabled for). The other profile is unchanged. |
+| E2 | Switch back | Sync resumes and writes the pending update |
+| E3 | Enter combat (for example attack a training dummy) and add a public fact | No write until combat ends (retry within about 30 s after) |
+| E4 | `/dawnward sim on`, add a public fact | Nothing is published; `/dawnward trp3 preview` says simulation mode |
+| E5 | *(optional)* Link an alt to the test profile, then opt in again | The enable message names the shared character |
+
+#### Part F: Multiplayer propagation (issue #7) — needs a second player or account
+
+| # | Steps | Pass when |
+|---|---|---|
+| F1 | Player 2 (TRP3 installed) mouses over or targets you and opens your TRP3 profile | They see your current About page and traits |
+| F2 | You add a public fact; wait for "Updated…"; player 2 waits 15 s, then mouses over or targets you again | Player 2 sees the new Chronicle line without either of you reloading |
+| F3 | Repeat F2 for a personality change | Player 2 sees the moved slider |
+| F4 | You run `/dawnward status` several times; player 2 re-targets you | No new download (TRP3's request indicator stays idle) |
+| F5 | *(optional)* Player 2 uses MyRolePlay or XRP instead of TRP3 | They see the updated description (and traits, if their addon shows them) |
+| F6 | You open TRP3's About editor before a Dawnward write, close the window without saving, let Dawnward wait, then save in the editor | Player 2 sees **your saved** version (not a stale one) after re-targeting |
+
+**Record:** pass, fail or n/a per item, screenshots or `/chatlog` excerpts, and any difference outside Dawnward's section (that is a release blocker: roll back and report).

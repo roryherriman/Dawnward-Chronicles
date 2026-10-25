@@ -26,25 +26,31 @@ Status: **v0.2 (journal window) implemented, tested at L0–L2, and passed its L
 
 `Core` is pure Lua 5.1, so all of the game logic is unit-tested (L1) without a client. The UI never writes saved data directly: every change goes through `Core/Actions.lua` (or `Core/Commands.lua` for slash commands, which share the same rules).
 
-## Addon layout (v0.2)
+## Addon layout (v0.3.0-dev)
 
 ```
 DawnwardChronicles/
   DawnwardChronicles.toc
   Core/          Util, Privacy, Themes, Schema, Migrations, Character, Journal,
-                 Milestones, Projection, Serializer, Transfer, Store, Actions, Commands
+                 Milestones, Facts, Sources, Interpretations, Personality,
+                 Projection, Serializer, Transfer, Store, Actions, Commands
   Integrations/TRP3/
-                 VersionProfiles, Status (read-only)
-  Platform/      Detect, Events (milestones), Bootstrap (saved data, slash commands)
+                 VersionProfiles, Status (read-only), Ledger, AboutBlock, TraitPlan,
+                 Shape, Adapter (the only module touching TRP3 for sync), Sync, Commands
+  Platform/      Detect, Events (milestones), TRP3Bridge (sync scheduling),
+                 Bootstrap (saved data, slash commands)
   UI/            Widgets, CopyBox, MainWindow, JournalView, CharacterView,
                  StoryView, SettingsPanel
 ```
 
+**Character foundations (v0.3 M1):** `Facts` is canon, and only the player creates it (`Facts.Add` from `Actions`, or `Interpretations.Promote`); `tests/spec/architecture_spec.lua` scans `Core/` to enforce this. `Sources` stores biographies verbatim. `Interpretations` holds suggestions with stable keys and key memory. `Personality` holds axis values. The core plugs the TRP3 commands in through `ctx.trp3`, so `Core/` never references TRP3.
+
+**TRP3 sync** is described in [TRP3_INTEGRATION.md](TRP3_INTEGRATION.md#the-sync-design-as-built).
+
 **Planned, not built:**
 
-- the story and personality modules (v0.3+);
+- the story modules, the setup wizard and the evolution model (v0.3 M2+);
 - `CombatQueue` for popups (v0.3);
-- TRP3 writers and `DawnwardChroniclesTRP3DB` (v0.5);
 - a Forever adapter (once a Forever client can be tested);
 - locale files.
 
@@ -54,11 +60,11 @@ The Kyssarra Dawnward test character is entered through the normal UI. Her detai
 
 | Variable | Owner | Contents |
 |---|---|---|
-| `DawnwardChroniclesDB` | Core | `schemaVersion` (2); per character: profile fields, family, history, journal, journal milestone keys, theme; import undo slots; account-wide window position |
+| `DawnwardChroniclesDB` | Core | `schemaVersion` (3); per character: profile fields, family, history, journal, journal milestone keys, theme, and (v3) biography sources, suggestions, suggestion key memory, facts, personality, wizard; import undo slots; account-wide window position |
 | `DawnwardChroniclesSimDB` | Core, simulation mode | The same schema, with test data only. It can be wiped with one command. |
-| `DawnwardChroniclesTRP3DB` | TRP3 integration (v0.5) | Not created yet. It will hold profile bindings, the sync ledger and backups. |
+| `DawnwardChroniclesTRP3DB` | TRP3 integration (v0.3, experimental) | Its own `schemaVersion` (1); per-character opt-ins bound to a TRP3 profile ID, per-profile ownership records and conflicts, up to 20 serialised section backups, a short log. A ledger from a newer build is left untouched and pauses sync. |
 
-**Isolation:** the TRP3 adapter only reads. It copies out strings and booleans and never receives a reference to Dawnward's saved tables. A TRP3 failure becomes an `error` status, and the journal carries on.
+**Isolation:** the TRP3 status reader only reads. The sync works from the public projection and writes nothing to Dawnward's character data. Every TRP3 access is wrapped in `pcall`, so a TRP3 failure becomes a status or a blocked sync, and the journal carries on.
 
 **Real versus simulated events:** milestones observed in the game always go to the *real* character, even while simulation mode is on. Simulation is for trying things out, not for hiding real events. To test milestones, `/dawnward sim levelup <n>` writes simulated ones to simulation data only.
 
@@ -67,6 +73,8 @@ The Kyssarra Dawnward test character is entered through the normal UI. Her detai
 - A failed migration, unversioned data, or data from a **newer** schema switches the addon to read-only for the session and leaves the saved table untouched.
 - `Schema.NormalizeDatabase` is the single gate for loaded, migrated and imported data. It drops unknown keys, cleans text, caps sizes and repairs IDs. Loading data twice gives the same result (tested).
 - **1 → 2 (v0.2):** additive only. It adds an empty journal, empty journal keys and the Neutral theme to every character and import backup, plus an empty `ui` table. Fields, family, history, visibility, timestamps and IDs are untouched (tested). After upgrading, v0.1 treats the data as newer and opens it read-only rather than damaging it.
+
+- **2 → 3 (v0.3):** additive only. It adds empty sources, suggestions, suggestion keys, facts, personality and wizard tables to every character and import backup. Every v2 value is untouched (tested against a full v2 fixture). Schema v3 is frozen when v0.3 is released; until then later v0.3 milestones may add fields within v3.
 
 ### Journal retention
 - At most **500 entries per character**.
@@ -94,6 +102,11 @@ Automatic entries can change visibility, but they can't be edited or deleted, so
 | Characters per database | 200 |
 | Short / long text | 100 / 2,000 bytes |
 | Import text | 200,000 bytes |
+| Facts / open suggestions / suggestion keys | 200 / 300 / 1,000 (oldest keys dropped first) |
+| Biography versions | 3 × 16 KB (the current one is never dropped; larger text is refused) |
+| Fact statement / excerpt | 300 / 300 bytes |
+| TRP3 section backups | 20 (a section over 64 KB serialised is never written) |
+| Dawnward biography section in TRP3 | 4,000 bytes |
 
 ## UI
 

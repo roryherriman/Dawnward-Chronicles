@@ -30,7 +30,15 @@ Slash commands remain for quick changes and troubleshooting:
 | `/dawnward export share` | Exports public facts only |
 | `/dawnward import` | Paste a backup, press **Check**, then **Import**. `/dawnward import undo` reverts it. |
 | `/dawnward sim on` / `off` | Simulation mode: experiment on separate test data. `sim levelup <n>` adds a simulated level-up. |
-| `/dawnward trp3` | Read-only Total RP 3 status. Dawnward never changes your TRP3 profile. |
+| `/dawnward trp3` | Total RP 3 status. Dawnward never changes your TRP3 profile unless you turn on the experimental sync below. |
+
+**In development (v0.3.0-dev, not yet tested in game):**
+
+| Command | What it does |
+|---|---|
+| `/dawnward fact add belief Protect the weak` | Adds a fact to your character's canon (private). Use `fact list`, `fact vis <#> public`, `fact remove <#> confirm`. |
+| `/dawnward personality set courage 15` | Sets a personality axis (0–20). Use `personality list`, `personality vis <axis> public`. |
+| `/dawnward trp3 help` | **Experimental, off by default:** keeps a Dawnward "Chronicle" section and Dawnward personality traits up to date in your own Total RP 3 profile (TRP3 3.4.1, never the default profile). Backed up before every write; `trp3 rollback confirm` undoes it. Try it on a spare TRP3 profile first. |
 
 Anything that deletes or replaces data asks you to add `confirm`.
 

@@ -18,13 +18,28 @@ Every fact Dawnward stores (a family member, a backstory paragraph, a journal en
 - The cosmetic **theme** isn't personal information, so it is included in every export.
 - **Milestone keys** (for example `levelup:23`, used to avoid duplicates) are included in personal backups only, never in share exports.
 
+## Character foundations (v0.3)
+- **Facts** and **suggestions** start **private**. Personality values start private too.
+- **Biography sources** have no visibility of their own and are always private:
+  - never in a share export;
+  - never in a projection;
+  - never sent to TRP3;
+  - in a personal backup only when you ask (`/dawnward export backup biography`).
+- **Suggestions and their key memory** are never in a share export or a projection. Personal backups include them, so a restore cannot re-suggest what you dismissed.
+- Share exports were checked by planting marker text in every private part and scanning the export text (L1).
+
+## Total RP 3 sync (experimental, v0.3)
+- TRP3 sync uses **only the public projection**: public facts and public personality values. Private and secret data, sources, suggestions and simulation data can never reach TRP3 (L2).
+- It is off until you opt in for a character. Anything it writes, TRP3 then shares with other players as part of your profile.
+- Backups of your TRP3 sections are stored in `DawnwardChroniclesTRP3DB` on your computer only.
+
 ## The public projection
 
 The **only** way character data leaves the core is `Projection.GetPublic(characterKey)`. It returns a newly built, deep-copied table that contains `public` facts only. The TRP3 integration and the shareable export both work from this projection and never see the core database.
 
-Tests will check that:
+Tests check that:
 
-- `private` and `secret` values never appear in any projection or TRP3 payload;
+- `private` and `secret` values never appear in any projection, share export or TRP3 write;
 - changing the projection cannot change the core data;
 - marking a fact as `secret` removes it from the very next projection.
 

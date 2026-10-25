@@ -139,9 +139,18 @@ Every name below is also in the per-directory lists in `.luacheckrc`.
 | Icon texture `INV_Misc_Book_09` | Story empty state | Assumed (not part of a mandatory item) | — |
 | `GameFontNormalLarge`, `GameFontHighlight` | Headings and body text | L3 (implied: M2–M7) | — |
 
+## Client APIs added in v0.3 (experimental TRP3 sync)
+
+| API | Used for | Classic Era | Forever |
+|---|---|---|---|
+| `C_Timer.After` | Merging sync requests and retrying after an open editor or combat | Assumed | — |
+| `InCombatLockdown` | No TRP3 writes in combat (also used by the copy window since v0.1) | Assumed | — |
+
+TRP3 internals used by the experimental sync (TRP3 3.4.1 only) are listed with their risks in [TRP3_INTEGRATION.md](TRP3_INTEGRATION.md#internal-dependencies-and-their-risk). The sync is allowlisted for TRP3 3.4.1 by source audit only. It has **not** been tested in game.
+
 ## Planned APIs (not used yet)
 
 | API or event | Planned for |
 |---|---|
-| `InCombatLockdown`, `PLAYER_REGEN_ENABLED/DISABLED` | Combat queue for story popups (v0.3) |
+| `PLAYER_REGEN_ENABLED/DISABLED` | Combat queue for story popups (v0.3) |
 | `QUEST_TURNED_IN`, `ZONE_CHANGED_NEW_AREA`, `PLAYER_DEAD`, `ENCOUNTER_END` / `BOSS_KILL` | More milestone types (later; each needs a registered type and an L3 check) |
