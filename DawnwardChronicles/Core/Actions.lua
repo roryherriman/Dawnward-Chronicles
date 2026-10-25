@@ -139,6 +139,25 @@ function Actions.SetFieldVisibility(ctx, key, level)
 	return true, key .. " is now " .. level .. "."
 end
 
+--- Window preferences (account-wide, stored in real data only) ------------------
+
+function Actions.WindowPosition(ctx)
+	local ui = ctx.store.real.ui
+	return ui and ui.position
+end
+
+function Actions.SaveWindowPosition(ctx, left, top)
+	if ctx.store.realReadOnly then
+		return nil, "saved data is read-only"
+	end
+	if type(left) ~= "number" or type(top) ~= "number" then
+		return nil, "invalid position"
+	end
+	ctx.store.real.ui = ctx.store.real.ui or {}
+	ctx.store.real.ui.position = { left = left, top = top }
+	return true
+end
+
 --- Theme (cosmetic only) -----------------------------------------------------
 
 function Actions.SetTheme(ctx, themeId)

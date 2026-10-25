@@ -38,6 +38,17 @@ return function(t, expect)
 			end
 		end)
 
+		t:it("keeps visibility labels readable on every theme", function()
+			for _, theme in ipairs(Themes.LIST) do
+				for level, color in pairs(Themes.VISIBILITY_COLORS) do
+					for _, surface in ipairs({ "background", "panel" }) do
+						local ratio = Themes.Contrast(color, theme[surface])
+						expect.truthy(ratio >= 4.5, string.format("%s %s on %s is %.2f:1", theme.id, level, surface, ratio))
+					end
+				end
+			end
+		end)
+
 		t:it("computes WCAG contrast correctly", function()
 			expect.truthy(math.abs(Themes.Contrast({ 1, 1, 1 }, { 0, 0, 0 }) - 21) < 1e-9)
 			expect.truthy(math.abs(Themes.Contrast({ 0.5, 0.5, 0.5 }, { 0.5, 0.5, 0.5 }) - 1) < 1e-9)

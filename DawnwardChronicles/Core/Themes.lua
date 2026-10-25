@@ -54,6 +54,16 @@ Themes.LIST = {
 	},
 }
 
+-- Visibility labels use fixed meanings across themes, so "Secret" always
+-- looks like a warning. Checked for contrast on every theme's panel.
+Themes.VISIBILITY_COLORS = {
+	public = { 0.55, 0.86, 0.55 },
+	private = { 0.78, 0.78, 0.78 },
+	secret = { 0.98, 0.58, 0.48 },
+}
+
+Themes.VISIBILITY_LABELS = { public = "Public", private = "Private", secret = "Secret" }
+
 Themes.BY_ID = {}
 for _, theme in ipairs(Themes.LIST) do
 	Themes.BY_ID[theme.id] = theme
