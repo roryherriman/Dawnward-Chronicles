@@ -181,7 +181,7 @@ local function create(parent)
 		self.older:SetEnabled(self.page < pages)
 
 		self.empty:SetShown(#entries == 0)
-		local width = math.max(200, self.scroll:GetWidth())
+		local width = view.contentWidth - 2 * INSET - 22 -- scroll bar sits inside the right inset
 		self.child:SetWidth(width)
 		local first = (self.page - 1) * JournalView.PAGE_SIZE + 1
 		local y, shown = 0, 0
@@ -268,7 +268,7 @@ function JournalView.AttachEditing(section)
 	editor.textLabel = Widgets.Label(editor, "GameFontHighlightSmall")
 	editor.textLabel:SetPoint("TOPLEFT", INSET, -86)
 	editor.textLabel:SetText("Entry")
-	editor.area = Widgets.TextArea(editor, 2001)
+	editor.area = Widgets.TextArea(editor, 2001, MainWindow.ContentWidth() - 2 * INSET)
 	editor.area.frame:SetPoint("TOPLEFT", INSET, -102)
 	editor.area.frame:SetPoint("BOTTOMRIGHT", -INSET, 44)
 

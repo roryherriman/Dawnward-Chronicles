@@ -122,11 +122,19 @@ function MainWindow.TitleFor(char, simulation)
 	return simulation and (title .. SIM_SUFFIX) or title
 end
 
+--- Width of the content area. Sections size their text from this rather than
+-- GetWidth(), which the client may report as 0 before the first layout pass.
+function MainWindow.ContentWidth()
+	local L = MainWindow.LAYOUT
+	return L.width - 2 * L.pad
+end
+
 local function makeView(theme, char)
 	return {
 		ctx = ctx(),
 		char = char,
 		theme = theme,
+		contentWidth = MainWindow.ContentWidth(),
 		setStatus = setStatus,
 		refresh = MainWindow.Refresh,
 	}

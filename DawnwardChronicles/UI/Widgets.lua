@@ -125,8 +125,9 @@ local function followCursor(scroll, y, cursorHeight)
 end
 
 --- Multi-line text area on an opaque well. Returns { frame, scroll, edit, well }.
--- Place area.frame; the text inside follows its size.
-function Widgets.TextArea(parent, maxBytes)
+-- Place area.frame; the text inside follows its size. width is the area's
+-- expected width, used until the client reports the real size.
+function Widgets.TextArea(parent, maxBytes, width)
 	local area = {}
 	area.frame = CreateFrame("Frame", nil, parent)
 	area.well = Widgets.Solid(area.frame, "BACKGROUND", -6)
@@ -143,14 +144,14 @@ function Widgets.TextArea(parent, maxBytes)
 	edit:SetMaxBytes(maxBytes or 2000)
 	edit:SetFontObject(ChatFontNormal)
 	edit:SetTextInsets(4, 4, 4, 4)
-	edit:SetWidth(200)
+	edit:SetWidth(math.max(100, (width or 230) - 30)) -- minus scroll bar and padding
 	edit:SetHeight(100)
 	edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 	edit:SetScript("OnCursorChanged", function(_, _, y, _, h) followCursor(scroll, y, h) end)
 	scroll:SetScrollChild(edit)
-	scroll:SetScript("OnSizeChanged", function(_, width, height)
-		edit:SetWidth(width)
-		edit:SetHeight(height)
+	scroll:SetScript("OnSizeChanged", function(_, newWidth, newHeight)
+		edit:SetWidth(newWidth)
+		edit:SetHeight(newHeight)
 	end)
 	scroll:EnableMouse(true)
 	scroll:SetScript("OnMouseDown", function() edit:SetFocus() end)

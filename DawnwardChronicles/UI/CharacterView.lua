@@ -151,7 +151,7 @@ local function create(parent)
 
 	function section:RenderList(view)
 		local specs = section.BuildSpecs(view.char)
-		local width = math.max(200, self.scroll:GetWidth())
+		local width = view.contentWidth - 2 * INSET - 22 -- scroll bar sits inside the right inset
 		self.child:SetWidth(width)
 		local y = 0
 		for i, spec in ipairs(specs) do
@@ -223,7 +223,7 @@ function CharacterView.AttachEditing(section)
 	editor.line = Widgets.EditLine(editor, 101)
 	editor.line:SetPoint("TOPLEFT", INSET + 6, -64)
 	editor.line:SetPoint("TOPRIGHT", -INSET, -64)
-	editor.area = Widgets.TextArea(editor, 2001)
+	editor.area = Widgets.TextArea(editor, 2001, MainWindow.ContentWidth() - 2 * INSET)
 	editor.area.frame:SetPoint("TOPLEFT", INSET, -64)
 	editor.area.frame:SetPoint("BOTTOMRIGHT", -INSET, 44)
 
