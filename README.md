@@ -64,7 +64,7 @@ Total RP 3 3.4.1 has public setters for small fields such as Currently, OOC, nam
 | Version | Milestone |
 |---|---|
 | 0.1 | Foundation: saved data and migrations, character and family-history model, export/import, simulation mode, read-only Total RP 3 detection |
-| 0.2 | Milestone journal |
+| 0.2 | Milestone journal and a simple themed journal window (Journal, Character, Story). See [UI direction](docs/UI_DIRECTION.md). |
 | 0.3 | Story decision popups and combat-safe queue |
 | 0.4 | Personality proposals and approval ledger |
 | 0.5 | Total RP 3 sync: public setters (opt-in) and copy-and-paste export, with backup and rollback |
