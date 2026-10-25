@@ -2,6 +2,8 @@
 
 Status: **design only.** Nothing in this document is implemented in v0.2. It describes how Dawnward will eventually turn a character's existing story into personalised story decisions, and checks that today's data model can grow into it.
 
+> **Superseded in detail by [`planning/v0.3-proposal.md`](planning/v0.3-proposal.md).** The approved decisions there separate **Source**, **Interpretation** and **Canon** into three distinct layers, rather than the single fact list with a `status` field sketched below. The principles here still apply.
+
 ## The problem
 Players come to Dawnward in three different ways, and all three must work equally well:
 
