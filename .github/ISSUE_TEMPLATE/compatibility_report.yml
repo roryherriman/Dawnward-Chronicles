@@ -1,0 +1,40 @@
+name: Compatibility report
+description: Report whether a Dawnward feature works on a particular client or Total RP 3 version.
+labels: ["compatibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        These reports feed `docs/COMPATIBILITY.md`. Please list only what you actually saw in game.
+  - type: input
+    id: version
+    attributes:
+      label: Dawnward Chronicles version
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: Client and build
+      description: "Client name and the output of `/dump GetBuildInfo()`"
+    validations:
+      required: true
+  - type: input
+    id: trp3
+    attributes:
+      label: Total RP 3 version
+      placeholder: "3.4.1 / 3.5.3 / not installed"
+  - type: textarea
+    id: checks
+    attributes:
+      label: What did you check?
+      description: Which feature or checklist item from `docs/TESTING.md` you tested, and the result.
+      placeholder: |
+        - [x] Addon loads without errors
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes, errors or screenshots

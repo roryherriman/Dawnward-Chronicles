@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest an idea for Dawnward Chronicles.
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What roleplay or storytelling need does this address?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Proposed behaviour
+    validations:
+      required: true
+  - type: checkboxes
+    id: principles
+    attributes:
+      label: Project principles
+      description: Features must respect these. Tick the ones you've considered.
+      options:
+        - label: Works for any character, not just one race, class or background
+        - label: Personality changes stay player-approved
+        - label: Doesn't expose private or secret character facts
+        - label: Doesn't overwrite Total RP 3 content Dawnward didn't create
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?

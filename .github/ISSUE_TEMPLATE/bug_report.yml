@@ -1,0 +1,57 @@
+name: Bug report
+description: Something in Dawnward Chronicles is broken or behaves unexpectedly.
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **Don't paste private character backstory, SavedVariables files, or account details.** Remove any names you don't want made public.
+  - type: input
+    id: version
+    attributes:
+      label: Dawnward Chronicles version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: client
+    attributes:
+      label: Game client
+      options:
+        - Classic Era
+        - WoW Forever
+        - Other (please say which in the description)
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: Client build
+      description: "Output of `/dump GetBuildInfo()`"
+      placeholder: '"1.15.x", "12345", "...", 11509'
+  - type: input
+    id: trp3
+    attributes:
+      label: Total RP 3 version (if installed)
+      placeholder: "3.4.1 / not installed"
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: errors
+    attributes:
+      label: Lua errors
+      description: Copy from BugSack/BugGrabber, or enable `/console scriptErrors 1`.
+      render: text
