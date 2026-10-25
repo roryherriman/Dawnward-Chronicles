@@ -101,7 +101,21 @@ This checklist will be filled in for each release from v0.1 onward. For each run
 | 24 | With the window open, click Total RP 3's window, then click the Dawnward window | Clicking the Dawnward window brings it back to the front | |
 | 25 | `/dawnward import`, then paste a long backup | The text is padded inside a dark area, wraps within the box, and scrolls with the scroll bar or mouse wheel. Nothing draws outside the box. | |
 | 26 | Press **Check** | The status message wraps above the buttons without overlapping them | |
-| 27 | Repeat 23–26 at a different UI scale (System → Advanced → UI Scale) | Still readable, nothing overlaps, and the window stays on screen | |
+| 27 | Repeat 23–26 at a different UI scale: `/console useUiScale 1`, then `/console uiScale 0.8`, then try `1.0`. Afterwards, restore your original values; `/dump GetCVar("uiScale")` shows the current one. | Still readable, nothing overlaps, and the window stays on screen | |
+
+### v0.1 results: Classic Era 1.15.9 (build 70003), Total RP 3 3.4.1, 2026-10-25
+
+Two sessions: the first test (build `1fdb724`) and the copy window re-test (build `14669c3`).
+
+| Result | Steps |
+|---|---|
+| **Pass** | 7 (history and privacy labels), 9 (`/reload`), 10 (full logout and login), 11 (export), 12–14 (import check, import, undo/redo), 15 (damaged import rejected), 16–17 (simulation isolation and reset), 23 (no bleed-through over TRP3), 25 (long text and scrolling), 26 (no overlapping text) |
+| **Partial** | 18: the TRP3 default profile was detected. Version and profile-name output weren't reported. |
+| **Fail, then fixed** | First session: the copy window was hard to read over TRP3. Fixed in `15dbae1`, and the fix passed steps 23, 25 and 26. |
+| **Untested** | 27 (UI scale). No scale option was found during the session. This is neither passed nor failed. |
+| **Not reported** | 1–6, 8, 19–22 and 24. Run these on the next in-game pass. |
+
+No Lua errors were seen during the re-test session.
 
 **Notes for the tester**
 

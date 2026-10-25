@@ -47,9 +47,9 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 - UI strings are English only. Localisation files will come once the strings settle.
 
 **Verified:**
-- L0, L1 and L2: 103 tests, run locally. CI has not run on this branch yet.
-- **L3, partial** (Classic Era 1.15.9, Total RP 3 3.4.1): the items listed in `docs/COMPATIBILITY.md` were confirmed in game.
-- The window fix has not been re-tested in game yet.
+- L0, L1 and L2: 103 tests.
+- **L3, partial** (Classic Era 1.15.9, Total RP 3 3.4.1): history, persistence, export, import with undo, checksum rejection, simulation mode and default-profile detection were confirmed in game. The copy window fix passed an in-game re-test.
+- UI scaling is **untested**, and several checklist steps weren't reported. See the results table in `docs/TESTING.md`.
 - Not tested on Forever (L4).
 
 ## Repository foundation (2026-10-25)

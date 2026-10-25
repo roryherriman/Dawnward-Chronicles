@@ -31,7 +31,21 @@ Test build `1fdb724`. The client build was read from the installed `.build.info`
 - Simulation mode keeps its data separate, and reset works
 - Total RP 3 Default profile detected
 
-**Found:** the export/import window was hard to read over Total RP 3. It is fixed in `15dbae1` and still needs re-testing.
+**Found:** the export/import window was hard to read over Total RP 3. It was fixed in `15dbae1`.
+
+### L3 re-test: copy window fix, same client and Total RP 3 version, 2026-10-25
+
+Test build `14669c3`.
+
+**Confirmed in game:**
+- No Total RP 3 bleed-through and no overlapping text
+- The export and import windows display correctly
+- Text stays readable
+- Long text and scrolling behave correctly
+- No Lua errors during these tests
+
+**Untested (neither passed nor failed):**
+- **UI scaling** (checklist step 27). The tester couldn't find a scale option during this session.
 
 **Not yet reported:**
 - the interface number from `GetBuildInfo()`
@@ -46,7 +60,7 @@ v0.1 uses no client-specific gameplay APIs, so the same code runs on any client 
 
 | Version | Source audited | Tier 0 (read) | Tier A (public setters) | Tier B (manual export) | Tier C (owned direct write) |
 |---|---|---|---|---|---|
-| 3.4.1 | Yes, see [TRP3_INTEGRATION.md](TRP3_INTEGRATION.md) | L2 (fake built from the audited source) | Not built | Not built | Research only |
+| 3.4.1 | Yes, see [TRP3_INTEGRATION.md](TRP3_INTEGRATION.md) | L3, partial: the default profile was detected. Profile name and version output weren't reported. Full behaviour is L2. | Not built | Not built | Research only |
 | 3.5.3 | No | Reported as "not audited", status only | — | — | — |
 | Any other version | No | Read only, if capability checks pass | Off | — | Off |
 
@@ -54,21 +68,25 @@ Compatibility with 3.5.3 is **not claimed**, and won't be until its source has b
 
 ## Client APIs used in v0.1
 
-Every name below is also in the per-directory lists in `.luacheckrc`. "Assumed" means it's believed to exist on that client but no Dawnward test has confirmed it yet.
+Every name below is also in the per-directory lists in `.luacheckrc`.
+
+- **"Assumed"** means the API is believed to exist on that client, but no Dawnward test has confirmed it.
+- **"L3 (implied)"** means a confirmed in-game result depends on it working, even though the API wasn't checked on its own.
 
 | API | Used for | Classic Era | Forever |
 |---|---|---|---|
-| `GetBuildInfo`, `WOW_PROJECT_ID`, `WOW_PROJECT_CLASSIC` | Client detection | Assumed | — |
-| `C_AddOns.GetAddOnMetadata`, with `GetAddOnMetadata` as fallback | Own version, TRP3 version | Assumed (either one) | — |
-| `C_AddOns.IsAddOnLoaded`, with `IsAddOnLoaded` as fallback | Whether TRP3 is loaded | Assumed (either one) | — |
-| `UnitName`, `GetNormalizedRealmName`, with `GetRealmName` as fallback | Character key `Name-Realm` | Assumed | — |
-| `time` | Timestamps | Assumed | — |
-| `CreateFrame`, `UIParent`, `DEFAULT_CHAT_FRAME`, `SlashCmdList` | Events, chat, `/dawnward` | Assumed | — |
-| `ADDON_LOADED`, `PLAYER_LOGIN` events | Loading saved data and starting up | Assumed | — |
-| `BackdropTemplateMixin` / `"BackdropTemplate"` (optional) | Copy window background | Assumed. The window still works without it. | — |
-| `UIPanelCloseButton`, `UIPanelScrollFrameTemplate`, `UIPanelButtonTemplate` | Copy window | Assumed | — |
-| `ChatFontNormal`, `GameFontNormal`, `GameFontHighlightSmall`, `UISpecialFrames`, `tinsert` | Copy window | Assumed | — |
-| `AddOn_TotalRP3.Player.GetCurrentUser()` → `GetProfileName`, `IsProfileDefault`, `GetRoleplayingName` | TRP3 status (read only) | L2 against the 3.4.1 fake | — |
+| `GetBuildInfo`, `WOW_PROJECT_ID`, `WOW_PROJECT_CLASSIC` | Client detection | Assumed (the status line wasn't reported) | — |
+| `C_AddOns.GetAddOnMetadata`, with `GetAddOnMetadata` as fallback | Own version, TRP3 version | Assumed (version output wasn't reported) | — |
+| `C_AddOns.IsAddOnLoaded`, with `IsAddOnLoaded` as fallback | Whether TRP3 is loaded | L3 (implied: the TRP3 default profile was detected) | — |
+| `UnitName`, `GetNormalizedRealmName`, with `GetRealmName` as fallback | Character key `Name-Realm` | L3 (implied: data persisted per character) | — |
+| `time` | Timestamps | L3 (implied: no errors when saving) | — |
+| `CreateFrame`, `UIParent`, `DEFAULT_CHAT_FRAME`, `SlashCmdList` | Events, chat, `/dawnward` | L3 (implied) | — |
+| `ADDON_LOADED`, `PLAYER_LOGIN` events | Loading saved data and starting up | L3 (implied: data persisted through relog) | — |
+| `BackdropTemplateMixin` / `"BackdropTemplate"`, `SetColorTexture`, `FULLSCREEN_DIALOG` strata, `SetToplevel`/`Raise` | Copy window border, background and layering | L3 (the window displayed correctly over Total RP 3) | — |
+| `UIPanelCloseButton`, `UIPanelScrollFrameTemplate`, `UIPanelButtonTemplate`, multi-line `EditBox` | Copy window | L3 | — |
+| `ChatFontNormal`, `GameFontNormal`, `GameFontHighlightSmall`, `UISpecialFrames`, `tinsert` | Copy window | L3 | — |
+| `AddOn_TotalRP3.Player.GetCurrentUser()` → `IsProfileDefault` | TRP3 default-profile warning | L3 (TRP3 3.4.1) | — |
+| `AddOn_TotalRP3.Player.GetCurrentUser()` → `GetProfileName`, `GetRoleplayingName` | TRP3 status (read only) | L2 against the 3.4.1 fake. The in-game name output wasn't reported. | — |
 
 ## Planned APIs (not used yet)
 
