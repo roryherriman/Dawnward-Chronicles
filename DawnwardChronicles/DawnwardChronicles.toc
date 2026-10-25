@@ -3,7 +3,7 @@
 ## Notes: Roleplay storytelling engine: character profile, family history, private-by-default facts, export/import. Optional read-only Total RP 3 status.
 ## Author: roryherriman
 ## Version: 0.3.0-dev
-## SavedVariables: DawnwardChroniclesDB, DawnwardChroniclesSimDB
+## SavedVariables: DawnwardChroniclesDB, DawnwardChroniclesSimDB, DawnwardChroniclesTRP3DB
 ## OptionalDeps: totalRP3
 ## X-License: MIT
 ## X-Website: https://github.com/roryherriman/Dawnward-Chronicles
@@ -46,4 +46,5 @@ UI\JournalView.lua
 UI\CharacterView.lua
 UI\StoryView.lua
 UI\SettingsPanel.lua
+Platform\TRP3Bridge.lua
 Platform\Bootstrap.lua
