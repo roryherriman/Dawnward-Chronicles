@@ -53,6 +53,8 @@ Labels: **S** source-confirmed, **G** confirmed in game, **F** feasible but unve
 
 This delivers the core experience ("TRP3 reflects that evolution") **automatically for the most visible, most frequently changing fields** (Currently, titles). The deeper biography and traits need **one paste per update**, which Dawnward makes as quick as possible.
 
+**Product requirement (review decision 4):** automatic biography synchronisation stays a **core long-term requirement**. The paste-assisted path is an **interim fallback**. The Writer is built so that a supported TRP3 biography or trait API (§5) can be added as one more capability-gated field writer, without changing the sync design.
+
 ## 3. Synchronisation policy
 
 - **Categories:** milestones, mood and Currently, titles, personality developments, relationships, beliefs and motivations, biography sections. Each is set to **Never** (default), **Ask** or **Automatic**.

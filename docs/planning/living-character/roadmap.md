@@ -78,6 +78,13 @@ Everything else depends on it, it is already approved in detail, it is pure Core
 **Immediately after** comes **v0.3 M6, the TRP3 write spike**, moved ahead of the wizard UI if you prefer. It de-risks the central sync goal early, using only public setters, on a test profile, with your approval for the in-game trial.
 
 ## Decisions needed before implementation
+
+> **Settled on 2026-10-25** (see `README.md`, "Review decisions"):
+> - 1, 2 and 5: approved. M1 comes first; the Currently write test follows once the data model is ready.
+> - 3: drafting approved; submission needs separate approval.
+> - 4: deferred to a presentation with examples before v0.5.
+>
+> The original list is kept below for the record.
 1. Approve this architecture and roadmap, including moving the TRP3 write spike into v0.3.
 2. Approve **Currently**, **Title** and **Full title** as the automatically managed fields, each opt-in, and the paste-assisted approach for biography and traits.
 3. May I draft (not send) the upstream TRP3 API proposal? Sending it is a separate approval.

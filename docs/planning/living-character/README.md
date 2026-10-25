@@ -1,6 +1,27 @@
 # Living Character System: master plan
 
-Status: **planning for review (2026-10-25). Nothing here is implemented.** This plan builds on the merged v0.2 (`main` at `71fa999`), the approved v0.3 decisions (`../v0.3-proposal.md`) and the TRP3 audit (`../../TRP3_INTEGRATION.md`).
+Status: **overall direction approved (2026-10-25), subject to implementation review. Nothing here is implemented.** This plan builds on the merged v0.2 (`main` at `71fa999`), the approved v0.3 decisions (`../v0.3-proposal.md`) and the TRP3 audit (`../../TRP3_INTEGRATION.md`).
+
+## Review decisions (2026-10-25)
+
+| # | Decision |
+|---|---|
+| 1 | **Six-layer character architecture approved**, subject to implementation review |
+| 2 | **Early TRP3 Currently write test in v0.3 approved:** disposable TRP3 profile, supported public APIs only, and **explicit authorisation before the test is run** |
+| 3 | **Drafting an upstream TRP3 API proposal approved.** Do **not** submit it or contact TRP3 maintainers without separate approval. Draft: [`trp3-upstream-proposal.md`](trp3-upstream-proposal.md). |
+| 4 | **Automatic biography synchronisation remains a core long-term requirement.** Paste-assisted updates are an interim fallback, not the final experience. |
+| 5 | **Implementation planning starts with v0.3 M1** (character foundations). The TRP3 write test follows once the foundation data model is ready. |
+| 6 | **Before the personality system is finalised** (before v0.5 work starts), present the six leanings, nine moods and publication categories, with examples of how each affects prompts and public profile information |
+
+**Standing requirements:**
+- preserve the original TRP3 biography;
+- never automatically expose private or secret information;
+- keep personality changes gradual and grounded in player decisions;
+- support characters with no TRP3 profile;
+- avoid excessive prompts and complicated UI;
+- keep the TRP3 integration modular, so newly supported APIs slot in later.
+
+**Implementation** of anything in this plan still needs explicit authorisation. The current detailed scope is [`../v0.3-m1-scope.md`](../v0.3-m1-scope.md).
 
 ## Documents
 
