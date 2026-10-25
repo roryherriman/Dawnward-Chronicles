@@ -88,9 +88,28 @@ Every name below is also in the per-directory lists in `.luacheckrc`.
 | `AddOn_TotalRP3.Player.GetCurrentUser()` → `IsProfileDefault` | TRP3 default-profile warning | L3 (TRP3 3.4.1) | — |
 | `AddOn_TotalRP3.Player.GetCurrentUser()` → `GetProfileName`, `GetRoleplayingName` | TRP3 status (read only) | L2 against the 3.4.1 fake. The in-game name output wasn't reported. | — |
 
+## Client APIs added in v0.2 (journal window)
+
+All of these are **assumed** until the v0.2 checklist runs in game.
+
+| API or event | Used for | Classic Era | Forever |
+|---|---|---|---|
+| `PLAYER_LEVEL_UP` (arg 1 = new level) | Level-up milestones | Assumed | — |
+| `GetRealZoneText`, `GetSubZoneText` | Zone and subzone on milestones | Assumed | — |
+| `date` | Entry dates in the journal | Assumed | — |
+| `InputBoxTemplate` EditBox, `EditBox:SetMaxBytes` | Title and field editors | Assumed | — |
+| `StaticPopupDialogs` / `StaticPopup_Show` | Delete and reset confirmations | Assumed | — |
+| `GameTooltip` | Visibility and settings tooltips | Assumed | — |
+| `Frame:SetBackdropBorderColor` | Theme border tint | Assumed | — |
+| `MEDIUM` strata with `SetToplevel`, `SetUserPlaced`, `GetLeft`/`GetTop` | Journal window layering and remembered position | Assumed | — |
+| `FontString:GetStringHeight`, `SetWordWrap`, `SetNonSpaceWrap` (optional) | Variable-height journal rows | Assumed | — |
+| `Region:SetShown`, `Button:SetEnabled` | Showing and hiding controls | Assumed | — |
+| Icon textures `INV_Misc_Gear_01`, `INV_Misc_Book_09`; `ButtonHilight-Square` | Gear button, Story empty state | Assumed | — |
+| `GameFontNormalLarge`, `GameFontHighlight` | Headings and body text | Assumed | — |
+
 ## Planned APIs (not used yet)
 
 | API or event | Planned for |
 |---|---|
-| `InCombatLockdown`, `PLAYER_REGEN_ENABLED/DISABLED` | Combat queue (v0.3) |
-| `PLAYER_LEVEL_UP`, `QUEST_TURNED_IN`, `ZONE_CHANGED_NEW_AREA`, `PLAYER_DEAD`, `ENCOUNTER_END` / `BOSS_KILL` | Journal (v0.2) |
+| `InCombatLockdown`, `PLAYER_REGEN_ENABLED/DISABLED` | Combat queue for story popups (v0.3) |
+| `QUEST_TURNED_IN`, `ZONE_CHANGED_NEW_AREA`, `PLAYER_DEAD`, `ENCOUNTER_END` / `BOSS_KILL` | More milestone types (later; each needs a registered type and an L3 check) |

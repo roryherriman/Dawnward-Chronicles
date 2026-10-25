@@ -1,6 +1,6 @@
 # UI direction (from v0.2)
 
-Status: **agreed direction, not implemented.** v0.1 has no main window, only slash commands and the export/import window. This document guides the interface work from v0.2 onwards. It does not widen v0.1's scope.
+Status: **direction in use.** v0.2 implements the first part: the three-section window, the settings panel and three cosmetic themes. Emblems, theme suggestions, resizing and paged reading remain open (see the end of this document).
 
 ## Why
 An earlier project showed that too many tabs, controls and features can hurt usability. Dawnward Chronicles should feel like a **character's journal you read and write in**, not a management dashboard.

@@ -4,12 +4,23 @@
 
 > **Status: pre-alpha.** v0.1.0 (the foundation) is in development and has **not yet been tested in game**. There is no published release yet. See the [roadmap](#roadmap).
 
-## Using v0.1
+## Using Dawnward (v0.2, in development)
 
-Type `/dawnward` (or `/dwc`) in game. Everything you enter is **private** until you mark it otherwise.
+Type `/dawnward` (or `/dwc`) to open your journal. It has three sections:
+
+- **Journal:** write entries in your character's voice. Level-ups are added automatically.
+- **Character:** your profile, family and history.
+- **Story:** where story decisions will appear in a future version.
+
+The gear icon holds the settings: your journal's theme (Neutral, Silver Hand or Arcane), backup and import, simulation mode, and the Total RP 3 status. Everything you write is **private** until you mark it otherwise.
+
+Slash commands remain for quick changes and troubleshooting:
 
 | Command | What it does |
 |---|---|
+| `/dawnward status` | Diagnostic report (version, client, saved data, Total RP 3) |
+| `/dawnward journal add Arrived in Goldshire` | Adds a journal entry. Use `journal list`, `journal edit <#> <text>`, `journal vis <#> public`, `journal remove <#> confirm`. |
+| `/dawnward theme arcane` | Changes this character's journal theme (appearance only) |
 | `/dawnward set name Aelin Brightwater` | Sets a profile field. `/dawnward fields` lists them all. |
 | `/dawnward vis name public` | Sets a field's visibility to `public`, `private` or `secret` |
 | `/dawnward family add mother Ilsa` | Adds a family member. Use `family list`, `family set <#> status deceased`, `family vis <#> secret`. |
@@ -18,8 +29,8 @@ Type `/dawnward` (or `/dwc`) in game. Everything you enter is **private** until 
 | `/dawnward export backup` | Opens a window with a personal backup (private facts, no secrets). Add `secrets` to include them. |
 | `/dawnward export share` | Exports public facts only |
 | `/dawnward import` | Paste a backup, press **Check**, then **Import**. `/dawnward import undo` reverts it. |
-| `/dawnward sim on` / `off` | Simulation mode: experiment on separate test data |
-| `/dawnward trp3` | Read-only Total RP 3 status. v0.1 never changes your TRP3 profile. |
+| `/dawnward sim on` / `off` | Simulation mode: experiment on separate test data. `sim levelup <n>` adds a simulated level-up. |
+| `/dawnward trp3` | Read-only Total RP 3 status. Dawnward never changes your TRP3 profile. |
 
 Anything that deletes or replaces data asks you to add `confirm`.
 
@@ -49,7 +60,7 @@ Nothing has been verified in game yet. See [`docs/COMPATIBILITY.md`](docs/COMPAT
 
 | Target | Role | Status |
 |---|---|---|
-| WoW Classic Era | Primary development client | v0.1 in development. Mock-tested only. |
+| WoW Classic Era | Primary development client | v0.1 partly tested in game. v0.2 mock-tested only. |
 | WoW Forever 1.60.1 | Final deployment target | Provisional. Its adapter is isolated until it can be tested. |
 | Total RP 3 3.4.1 | Integration target | Source audited. Read-only status is mock-tested. Not yet tested in game. |
 | Total RP 3 3.5.3 | Intended Forever version | Not yet audited or tested |
