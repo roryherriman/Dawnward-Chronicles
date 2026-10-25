@@ -67,7 +67,8 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 
 **Verified:**
 - L0, L1 and L2: 180 tests, run locally.
-- **Not yet tested in game (L3).** UI scaling is untested.
+- **L3 (Classic Era 1.15.9):** all 24 mandatory acceptance items pass, including a real level-up, backup/import integrity and coexistence with TRP3 3.4.1 (read-only, TRP3 unchanged). See `docs/TESTING.md`.
+- **Untested:** optional checks O1–O6, including UI scaling and the remembered window position. The interface number wasn't reported.
 - Not tested on Forever (L4).
 
 ## 0.1.0 (foundation): merged, not released

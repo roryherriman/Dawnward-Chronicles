@@ -176,3 +176,25 @@ No Lua errors were seen during the re-test session.
 **Known issue during testing:** KI-1 (a one-time return to character select) is unresolved and not reproduced. If it happens again, note the time and stop. It then becomes blocking (see `COMPATIBILITY.md`).
 
 **Report format:** the build number, the TRP3 version, and then for each item **Pass**, **Fail** (with what happened) or **Untested**.
+
+### v0.2 acceptance results: Classic Era (build not reported), 2026-10-25
+
+Reported by the tester in groups. Addon code under test: `f973931`, unchanged since installation. The interface number and TRP3 version were not reported in this round.
+
+| Group | Items | Result |
+|---|---|---|
+| Loading and navigation | M1–M2 | **Pass** |
+| Journal | M3–M6 | **Pass** |
+| Character and privacy | M7–M9 | **Pass** |
+| Simulation | M10–M11 | **Pass** |
+| Real level-up | M12 | **Pass** |
+| Backup and import | M13–M15 | **Pass** |
+| Sharing privacy | M16 | **Pass** |
+| Themes and persistence | M17–M19 | **Pass** |
+| TRP3 compatibility | M20–M22 | **Pass**. First reported as untested, then as pass in an updated report the same day. |
+| UI safety | M23–M24 | **Pass** |
+| Optional | O1–O6 | Not reported |
+
+**Outcome:** all 24 mandatory items pass, so v0.2 meets the merge rule. Optional items O1–O6 (including UI scale) remain unreported, which does not block the merge.
+
+Notes from the tester: none. No Lua errors were reported. KI-1 did not recur.
