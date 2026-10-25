@@ -63,7 +63,7 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 - Once v0.2 has upgraded saved data to schema 2, v0.1 opens it read-only rather than changing it.
 
 ### Known issues
-- **KI-1:** a one-time return to character select happened shortly after entering the world in the first v0.2 test session. It is **unresolved, not reliably reproduced, and has no confirmed connection to Dawnward**. Revisit if it recurs. See `docs/COMPATIBILITY.md`.
+- **KI-1:** a one-time return to character select happened shortly after entering the world in the first v0.2 test session. It is **unresolved, not reproduced, and has no confirmed connection to Dawnward**. It does not block development unless it recurs. See `docs/COMPATIBILITY.md`.
 
 **Verified:**
 - L0, L1 and L2: 180 tests, run locally.

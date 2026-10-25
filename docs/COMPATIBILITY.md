@@ -59,7 +59,8 @@ v0.1 uses no client-specific gameplay APIs, so the same code runs on any client 
 ## Known issues
 
 ### KI-1: one-time return to character select after entering the world (v0.2 test session)
-- **Status:** Unresolved. **Not reliably reproduced.** **No confirmed connection to Dawnward.** Revisit if it occurs again. It is **not** fixed.
+- **Status:** Unresolved. **Not reproduced.** **No confirmed connection to Dawnward.** It is **not** fixed.
+- **Impact on development:** does **not** block development or the v0.2 merge. It becomes blocking only if it happens again, in which case investigation resumes before further release steps.
 - **Seen:** 2026-10-25, Classic Era 1.15.9, Total RP 3 3.4.1, during the first v0.2 session. The game returned to character select about 21 seconds after entering the world (client logs: entered at 02:11:20, returned at 02:11:41). There was no error message, and the next session was stable.
 - **What was checked (read-only):**
   - No installed addon (Dawnward, Total RP 3, RaiderIO, including bundled libraries) calls `Logout`, `Quit` or `ForceQuit`.
