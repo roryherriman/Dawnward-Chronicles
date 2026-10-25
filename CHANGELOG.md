@@ -34,12 +34,23 @@ A feature is never called "tested" or "compatible" in this file unless it reache
   - a TOC completeness check;
   - a release packaging script.
 
+### Fixed (found in the first in-game test)
+- The export/import window was hard to read when opened over Total RP 3. Its background was translucent, and it shared the DIALOG layer with Total RP 3's popups. It now:
+  - opens in the FULLSCREEN_DIALOG layer and comes to the front each time it opens;
+  - has an opaque background and a dark text area;
+  - keeps the text, status line and buttons from overlapping;
+  - pads and wraps text, and scrolls to follow the cursor.
+
 ### Known limitations
 - No adventure journal, story popups, personality changes or TRP3 writes yet. These are planned for v0.2–v0.5.
 - Profile editing is through slash commands only. Long text is cut short in chat; the export window shows it in full.
 - UI strings are English only. Localisation files will come once the strings settle.
 
-**Verified:** L0, L1 and L2 (94 tests), run locally. Not yet tested in game (L3), not yet run by CI on this branch, and not tested on Forever (L4).
+**Verified:**
+- L0, L1 and L2: 103 tests, run locally. CI has not run on this branch yet.
+- **L3, partial** (Classic Era 1.15.9, Total RP 3 3.4.1): the items listed in `docs/COMPATIBILITY.md` were confirmed in game.
+- The window fix has not been re-tested in game yet.
+- Not tested on Forever (L4).
 
 ## Repository foundation (2026-10-25)
 

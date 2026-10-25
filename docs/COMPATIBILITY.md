@@ -15,8 +15,30 @@ This matrix records **observed** results only. Levels are defined in [TESTING.md
 
 | Client | Interface | Role | Highest level reached |
 |---|---|---|---|
-| WoW Classic Era | The TOC says `11509` (taken from the TRP3 3.4.1 TOC). Confirm with `GetBuildInfo()` at L3. | Primary development client | L2 (mocked) |
+| WoW Classic Era 1.15.9 | The TOC says `11509`. Not yet confirmed with `GetBuildInfo()`. | Primary development client | L3, partial (see below) |
 | WoW Forever 1.60.1 | Believed to be 16001. **Unverified.** | Final deployment target | — (shown as "provisional", no client-specific features) |
+
+### L3 results: Classic Era 1.15.9 (build 70003), Total RP 3 3.4.1, 2026-10-25
+
+Test build `1fdb724`. The client build was read from the installed `.build.info`.
+
+**Confirmed in game:**
+- History entries: creating, editing and privacy labels
+- Data kept through `/reload` and a full logout and login
+- Backup export
+- Backup import and restore, then undo and redo
+- Corrupted backup rejected by the checksum
+- Simulation mode keeps its data separate, and reset works
+- Total RP 3 Default profile detected
+
+**Found:** the export/import window was hard to read over Total RP 3. It is fixed in `15dbae1` and still needs re-testing.
+
+**Not yet reported:**
+- the interface number from `GetBuildInfo()`
+- whether the AddOns list marks the addon "out of date"
+- family member commands
+- detection of a non-default Total RP 3 profile name
+- the combat check
 
 v0.1 uses no client-specific gameplay APIs, so the same code runs on any client that has the APIs below. That does **not** make it verified anywhere.
 

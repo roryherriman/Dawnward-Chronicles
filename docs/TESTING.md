@@ -97,6 +97,11 @@ This checklist will be filled in for each release from v0.1 onward. For each run
 | 20 | Disable TRP3, `/reload`, `/dawnward trp3` | "installed but not loaded" (or "not installed"). No errors. | |
 | 21 | Fight a mob while using a few `/dawnward` commands and the export window | No errors and no "action blocked" messages | |
 | 22 | `/dwc status` | Same output as `/dawnward` | |
+| 23 | Open Total RP 3's main window, then `/dawnward export backup` on top of it | The window is fully opaque, Total RP 3 doesn't show through, and the window is in front | |
+| 24 | With the window open, click Total RP 3's window, then click the Dawnward window | Clicking the Dawnward window brings it back to the front | |
+| 25 | `/dawnward import`, then paste a long backup | The text is padded inside a dark area, wraps within the box, and scrolls with the scroll bar or mouse wheel. Nothing draws outside the box. | |
+| 26 | Press **Check** | The status message wraps above the buttons without overlapping them | |
+| 27 | Repeat 23–26 at a different UI scale (System → Advanced → UI Scale) | Still readable, nothing overlaps, and the window stays on screen | |
 
 **Notes for the tester**
 
