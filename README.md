@@ -2,9 +2,9 @@
 
 **An in-game storytelling engine for World of Warcraft roleplayers.** It keeps a journal of your character's real adventures, offers you roleplay decisions, grows their personality only with your approval, and shares the parts you choose with [Total RP 3](https://github.com/Total-RP/Total-RP-3).
 
-> **Status: pre-alpha.** v0.1.0 (the foundation) is in development and has **not yet been tested in game**. There is no published release yet. See the [roadmap](#roadmap).
+> **Status: pre-alpha.** v0.2.0 (the journal window) has passed its in-game acceptance checklist on Classic Era. There is no published release yet. See the [roadmap](#roadmap).
 
-## Using Dawnward (v0.2, in development)
+## Using Dawnward (v0.2, pre-release)
 
 Type `/dawnward` (or `/dwc`) to open your journal. It has three sections:
 
@@ -56,13 +56,13 @@ Anything that deletes or replaces data asks you to add `confirm`.
 
 ## Compatibility
 
-Nothing has been verified in game yet. See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the live matrix.
+See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the live matrix and [`docs/TESTING.md`](docs/TESTING.md) for in-game results.
 
 | Target | Role | Status |
 |---|---|---|
-| WoW Classic Era | Primary development client | v0.1 partly tested in game. v0.2 mock-tested only. |
+| WoW Classic Era 1.15.9 | Primary development client | v0.2 passed its in-game acceptance checklist (all mandatory items). UI scaling untested. |
 | WoW Forever 1.60.1 | Final deployment target | Provisional. Its adapter is isolated until it can be tested. |
-| Total RP 3 3.4.1 | Integration target | Source audited. Read-only status is mock-tested. Not yet tested in game. |
+| Total RP 3 3.4.1 | Integration target | Source audited. Read-only status and coexistence tested in game; Dawnward never writes to it. |
 | Total RP 3 3.5.3 | Intended Forever version | Not yet audited or tested |
 
 Total RP 3 is optional. Dawnward works without it.
