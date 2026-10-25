@@ -153,4 +153,117 @@ return function(t, expect)
 			expect.equal(Transfer.Checksum("Wikipedia"), "11e60398")
 		end)
 	end)
+
+	t:describe("Transfer and character foundations (v0.3)", function()
+		local Facts, Sources, Interpretations = ns.Facts, ns.Sources, ns.Interpretations
+
+		local function planted()
+			local c = sample()
+			Facts.Add(c, { category = "belief", statement = "PUBLIC-FACT", visibility = "public" })
+			Facts.Add(c, { category = "fear", statement = "PRIVATE-FACT" })
+			Facts.Add(c, { category = "origin", statement = "SECRET-FACT", visibility = "secret" })
+			Sources.Capture(c, "paste", "SOURCE-MARKER biography", { note = "META-MARKER" }, 1)
+			Interpretations.Propose(c, { kind = "candidate", category = "trait", statement = "OPEN-MARKER",
+				origin = "paste", excerpt = "EXCERPT-MARKER" }, 2)
+			local rejected = Interpretations.Propose(c, { kind = "insight", category = "trait",
+				statement = "REJECTED-MARKER", origin = "paste" }, 3)
+			Interpretations.Reject(c, rejected.key, 4)
+			return c
+		end
+
+		t:it("share exports contain public facts only and never sources, suggestions or keys", function()
+			local text = assert(Transfer.Export(planted(), "share", { includeBiography = true, includeSecrets = true }))
+			expect.truthy(text:find("PUBLIC-FACT", 1, true))
+			for _, marker in ipairs({ "PRIVATE-FACT", "SECRET-FACT", "SOURCE-MARKER", "META-MARKER", "OPEN-MARKER",
+				"EXCERPT-MARKER", "REJECTED-MARKER", "rejected-marker", "interpretation", "sources" }) do
+				expect.falsy(text:find(marker, 1, true), "share export leaked " .. marker)
+			end
+		end)
+
+		t:it("backups carry facts, suggestions and key memory, and sources only with the biography option", function()
+			local c = planted()
+			local text = assert(Transfer.Export(c, "backup"))
+			expect.falsy(text:find("SOURCE-MARKER", 1, true))
+			expect.falsy(text:find("SECRET-FACT", 1, true))
+			local plan = assert(Transfer.Decode(text))
+			expect.falsy(plan.includesBiography)
+			expect.equal(#plan.character.facts, 2)
+			expect.equal(#plan.character.interpretations, 1)
+			expect.equal(ns.Util.CountKeys(plan.character.interpretationKeys), 1)
+			expect.equal(plan.character.sources.current, nil)
+
+			local withBio = assert(Transfer.Decode(assert(Transfer.Export(c, "backup", { includeBiography = true }))))
+			expect.truthy(withBio.includesBiography)
+			expect.equal(Sources.Current(withBio.character).text, "SOURCE-MARKER biography")
+			expect.truthy(Transfer.Describe(withBio):find("includes the stored biography"))
+		end)
+
+		t:it("restoring without sources keeps the current sources; with sources replaces them", function()
+			local c = planted()
+			local plan = assert(Transfer.Decode(assert(Transfer.Export(c, "backup"))))
+			Sources.Capture(c, "paste", "NEWER biography", nil, 9)
+			local merged = Transfer.MergeForImport(c, plan.character, plan.includesSecrets, 10, plan.includesBiography)
+			expect.equal(Sources.Current(merged).text, "NEWER biography")
+			expect.equal(#Sources.Versions(merged), 2)
+
+			local bioPlan = assert(Transfer.Decode(assert(Transfer.Export(planted(), "backup", { includeBiography = true }))))
+			local replaced = Transfer.MergeForImport(c, bioPlan.character, false, 11, true)
+			expect.equal(Sources.Current(replaced).text, "SOURCE-MARKER biography")
+		end)
+
+		t:it("secret facts carry over with unique IDs, and key memory is merged", function()
+			local c = planted()
+			local plan = assert(Transfer.Decode(assert(Transfer.Export(c, "backup"))))
+			local later = Interpretations.Propose(c, { kind = "candidate", category = "fear", statement = "LATER",
+				origin = "paste" }, 20)
+			Interpretations.Reject(c, later.key, 21)
+			local merged, carried = Transfer.MergeForImport(c, plan.character, false, 30, false)
+			expect.equal(carried, 3, "secret field, secret family member and secret fact")
+			local statements, seen = {}, {}
+			for _, f in ipairs(merged.facts) do
+				statements[#statements + 1] = f.statement
+				expect.falsy(seen[f.id])
+				seen[f.id] = true
+			end
+			expect.truthy(table.concat(statements, " "):find("SECRET-FACT", 1, true))
+			for _, list in ipairs({ merged.family, merged.history, merged.journal }) do
+				for _, item in ipairs(list) do
+					expect.falsy(seen[item.id], "IDs unique across all lists")
+					seen[item.id] = true
+				end
+			end
+			expect.equal(merged.interpretationKeys[later.key].status, "rejected")
+		end)
+
+		t:it("a suggestion resolved after the backup stays resolved on restore", function()
+			local c = planted()
+			local plan = assert(Transfer.Decode(assert(Transfer.Export(c, "backup"))))
+			local open = Interpretations.Open(c)[1]
+			Interpretations.Promote(c, open.key, nil, 40)
+			local merged = Transfer.MergeForImport(c, plan.character, false, 50, false)
+			expect.equal(#merged.interpretations, 0)
+		end)
+
+		t:it("v0.2 exports import with empty foundations", function()
+			local payload = Serializer.Encode({ format = 1, kind = "backup", schemaVersion = 2, includesSecrets = false,
+				character = { fields = { name = { value = "Old", visibility = "public" } }, family = {}, history = {},
+					journal = {}, journalKeys = {}, theme = "arcane" } })
+			local plan = assert(Transfer.Decode("!DWC1!B!" .. Transfer.Checksum(payload) .. "!" .. payload))
+			expect.equal(plan.character.theme, "arcane")
+			expect.deepEqual(plan.character.facts, {})
+			expect.deepEqual(plan.character.interpretations, {})
+			expect.deepEqual(plan.character.sources, { nextId = 1, versions = {} })
+		end)
+
+		t:it("sources smuggled into a backup without the biography flag are ignored", function()
+			local payload = Serializer.Encode({ format = 1, kind = "backup", schemaVersion = 3,
+				character = { sources = { current = 1, nextId = 2, versions = { { id = 1, kind = "paste", text = "X" } } } } })
+			local plan = assert(Transfer.Decode("!DWC1!B!" .. Transfer.Checksum(payload) .. "!" .. payload))
+			expect.equal(plan.character.sources.current, nil)
+		end)
+
+		t:it("Util.Checksum and the Transfer alias agree", function()
+			expect.equal(Transfer.Checksum, ns.Util.Checksum)
+		end)
+	end)
 end

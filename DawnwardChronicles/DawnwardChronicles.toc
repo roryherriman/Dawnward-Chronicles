@@ -2,7 +2,7 @@
 ## Title: Dawnward Chronicles
 ## Notes: Roleplay storytelling engine: character profile, family history, private-by-default facts, export/import. Optional read-only Total RP 3 status.
 ## Author: roryherriman
-## Version: 0.2.0
+## Version: 0.3.0-dev
 ## SavedVariables: DawnwardChroniclesDB, DawnwardChroniclesSimDB
 ## OptionalDeps: totalRP3
 ## X-License: MIT
@@ -16,6 +16,9 @@ Core\Migrations.lua
 Core\Character.lua
 Core\Journal.lua
 Core\Milestones.lua
+Core\Facts.lua
+Core\Sources.lua
+Core\Interpretations.lua
 Core\Projection.lua
 Core\Serializer.lua
 Core\Transfer.lua

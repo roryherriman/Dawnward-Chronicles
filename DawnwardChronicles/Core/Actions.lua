@@ -7,8 +7,8 @@
 --
 -- ctx needs: store, characterKey, now()
 local _, ns = ...
-local Character, Journal, Milestones, Themes =
-	ns.Character, ns.Journal, ns.Milestones, ns.Themes
+local Character, Journal, Milestones, Themes, Facts =
+	ns.Character, ns.Journal, ns.Milestones, ns.Themes, ns.Facts
 
 local Actions = {}
 ns.Actions = Actions
@@ -149,6 +149,34 @@ function Actions.SetFieldVisibility(ctx, key, level)
 		local ok, result = Character.SetFieldVisibility(char, key, level, ctx.now())
 		if not ok then return fail(result) end
 		return true, key .. " is now " .. level .. "."
+	end)
+end
+
+--- Facts (canon) --------------------------------------------------------------
+
+function Actions.AddFact(ctx, category, statement, visibility)
+	return withCharacter(ctx, function(char)
+		local fact, err = Facts.Add(char, { category = category, statement = statement, visibility = visibility },
+			nil, ctx.now())
+		if not fact then return fail(err) end
+		return fact, string.format("Added fact #%d (%s) [%s].", fact.id, Facts.DisplayCategory(fact.category).label,
+			fact.visibility)
+	end)
+end
+
+function Actions.SetFactVisibility(ctx, id, level)
+	return withCharacter(ctx, function(char)
+		local fact, err = Facts.SetVisibility(char, id, level, ctx.now())
+		if not fact then return fail(err) end
+		return fact, "Fact #" .. id .. " is now " .. level .. "."
+	end)
+end
+
+function Actions.RemoveFact(ctx, id)
+	return withCharacter(ctx, function(char)
+		local fact, err = Facts.Remove(char, id, ctx.now())
+		if not fact then return fail(err) end
+		return fact, "Removed fact #" .. id .. "."
 	end)
 end
 

@@ -13,8 +13,8 @@
 --
 -- Anything that deletes or replaces data requires the word "confirm".
 local _, ns = ...
-local Util, Schema, Character, Projection, Transfer, Journal, Actions, Themes =
-	ns.Util, ns.Schema, ns.Character, ns.Projection, ns.Transfer, ns.Journal, ns.Actions, ns.Themes
+local Util, Schema, Character, Projection, Transfer, Journal, Actions, Themes, Facts =
+	ns.Util, ns.Schema, ns.Character, ns.Projection, ns.Transfer, ns.Journal, ns.Actions, ns.Themes, ns.Facts
 
 local Commands = {}
 ns.Commands = Commands
@@ -31,7 +31,8 @@ local HELP = {
 	"  family vis <#> <level> | family remove <#> confirm",
 	"  history add <text> | history list | history set <#> when|text <text>",
 	"  history vis <#> <level> | history remove <#> confirm",
-	"  export backup [secrets] | export share | import | import confirm | import undo",
+	"  fact list | fact add <category> <statement> | fact vis <#> <level> | fact remove <#> confirm",
+	"  export backup [secrets] [biography] | export share | import | import confirm | import undo",
 	"  sim on | sim off | sim copy confirm | sim reset confirm | sim levelup <level>",
 }
 
@@ -146,6 +147,9 @@ handlers.status = function(ctx)
 	else
 		out(ctx, "Profile: none yet. Start with /dawnward set name <your character's name>")
 	end
+	local f = char and Character.FoundationCounts(char) or { facts = 0, suggestions = 0, biography = false }
+	out(ctx, string.format("Foundations: %d facts, %d suggestions, biography stored: %s",
+		f.facts, f.suggestions, f.biography and "yes" or "no"))
 	handlers.trp3(ctx)
 end
 
@@ -254,6 +258,54 @@ handlers.journal = function(ctx, rest)
 		_, message = Actions.RemoveNote(ctx, id)
 	else
 		message = "Unknown journal command '" .. sub .. "'. Try /dawnward help"
+	end
+	out(ctx, message)
+end
+
+handlers.fact = function(ctx, rest)
+	local sub, args = Util.NextWord(rest)
+	sub = sub:lower()
+	if sub == "" or sub == "list" then
+		local char = Actions.Character(ctx)
+		if not char or #char.facts == 0 then
+			out(ctx, "No facts yet (" .. modeLabel(ctx) .. "). Add one: /dawnward fact add <category> <statement>")
+			out(ctx, "Categories: " .. Facts.CategoryList())
+			return
+		end
+		out(ctx, string.format("Facts (%d of %d):", #char.facts, Schema.FOUNDATION.facts))
+		for _, group in ipairs(Facts.ByCategory(char)) do
+			out(ctx, "  " .. group.category.label .. ":")
+			for _, fact in ipairs(group.facts) do
+				out(ctx, string.format("    #%d %s [%s]", fact.id, preview(fact.statement), fact.visibility))
+			end
+		end
+		return
+	end
+	if sub == "add" then
+		local category, statement = Util.NextWord(args)
+		if category == "" or statement == "" then
+			out(ctx, "Usage: /dawnward fact add <category> <statement>   Categories: " .. Facts.CategoryList())
+			return
+		end
+		local _, message = Actions.AddFact(ctx, category:lower(), statement, nil)
+		out(ctx, message)
+		return
+	end
+	local idText, tail = Util.NextWord(args)
+	local id = parseId(idText)
+	if not id or (sub ~= "vis" and sub ~= "remove") then
+		out(ctx, "Usage: /dawnward fact list | add <category> <statement> | vis <#> <level> | remove <#> confirm")
+		return
+	end
+	local message
+	if sub == "vis" then
+		_, message = Actions.SetFactVisibility(ctx, id, Util.NextWord(tail):lower())
+	else
+		if Util.NextWord(tail):lower() ~= "confirm" then
+			out(ctx, string.format("This deletes fact #%d. Type: /dawnward fact remove %d confirm", id, id))
+			return
+		end
+		_, message = Actions.RemoveFact(ctx, id)
 	end
 	out(ctx, message)
 end
@@ -390,7 +442,7 @@ handlers.export = function(ctx, rest)
 		kind = Transfer.KIND_BACKUP
 	end
 	if kind ~= Transfer.KIND_BACKUP and kind ~= Transfer.KIND_SHARE then
-		out(ctx, "Usage: /dawnward export backup [secrets] | /dawnward export share")
+		out(ctx, "Usage: /dawnward export backup [secrets] [biography] | /dawnward export share")
 		return
 	end
 	local char = ctx.store:GetCharacter(ctx.characterKey)
@@ -398,8 +450,14 @@ handlers.export = function(ctx, rest)
 		out(ctx, "Nothing to export yet.")
 		return
 	end
-	local includeSecrets = kind == Transfer.KIND_BACKUP and Util.NextWord(opt):lower() == "secrets"
-	local text, err = Transfer.Export(char, kind, { includeSecrets = includeSecrets, addonVersion = ctx.version })
+	local options = {}
+	for word in opt:lower():gmatch("%S+") do
+		options[word] = true
+	end
+	local includeSecrets = kind == Transfer.KIND_BACKUP and options.secrets == true
+	local includeBiography = kind == Transfer.KIND_BACKUP and options.biography == true
+	local text, err = Transfer.Export(char, kind, { includeSecrets = includeSecrets,
+		includeBiography = includeBiography, addonVersion = ctx.version })
 	if not text then
 		out(ctx, "Export failed: " .. tostring(err))
 		return
@@ -411,6 +469,9 @@ handlers.export = function(ctx, rest)
 		title = "Backup WITH SECRETS - do not share this text"
 	else
 		title = "Personal backup - includes private facts, not secrets"
+	end
+	if includeBiography then
+		title = title .. " (with stored biography)"
 	end
 	if ctx.ui and ctx.ui.ShowExport then
 		ctx.ui.ShowExport(title, text)
@@ -469,7 +530,8 @@ handlers.import = function(ctx, rest)
 			out(ctx, "Cannot import: no room for another character.")
 			return
 		end
-		local merged, carried = Transfer.MergeForImport(current, plan.character, plan.includesSecrets, ctx.now())
+		local merged, carried = Transfer.MergeForImport(current, plan.character, plan.includesSecrets, ctx.now(),
+			plan.includesBiography)
 		ctx.store:ReplaceCharacter(ctx.characterKey, merged)
 		ctx.pendingImport = nil
 		out(ctx, "Imported into " .. modeLabel(ctx) .. "." ..
