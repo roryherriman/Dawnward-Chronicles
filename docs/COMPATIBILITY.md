@@ -56,6 +56,19 @@ Test build `14669c3`.
 
 v0.1 uses no client-specific gameplay APIs, so the same code runs on any client that has the APIs below. That does **not** make it verified anywhere.
 
+## Known issues
+
+### KI-1: one-time return to character select after entering the world (v0.2 test session)
+- **Status:** Unresolved. **Not reliably reproduced.** **No confirmed connection to Dawnward.** Revisit if it occurs again. It is **not** fixed.
+- **Seen:** 2026-10-25, Classic Era 1.15.9, Total RP 3 3.4.1, during the first v0.2 session. The game returned to character select about 21 seconds after entering the world (client logs: entered at 02:11:20, returned at 02:11:41). There was no error message, and the next session was stable.
+- **What was checked (read-only):**
+  - No installed addon (Dawnward, Total RP 3, RaiderIO, including bundled libraries) calls `Logout`, `Quit` or `ForceQuit`.
+  - Dawnward sends no network traffic and has no timers or hooks.
+  - The v1→v2 data upgrade completed correctly in that session.
+  - The client's connection logs were empty.
+- **Context:** the client process had been running since before three different Dawnward builds were installed under it. The incident followed a fresh account-level login.
+- **If it happens again:** note the time, enable `/chatlog`, and compare runs with Dawnward enabled and disabled from cold client starts. A separate logout-diagnostic addon was proposed but not built.
+
 ## Total RP 3
 
 | Version | Source audited | Tier 0 (read) | Tier A (public setters) | Tier B (manual export) | Tier C (owned direct write) |
