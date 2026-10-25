@@ -1,6 +1,4 @@
 -- Static analysis config. WoW runs Lua 5.1, so the standard library is lua51.
--- WoW API globals are added per-directory as each layer starts using them
--- (Core/ must never need any).
 std = "lua51"
 max_line_length = 120
 codes = true
@@ -12,6 +10,44 @@ exclude_files = {
 	"dist/",
 }
 
--- The runner reads varargs/`arg` and may exit the process.
-files["tests/run.lua"] = { read_globals = { "arg", "jit" } }
-files["tests/spec/environment_spec.lua"] = { read_globals = { "jit" } }
+-- The WoW client has no os/io libraries and no module loading. Addon code
+-- must never use them; tests may.
+local NOT_IN_WOW = { "os", "io", "require", "dofile", "loadfile", "module", "package", "debug" }
+
+-- Core/ is pure Lua: no WoW globals at all, so anything else is an error.
+files["DawnwardChronicles/Core/"] = {
+	not_globals = NOT_IN_WOW,
+}
+
+-- Client-facing layers: only the WoW API names they are known to use.
+-- Every name here must also appear in docs/COMPATIBILITY.md.
+local WOW_READ = {
+	"CreateFrame", "UIParent", "GetBuildInfo", "WOW_PROJECT_ID", "WOW_PROJECT_CLASSIC",
+	"C_AddOns", "GetAddOnMetadata", "IsAddOnLoaded", "UnitName", "GetRealmName",
+	"GetNormalizedRealmName", "time", "DEFAULT_CHAT_FRAME", "BackdropTemplateMixin",
+	"UISpecialFrames", "tinsert", "ChatFontNormal", "GameFontNormal", "GameFontHighlightSmall",
+	"InCombatLockdown",
+}
+
+files["DawnwardChronicles/Platform/"] = {
+	not_globals = NOT_IN_WOW,
+	read_globals = WOW_READ,
+	globals = {
+		"DawnwardChroniclesDB", "DawnwardChroniclesSimDB",
+		"SLASH_DAWNWARD1", "SLASH_DAWNWARD2", "SlashCmdList",
+	},
+}
+
+files["DawnwardChronicles/UI/"] = {
+	not_globals = NOT_IN_WOW,
+	read_globals = WOW_READ,
+}
+
+-- The TRP3 adapter receives its environment explicitly; it reads no globals itself.
+files["DawnwardChronicles/Integrations/"] = {
+	not_globals = NOT_IN_WOW,
+}
+
+-- Tests run outside WoW and may use the full standard library.
+-- Fakes mirror method-style APIs, so an unused `self` is expected there.
+files["tests/"] = { read_globals = { "arg", "jit", "setfenv" }, self = false }

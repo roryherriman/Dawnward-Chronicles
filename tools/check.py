@@ -1,4 +1,4 @@
-"""Run every local check: repository hygiene, luacheck (L0), Lua 5.1 tests (L1/L2).
+"""Run every local check: repository hygiene, TOC completeness, luacheck (L0), Lua 5.1 tests (L1/L2).
 
 Usage: python tools/check.py
 
@@ -94,6 +94,31 @@ def check_hygiene():
     return not problems
 
 
+ADDON_DIR = ROOT / "DawnwardChronicles"
+TOC_FILE = ADDON_DIR / "DawnwardChronicles.toc"
+
+
+def check_toc():
+    """Every addon .lua file is listed in the TOC, and every TOC entry exists."""
+    if not TOC_FILE.is_file():
+        print("  FAIL DawnwardChronicles.toc not found")
+        return False
+    listed = []
+    for line in TOC_FILE.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            listed.append(line.replace("\\", "/"))
+    on_disk = sorted(str(p.relative_to(ADDON_DIR)).replace("\\", "/") for p in ADDON_DIR.rglob("*.lua"))
+    problems = [f"listed in TOC but missing: {p}" for p in listed if not (ADDON_DIR / p).is_file()]
+    problems += [f"not listed in TOC (would never load): {p}" for p in on_disk if p not in listed]
+    if len(set(listed)) != len(listed):
+        problems.append("TOC lists a file more than once")
+    for p in problems:
+        print(f"  FAIL {p}")
+    print(f"  {len(listed)} files listed")
+    return not problems
+
+
 def find_luacheck():
     native = shutil.which("luacheck")
     if native:
@@ -125,6 +150,9 @@ def main():
 
     print("== Hygiene")
     results.append(("hygiene", check_hygiene()))
+
+    print("\n== TOC")
+    results.append(("toc", check_toc()))
 
     print("\n== L0 luacheck")
     luacheck = find_luacheck()

@@ -2,8 +2,26 @@
 
 **An in-game storytelling engine for World of Warcraft roleplayers.** It keeps a journal of your character's real adventures, offers you roleplay decisions, grows their personality only with your approval, and shares the parts you choose with [Total RP 3](https://github.com/Total-RP/Total-RP-3).
 
-> **Status: pre-alpha. There is no installable release yet.**
-> This repository currently holds the project foundation: architecture, compatibility research, tooling and tests. The first addon build will be v0.1.0. See the [roadmap](#roadmap).
+> **Status: pre-alpha.** v0.1.0 (the foundation) is in development and has **not yet been tested in game**. There is no published release yet. See the [roadmap](#roadmap).
+
+## Using v0.1
+
+Type `/dawnward` (or `/dwc`) in game. Everything you enter is **private** until you mark it otherwise.
+
+| Command | What it does |
+|---|---|
+| `/dawnward set name Aelin Brightwater` | Sets a profile field. `/dawnward fields` lists them all. |
+| `/dawnward vis name public` | Sets a field's visibility to `public`, `private` or `secret` |
+| `/dawnward family add mother Ilsa` | Adds a family member. Use `family list`, `family set <#> status deceased`, `family vis <#> secret`. |
+| `/dawnward history add Took the oath` | Adds a history entry. Use `history set <#> when Year 12`. |
+| `/dawnward show` / `show public` | Shows your full profile, or only what could ever be shared |
+| `/dawnward export backup` | Opens a window with a personal backup (private facts, no secrets). Add `secrets` to include them. |
+| `/dawnward export share` | Exports public facts only |
+| `/dawnward import` | Paste a backup, press **Check**, then **Import**. `/dawnward import undo` reverts it. |
+| `/dawnward sim on` / `off` | Simulation mode: experiment on separate test data |
+| `/dawnward trp3` | Read-only Total RP 3 status. v0.1 never changes your TRP3 profile. |
+
+Anything that deletes or replaces data asks you to add `confirm`.
 
 ## What it will do
 
@@ -31,9 +49,9 @@ Nothing has been verified in game yet. See [`docs/COMPATIBILITY.md`](docs/COMPAT
 
 | Target | Role | Status |
 |---|---|---|
-| WoW Classic Era | Primary development client | Planned for v0.1 |
+| WoW Classic Era | Primary development client | v0.1 in development. Mock-tested only. |
 | WoW Forever 1.60.1 | Final deployment target | Provisional. Its adapter is isolated until it can be tested. |
-| Total RP 3 3.4.1 | Integration target | Source audited. Not yet tested in game. |
+| Total RP 3 3.4.1 | Integration target | Source audited. Read-only status is mock-tested. Not yet tested in game. |
 | Total RP 3 3.5.3 | Intended Forever version | Not yet audited or tested |
 
 Total RP 3 is optional. Dawnward works without it.
@@ -46,7 +64,7 @@ Total RP 3 3.4.1 has public setters for small fields such as Currently, OOC, nam
 | Version | Milestone |
 |---|---|
 | 0.1 | Foundation: saved data and migrations, character and family-history model, export/import, simulation mode, read-only Total RP 3 detection |
-| 0.2 | Milestone journal |
+| 0.2 | Milestone journal and a simple themed journal window (Journal, Character, Story). See [UI direction](docs/UI_DIRECTION.md). |
 | 0.3 | Story decision popups and combat-safe queue |
 | 0.4 | Personality proposals and approval ledger |
 | 0.5 | Total RP 3 sync: public setters (opt-in) and copy-and-paste export, with backup and rollback |

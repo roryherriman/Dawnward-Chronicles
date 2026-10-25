@@ -1,6 +1,22 @@
 # Architecture
 
-Status: **design**. Only `tests/` and `tools/` exist so far. The addon folder arrives with v0.1. Everything below the tooling is planned, not implemented.
+Status: **v0.1 foundation implemented (L0–L2), not yet tested in game.**
+
+What v0.1 contains:
+
+- **Core:** `Util`, `Privacy`, `Schema`, `Migrations`, `Character`, `Projection`, `Serializer`, `Transfer`, `Store`, `Commands`.
+- **TRP3 integration:** `VersionProfiles` and the read-only `Status`.
+- **Platform:** `Detect` and `Bootstrap`.
+- **UI:** `CopyBox`.
+
+Still to come:
+
+- the journal, story and personality modules;
+- `Platform/Events` and `CombatQueue`;
+- the TRP3 writers and `DawnwardChroniclesTRP3DB` (v0.5);
+- locale files.
+
+The diagram and tables below describe the full target design.
 
 ## Layers
 

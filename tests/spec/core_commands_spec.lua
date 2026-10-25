@@ -1,0 +1,238 @@
+local Loader = require("support.loader")
+
+return function(t, expect)
+	local function setup(opts)
+		opts = opts or {}
+		local ns = Loader.Core()
+		local real = opts.real or ns.Schema.NewDatabase()
+		local sim = opts.sim or ns.Schema.NewDatabase()
+		local store = ns.Store.new(real, sim, opts.storeOpts)
+		local clock = 1000
+		local ctx = {
+			store = store,
+			characterKey = "Aelin-TestRealm",
+			now = function() clock = clock + 1; return clock end,
+			version = "0.1.0",
+			lines = {},
+			exports = {},
+			importShown = 0,
+		}
+		ctx.print = function(line) ctx.lines[#ctx.lines + 1] = line end
+		ctx.ui = {
+			ShowExport = function(title, text) ctx.exports[#ctx.exports + 1] = { title = title, text = text } end,
+			ShowImport = function() ctx.importShown = ctx.importShown + 1 end,
+		}
+		local function run(msg)
+			ctx.lines = {}
+			ns.Commands.Execute(ctx, msg)
+			return table.concat(ctx.lines, "\n")
+		end
+		return ns, ctx, run, real, sim
+	end
+
+	t:describe("profile commands", function()
+		t:it("creates a profile on first set, private by default", function()
+			local _, _, run, real = setup()
+			local output = run("set name Aelin Brightwater")
+			expect.truthy(output:find("%[private%]"))
+			expect.equal(real.characters["Aelin-TestRealm"].fields.name.value, "Aelin Brightwater")
+		end)
+
+		t:it("changes visibility and shows the public view only", function()
+			local _, _, run = setup()
+			run("set name Aelin")
+			run("set summary A quiet past")
+			run("vis name public")
+			local output = run("show public")
+			expect.truthy(output:find("Aelin"))
+			expect.falsy(output:find("quiet past"))
+			expect.truthy(run("show"):find("quiet past"))
+		end)
+
+		t:it("rejects unknown fields and bad levels without changing anything", function()
+			local _, _, run, real = setup()
+			expect.truthy(run("set eyecolour green"):find("Not changed"))
+			run("set name A")
+			expect.truthy(run("vis name everyone"):find("Not changed"))
+			expect.equal(real.characters["Aelin-TestRealm"].fields.name.visibility, "private")
+		end)
+
+		t:it("requires confirm to clear a field", function()
+			local _, _, run, real = setup()
+			run("set title Knight")
+			expect.truthy(run("clear title"):find("confirm"))
+			expect.truthy(real.characters["Aelin-TestRealm"].fields.title)
+			run("clear title confirm")
+			expect.equal(real.characters["Aelin-TestRealm"].fields.title, nil)
+		end)
+
+		t:it("prints help and handles unknown commands", function()
+			local _, _, run = setup()
+			expect.truthy(run("help"):find("family add"))
+			expect.truthy(run("dance"):find("Unknown command"))
+		end)
+	end)
+
+	t:describe("family and history commands", function()
+		t:it("adds, edits, hides and removes family with confirmation", function()
+			local _, _, run, real = setup()
+			expect.truthy(run("family add mother Ilsa Brightwater"):find("#1"))
+			run("family set 1 status deceased")
+			run("family vis 1 secret")
+			local member = real.characters["Aelin-TestRealm"].family[1]
+			expect.equal(member.name, "Ilsa Brightwater")
+			expect.equal(member.status, "deceased")
+			expect.equal(member.visibility, "secret")
+			expect.truthy(run("family remove 1"):find("confirm"))
+			expect.equal(#real.characters["Aelin-TestRealm"].family, 1)
+			run("family remove 1 confirm")
+			expect.equal(#real.characters["Aelin-TestRealm"].family, 0)
+		end)
+
+		t:it("records history entries", function()
+			local _, _, run, real = setup()
+			run("history add Took the oath at the chapel")
+			run("history set 1 when Year 12")
+			expect.truthy(run("history list"):find("Year 12: Took the oath"))
+			expect.equal(#real.characters["Aelin-TestRealm"].history, 1)
+		end)
+
+		t:it("reports bad IDs and invalid status", function()
+			local _, _, run = setup()
+			expect.truthy(run("family set x name Bob"):find("Usage"))
+			run("family add brother Tam")
+			expect.truthy(run("family set 1 status undead"):find("Not changed"))
+			expect.truthy(run("family set 99 name Bob"):find("Not changed"))
+		end)
+	end)
+
+	t:describe("export and import", function()
+		t:it("exports a backup to the window and imports it into another character", function()
+			local ns, ctx, run, real = setup()
+			run("set name Aelin")
+			run("set motivation A hidden vow")
+			run("vis motivation secret")
+			run("export backup")
+			expect.equal(#ctx.exports, 1)
+			local text = ctx.exports[1].text
+			expect.falsy(text:find("hidden vow", 1, true), "backup excludes secrets by default")
+
+			ctx.characterKey = "Alt-TestRealm"
+			expect.truthy(ns.Commands.StageImport(ctx, text))
+			run("import confirm")
+			local alt = real.characters["Alt-TestRealm"]
+			expect.equal(alt.fields.name.value, "Aelin")
+			expect.equal(alt.fields.motivation, nil)
+			expect.equal(real.characters["Aelin-TestRealm"].fields.motivation.value, "A hidden vow")
+		end)
+
+		t:it("stages, confirms and undoes an import", function()
+			local ns, ctx, run, real = setup()
+			run("set name Original")
+			run("set motivation Secret thing")
+			run("vis motivation secret")
+			local backupChar = ns.Schema.NewCharacter(1)
+			ns.Character.SetField(backupChar, "name", "Imported")
+			local text = assert(ns.Transfer.Export(backupChar, "backup"))
+
+			expect.truthy(run("import"):len() >= 0)
+			expect.equal(ctx.importShown, 1)
+			expect.truthy(run("import confirm"):find("Nothing to import"))
+
+			local ok = ns.Commands.StageImport(ctx, text)
+			expect.truthy(ok)
+			expect.equal(real.characters["Aelin-TestRealm"].fields.name.value, "Original", "staging changes nothing")
+
+			local output = run("import confirm")
+			expect.truthy(output:find("Kept 1 existing secret"))
+			local char = real.characters["Aelin-TestRealm"]
+			expect.equal(char.fields.name.value, "Imported")
+			expect.equal(char.fields.motivation.value, "Secret thing")
+
+			run("import undo")
+			expect.equal(real.characters["Aelin-TestRealm"].fields.name.value, "Original")
+		end)
+
+		t:it("rejects share exports and damaged text on import", function()
+			local ns, ctx, run = setup()
+			run("set name A")
+			run("vis name public")
+			run("export share")
+			local shareText = ctx.exports[1].text
+			expect.falsy(ns.Commands.StageImport(ctx, shareText))
+			expect.falsy(ns.Commands.StageImport(ctx, "not an export"))
+			expect.equal(ctx.pendingImport, nil)
+		end)
+
+		t:it("titles a secrets backup with a warning", function()
+			local _, ctx, run = setup()
+			run("set name A")
+			run("export backup secrets")
+			expect.truthy(ctx.exports[1].title:find("WITH SECRETS"))
+		end)
+	end)
+
+	t:describe("simulation mode", function()
+		t:it("keeps simulation writes out of real data", function()
+			local _, _, run, real, sim = setup()
+			run("set name Real Name")
+			run("sim on")
+			run("set name Test Name")
+			run("family add sister Test Sister")
+			expect.equal(real.characters["Aelin-TestRealm"].fields.name.value, "Real Name")
+			expect.equal(#real.characters["Aelin-TestRealm"].family, 0)
+			expect.equal(sim.characters["Aelin-TestRealm"].fields.name.value, "Test Name")
+			expect.truthy(run("show"):find("SIMULATION"))
+			run("sim off")
+			expect.truthy(run("show"):find("Real Name"))
+		end)
+
+		t:it("copies real data in and resets only with confirm", function()
+			local _, _, run, real, sim = setup()
+			run("set name Real")
+			run("sim copy")
+			expect.equal(sim.characters["Aelin-TestRealm"], nil)
+			run("sim copy confirm")
+			sim.characters["Aelin-TestRealm"].fields.name.value = "Changed in sim"
+			expect.equal(real.characters["Aelin-TestRealm"].fields.name.value, "Real", "copy is independent")
+			local simTable = sim
+			run("sim reset")
+			expect.truthy(sim.characters["Aelin-TestRealm"])
+			run("sim reset confirm")
+			expect.equal(sim.characters["Aelin-TestRealm"], nil)
+			expect.truthy(sim == simTable, "the saved table is reset in place")
+			expect.equal(real.characters["Aelin-TestRealm"].fields.name.value, "Real")
+		end)
+	end)
+
+	t:describe("read-only data", function()
+		t:it("refuses every write and says why", function()
+			local _, _, run, real = setup({ storeOpts = { realReadOnly = "saved data comes from a newer version" } })
+			for _, cmd in ipairs({ "set name A", "family add mother B", "history add C", "import confirm" }) do
+				local output = run(cmd)
+				expect.truthy(output:find("read%-only") or output:find("Nothing to import"), cmd .. " -> " .. output)
+			end
+			expect.equal(next(real.characters), nil)
+			expect.truthy(run("status"):find("READ%-ONLY"))
+		end)
+	end)
+
+	t:describe("status and trp3 output", function()
+		t:it("reports TRP3 states without failing", function()
+			local _, ctx, run = setup()
+			expect.truthy(run("trp3"):find("unavailable"))
+			ctx.trp3Status = function() return { installed = false, loaded = false } end
+			expect.truthy(run("trp3"):find("not installed"))
+			ctx.trp3Status = function()
+				return { installed = true, loaded = true, version = "3.4.1",
+					versionProfile = { label = "source audited, not yet tested in game" },
+					api = { getCurrentUser = true }, profile = { name = "Main", isDefault = true } }
+			end
+			local output = run("trp3")
+			expect.truthy(output:find("3.4.1"))
+			expect.truthy(output:find("never write to it"))
+			ctx.trp3Status = function() return { error = "boom" } end
+			expect.truthy(run("trp3"):find("disabled"))
+		end)
+	end)
+end
