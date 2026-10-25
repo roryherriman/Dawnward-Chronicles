@@ -198,12 +198,164 @@ local function create(parent)
 
 	function section:Refresh(view)
 		self.theme = view.theme
+		if self.editor:IsShown() then
+			self:ThemeEditor(view.theme)
+			return
+		end
 		self:RenderList(view)
 	end
 
 	section.getRow = getRow
+	JournalView.AttachEditing(section)
 	JournalView.section = section
 	return section
+end
+
+--- Editing ---------------------------------------------------------------------
+
+local EDIT_BUTTON_WIDTH = 50
+local DELETE_BUTTON_WIDTH = 58
+
+local function preview(text)
+	text = text or ""
+	if #text > 120 then
+		return text:sub(1, 120) .. "..."
+	end
+	return text
+end
+
+--- Adds the New entry button, row Edit/Delete buttons and the entry editor.
+function JournalView.AttachEditing(section)
+	local f = section.frame
+	section.rowActionsWidth = EDIT_BUTTON_WIDTH + DELETE_BUTTON_WIDTH + 8
+
+	section.newButton = Widgets.Button(section.toolbarLeft, "New entry", 100, 22)
+	section.newButton:SetPoint("LEFT", 0, 0)
+	section.newButton:SetScript("OnClick", function() section:OpenEditor(nil) end)
+
+	function section.decorateRow(row)
+		row.delete = Widgets.Button(row, "Delete", DELETE_BUTTON_WIDTH, 20)
+		row.delete:SetPoint("RIGHT", row.vis, "LEFT", -4, 0)
+		row.delete:SetScript("OnClick", function() section:ConfirmDelete(row.entry) end)
+		row.edit = Widgets.Button(row, "Edit", EDIT_BUTTON_WIDTH, 20)
+		row.edit:SetPoint("RIGHT", row.delete, "LEFT", -4, 0)
+		row.edit:SetScript("OnClick", function() section:OpenEditor(row.entry) end)
+	end
+
+	-- Only entries the player wrote can be edited or deleted.
+	function section.updateRowActions(row, entry)
+		local written = entry.kind == "note"
+		row.edit:SetShown(written)
+		row.delete:SetShown(written)
+	end
+
+	-- Editor panel (replaces the list while open).
+	local editor = CreateFrame("Frame", nil, f)
+	editor:SetAllPoints(f)
+	editor:Hide()
+	section.editor = editor
+
+	editor.heading = Widgets.Label(editor, "GameFontNormalLarge")
+	editor.heading:SetPoint("TOPLEFT", INSET, -10)
+
+	editor.titleLabel = Widgets.Label(editor, "GameFontHighlightSmall")
+	editor.titleLabel:SetPoint("TOPLEFT", INSET, -40)
+	editor.titleLabel:SetText("Title (optional)")
+	editor.title = Widgets.EditLine(editor, 101)
+	editor.title:SetPoint("TOPLEFT", INSET + 6, -56)
+	editor.title:SetPoint("TOPRIGHT", -INSET, -56)
+
+	editor.textLabel = Widgets.Label(editor, "GameFontHighlightSmall")
+	editor.textLabel:SetPoint("TOPLEFT", INSET, -86)
+	editor.textLabel:SetText("Entry")
+	editor.area = Widgets.TextArea(editor, 2001)
+	editor.area.frame:SetPoint("TOPLEFT", INSET, -102)
+	editor.area.frame:SetPoint("BOTTOMRIGHT", -INSET, 44)
+
+	editor.vis = Widgets.VisibilityButton(editor, function(level, button) button:SetLevel(level) end)
+	editor.vis:SetPoint("BOTTOMLEFT", INSET, 12)
+	editor.cancel = Widgets.Button(editor, "Cancel", 90, 22)
+	editor.cancel:SetPoint("BOTTOMRIGHT", -INSET, 12)
+	editor.save = Widgets.Button(editor, "Save", 90, 22)
+	editor.save:SetPoint("RIGHT", editor.cancel, "LEFT", -6, 0)
+
+	local function listParts(shown)
+		section.scroll:SetShown(shown)
+		section.newer:SetShown(shown)
+		section.older:SetShown(shown)
+		section.pageLabel:SetShown(shown)
+		section.toolbarLeft:SetShown(shown)
+		if not shown then
+			section.empty:Hide()
+		end
+	end
+
+	function section.ThemeEditor(_, theme)
+		Widgets.TextColor(editor.heading, theme.accent)
+		Widgets.TextColor(editor.titleLabel, theme.muted)
+		Widgets.TextColor(editor.textLabel, theme.muted)
+		Widgets.SetColor(editor.area.well, { 0, 0, 0 })
+		editor.area.edit:SetTextColor(theme.text[1], theme.text[2], theme.text[3])
+		editor.title:SetTextColor(theme.text[1], theme.text[2], theme.text[3])
+	end
+
+	--- entry nil = new entry.
+	function section:OpenEditor(entry)
+		editor.entryId = entry and entry.id or nil
+		editor.heading:SetText(entry and "Edit entry" or "New entry")
+		editor.title:SetText(entry and entry.title or "")
+		editor.area.edit:SetText(entry and entry.text or "")
+		editor.vis:SetLevel(entry and entry.visibility or "private")
+		listParts(false)
+		editor:Show()
+		if self.theme then
+			self:ThemeEditor(self.theme)
+		end
+		editor.area.edit:SetFocus()
+		MainWindow.SetStatus(entry and "Editing your entry." or "Write in your character's voice, or your own.")
+	end
+
+	function section.CloseEditor()
+		editor:Hide()
+		editor.title:ClearFocus()
+		editor.area.edit:ClearFocus()
+		listParts(true)
+		MainWindow.Refresh()
+	end
+
+	function section:SaveEditor()
+		local title = editor.title:GetText()
+		local text = editor.area.edit:GetText()
+		local ok, message
+		if editor.entryId then
+			ok, message = Actions.UpdateNote(ns.ctx, editor.entryId, title, text, editor.vis.level)
+		else
+			ok, message = Actions.AddNote(ns.ctx, title, text, editor.vis.level)
+			if ok then
+				self.page = 1
+			end
+		end
+		if ok then
+			self:CloseEditor()
+		end
+		MainWindow.SetStatus(message)
+	end
+
+	function section.ConfirmDelete(_, entry)
+		if not entry or entry.kind ~= "note" then
+			return
+		end
+		local id = entry.id
+		Widgets.Confirm("Delete this journal entry?\n\n\"" .. preview(entry.title or entry.text) .. "\"\n\n"
+			.. "This cannot be undone (a backup export keeps a copy).", "Delete", function()
+			local _, message = Actions.RemoveNote(ns.ctx, id)
+			MainWindow.SetStatus(message)
+			MainWindow.Refresh()
+		end)
+	end
+
+	editor.save:SetScript("OnClick", function() section:SaveEditor() end)
+	editor.cancel:SetScript("OnClick", function() section:CloseEditor() end)
 end
 
 MainWindow.RegisterSection({ id = "journal", label = "Journal", order = 1, create = create })
