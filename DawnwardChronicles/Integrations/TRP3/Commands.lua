@@ -16,6 +16,7 @@ local HELP = {
 	"  trp3 enable about|traits confirm | trp3 disable about|traits",
 	"  trp3 release about|traits confirm | trp3 rollback [#] confirm",
 	"  trp3 resolve about|traits keep|reclaim",
+	"  trp3 diagnose (read-only: which guard is holding each feature back)",
 }
 
 local STATE_LABEL = {
@@ -70,6 +71,47 @@ local function describeCheck(ctx, check)
 		out(ctx, "    would change: " .. table.concat(check.plan.changes, ", "))
 	elseif check.plan and check.state == "ready" then
 		out(ctx, "    would " .. check.plan.action .. " the Dawnward section")
+	end
+end
+
+local function flag(v)
+	if v == nil then return "unknown" end
+	return v and "yes" or "no"
+end
+
+--- Read-only report of every guard input, so an in-game "waiting" or
+-- "blocked" can be traced to the exact check. Writes nothing.
+local function diagnose(ctx, deps)
+	local probe = ns.TRP3Adapter.Probe(deps.env)
+	local status = probe.status
+	out(ctx, "Total RP 3 sync diagnostics (read-only, nothing is written):")
+	out(ctx, string.format("  Total RP 3: %s, version %s, writes allowed: %s", status.loaded and "loaded"
+		or "not loaded", tostring(status.version), flag(probe.experimental.allowed)))
+	if probe.profile then
+		out(ctx, string.format("  profile: '%s' (%s), default: %s", tostring(probe.profile.name),
+			tostring(probe.profile.id), flag(probe.profile.isDefault)))
+	end
+	for _, r in ipairs(probe.experimental.reasons) do
+		out(ctx, "  capability check failed: " .. r)
+	end
+	for _, section in ipairs({ "about", "characteristics" }) do
+		local e = probe.editorState and probe.editorState[section]
+		if e then
+			out(ctx, string.format("  %s editor: draft %s (%s) - page %s, context %s, edit mode %s, tab shown %s, "
+				.. "edit frame shown %s", section, flag(e.open), tostring(e.why), tostring(e.pageId),
+				flag(e.hasContext), flag(e.editMode), flag(e.tabShown), flag(e.editShown)))
+		end
+	end
+	out(ctx, string.format("  simulation: %s, saved data read-only: %s, ledger read-only: %s, in combat: %s",
+		flag(deps.store:IsSimulation()), flag(deps.store.realReadOnly == true), flag(deps.ledgerReadOnly ~= nil),
+		flag(deps.inCombat and deps.inCombat() or false)))
+	local entry = deps.ledger.optIn[deps.characterKey]
+	for _, feature in ipairs(Sync.ORDER) do
+		local check = Sync.Check(deps, feature)
+		out(ctx, string.format("  %s: opted in %s (profile %s), state %s%s", Sync.FEATURES[feature].label,
+			flag(entry and entry[feature] == true), tostring(entry and entry.profileId),
+			STATE_LABEL[check.state] or check.state,
+			#check.reasons > 0 and (" - " .. table.concat(check.reasons, "; ")) or ""))
 	end
 end
 
@@ -136,6 +178,8 @@ local function command(ctx, rest)
 		for _, feature in ipairs(Sync.ORDER) do
 			describeCheck(ctx, Sync.Check(deps, feature))
 		end
+	elseif sub == "diagnose" then
+		diagnose(ctx, deps)
 	elseif sub == "sync" then
 		runSync(ctx, deps)
 	elseif sub == "paste" then

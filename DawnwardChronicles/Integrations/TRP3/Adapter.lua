@@ -24,13 +24,22 @@ ns.TRP3Adapter = Adapter
 
 Adapter.SECTIONS = { about = true, characteristics = true }
 
--- TRP3 frames whose own "shown" flag means an editor holds a draft that a
--- later Save would copy over the live section (RegisterAbout.lua save(),
--- RegisterCharacteristics.lua saveCharacteristics()). The flag stays set
--- even when TRP3's window is closed in the middle of editing.
+-- How TRP3 3.4.1 holds an unsaved About or characteristics draft
+-- (RegisterAbout.lua, RegisterCharacteristics.lua, RegisterMain.lua,
+-- MainStructure.lua). Editing sets isEditMode on the "player_main" page
+-- context and shows the section's edit frame; Save or Cancel clears both.
+-- Closing TRP3's window mid-edit keeps both, so that draft still blocks.
+-- The edit frame's own "shown" flag is not enough on its own: the frames
+-- are declared without hidden="true", so they read as shown after every
+-- login and /reload until TRP3 first draws that tab (the About tab only
+-- when the player views it). A draft is a Lua local, so a reload discards
+-- it; and leaving the profile page replaces the context, after which TRP3
+-- discards the draft before any new edit. So a draft that a later Save
+-- could copy over the live section exists only when all of these hold.
+Adapter.PROFILE_PAGE = "player_main"
 Adapter.EDITOR_FRAMES = {
-	about = "TRP3_RegisterAbout_AboutPanel_Edit",
-	characteristics = "TRP3_RegisterCharact_Edit_NamePanel",
+	about = { tab = "TRP3_RegisterAbout", edit = "TRP3_RegisterAbout_AboutPanel_Edit" },
+	characteristics = { tab = "TRP3_RegisterCharact", edit = "TRP3_RegisterCharact_Edit_NamePanel" },
 }
 
 -- Official setters for whole sections, by name on CurrentUser. Empty: TRP3
@@ -105,10 +114,69 @@ local function eventApi(env)
 	return addon, globals.player_id
 end
 
+local function shownFlag(env, name)
+	local frame = env[name]
+	if type(frame) ~= "table" or type(frame.IsShown) ~= "function" then
+		return nil
+	end
+	local ok, shown = pcall(frame.IsShown, frame)
+	if not ok then
+		return nil
+	end
+	return shown and true or false
+end
+
+--- Raw editor signals for one section, read fresh. Never writes.
+-- Returns { open, why, pageId, hasContext, editMode, tabShown, editShown }
+-- where open is true (a draft exists), false (none) or nil (unknown).
+function Adapter.EditorState(env, section)
+	local names = Adapter.EDITOR_FRAMES[section]
+	local state = {}
+	if not names then
+		state.why = "unknown section"
+		return state
+	end
+	state.editShown = shownFlag(env, names.edit)
+	state.tabShown = shownFlag(env, names.tab)
+	local api = env.TRP3_API
+	local nav = type(api) == "table" and type(api.navigation) == "table" and api.navigation.page or nil
+	if type(nav) ~= "table" or type(nav.getCurrentPageID) ~= "function"
+		or type(nav.getCurrentContext) ~= "function" then
+		state.why = "Total RP 3's page state cannot be read"
+		return state
+	end
+	if state.editShown == nil then
+		state.why = "the Total RP 3 editor frame cannot be read"
+		return state
+	end
+	local okPage, pageId = pcall(nav.getCurrentPageID)
+	local okContext, context = pcall(nav.getCurrentContext)
+	if not okPage or not okContext then
+		state.why = "Total RP 3's page state cannot be read"
+		return state
+	end
+	state.pageId = type(pageId) == "string" and pageId or nil
+	state.hasContext = type(context) == "table"
+	state.editMode = state.hasContext and context.isEditMode == true
+	if state.pageId ~= Adapter.PROFILE_PAGE or not state.hasContext then
+		state.open, state.why = false, "no Total RP 3 profile page is in use"
+	elseif not state.editMode then
+		state.open, state.why = false, "the Total RP 3 profile page is not in edit mode"
+	elseif state.tabShown == false then
+		state.open, state.why = false, "another Total RP 3 tab is being edited"
+	elseif state.editShown then
+		state.open, state.why = true, "the Total RP 3 editor holds unsaved changes"
+	else
+		state.open, state.why = false, "the Total RP 3 editor is closed"
+	end
+	return state
+end
+
 --- Everything a sync decision needs, read fresh. Never writes.
 -- Returns { status, profile = { id, name, isDefault, characterId, sharedWith },
 --   versionProfile, experimental = { allowed, reasons = {...} },
---   editorOpen = { about, characteristics } (nil = unknown) }.
+--   editorOpen = { about, characteristics } (nil = unknown),
+--   editorState = { about, characteristics } (see EditorState) }.
 function Adapter.Probe(env)
 	local probe = { status = Status.Read(env), experimental = { allowed = false, reasons = {} } }
 	local reasons = probe.experimental.reasons
@@ -151,16 +219,12 @@ function Adapter.Probe(env)
 		if not eventApi(env) then
 			reasons[#reasons + 1] = "Total RP 3's update notification is unavailable, so other players would not see changes"
 		end
-		probe.editorOpen = {}
-		for section, frameName in pairs(Adapter.EDITOR_FRAMES) do
-			local frame = env[frameName]
-			if type(frame) == "table" and type(frame.IsShown) == "function" then
-				local shownOk, shown = pcall(frame.IsShown, frame)
-				if shownOk then
-					probe.editorOpen[section] = shown and true or false
-				end
-			end
-			if probe.editorOpen[section] == nil then
+		probe.editorOpen, probe.editorState = {}, {}
+		for section in pairs(Adapter.EDITOR_FRAMES) do
+			local state = Adapter.EditorState(env, section)
+			probe.editorState[section] = state
+			probe.editorOpen[section] = state.open
+			if state.open == nil then
 				reasons[#reasons + 1] = "Dawnward cannot tell whether the Total RP 3 editor is open"
 			end
 		end

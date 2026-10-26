@@ -49,6 +49,7 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 ### Changed
 - The Adler-32 checksum moved to `Util.Checksum`; `Transfer.Checksum` remains as an alias.
 - Export text now declares schema 3, so v0.2 builds refuse v0.3 exports as "newer".
+- **TRP3 editor detection (PR #9 in-game report):** the biography no longer stays "waiting - the Total RP 3 editor is open" after the editor was closed or after `/reload`. TRP3 3.4.1's edit frames read as shown from load until their tab is drawn, so Dawnward now treats a draft as present only while TRP3's profile page is in edit mode on that section's tab (still including a window closed mid-edit). New read-only `/dawnward trp3 diagnose` shows each guard input (L2).
 
 ## 0.2.0 (journal window)
 

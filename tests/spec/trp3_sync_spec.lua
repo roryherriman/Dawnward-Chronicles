@@ -519,4 +519,123 @@ return function(t, expect)
 			expect.truthy(w.ns.TRP3Commands.StatusLines(ctx)[1]:find("unavailable"))
 		end)
 	end)
+
+	-- In-game report (PR #9): after both writes succeeded, TRP3 closed and a
+	-- /reload, preview kept saying "biography: waiting - the editor is open".
+	-- TRP3 3.4.1 declares its edit frames without hidden="true", so they read
+	-- as shown from load until the tab is drawn; only the page context's edit
+	-- mode says whether a draft exists.
+	t:describe("TRP3 sync: editor detection (PR #9 in-game report)", function()
+		local function both(w)
+			w.publicFact("origin", "Born in Stormwind")
+			w.trait("courage", 15)
+			w.enable("about")
+			w.enable("traits")
+		end
+
+		t:it("after login or /reload with TRP3 never opened, load-time 'shown' frames do not block", function()
+			local w = world()
+			both(w)
+			expect.truthy(w.fake.aboutEditor:IsShown(), "precondition: the frame flag is set from XML")
+			expect.truthy(w.fake.characteristicsEditor:IsShown())
+			expect.equal(w.Sync.Check(w.deps, "about").state, "ready")
+			expect.equal(w.Sync.Check(w.deps, "traits").state, "ready")
+			local results = w.Sync.Run(w.deps)
+			expect.equal(results[1].state, "written", results[1].message)
+			expect.equal(results[2].state, "written", results[2].message)
+			w.fake.reload()
+			expect.equal(w.Sync.Check(w.deps, "about").state, "noop")
+			expect.equal(w.Sync.Check(w.deps, "traits").state, "noop")
+		end)
+
+		t:it("viewing the profile (characteristics tab only) and closing it does not block the biography", function()
+			-- The About edit frame keeps its load-time flag here, while the
+			-- characteristics one was hidden: why the two could disagree.
+			local w = world()
+			both(w)
+			w.fake.openProfilePage()
+			w.fake.closeEditorWindow()
+			expect.truthy(w.fake.aboutEditor:IsShown())
+			expect.falsy(w.fake.characteristicsEditor:IsShown())
+			expect.equal(w.Sync.Check(w.deps, "about").state, "ready")
+			expect.equal(w.Sync.Check(w.deps, "traits").state, "ready")
+		end)
+
+		t:it("closing the editor with Save or Cancel lets sync continue", function()
+			local w = world()
+			both(w)
+			w.fake.openEditor("about")
+			expect.equal(w.Sync.Check(w.deps, "about").state, "deferred")
+			w.fake.cancelEditor("about")
+			expect.equal(w.Sync.Check(w.deps, "about").state, "ready")
+			w.fake.openEditor("about")
+			w.fake.saveEditor("about")
+			expect.equal(w.Sync.Check(w.deps, "about").state, "ready")
+		end)
+
+		t:it("an unsaved draft still blocks, also after closing TRP3's window mid-edit", function()
+			local w = world()
+			both(w)
+			local draft = w.fake.openEditor("about")
+			draft.T1.TX = "Unsaved player text"
+			w.fake.closeEditorWindow()
+			local r = w.Sync.Run(w.deps)
+			expect.equal(r[1].state, "deferred")
+			expect.truthy(r[1].message:find("unsaved", 1, true), r[1].message)
+			expect.equal(w.about().T1.TX, "Private about text", "nothing written under the draft")
+			expect.equal(r[2].state, "written", "the other section has no draft and is not held back")
+		end)
+
+		t:it("a characteristics draft blocks traits only", function()
+			local w = world()
+			both(w)
+			w.fake.openEditor("characteristics")
+			w.fake.closeEditorWindow()
+			expect.truthy(w.fake.aboutEditor:IsShown(), "stale About flag from load")
+			local r = w.Sync.Run(w.deps)
+			expect.equal(r[1].state, "written", r[1].message)
+			expect.equal(r[2].state, "deferred")
+		end)
+
+		t:it("/reload discards an unsaved draft, so sync resumes", function()
+			local w = world()
+			both(w)
+			w.fake.openEditor("about")
+			w.fake.closeEditorWindow()
+			expect.equal(w.Sync.Check(w.deps, "about").state, "deferred")
+			w.fake.reload()
+			expect.equal(w.Sync.Run(w.deps)[1].state, "written")
+		end)
+
+		t:it("leaving the profile page mid-edit does not block (TRP3 discards that draft)", function()
+			local w = world()
+			both(w)
+			w.fake.openEditor("about")
+			w.fake.openOtherPage("player_profiles")
+			expect.truthy(w.fake.aboutEditor:IsShown())
+			expect.equal(w.Sync.Check(w.deps, "about").state, "ready")
+		end)
+
+		t:it("hidden frames with edit mode still on are not a draft for that section", function()
+			local w = world()
+			both(w)
+			w.fake.openEditor("about")
+			w.fake.aboutEditor.shown = false
+			expect.equal(w.Sync.Check(w.deps, "about").state, "ready")
+		end)
+
+		t:it("unreadable page state or frames block sync instead of guessing", function()
+			for _, opts in ipairs({ { noNavigation = true }, { noEditorFrames = true } }) do
+				local w = world(opts)
+				local state = w.ns.TRP3Adapter.EditorState(w.fake.env, "about")
+				expect.equal(state.open, nil)
+				local ok, err = w.Sync.SetOptIn(w.deps, "about", true)
+				expect.falsy(ok)
+				expect.truthy(err:find("cannot tell", 1, true), err)
+			end
+			local w = world()
+			w.fake.env.TRP3_API.navigation.page.getCurrentContext = function() error("boom") end
+			expect.equal(w.ns.TRP3Adapter.EditorState(w.fake.env, "about").open, nil)
+		end)
+	end)
 end

@@ -98,7 +98,8 @@ local function guards(deps, feature)
 	if #reasons == 0 then
 		local section = Sync.FEATURES[feature].section
 		if probe.editorOpen[section] then
-			reasons[#reasons + 1] = "the Total RP 3 editor is open; Dawnward will try again after it is closed"
+			reasons[#reasons + 1] = "the Total RP 3 editor holds unsaved changes to this section; save or cancel "
+				.. "it in Total RP 3 and Dawnward will try again"
 			deferred = true
 		elseif deps.inCombat and deps.inCombat() then
 			reasons[#reasons + 1] = "in combat; Dawnward will try again later"

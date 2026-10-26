@@ -253,7 +253,9 @@ Create a new TRP3 profile named for example "Dawnward Test" and switch to it.
 | C4 | `/dawnward status` twice, wait 10 s | No new "Updated" message; the log shows no new write (no-op) |
 | C5 | Add another public fact, wait 10 s | The section updates in place. Your own text is unchanged. |
 | C6 | `/reload`, then log out and in. Open the About page. | Your text plus the section persist |
-| C7 | Open TRP3's About **editor** (don't save). Add a public fact. Wait 40 s. | No write while the editor is open (`/dawnward trp3 preview` says the editor is open) |
+| C7 | Open TRP3's About **editor** (don't save). Add a public fact. Wait 40 s. | No write while the editor is open (`/dawnward trp3 preview` says the editor holds unsaved changes; `/dawnward trp3 diagnose` shows `about editor: draft yes`) |
+| C7a | With the editor still open, close TRP3's window (Escape or X). `/dawnward trp3 preview` | Still waiting: the unsaved draft is protected |
+| C7b | `/reload` **without** opening TRP3. `/dawnward trp3 preview` and `/dawnward trp3 diagnose` | Biography is **not** waiting (reload discarded the draft); diagnose shows `page nil, context no` for both editors. Copy the diagnose output into the report. |
 | C8 | Cancel the editor, wait about 30 s | The pending update is written |
 | C9 | In TRP3's editor, change one word **inside** the Chronicle section and save. Add a public fact. Wait 10 s. | Chat says sync is paused (conflict). Your edit is **kept**, nothing else changes. The message is shown once. |
 | C10 | `/dawnward trp3 resolve about reclaim`, wait 10 s | Your edited section stays, and a fresh Chronicle section is appended below it |

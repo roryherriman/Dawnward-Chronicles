@@ -132,7 +132,10 @@ Removing the owned block (release) restores the player's text **byte for byte** 
 2. Not in simulation mode, and saved data is writable.
 3. TRP3 is loaded, the version is on the allowlist (`VersionProfiles`: `experimentalWrite`), and the public API, profile data and update event exist. **A matching version number alone is never enough.**
 4. The active profile has an ID, is **not the default profile**, and is **exactly the profile the character opted in with**. Switching profile pauses sync.
-5. The editor panel for the section is not shown. Dawnward checks the panel's own shown flag, which stays set even if TRP3's window was closed in the middle of editing.
+5. No TRP3 editor holds an unsaved draft of the section. That is the case only while TRP3's `player_main` page context is in edit mode, the section's tab is shown and its edit frame is shown (`Adapter.EditorState`) **S**. Closing TRP3's window mid-edit keeps all three, so that draft still blocks.
+   - The edit frame's shown flag alone is **not** a reliable signal: both edit frames are declared without `hidden="true"` (`RegisterUIAbout.xml`, `RegisterUICharacteristics.xml`), so they read as shown after every login and `/reload` until TRP3 draws that tab. The characteristics tab is drawn whenever a profile page opens; the About tab only when the player views it **S**. Before this was fixed in PR #9, it left the biography "waiting" forever after a `/reload` (in-game report, TRP3 3.4.1).
+   - A `/reload` discards a draft (it is a Lua local), and leaving the profile page replaces the context, after which TRP3 discards the draft before any new edit **S**.
+   - `/dawnward trp3 diagnose` prints every input of this check, read-only.
 6. Not in combat.
 7. No unresolved conflict, and the section passes the shape check.
 
@@ -171,7 +174,7 @@ Removing the owned block (release) restores the player's text **byte for byte** 
 | About / PS layout (above) | To find owned content | Shape check fails closed → sync blocked |
 | `TRP3_Addon:TriggerEvent`, `TRP3_Addon.Events.REGISTER_DATA_UPDATED`, `TRP3_API.globals.player_id` | So TRP3's UI, MSP and the exchange see the change | Probe fails → sync blocked |
 | Version rule (+1, wrap at 100) | Other clients re-fetch on a different number | Remote clients may not re-fetch → caught by the two-client L3 test |
-| Editor frame names `TRP3_RegisterAbout_AboutPanel_Edit`, `TRP3_RegisterCharact_Edit_NamePanel` | To avoid writing under an open draft | Frame missing → "cannot tell whether the editor is open" → sync blocked |
+| `TRP3_API.navigation.page.getCurrentPageID` / `getCurrentContext` (`isEditMode`); frames `TRP3_RegisterAbout`, `TRP3_RegisterCharact`, `TRP3_RegisterAbout_AboutPanel_Edit`, `TRP3_RegisterCharact_Edit_NamePanel` | To avoid writing under an unsaved draft | Navigation or edit frame missing or failing → "cannot tell whether the editor is open" → sync blocked |
 | `TRP3_API.RegisterCallback` | Hints only | Missing → still works on Dawnward's own triggers |
 | `TRP3_Characters` (read only) | To warn about shared profiles | Missing → no warning |
 
@@ -193,4 +196,4 @@ Removing the owned block (release) restores the player's text **byte for byte** 
 
 - Does TRP3's open profile page refresh by itself after the update event?
 - Does a second client (and an MSP client) receive the update after mouse-over?
-- Are the editor panels' shown flags reliable in every path (cancel, tab switch, `/reload` while editing)?
+- Does the page-context edit-mode check match what TRP3 does in every path (cancel, tab switch, closing the window mid-edit, `/reload` while editing)? Check with `/dawnward trp3 diagnose`.

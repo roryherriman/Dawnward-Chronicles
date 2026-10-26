@@ -131,35 +131,83 @@ function Fake.new(opts)
 		end)
 	end
 
-	-- Editors: draft copied on open, Save copies it back with v = draft.v + 1.
-	local editorFrames = {}
-	local drafts = {}
+	-- Editors, as RegisterMain/RegisterAbout/RegisterCharacteristics and
+	-- MainStructure.lua do them:
+	--   * the tab and edit frames are declared without hidden="true", so
+	--     they read as shown after login or /reload until TRP3 draws the tab
+	--   * opening the player's profile page creates a fresh context and
+	--     selects the characteristics tab (its edit frame is hidden; the
+	--     About edit frame keeps its load-time flag until About is viewed)
+	--   * Edit sets context.isEditMode and shows the section's edit frame
+	--     over a draft copied from the live section; Save or Cancel shows the
+	--     tab again (isEditMode false, edit frame hidden)
+	--   * closing TRP3's window mid-edit changes nothing of that
 	local FRAME = { about = "TRP3_RegisterAbout_AboutPanel_Edit", characteristics = "TRP3_RegisterCharact_Edit_NamePanel" }
-	for section, name in pairs(FRAME) do
-		local frame = { shown = false }
+	local TAB = { about = "TRP3_RegisterAbout", characteristics = "TRP3_RegisterCharact" }
+	local frames, drafts = {}, {}
+	local nav = { pageId = nil, context = nil }
+	local function newFrame()
+		local frame = { shown = true }
 		function frame:IsShown() return self.shown end
-		editorFrames[name] = frame
-		fake[section .. "Editor"] = frame
+		return frame
+	end
+	for section in pairs(FRAME) do
+		frames[FRAME[section]] = newFrame()
+		frames[TAB[section]] = newFrame()
+		fake[section .. "Editor"] = frames[FRAME[section]]
+		fake[section .. "Tab"] = frames[TAB[section]]
+	end
+	fake.nav = nav
+	trp3api.navigation = { page = {
+		getCurrentPageID = function() return nav.pageId end,
+		getCurrentContext = function() return nav.context end,
+	} }
+	if opts.noNavigation then
+		trp3api.navigation = nil
+	end
+	function fake.showTab(section)
+		for other in pairs(TAB) do frames[TAB[other]].shown = false end
+		frames[TAB[section]].shown = true
+		nav.context.isEditMode = false
+		frames[FRAME[section]].shown = false
+	end
+	function fake.openProfilePage()
+		nav.pageId, nav.context = "player_main", { source = "player", isPlayer = true }
+		fake.showTab("characteristics")
+	end
+	function fake.openOtherPage(pageId)
+		nav.pageId, nav.context = pageId or "player_profiles", nil
 	end
 	function fake.openEditor(section)
+		if nav.pageId ~= "player_main" then fake.openProfilePage() end
+		fake.showTab(section)
 		drafts[section] = deepCopy(profile.player[section])
-		fake[section .. "Editor"].shown = true
+		nav.context.isEditMode = true
+		frames[FRAME[section]].shown = true
 		return drafts[section]
 	end
-	function fake.closeEditorWindow(section)
-		-- Closing TRP3's window mid-edit leaves the panel's own shown flag set.
-		fake[section .. "Editor"].shown = true
+	function fake.closeEditorWindow()
+		-- Hides TRP3_MainFrame only; the page, its context and draft stay.
+		fake.mainFrameShown = false
 	end
 	function fake.saveEditor(section)
 		local live = profile.player[section]
 		for k in pairs(live) do live[k] = nil end
 		for k, v in pairs(drafts[section]) do live[k] = deepCopy(v) end
 		live.v = increment(live.v)
-		fake[section .. "Editor"].shown = false
+		if nav.context then fake.showTab(section) end
+		frames[FRAME[section]].shown = false
 		fire("REGISTER_DATA_UPDATED", fake.playerId, nil, section)
 	end
 	function fake.cancelEditor(section)
-		fake[section .. "Editor"].shown = false
+		fake.showTab(section)
+	end
+	-- /reload: Lua state (drafts, page, context) is gone; frames are rebuilt
+	-- from XML; saved profile data stays.
+	function fake.reload()
+		for _, frame in pairs(frames) do frame.shown = true end
+		for k in pairs(drafts) do drafts[k] = nil end
+		nav.pageId, nav.context = nil, nil
 	end
 	-- What another client that cached these versions would re-fetch.
 	function fake.remoteRefetch(cached)
@@ -197,7 +245,7 @@ function Fake.new(opts)
 		fake.env.C_AddOns.IsAddOnLoaded = function() return false end
 	end
 	if not opts.noEditorFrames then
-		for name, frame in pairs(editorFrames) do fake.env[name] = frame end
+		for name, frame in pairs(frames) do fake.env[name] = frame end
 	end
 	fake.snapshot = function() return deepCopy(profile) end
 	return fake
