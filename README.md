@@ -106,7 +106,7 @@ Dawnward is not yet published on an addon site. To try a development build:
 
 1. **Name your character:** `/dawnward set name <name>` (or the Character section). Everything you add is **private** until you change it.
 2. **Add who they are:** facts with `/dawnward fact add belief Trusts no one`, personality with `/dawnward personality set courage 6`. Choose what is public with the visibility buttons or `vis` commands.
-3. **Play.** When a moment is waiting, you will see one chat line and a small card, never in combat. Open it with **Answer**, or later from the **Story** section (`/dawnward story`).
+3. **Play.** Story moments start once a character has a Dawnward profile (step 1), so your other characters are never recorded. When a moment is waiting, you will see one chat line and a small card, never in combat. Open it with **Answer**, or later from the **Story** section (`/dawnward story`).
 4. **Review your development:** approve or reject proposed personality changes in the Story section (`/dawnward develop`).
 5. **Curate your chronicle:** in the Journal, edit drafts, **Approve** them, mark defining moments with `*`, and make public only what you want others to see.
 6. **Try it safely first:** `/dawnward sim on`, then `/dawnward sim quest 1 A Practice Quest`, uses separate test data.
