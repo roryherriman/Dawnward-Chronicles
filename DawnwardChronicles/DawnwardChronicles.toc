@@ -38,6 +38,7 @@ Core\StoryCommands.lua
 Integrations\TRP3\VersionProfiles.lua
 Integrations\TRP3\Status.lua
 Integrations\TRP3\Ledger.lua
+Integrations\TRP3\Presentation.lua
 Integrations\TRP3\AboutBlock.lua
 Integrations\TRP3\TraitPlan.lua
 Integrations\TRP3\Shape.lua
