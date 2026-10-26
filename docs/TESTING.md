@@ -302,3 +302,72 @@ Give the test profile two personality traits of your own: one preset and one cus
 | F6 | You open TRP3's About editor before a Dawnward write, close the window without saving, let Dawnward wait, then save in the editor | Player 2 sees **your saved** version (not a stale one) after re-targeting |
 
 **Record:** pass, fail or n/a per item, screenshots or `/chatlog` excerpts, and any difference outside Dawnward's section (that is a release blocker: roll back and report).
+
+### v0.4 in-game checklist (L3): the living chronicle
+
+Build: `0.4.0-dev`. Use a test character, and keep TRP3 sync on the **disposable** test profile only. Back up `WTF\Account\<account>\SavedVariables\DawnwardChronicles*.lua` before installing. Everything below has passed mocked tests (L2) only.
+
+#### Part G: Upgrade and quest moment (the vertical slice)
+
+| # | Steps | Pass when |
+|---|---|---|
+| G1 | Install over v0.3 and log in | Chat: "Saved data upgraded from schema 3." Journal, facts and personality are unchanged; nothing new is public |
+| G2 | `/dawnward status` | A "Story:" line: 0 events, 0 moments waiting |
+| G3 | Turn in any quest (reward panel shown) | No popup during the turn-in. Within a few seconds out of combat: one chat line "A moment for your story: ..." naming the quest and zone, and a small card |
+| G4 | `/dawnward story events` | The quest, with its real title and zone, `verified`, `queued` |
+| G5 | Click **Answer** on the card | The journal opens on the Story section with that question and 5 or 6 answers (the last is "Nothing worth remembering.") |
+| G6 | Click an answer that moves an axis (for example the first) | Status: "Decision recorded ... waiting for your approval". The Story section shows the change with Approve / Reject. Personality is **unchanged** so far |
+| G7 | Approve it | `/dawnward personality list` shows the axis moved by exactly 1 (a new axis starts at 10, private) |
+| G8 | Journal section | A **draft** entry with the quest title, what happened, your answer and the development line; Approve button visible |
+| G9 | Click the visibility button on the draft | Status explains it must be approved first; it stays Private |
+| G10 | Approve, click `*` (defining moment), then make it Public | Meta line says "story - defining moment"; visibility Public |
+| G11 | Turn in two more quests in the same zone quickly | No second notice; `/dawnward story events` shows them folded into the waiting moment, or recorded during the cooldown |
+| G12 | `/reload`, then `/dawnward story events` | The same events; none recorded twice |
+
+#### Part H: Calm moments and pacing
+
+| # | Steps | Pass when |
+|---|---|---|
+| H1 | Turn in a quest and immediately enter combat | No card or notice in combat. After combat ends, the notice appears |
+| H2 | Die (safely) | No notice while dead or as a ghost. After reviving, a death moment may appear (first death: always) |
+| H3 | Card visible, then enter combat | The card hides |
+| H4 | Settings (gear) > Moments: off; turn in a quest | Recorded (`story events`) but no moment |
+| H5 | Settings > Card: off; next moment | A chat line only, no card |
+| H6 | `story <#> later`, `notnow`, `dismiss` | Later: kept, marked "kept for later". Not now: stays, no reminder. Dismiss: gone; the event stays `dismissed` |
+| H7 | Write your own answer in the Story section and Save | Draft says "In <name>'s own words: ..."; no personality change proposed |
+
+#### Part I: TRP3 presentation (disposable profile, experimental sync on for biography)
+
+| # | Steps | Pass when |
+|---|---|---|
+| I1 | After G10, wait about 10 s (or `/dawnward trp3 sync`) | The About page shows your text unchanged, then Chronicle with "Defining moments:" and the entry's title |
+| I2 | Make the entry Private again, wait | The moment disappears; your own text is unchanged |
+| I3 | `/dawnward story set trp3Style arcane`, wait, open the About page | Violet heading with a book icon. Screenshot it. Repeat with `silverhand` and `neutral` |
+| I4 | `/dawnward trp3 release about confirm` | Your About text is exactly as before Dawnward's first write |
+
+**Record:** pass, fail or n/a per item, screenshots of G5, G8, I1 and I3, and any Lua error (BugSack or `/console scriptErrors 1`).
+
+#### Part J: Chronicle, memories, arcs, goals and identity
+
+| # | Steps | Pass when |
+|---|---|---|
+| J1 | Open the **Chronicle** tab. Type a memory in the line at the bottom, then click Add memory | A row shows it, labelled `player, established, private` |
+| J2 | Answer a notable moment (the first quest in a new zone) | A **suggested** memory appears (`suggested, proposed, private`) with an Accept button. Clicking Private → Public on it is refused until you accept it |
+| J3 | Answer three moments with the same kind of answer (for example the first answer each time), in different zones | Arcs tab: a suggested arc "A thread of …" |
+| J4 | `/dawnward goal add Become a master smith`, then `/dawnward goal level <#> <your level + 1>`. Level up | `goal list` shows the level reached; the goal stays **active** until you change it |
+| J5 | With an active goal, turn in a quest and open the moment | An extra answer "It mattered to their goal: …"; the universal answers are unchanged |
+| J6 | `/dawnward stance add <a faction>; Loyal; Privately resents them` | The Review tab asks about the contradiction; answer "secret" and the private side becomes secret |
+| J7 | Make the stance's public side Public (with biography sync on the disposable TRP3 profile) | The About section shows "Where they stand: …" with the public stance only, never the private conviction |
+| J8 | `/dawnward person add npc <name>; <relation>`, `person add player Name-Realm; <relation>` | Listed in the People tab; a second record for the same Name-Realm is refused |
+
+#### Part K: World events and storytelling
+
+| # | Steps | Pass when |
+|---|---|---|
+| K1 | Travel to a zone you have not been to since installing v0.4 | `story events` shows "First recorded visit" for it; no prompt in combat |
+| K2 | Enter a dungeon | "First recorded entry" with the dungeon's name |
+| K3 | Gain a reputation tier (or watch `story events` after one) | Only the change is recorded, never your existing standings at login |
+| K4 | Join or leave a guild on a test character | One guild event; nothing at login |
+| K5 | `/dawnward moment Swore an oath at the shrine` | Recorded as a player moment (`confidence player`) with a question to reflect on |
+| K6 | `/dawnward timeline` | Newest first; your history entries are listed as undated |
+| K7 | Keep a moment for later, then click **Reflect** in the Story section | It comes back to "waiting" without a new reminder |

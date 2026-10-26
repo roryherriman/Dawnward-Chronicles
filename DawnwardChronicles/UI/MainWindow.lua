@@ -1,5 +1,5 @@
--- The journal window: one shared layout with three sections (Journal,
--- Character, Story) and a gear button for the small settings panel.
+-- The journal window: one shared layout with four sections (Journal,
+-- Character, Story, Chronicle) and a gear button for the small settings panel.
 -- See docs/UI_DIRECTION.md.
 --
 -- Layering: MEDIUM strata and toplevel, like the game's own panels, so game
@@ -28,6 +28,7 @@ MainWindow.LAYOUT = {
 	tabTop = 46,          -- tab row top, below the top edge
 	tabHeight = 24,
 	tabWidth = 120,
+	tabCount = 4,
 	tabGap = 6,
 	iconSize = 24,
 	contentTop = 80,      -- content area top, below the top edge
@@ -44,7 +45,7 @@ function MainWindow.ComputeLayout(L)
 	r.title = { left = L.pad, right = L.width - L.pad - 2 * L.iconSize - 16,
 		bottom = L.height - L.titleTop - 18, top = L.height - L.titleTop + 2 }
 	r.tabs = {}
-	for i = 1, 3 do
+	for i = 1, L.tabCount do
 		local left = L.pad + (i - 1) * (L.tabWidth + L.tabGap)
 		r.tabs[i] = { left = left, right = left + L.tabWidth,
 			bottom = L.height - L.tabTop - L.tabHeight, top = L.height - L.tabTop }

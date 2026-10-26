@@ -1,3 +1,5 @@
+> **Archived.** The Phase 0 Total RP 3 audit, kept for history. Current findings are in [`../../TRP3_INTEGRATION.md`](../../TRP3_INTEGRATION.md).
+
 # Dawnward Chronicles: Phase 0 Audit and Plan
 
 Status: **approved (Phase 0)**. The decisions are recorded in §12. No addon code has been written yet.

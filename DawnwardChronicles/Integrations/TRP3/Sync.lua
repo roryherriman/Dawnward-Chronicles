@@ -140,6 +140,8 @@ function Sync.Check(deps, feature, publicOverride)
 	end
 	local char = realCharacter(deps)
 	local public = publicOverride or (char and Projection.GetPublic(char)) or { facts = {}, personality = {} }
+	-- The presentation style is cosmetic; it is the only setting read here.
+	public.trp3Style = char and char.story and char.story.prefs.trp3Style or nil
 	local section, err = Adapter.ReadSection(deps.env, spec.section)
 	if not section then
 		result.state = "blocked"

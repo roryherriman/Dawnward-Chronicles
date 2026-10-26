@@ -28,7 +28,7 @@ return function(t, expect)
 
 		t:it("declares the expected metadata", function()
 			local _, meta = readToc()
-			expect.equal(meta.Version, "0.3.0-dev")
+			expect.equal(meta.Version, "0.4.0-dev")
 			expect.equal(meta.SavedVariables, "DawnwardChroniclesDB, DawnwardChroniclesSimDB, DawnwardChroniclesTRP3DB")
 			expect.equal(meta.OptionalDeps, "totalRP3")
 		end)
@@ -151,7 +151,7 @@ return function(t, expect)
 			local mock, env = boot({ savedVariables = { DawnwardChroniclesDB = saved } })
 			login(mock)
 			local db = env.DawnwardChroniclesDB
-			expect.equal(db.schemaVersion, 3)
+			expect.equal(db.schemaVersion, 4, "v2 data migrates to the current schema")
 			local char = db.characters[KEY]
 			expect.equal(char.theme, "arcane")
 			expect.equal(char.history[1].text, "Joined")

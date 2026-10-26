@@ -197,3 +197,20 @@ Removing the owned block (release) restores the player's text **byte for byte** 
 - Does TRP3's open profile page refresh by itself after the update event?
 - Does a second client (and an MSP client) receive the update after mouse-over?
 - Does the page-context edit-mode check match what TRP3 does in every path (cancel, tab switch, closing the window mid-edit, `/reload` while editing)? Check with `/dawnward trp3 diagnose`.
+
+## Presentation and supported markup (v0.4)
+
+`Integrations/TRP3/Presentation.lua` formats Dawnward's own section; `AboutBlock` decides what is in it. Markup confirmed in TRP3 3.4.1's source (`totalRP3/Core/Utils.lua`: `convertTextTags`, `structureTags` and the HTML conversion) **S**:
+
+| Markup | Effect |
+|---|---|
+| `{h1}…{/h1}` to `{h3}…{/h3}`, optionally `{h2:c}` / `{h2:r}` | Headings (left, centre, right) |
+| `{p:c}…{/p}`, `{p:r}…{/p}` | Centred or right-aligned paragraph |
+| `{col:RRGGBB}…{/col}` (also `{col:<letter>}`) | Text colour |
+| `{icon:<icon file name>:<size>}` | An icon |
+| `{img:<path>:<w>:<h>[:align]}` | An image |
+| `{link*<url>*<text>}`, `[text](url)` | Links |
+
+TRP3 has **no font tags**: headings use TRP3's own heading fonts. Dawnward uses only headings, colour and icons. Its styles are Neutral (the default, exactly the v0.3 block), Silver Hand (gold headings) and Arcane (violet headings, book icon). How they render in game is **not yet verified** (v0.4 checklist I3). Player text is always escaped (`{` and `}` become brackets), so it can never become markup.
+
+**What reaches TRP3:** public facts (as in v0.3); public personality axes (traits sync); and, new in v0.4, the titles of journal entries the player approved, marked as defining moments and made public. Drafts cannot be public. The story table (events, decisions, private answers) is never part of a projection.

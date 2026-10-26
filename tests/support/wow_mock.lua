@@ -147,6 +147,27 @@ function Mock.new(opts)
 		GetRealZoneText = function() return mock.zone end,
 		GetSubZoneText = function() return mock.subzone end,
 		UnitName = function() return "Testchar" end,
+		UnitLevel = function() return mock.level or 20 end,
+		UnitClass = function() return "Mage", mock.classToken or "MAGE", 8 end,
+		UnitRace = function() return "Orc", mock.raceToken or "Orc", 2 end,
+		UnitFactionGroup = function() return mock.faction or "Horde", "Horde" end,
+		UnitIsDeadOrGhost = function() return mock.dead == true end,
+		GetQuestID = function() return mock.quest and mock.quest.id or 0 end,
+		GetTitleText = function() return mock.quest and mock.quest.title or "" end,
+		GetQuestLogIndexByID = function(id) return mock.quest and mock.quest.id == id and 3 or 0 end,
+		GetQuestLogTitle = function(index)
+			if index == 3 and mock.quest then return mock.quest.title, mock.quest.level end
+		end,
+		GetNumFactions = function() return #(mock.factions or {}) end,
+		GetFactionInfo = function(i)
+			local f = (mock.factions or {})[i]
+			if f then return f.name, "", f.standing, 0, 0, 0, false, false, f.header, false, f.hasRep, false, false, f.id end
+		end,
+		IsInInstance = function() return mock.instanceType ~= nil, mock.instanceType or "none" end,
+		GetInstanceInfo = function() return mock.instanceName, mock.instanceType end,
+		IsInGuild = function() if mock.guildKnown == false then return nil end return mock.guild ~= nil end,
+		GetGuildInfo = function() if mock.guild then return mock.guild.name, mock.guild.rank, 1 end end,
+		C_QuestLog = { GetQuestInfo = function(id) return mock.questTitles and mock.questTitles[id] end },
 		GetRealmName = function() return "Test Realm" end,
 		GetNormalizedRealmName = function() return "TestRealm" end,
 		time = function() mock.clock = mock.clock + 1; return mock.clock end,

@@ -59,10 +59,12 @@ local function makeRoom(char)
 	if #list < Schema.JOURNAL.limit then
 		return true, 0
 	end
-	for index, entry in ipairs(list) do
-		if entry.kind == "event" then
-			table.remove(list, index)
-			return #list < Schema.JOURNAL.limit, 1
+	for _, prunable in ipairs({ function(e) return e.kind == "event" end, Schema.IsPrunable }) do
+		for index, entry in ipairs(list) do
+			if prunable(entry) and not entry.important then
+				table.remove(list, index)
+				return #list < Schema.JOURNAL.limit, 1
+			end
 		end
 	end
 	return false, 0
@@ -109,7 +111,7 @@ function Journal.UpdateNote(char, id, values, now)
 	if not entry then
 		return nil, "no journal entry #" .. tostring(id)
 	end
-	if entry.kind ~= "note" then
+	if entry.kind ~= "note" and entry.kind ~= "story" then
 		return nil, "automatic entries cannot be edited (you can change their visibility)"
 	end
 	local title, text = entry.title, entry.text
@@ -125,6 +127,9 @@ function Journal.UpdateNote(char, id, values, now)
 	if values.visibility ~= nil and not Privacy.IsValid(values.visibility) then
 		return nil, "visibility must be public, private or secret"
 	end
+	if values.visibility == Privacy.PUBLIC and Journal.NeedsApproval(entry) then
+		return nil, Journal.APPROVAL_MESSAGE
+	end
 	entry.title, entry.text = title, text
 	if values.visibility ~= nil then
 		entry.visibility = values.visibility
@@ -134,6 +139,13 @@ function Journal.UpdateNote(char, id, values, now)
 	return entry
 end
 
+Journal.APPROVAL_MESSAGE = "this is an unapproved story draft; approve it before making it public"
+
+--- Story drafts are written by Dawnward, so they stay private until approved.
+function Journal.NeedsApproval(entry)
+	return entry.kind == "story" and entry.status ~= "approved"
+end
+
 function Journal.SetVisibility(char, id, level, now)
 	if not Privacy.IsValid(level) then
 		return nil, "visibility must be public, private or secret"
@@ -141,6 +153,9 @@ function Journal.SetVisibility(char, id, level, now)
 	local entry = Journal.Find(char, id)
 	if not entry then
 		return nil, "no journal entry #" .. tostring(id)
+	end
+	if level == Privacy.PUBLIC and Journal.NeedsApproval(entry) then
+		return nil, Journal.APPROVAL_MESSAGE
 	end
 	entry.visibility = level
 	touch(char, now)
@@ -152,7 +167,7 @@ function Journal.RemoveNote(char, id, now)
 	if not entry then
 		return nil, "no journal entry #" .. tostring(id)
 	end
-	if entry.kind ~= "note" then
+	if entry.kind ~= "note" and entry.kind ~= "story" then
 		return nil, "automatic entries cannot be deleted"
 	end
 	table.remove(char.journal, index)
@@ -182,4 +197,78 @@ function Journal.RecordEvent(char, event, now)
 	Schema.CapJournalKeys(char.journalKeys)
 	touch(char, now)
 	return entry, pruned
+end
+
+--- Adds a private story draft written from a decision (Core/Narrative.lua).
+-- values: { title, text, story = { category, decisionId, eventKey } }.
+-- Returns entry, prunedCount or nil, error.
+function Journal.AddStoryDraft(char, values, now)
+	local title = Schema.CleanValue(Schema.SHORT, values.title)
+	local text = Schema.CleanValue(Schema.LONG, values.text)
+	if not title and not text then
+		return nil, "the entry is empty"
+	end
+	local ok, pruned = makeRoom(char)
+	if not ok then
+		return nil, Journal.FULL_MESSAGE
+	end
+	local link = values.story or {}
+	local entry = append(char, {
+		kind = "story", title = title, text = text, status = "draft", visibility = Privacy.PRIVATE,
+		createdAt = now or 0,
+		story = { category = link.category, decisionId = link.decisionId, eventKey = link.eventKey },
+	})
+	touch(char, now)
+	return entry, pruned
+end
+
+--- The player approves a story draft as part of their character's record.
+-- Approval does not publish it; visibility stays as it is until changed.
+function Journal.Approve(char, id, now)
+	local entry = Journal.Find(char, id)
+	if not entry then
+		return nil, "no journal entry #" .. tostring(id)
+	end
+	if entry.kind ~= "story" then
+		return nil, "only story entries need approval"
+	end
+	entry.status = "approved"
+	entry.updatedAt = now or 0
+	touch(char, now)
+	return entry
+end
+
+--- Marks any entry as an important memory (a defining moment), or unmarks it.
+function Journal.SetImportant(char, id, on, now)
+	local entry = Journal.Find(char, id)
+	if not entry then
+		return nil, "no journal entry #" .. tostring(id)
+	end
+	entry.important = on and true or nil
+	touch(char, now)
+	return entry
+end
+
+--- Entries matching a filter, newest first.
+-- filter: { text = substring (case-insensitive), kind = "note"|"event"|"story",
+--   visibility = level, important = true, status = "draft"|"approved" }
+function Journal.Search(char, filter)
+	filter = filter or {}
+	local needle = filter.text and filter.text ~= "" and filter.text:lower() or nil
+	local out = {}
+	for i = #char.journal, 1, -1 do
+		local e = char.journal[i]
+		local ok = (not filter.kind or e.kind == filter.kind)
+			and (not filter.visibility or e.visibility == filter.visibility)
+			and (not filter.important or e.important == true)
+			and (not filter.status or e.status == filter.status)
+		if ok and needle then
+			local hay = ((e.title or "") .. "\n" .. (e.text or "")):lower()
+			ok = hay:find(needle, 1, true) ~= nil
+		end
+		if ok then
+			out[#out + 1] = e
+		end
+	end
+	return out
 end

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dawnward Chronicles</title>
+<meta name="description" content="A living chronicle for your World of Warcraft character. A companion to Total RP 3, not a replacement.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">A World of Warcraft roleplaying companion</p>
+    <h1>Dawnward Chronicles</h1>
+    <p class="tagline">Total RP 3 tells the world who your character is.<br>Dawnward Chronicles helps you discover who they become.</p>
+    <p class="status"><span class="pill warn">Pre-alpha</span> <span class="pill">No public release yet</span> <span class="pill">Classic Era 1.15.9</span></p>
+    <nav class="cta">
+      <a class="button" href="https://github.com/roryherriman/Dawnward-Chronicles">View on GitHub</a>
+      <a class="button ghost" href="#how">How it works</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<section class="wrap" id="concept">
+  <h2>A character who remembers</h2>
+  <p>Dawnward notices what your character actually does in the game (quests turned in, levels reached, falls survived) and, at a calm moment, asks a quiet question: <em>how did that affect them?</em> Your answers, never the addon, shape their personality over time and become entries in a private chronicle you can edit, approve and choose to share.</p>
+  <p>It works for every class, race and faction. A compassionate warlock, a ruthless paladin, a sceptical priest and an honourable rogue are all equally valid. Class never decides who your character is.</p>
+</section>
+
+<section class="wrap" id="how">
+  <h2>How it works</h2>
+  <ol class="flow">
+    <li><span class="step">1</span><h3>You play</h3><p>Only what the game verifiably reports is recorded. Nothing is invented.</p></li>
+    <li><span class="step">2</span><h3>A quiet question</h3><p>Shown at a calm moment, never in combat. Answer it, write your own, keep it for later or dismiss it.</p></li>
+    <li><span class="step">3</span><h3>Your decision</h3><p>Proposes a one-step personality change, applied only when you approve. Always reversible.</p></li>
+    <li><span class="step">4</span><h3>The chronicle</h3><p>A private journal draft: what happened, where, how they responded, what it may mean.</p></li>
+    <li><span class="step">5</span><h3>Your choice to share</h3><p>Approve it, mark a defining moment, make it public, and optionally show it in Total RP 3.</p></li>
+  </ol>
+</section>
+
+<section class="band" id="trp3">
+  <div class="wrap">
+    <h2>Built to complement Total RP 3, not replace it</h2>
+    <p>Dawnward Chronicles was created with one goal: to make roleplaying in World of Warcraft feel more alive. Total RP 3 is an essential part of the WoW roleplaying community, and Dawnward is not here to compete with it or replace what it already does so well.</p>
+    <p>While TRP3 gives you the tools to present your character to the world, Dawnward helps you discover who that character becomes along the way. Together, they can create a richer and more personal roleplaying experience.</p>
+    <ul class="checks">
+      <li>TRP3 stays your public profile. Dawnward focuses on development, memories and storytelling.</li>
+      <li>An independent companion project, not an official or affiliated TRP3 extension.</li>
+      <li>Integration is optional, opt-in and experimental. It only edits a section Dawnward created, backs up first, and can be rolled back.</li>
+      <li>Only what you approve and make public can ever reach TRP3.</li>
+    </ul>
+    <p class="credit">With thanks to the <a href="https://github.com/Total-RP/Total-RP-3">Total RP 3</a> team.</p>
+  </div>
+</section>
+
+<section class="wrap" id="features">
+  <h2>Features</h2>
+  <p class="legend"><span class="pill ok">Verified in game</span> <span class="pill test">Automated tests only</span> <span class="pill warn">Experimental</span> <span class="pill">Planned</span></p>
+  <div class="grid">
+    <article><h3>Journal window</h3><p>A themed journal with Journal, Character and Story sections.</p><span class="pill ok">v0.2</span></article>
+    <article><h3>Private by default</h3><p>Every detail is public, private or secret. Backups and share exports respect it.</p><span class="pill ok">v0.2</span></article>
+    <article><h3>Character canon</h3><p>Facts and six personality axes. Faith means any belief or worldview, not one religion.</p><span class="pill test">v0.3</span></article>
+    <article><h3>Story moments</h3><p>Universal questions with answers in different moral and emotional directions. Paced, and never in combat.</p><span class="pill test">v0.4</span></article>
+    <article><h3>Personality evolution</h3><p>Small, explainable changes you approve, reject or reverse. Your own baseline is kept.</p><span class="pill test">v0.4</span></article>
+    <article><h3>Living journal</h3><p>Drafts from what happened and how you answered. Edit, approve, and mark defining moments.</p><span class="pill test">v0.4</span></article>
+    <article><h3>TRP3 Chronicle sync</h3><p>A Dawnward-owned section and traits in your TRP3 profile, from public information only.</p><span class="pill warn">Experimental</span></article>
+    <article><h3>Arcs, goals and relationships</h3><p>Long-term arcs, personal goals, relationships, guilds and family.</p><span class="pill">Planned</span></article>
+  </div>
+  <p class="note">There are no screenshots yet. They will be real in-game captures once the v0.4 interface has been verified.</p>
+</section>
+
+<section class="band" id="install">
+  <div class="wrap">
+    <h2>Installation and compatibility</h2>
+    <p>Dawnward is in development and has no public release yet. To try a development build, copy the <code>DawnwardChronicles</code> folder into:</p>
+    <pre><code>World of Warcraft\_classic_era_\Interface\AddOns\DawnwardChronicles\</code></pre>
+    <table>
+      <tr><th>WoW Classic Era 1.15.9</th><td>Primary development client. v0.2 verified in game; newer versions awaiting in-game checks.</td></tr>
+      <tr><th>WoW Forever</th><td>Compatibility pending verification.</td></tr>
+      <tr><th>Total RP 3</th><td>Optional. Read-only status verified on 3.4.1; experimental sync allowlisted for 3.4.1 only.</td></tr>
+    </table>
+  </div>
+</section>
+
+<section class="wrap" id="roadmap">
+  <h2>Roadmap</h2>
+  <ul class="roadmap">
+    <li><strong>v0.1–v0.2</strong> Foundation and journal window <span class="pill ok">Verified in game</span></li>
+    <li><strong>v0.3</strong> Character foundations and experimental TRP3 sync <span class="pill test">In testing</span></li>
+    <li><strong>v0.4</strong> The living chronicle <span class="pill test">In testing</span></li>
+    <li><strong>Next</strong> More events, arcs and goals, relationships, journal redesign, story import <span class="pill">Planned</span></li>
+    <li><strong>Release gate</strong> WoW Forever compatibility and launch readiness <span class="pill">Not started</span></li>
+  </ul>
+  <p><a href="https://github.com/roryherriman/Dawnward-Chronicles/issues">Follow development on GitHub</a></p>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>MIT licence. A fan-made project, not affiliated with or endorsed by Blizzard Entertainment or the Total RP 3 authors. World of Warcraft is a trademark of Blizzard Entertainment, Inc.</p>
+  </div>
+</footer>
+</body>
+</html>

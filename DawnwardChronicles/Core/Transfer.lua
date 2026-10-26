@@ -28,6 +28,54 @@ local CODE_KIND = { B = "backup", S = "share" }
 -- Kept as an alias: the checksum moved to Util so biography hashes can share it.
 Transfer.Checksum = Util.Checksum
 
+local SECRET = Privacy.SECRET
+-- Stands in for the player's own words when they belong to a secret entry.
+Transfer.WITHHELD = "[withheld from this backup: secret]"
+
+--- The story table as it goes into a personal backup.
+-- * Compact: full event records are left out (their keys are kept, so a
+--   restore can never record an event twice), so the text stays importable.
+-- * Without secrets: secret records are left out, and a record's secret
+--   side (an identity's private conviction, feelings about a person) is
+--   removed; the player's own words in a decision whose journal entry is
+--   secret are removed too. MergeForImport carries the current secrets back.
+function Transfer.StoryForBackup(char, includeSecrets)
+	local story = Util.DeepCopy(char.story or ns.StorySchema.New())
+	story.events = {}
+	if includeSecrets then
+		return story
+	end
+	local secretEntries = {}
+	for _, entry in ipairs(char.journal or {}) do
+		if entry.visibility == SECRET then secretEntries[entry.id] = true end
+	end
+	local function linkedToSecret(r)
+		for _, id in ipairs(r.links and r.links.journal or {}) do
+			if secretEntries[id] then return true end
+		end
+		return false
+	end
+	for name in pairs(ns.StorySchema.RECORD_LISTS) do
+		local kept = {}
+		for _, r in ipairs(story[name] or {}) do
+			if r.visibility ~= SECRET then
+				if r.convictionVisibility == SECRET then r.conviction = nil end
+				if r.feelingsVisibility == SECRET then r.feelings = nil end
+				-- A memory suggested from a secret entry repeats the player's words.
+				if r.text and linkedToSecret(r) then r.text = Transfer.WITHHELD end
+				kept[#kept + 1] = r
+			end
+		end
+		story[name] = kept
+	end
+	for _, d in ipairs(story.decisions) do
+		if d.journalId and secretEntries[d.journalId] and d.custom then
+			d.custom = Transfer.WITHHELD
+		end
+	end
+	return story
+end
+
 --- opts: { includeSecrets = bool, includeBiography = bool, addonVersion = string }
 function Transfer.Export(char, kind, opts)
 	opts = opts or {}
@@ -49,6 +97,9 @@ function Transfer.Export(char, kind, opts)
 				data.interpretations[#data.interpretations + 1] = Util.DeepCopy(item)
 			end
 		end
+		-- The living chronicle travels only in personal backups, filtered
+		-- like everything else: no secrets unless asked (Transfer.StoryForBackup).
+		data.story = Transfer.StoryForBackup(char, includesSecrets)
 		includesBiography = opts.includeBiography == true and char.sources ~= nil
 		if includesBiography then
 			data.sources = Util.DeepCopy(char.sources)
@@ -68,7 +119,13 @@ function Transfer.Export(char, kind, opts)
 	if not payload then
 		return nil, err
 	end
-	return Transfer.PREFIX .. KIND_CODE[kind] .. "!" .. Transfer.Checksum(payload) .. "!" .. payload
+	local text = Transfer.PREFIX .. KIND_CODE[kind] .. "!" .. Transfer.Checksum(payload) .. "!" .. payload
+	-- Never hand out text that Decode would refuse: it could not be restored.
+	if #text > Serializer.MAX_INPUT then
+		return nil, string.format("the export would be %d bytes, more than can be imported again (%d). Nothing was "
+			.. "exported; please report this so the limit can be raised", #text, Serializer.MAX_INPUT)
+	end
+	return text
 end
 
 --- Decodes and validates import text.
@@ -99,7 +156,7 @@ function Transfer.Decode(text)
 	if type(data.schemaVersion) ~= "number" or data.schemaVersion > Schema.VERSION then
 		return nil, "this export comes from a newer version of Dawnward Chronicles"
 	end
-	-- Schemas 2 and 3 only added parts to a character, so older exports
+	-- Schemas 2, 3 and 4 only added parts to a character, so older exports
 	-- normalise directly (with an empty journal, the neutral theme and empty
 	-- foundations). A future change that reshapes characters must migrate
 	-- older exports here first.
@@ -110,10 +167,17 @@ function Transfer.Decode(text)
 		-- Only a backup made with the biography option may bring sources in.
 		character.sources = Schema.NewSources()
 	end
+	-- Only a v0.4+ personal backup carries a story; a share export never does.
+	local includesStory = data.kind == Transfer.KIND_BACKUP and type(data.character) == "table"
+		and type(data.character.story) == "table"
+	if not includesStory then
+		character.story = ns.StorySchema.New()
+	end
 	return {
 		kind = data.kind,
 		includesSecrets = data.includesSecrets == true,
 		includesBiography = includesBiography,
+		includesStory = includesStory,
 		addonVersion = type(data.addonVersion) == "string" and data.addonVersion or nil,
 		character = character,
 		notes = report,
@@ -126,7 +190,10 @@ end
 -- If it was exported without the biography, the current biography sources
 -- are kept, so a restore never discards a stored biography.
 -- Returns the merged character and the number of secrets carried over.
-function Transfer.MergeForImport(current, imported, includesSecrets, now, includesBiography)
+-- If it carries no story (an older backup or a share export), the current
+-- story is kept; otherwise the imported one is used, and events recorded on
+-- either side stay recorded.
+function Transfer.MergeForImport(current, imported, includesSecrets, now, includesBiography, includesStory)
 	local result = Util.DeepCopy(imported)
 	result.createdAt = current and current.createdAt or now or 0
 	result.updatedAt = now or 0
@@ -187,8 +254,60 @@ function Transfer.MergeForImport(current, imported, includesSecrets, now, includ
 		if not includesBiography then
 			result.sources = Util.DeepCopy(current.sources or Schema.NewSources())
 		end
+		if current.story then
+			if not includesStory then
+				result.story = Util.DeepCopy(current.story)
+			else
+				local rs, cs = result.story, current.story
+				for key, at in pairs(cs.eventKeys or {}) do
+					if rs.eventKeys[key] == nil then
+						rs.eventKeys[key] = at
+					end
+				end
+				ns.StorySchema.CapEventKeys(rs.eventKeys)
+				-- The backup leaves full event records out; keep the current ones.
+				rs.events = Util.DeepCopy(cs.events or {})
+				if not includesSecrets then
+					Transfer.CarrySecretStory(rs, cs)
+				end
+			end
+		end
 	end
 	return result, carried
+end
+
+--- Puts the current character's secret story content back into a story
+-- restored from a backup made without secrets: secret records, private
+-- convictions and feelings kept secret, and withheld answers.
+function Transfer.CarrySecretStory(rs, cs)
+	local maxId = rs.nextId - 1
+	for name in pairs(ns.StorySchema.RECORD_LISTS) do
+		local byId = {}
+		for _, r in ipairs(rs[name]) do byId[r.id] = r end
+		for _, r in ipairs(cs[name] or {}) do
+			local mine = byId[r.id]
+			if r.visibility == SECRET then
+				if not mine then
+					local copy = Util.DeepCopy(r)
+					if copy.id <= maxId and byId[copy.id] then
+						copy.id = rs.nextId
+					end
+					rs[name][#rs[name] + 1] = copy
+					rs.nextId = math.max(rs.nextId, copy.id + 1)
+				end
+			elseif mine then
+				if r.convictionVisibility == SECRET and mine.conviction == nil then mine.conviction = r.conviction end
+				if r.feelingsVisibility == SECRET and mine.feelings == nil then mine.feelings = r.feelings end
+				if mine.text == Transfer.WITHHELD and r.text then mine.text = r.text end
+			end
+		end
+	end
+	local currentDecisions = {}
+	for _, d in ipairs(cs.decisions or {}) do currentDecisions[d.id] = d end
+	for _, d in ipairs(rs.decisions) do
+		local c = currentDecisions[d.id]
+		if d.custom == Transfer.WITHHELD and c and c.custom then d.custom = c.custom end
+	end
 end
 
 --- One-line summary of an import plan, for confirmation prompts.
@@ -203,4 +322,6 @@ function Transfer.Describe(plan)
 		plan.includesSecrets and "" or "; secrets not included in this backup",
 		plan.includesBiography and "; includes the stored biography"
 			or "; no biography in this backup (the current one is kept)")
+		.. (plan.includesStory and "; replaces your story (moments, decisions, memories, arcs, goals) with the backup's; "
+			.. "events recorded since stay recorded" or "")
 end

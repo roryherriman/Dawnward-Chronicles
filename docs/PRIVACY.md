@@ -28,6 +28,23 @@ Every fact Dawnward stores (a family member, a backstory paragraph, a journal en
 - **Suggestions and their key memory** are never in a share export or a projection. Personal backups include them, so a restore cannot re-suggest what you dismissed.
 - Share exports were checked by planting marker text in every private part and scanning the export text (L1).
 
+## The living chronicle (v0.4)
+
+- **Story records** (events, reactions, decisions, personality changes, memories, arcs, goals, stances and people) are kept in the character's private `story` table. None of it is ever part of the public projection, a share export or Total RP 3. The exceptions are below.
+- **Suggestions and drafts are private.** Anything Dawnward suggests starts *proposed* and private. A record must be *established* by you before it can be public. A story draft must be approved before it can be public.
+- **What can leave Dawnward, and only if you make it public:**
+  - an approved journal entry you mark as a defining moment (its title, in Total RP 3);
+  - an established stance's public side;
+  - its private conviction, only if you make that side public as well.
+- **Secrets in backups.** A personal backup made without secrets leaves out:
+  - secret records;
+  - an identity's secret conviction;
+  - secret feelings about a person;
+  - your own words in an answer whose journal entry is secret, and the memory suggested from them.
+
+  Restoring such a backup keeps the secrets you have now. Full event records are left out of backups (their keys are kept, so nothing is recorded twice).
+- **Alts.** Story events are recorded only for characters that already use Dawnward, so installing it does not start recording every character on the account.
+
 ## Total RP 3 sync (experimental, v0.3)
 - TRP3 sync uses **only the public projection**: public facts and public personality values. Private and secret data, sources, suggestions and simulation data can never reach TRP3 (L2).
 - It is off until you opt in for a character. Anything it writes, TRP3 then shares with other players as part of your profile.

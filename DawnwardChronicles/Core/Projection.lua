@@ -37,8 +37,13 @@ function Projection.Filter(char, allowed)
 end
 
 --- Public facts only: what TRP3 and shareable exports may ever see.
+-- From the story records, only established public identity statements
+-- (the public persona, and a conviction only if it is itself public) are
+-- added; memories, arcs, goals, decisions and answers never are.
 function Projection.GetPublic(char)
-	return Projection.Filter(char, Privacy.PUBLIC_ONLY)
+	local out = Projection.Filter(char, Privacy.PUBLIC_ONLY)
+	out.stances = (char.story and ns.Identity) and ns.Identity.Public(char) or {}
+	return out
 end
 
 Projection.ITEM_LISTS = ITEM_LISTS

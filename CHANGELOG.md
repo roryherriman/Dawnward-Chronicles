@@ -12,6 +12,39 @@ Every release entry has a **Verified** line naming the highest test level reache
 
 A feature is never called "tested" or "compatible" in this file unless it reached L3 or L4.
 
+## [Unreleased]: 0.4.0-dev (the living chronicle)
+
+**Verified: L2** (mocked). Not tested in game yet; see the v0.4 checklist in [`docs/TESTING.md`](docs/TESTING.md#v04-in-game-checklist-l3-the-living-chronicle).
+
+### Added
+- **Schema v4:** a per-character `story` table and "story" journal entries, by an additive 3 → 4 migration. No existing value or visibility changes; nothing becomes public.
+- **Gameplay events:** quest turn-ins (`QUEST_COMPLETE` + `QUEST_TURNED_IN`), deaths and level-ups become normalised records with a stable key, time, zone, character context, verified metadata, source, confidence and status. They are never recorded twice, across reloads and sessions.
+- **Reactions:** authored, universal questions with several moral and emotional directions, a neutral answer, your own words, and Later / Not now / Dismiss. They are paced by frequency, a significance threshold and cooldowns, same-zone quests are folded together, and the queue is bounded. Announced only at a calm moment (never in combat, while dead, in a cinematic or loading).
+- **Optional class flavour:** one extra answer per class, with no personality effect. It can be switched off, and never changes the universal answers.
+- **Personality evolution:** answers propose one-step changes on the six axes. They apply only on approval (or automatically if you choose; still reversible), with a daily limit, a preserved baseline and a history that also records your manual edits.
+- **Living journal:** private story drafts from verified data and your answer; edit, approve, mark as a defining moment, search (`journal search`, `journal drafts`). Drafts cannot be made public before approval.
+- **TRP3 presentation:** formatting is separate from narrative data (Neutral, Silver Hand, Arcane), using only markup confirmed in TRP3 3.4.1's source. Approved, public defining moments can appear in Dawnward's own About section. Neutral is the default and gives exactly the v0.3 block.
+- **UI:** a working Story section, a small reaction card, journal Approve and defining-moment buttons, and story settings in the settings panel.
+- **Commands:** `story`, `develop`, `journal approve|important|search|drafts`, `sim quest`, `sim death`.
+- **Narrative records with one shared contract:** each record has provenance (observed, player or suggested), a canon status (proposed, established, disputed or superseded) and a visibility. Suggestions are proposed and private, and only established records can be public.
+  - Memories (#12), arcs (#19), goals (#27).
+  - Public persona vs private convictions (#30).
+  - People: NPCs, other players' characters keyed by name and realm, and family (#18, #28, #37).
+- **Story Director (#20, #25):** context-aware answers drawn from your established goals and arcs, a recalled memory, and "why now" from verified data. It is deterministic and runs offline.
+- **Continuity review (#42):** finds contradictions and asks what each is (growth, unreliable narration, secret, correction or ignore). It never rewrites canon.
+- **World events (#11, #18, #36):** reputation tier changes (silent first baseline), first recorded zone visits and dungeon entries, and guild joins and leaves. An observed standing never implies an attitude.
+- **Roleplay moments (#40), timeline (#26), reflection (#29).**
+- **Chronicle section** in the window for all of the above.
+- Commands: `memory`, `arc`, `goal`, `stance`, `person`, `continuity`, `moment`, `timeline`, `reflect`.
+- Docs: a documentation index, the CurseForge (WoW Forever) listing prepared but **not published** (#44), and an unpublished project website (`docs/site/`).
+
+### Fixed
+- Story observers passed at most 8 return values from client functions, so the faction ID from `GetFactionInfo` (14th return) would always have been missing.
+
+### Changed
+- Personal backups carry the story. Share exports never do, and importing a share export or an older backup keeps the current story.
+- `/dawnward status` reports story counts.
+
 ## [Unreleased]: 0.3.0-dev (character foundations, experimental TRP3 sync)
 
 **Verified: L2** (mocked). Nothing in this section has been tested in game yet; see the v0.3 checklist in [`docs/TESTING.md`](docs/TESTING.md#v03-in-game-checklist-l3).
@@ -85,7 +118,7 @@ A feature is never called "tested" or "compatible" in this file unless it reache
   - `sim levelup <n>`.
 - **Saved data schema 2:** an additive, idempotent upgrade from schema 1 that preserves every v0.1 profile, family entry, history entry, privacy setting and import backup.
 - **Docs:**
-  - the story interpretation architecture (`docs/STORY_ARCHITECTURE.md`);
+  - the story interpretation architecture (`docs/planning/archive/story-architecture-v0.2.md`);
   - an updated architecture document, including the retention policy;
   - the v0.2 in-game checklist.
 

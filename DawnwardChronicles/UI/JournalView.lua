@@ -29,8 +29,16 @@ function JournalView.MetaText(entry, formatDate)
 			parts[#parts + 1] = event.subzone and (event.zone .. " (" .. event.subzone .. ")") or event.zone
 		end
 		parts[#parts + 1] = event.source == "SIMULATION" and "simulated" or "recorded automatically"
+	elseif entry.kind == "story" then
+		parts[#parts + 1] = entry.status == "approved" and "story" or "draft - approve to keep"
+		if entry.updatedAt then
+			parts[#parts + 1] = "edited"
+		end
 	elseif entry.updatedAt then
 		parts[#parts + 1] = "edited"
+	end
+	if entry.important then
+		parts[#parts + 1] = "defining moment"
 	end
 	return table.concat(parts, "  -  ")
 end
@@ -215,6 +223,8 @@ end
 
 local EDIT_BUTTON_WIDTH = 50
 local DELETE_BUTTON_WIDTH = 58
+local APPROVE_BUTTON_WIDTH = 64
+local MARK_BUTTON_WIDTH = 26
 
 local function preview(text)
 	text = text or ""
@@ -227,7 +237,7 @@ end
 --- Adds the New entry button, row Edit/Delete buttons and the entry editor.
 function JournalView.AttachEditing(section)
 	local f = section.frame
-	section.rowActionsWidth = EDIT_BUTTON_WIDTH + DELETE_BUTTON_WIDTH + 8
+	section.rowActionsWidth = EDIT_BUTTON_WIDTH + DELETE_BUTTON_WIDTH + APPROVE_BUTTON_WIDTH + MARK_BUTTON_WIDTH + 16
 
 	section.newButton = Widgets.Button(section.toolbarLeft, "New entry", 100, 22)
 	section.newButton:SetPoint("LEFT", 0, 0)
@@ -240,13 +250,36 @@ function JournalView.AttachEditing(section)
 		row.edit = Widgets.Button(row, "Edit", EDIT_BUTTON_WIDTH, 20)
 		row.edit:SetPoint("RIGHT", row.delete, "LEFT", -4, 0)
 		row.edit:SetScript("OnClick", function() section:OpenEditor(row.entry) end)
+		-- Story drafts are Dawnward's words until the player approves them.
+		row.approve = Widgets.Button(row, "Approve", APPROVE_BUTTON_WIDTH, 20)
+		row.approve:SetPoint("RIGHT", row.edit, "LEFT", -4, 0)
+		row.approve:SetScript("OnClick", function()
+			local _, message = Actions.ApproveEntry(ns.ctx, row.entryId)
+			MainWindow.SetStatus(message)
+			MainWindow.Refresh()
+		end)
+		Widgets.Tooltip(row.approve, "Approve draft",
+			"Accept this draft as part of your character's story. It stays private until you change its visibility.")
+		-- Any entry can be marked as a defining moment.
+		row.mark = Widgets.Button(row, "*", MARK_BUTTON_WIDTH, 20)
+		row.mark:SetPoint("RIGHT", row.approve, "LEFT", -4, 0)
+		row.mark:SetScript("OnClick", function()
+			local _, message = Actions.SetEntryImportant(ns.ctx, row.entryId, not (row.entry and row.entry.important))
+			MainWindow.SetStatus(message)
+			MainWindow.Refresh()
+		end)
+		Widgets.Tooltip(row.mark, "Defining moment",
+			"Mark or unmark this entry as an important memory. Approved, public defining moments can appear in "
+				.. "Total RP 3 if you turned biography sync on.")
 	end
 
-	-- Only entries the player wrote can be edited or deleted.
+	-- Only entries the player wrote (or story entries) can be edited or deleted.
 	function section.updateRowActions(row, entry)
-		local written = entry.kind == "note"
+		local written = entry.kind == "note" or entry.kind == "story"
 		row.edit:SetShown(written)
 		row.delete:SetShown(written)
+		row.approve:SetShown(entry.kind == "story" and entry.status ~= "approved")
+		row.mark:SetText(entry.important and "**" or "*")
 	end
 
 	-- Editor panel (replaces the list while open).
@@ -342,7 +375,7 @@ function JournalView.AttachEditing(section)
 	end
 
 	function section.ConfirmDelete(_, entry)
-		if not entry or entry.kind ~= "note" then
+		if not entry or (entry.kind ~= "note" and entry.kind ~= "story") then
 			return
 		end
 		local id = entry.id

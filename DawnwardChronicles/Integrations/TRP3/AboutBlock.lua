@@ -11,49 +11,78 @@
 -- content cannot be found exactly once, the plan is a conflict and nothing
 -- is written: the player's edit wins until they decide.
 local _, ns = ...
-local Util, Schema = ns.Util, ns.Schema
+local Util, Schema, Presentation = ns.Util, ns.Schema, ns.TRP3Presentation
 
 local AboutBlock = {}
 ns.TRP3AboutBlock = AboutBlock
 
-AboutBlock.HEADING = "{h3}Chronicle{/h3}"
+AboutBlock.HEADING = Presentation.STYLES.neutral.heading
 AboutBlock.SEPARATOR = "\n\n"
 AboutBlock.MAX_BYTES = 4000
 -- New template 2 frames: a neutral book icon and TRP3's first background.
 AboutBlock.FRAME_ICON = "INV_Misc_Book_09"
 AboutBlock.FRAME_BACKGROUND = 1
 
--- Braces would be read as TRP3 tags; player text must never become markup.
-local function escapeTags(s)
-	return (s:gsub("{", "("):gsub("}", ")"))
+-- Defining moments: public journal entries the player wrote or approved as
+-- story and marked important. Unapproved drafts can never be public
+-- (Journal.SetVisibility), and the public projection holds nothing else.
+local function moments(public)
+	local out = {}
+	for _, entry in ipairs(public and public.journal or {}) do
+		if entry.kind == "story" and entry.status == "approved" and entry.important and entry.title
+			and entry.visibility == "public" then
+			out[#out + 1] = entry.title
+		end
+	end
+	return out
 end
+AboutBlock.Moments = moments
 
 --- Builds the block from a public projection (never from private data).
--- Returns "" when there is nothing public to show.
+-- public.trp3Style picks a presentation style (Presentation.lua); the
+-- default style gives exactly the v0.3 block. Returns "" when there is
+-- nothing public to show.
 function AboutBlock.Compose(public)
 	local facts = public and public.facts or {}
-	if #facts == 0 then
+	local chosen = moments(public)
+	local stances = public and public.stances or {}
+	if #facts == 0 and #chosen == 0 and #stances == 0 then
 		return ""
 	end
+	local style = Presentation.Get(public.trp3Style)
 	local byCategory = {}
 	for _, fact in ipairs(facts) do
 		local category = Schema.FACT_CATEGORY_BY_ID[fact.category] or Schema.FACT_CATEGORY_BY_ID.other
 		byCategory[category.id] = byCategory[category.id] or {}
 		table.insert(byCategory[category.id], fact)
 	end
-	local lines = { AboutBlock.HEADING }
+	local lines = { style.heading }
 	local used = #lines[1]
 	local omitted = 0
+	local function add(line)
+		-- Leave room for the "more" note so the block never exceeds the cap.
+		if used + 1 + #line > AboutBlock.MAX_BYTES - 60 then
+			omitted = omitted + 1
+		else
+			lines[#lines + 1] = line
+			used = used + 1 + #line
+		end
+	end
 	for _, category in ipairs(Schema.FACT_CATEGORIES) do
 		for _, fact in ipairs(byCategory[category.id] or {}) do
-			local line = category.label .. ": " .. escapeTags(fact.statement:gsub("\n", " "))
-			-- Leave room for the "more" note so the block never exceeds the cap.
-			if used + 1 + #line > AboutBlock.MAX_BYTES - 60 then
-				omitted = omitted + 1
-			else
-				lines[#lines + 1] = line
-				used = used + 1 + #line
-			end
+			add(Presentation.FactLine(style, category.label, fact.statement))
+		end
+	end
+	if #stances > 0 then
+		add((#facts > 0 and "\n" or "") .. style.stancesHeading)
+		for _, stance in ipairs(stances) do
+			add(Presentation.StanceLine(style, stance))
+		end
+	end
+	if #chosen > 0 then
+		add(((#facts > 0 or #stances > 0) and "\n" or "") .. style.momentsHeading)
+		for _, title in ipairs(chosen) do
+			add(Presentation.MomentLine(style, title))
 		end
 	end
 	if omitted > 0 then

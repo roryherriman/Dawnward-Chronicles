@@ -39,6 +39,12 @@ local HELP = {
 	"  personality clear <axis> confirm",
 	"  export backup [secrets] [biography] | export share | import | import confirm | import undo",
 	"  sim on | sim off | sim copy confirm | sim reset confirm | sim levelup <level>",
+	"  sim quest <id> [title] | sim death   (test the story loop in simulation data)",
+	"  story | story <#> [<answer #> | write <text> | later | notnow | dismiss] | story settings",
+	"  develop | develop approve|reject|reverse <#>",
+	"  journal approve <#> | journal important <#> [off] | journal search <text> | journal drafts",
+	"  memory | arc | goal | stance | person | continuity   (each lists its own commands)",
+	"  moment <what happened> | timeline [n] | reflect",
 }
 
 local function out(ctx, line)
@@ -120,6 +126,13 @@ end
 
 local handlers = {}
 
+--- Lets other core modules (Core/StoryCommands.lua) add a command.
+function Commands.Register(name, handler)
+	handlers[name] = handler
+end
+
+Commands.Out, Commands.Preview, Commands.ModeLabel = out, preview, modeLabel
+
 handlers.help = function(ctx)
 	for _, line in ipairs(HELP) do
 		out(ctx, line)
@@ -155,6 +168,11 @@ handlers.status = function(ctx)
 	local f = char and Character.FoundationCounts(char) or { facts = 0, suggestions = 0, biography = false }
 	out(ctx, string.format("Foundations: %d facts, %d suggestions, biography stored: %s",
 		f.facts, f.suggestions, f.biography and "yes" or "no"))
+	if char then
+		out(ctx, string.format("Story: %d events recorded, %d moments waiting, %d personality changes to approve "
+			.. "(/dawnward story)", #char.story.events, #ns.Reactions.List(char, ctx.now()),
+			#ns.Evolution.Pending(char)))
+	end
 	handlers.trp3(ctx)
 end
 
@@ -219,11 +237,15 @@ local function journalLine(entry)
 	local label
 	if entry.kind == "event" then
 		label = "[auto] "
+	elseif entry.kind == "story" then
+		label = (entry.status == "approved" and "[story] " or "[draft] ") .. (entry.title and (entry.title .. ": ") or "")
 	else
 		label = entry.title and (entry.title .. ": ") or ""
 	end
-	return string.format("  #%d %s%s [%s]", entry.id, label, preview(entry.text or ""), entry.visibility)
+	return string.format("  #%d %s%s%s [%s]", entry.id, entry.important and "* " or "", label,
+		preview(entry.text or ""), entry.visibility)
 end
+Commands.JournalLine = journalLine
 
 handlers.journal = function(ctx, rest)
 	local sub, args = Util.NextWord(rest)
@@ -238,6 +260,16 @@ handlers.journal = function(ctx, rest)
 		out(ctx, string.format("Journal, newest first (%d of %d):", math.min(#entries, 10), #entries))
 		for i = 1, math.min(#entries, 10) do
 			out(ctx, journalLine(entries[i]))
+		end
+		return
+	end
+	if sub == "search" or sub == "drafts" then
+		local char = Actions.Character(ctx)
+		local found = char and Journal.Search(char, sub == "drafts" and { kind = "story", status = "draft" }
+			or { text = args }) or {}
+		out(ctx, string.format("%d matching entr%s:", #found, #found == 1 and "y" or "ies"))
+		for i = 1, math.min(#found, 10) do
+			out(ctx, journalLine(found[i]))
 		end
 		return
 	end
@@ -265,6 +297,10 @@ handlers.journal = function(ctx, rest)
 		_, message = Actions.UpdateNote(ctx, id, nil, tail, nil)
 	elseif sub == "vis" then
 		_, message = Actions.SetEntryVisibility(ctx, id, Util.NextWord(tail):lower())
+	elseif sub == "approve" then
+		_, message = Actions.ApproveEntry(ctx, id)
+	elseif sub == "important" then
+		_, message = Actions.SetEntryImportant(ctx, id, Util.NextWord(tail):lower() ~= "off")
 	elseif sub == "remove" then
 		if Util.NextWord(tail):lower() ~= "confirm" then
 			out(ctx, string.format("This deletes journal entry #%d. Type: /dawnward journal remove %d confirm", id, id))
@@ -587,7 +623,7 @@ handlers.import = function(ctx, rest)
 			return
 		end
 		local merged, carried = Transfer.MergeForImport(current, plan.character, plan.includesSecrets, ctx.now(),
-			plan.includesBiography)
+			plan.includesBiography, plan.includesStory)
 		ctx.store:ReplaceCharacter(ctx.characterKey, merged)
 		ctx.pendingImport = nil
 		out(ctx, "Imported into " .. modeLabel(ctx) .. "." ..
@@ -649,10 +685,27 @@ handlers.sim = function(ctx, rest)
 		local _, message = Actions.RecordSimulatedMilestone(ctx, "levelup",
 			{ level = level, zone = ctx.zone and ctx.zone() or nil })
 		out(ctx, message)
+	elseif sub == "quest" or sub == "death" then
+		-- Exercises the story loop without real quests. Simulation data only.
+		local data = { zone = ctx.zone and ctx.zone() or nil }
+		if sub == "quest" then
+			local idText, title = Util.NextWord(tail)
+			data.questId = tonumber(idText)
+			if not Util.IsPositiveInteger(data.questId) then
+				out(ctx, "Usage: /dawnward sim quest <id> [title]   (simulation mode only)")
+				return
+			end
+			data.title = title ~= "" and title or nil
+		else
+			data.at = ctx.now()
+		end
+		local _, message = Actions.RecordSimulatedEvent(ctx, sub, data)
+		out(ctx, message)
 	elseif sub == "" or sub == "status" then
 		out(ctx, "Simulation mode is " .. (store:IsSimulation() and "ON" or "OFF") .. ".")
 	else
-		out(ctx, "Usage: /dawnward sim on | off | copy confirm | reset confirm | levelup <level>")
+		out(ctx, "Usage: /dawnward sim on | off | copy confirm | reset confirm | levelup <level> | quest <id> [title]"
+			.. " | death")
 	end
 end
 
