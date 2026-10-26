@@ -39,6 +39,8 @@ Loader.CORE = {
 	"Core/Identity.lua",
 	"Core/Director.lua",
 	"Core/Continuity.lua",
+	"Core/Observed.lua",
+	"Core/People.lua",
 	"Core/Projection.lua",
 	"Core/Serializer.lua",
 	"Core/Transfer.lua",

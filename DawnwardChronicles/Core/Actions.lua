@@ -245,6 +245,45 @@ function Actions.RecordRealEvent(ctx, category, data)
 	return record, reaction, outcome
 end
 
+--- Observed reputation standings (from Platform/Observers): records a
+-- reputation event for each tier change. The first reading is a silent
+-- baseline. Snapshots are kept only for characters that already use
+-- Dawnward (nothing is created for an alt just by logging in).
+-- Returns the list of records created.
+function Actions.ObserveStandings(ctx, factions, context)
+	local char = ctx.store.real.characters[ctx.characterKey]
+	if not char or ctx.store.realReadOnly then
+		return {}
+	end
+	local created = {}
+	for _, change in ipairs(ns.Observed.CompareStandings(char, factions)) do
+		for k, v in pairs(context or {}) do
+			if change[k] == nil then change[k] = v end
+		end
+		local record, reaction, outcome = recordEvent(char, "reputation", change, ctx.now())
+		if record then
+			created[#created + 1] = { record = record, reaction = reaction, outcome = outcome }
+		end
+	end
+	return created
+end
+
+--- An observed guild reading (conclusive only). Returns record, reaction, outcome or nil.
+function Actions.ObserveGuild(ctx, guild, context)
+	local char = ctx.store.real.characters[ctx.characterKey]
+	if not char or ctx.store.realReadOnly then
+		return nil
+	end
+	local change = ns.Observed.CompareGuild(char, guild)
+	if not change then
+		return nil
+	end
+	for k, v in pairs(context or {}) do
+		if change[k] == nil then change[k] = v end
+	end
+	return recordEvent(char, "guild", change, ctx.now())
+end
+
 --- A simulated event, into simulation data only (for testing the story loop).
 function Actions.RecordSimulatedEvent(ctx, category, data)
 	if not ctx.store:IsSimulation() then

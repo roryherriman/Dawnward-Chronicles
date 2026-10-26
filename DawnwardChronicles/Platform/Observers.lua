@@ -9,6 +9,13 @@
 --   QUEST_TURNED_IN     (questID, xpReward, moneyReward): the turn-in happened
 --   PLAYER_DEAD         the character died (the cause is not recorded)
 --   PLAYER_LEVEL_UP     (level): the new level
+--   ZONE_CHANGED_NEW_AREA   arriving in a zone (first recorded visit), and
+--                       IsInInstance / GetInstanceInfo for a party or raid
+--                       instance (first recorded entry)
+--   UPDATE_FACTION      GetNumFactions / GetFactionInfo: tier changes against
+--                       a snapshot; the first reading is a silent baseline
+--   PLAYER_GUILD_UPDATE GetGuildInfo("player") with IsInGuild(): guild
+--                       changes; inconclusive readings are ignored
 -- Character context: UnitLevel, UnitClass, UnitRace, UnitFactionGroup.
 -- Nothing here parses chat text or the combat log.
 local _, ns = ...
@@ -19,15 +26,20 @@ ns.Observers = Observers
 
 local pendingQuest -- details cached at QUEST_COMPLETE, used at QUEST_TURNED_IN
 
+-- Calls a client function safely, passing every return value through
+-- (GetFactionInfo returns the faction ID as its 14th value).
+local function results(ok, ...)
+	if ok then
+		return ...
+	end
+	return nil
+end
+
 local function call(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
 	end
-	local ok, a, b, c, d, e, f, g, h = pcall(fn, ...)
-	if ok then
-		return a, b, c, d, e, f, g, h
-	end
-	return nil
+	return results(pcall(fn, ...))
 end
 
 --- Current context: zone, subzone, level and the client's class, race and
@@ -103,9 +115,83 @@ Observers.HANDLERS = {
 	end,
 }
 
+--- Reputation standings as listed by the client (factions under a collapsed
+-- header are not listed, and are left unchanged).
+function Observers.ReadFactions()
+	local out = {}
+	local n = call(GetNumFactions) or 0
+	for i = 1, n do
+		local name, _, standing, _, _, _, _, _, isHeader, _, hasRep, _, _, factionId = call(GetFactionInfo, i)
+		if name and type(factionId) == "number" and type(standing) == "number" and (not isHeader or hasRep) then
+			out[#out + 1] = { id = factionId, name = name, standing = standing }
+		end
+	end
+	return out
+end
+
+--- The guild, if the reading is conclusive: { name, rank }, false (not in a
+-- guild), or nil (unknown yet, e.g. guild data still loading at login).
+function Observers.ReadGuild()
+	local inGuild = call(IsInGuild)
+	local name, rank = call(GetGuildInfo, "player")
+	if type(name) == "string" and name ~= "" then
+		return { name = name, rank = rank }
+	end
+	if inGuild == false then
+		return false
+	end
+	return nil
+end
+
+local function notify(onQueued, reaction, outcome)
+	if reaction and outcome == "queued" and onQueued then
+		onQueued(reaction)
+	end
+end
+
+-- Events that compare snapshots or produce several records.
+Observers.SPECIAL = {
+	UPDATE_FACTION = function(ctx, onQueued)
+		for _, made in ipairs(Actions.ObserveStandings(ctx, Observers.ReadFactions(), Observers.Context())) do
+			notify(onQueued, made.reaction, made.outcome)
+		end
+	end,
+	PLAYER_GUILD_UPDATE = function(ctx, onQueued)
+		local guild = Observers.ReadGuild()
+		if guild == nil then
+			return
+		end
+		local _, reaction, outcome = Actions.ObserveGuild(ctx, guild or nil, Observers.Context())
+		notify(onQueued, reaction, outcome)
+	end,
+	ZONE_CHANGED_NEW_AREA = function(ctx, onQueued)
+		local data = Observers.Context()
+		if not data.zone then
+			return
+		end
+		local inInstance, instanceType = call(IsInInstance)
+		local category = "zone"
+		if inInstance and (instanceType == "party" or instanceType == "raid") then
+			category = "instance"
+			data.instanceName = call(GetInstanceInfo) or data.zone
+			data.instanceType = instanceType
+		end
+		data.source = "ZONE_CHANGED_NEW_AREA"
+		local record, reaction, outcome = Actions.RecordRealEvent(ctx, category, data)
+		if record then
+			notify(onQueued, reaction, outcome)
+		end
+	end,
+}
+Observers.SPECIAL.PLAYER_ENTERING_WORLD = Observers.SPECIAL.PLAYER_GUILD_UPDATE
+
 --- Records one observed event. onQueued(reaction) runs when a reaction was
 -- queued, so the safe-time scheduler can consider announcing it.
 function Observers.Handle(ctx, event, onQueued, ...)
+	local special = Observers.SPECIAL[event]
+	if special then
+		return special(ctx, onQueued, ...)
+	end
 	local handler = Observers.HANDLERS[event]
 	if not handler then
 		return nil
@@ -124,6 +210,9 @@ end
 function Observers.Init(ctx, onQueued)
 	local frame = CreateFrame("Frame")
 	for event in pairs(Observers.HANDLERS) do
+		frame:RegisterEvent(event)
+	end
+	for event in pairs(Observers.SPECIAL) do
 		frame:RegisterEvent(event)
 	end
 	frame:SetScript("OnEvent", function(_, event, ...)

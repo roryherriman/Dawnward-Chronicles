@@ -9,7 +9,7 @@ local RecordTypes = {}
 ns.RecordTypes = RecordTypes
 
 RecordTypes.LIMITS = { memories = 300, arcs = 40, goals = 60, identity = 60, milestones = 12, turningPoints = 20,
-	reviews = 300 }
+	reviews = 300, people = 200 }
 
 RecordTypes.ARC_KINDS = { goal = true, conflict = true, conviction = true, growth = true, relationship = true,
 	other = true }
@@ -135,4 +135,28 @@ function RecordTypes.CleanReview(raw)
 	local key = T(raw.key, 200)
 	if not key or key ~= raw.key then return nil end
 	return { key = key, choice = raw.choice, at = Records.Timestamp(raw.at), note = T(raw.note, 300, true) }
+end
+
+-- People the character knows (#18 NPCs, #28 other players' characters,
+-- #37 family and connections). Player-authored only: nothing here is
+-- inferred from groups, guilds, reputation or other players' profiles.
+-- There is no relationship score; the relation is the player's own words.
+RecordTypes.PERSON_KINDS = { npc = true, player = true, family = true, other = true }
+
+function RecordTypes.CleanPerson(raw)
+	local p = Records.CleanCommon(raw, {})
+	if not p then return nil end
+	p.name = T(raw.name, 100)
+	if not p.name then return nil end
+	p.kind = RecordTypes.PERSON_KINDS[raw.kind] and raw.kind or "other"
+	-- Another player's character is identified by name and realm; neither is
+	-- ever merged with another record automatically.
+	p.realm = p.kind == "player" and T(raw.realm, 100) or nil
+	p.relation = T(raw.relation, 300, true)
+	p.feelings = T(raw.feelings, 1000, true)
+	p.feelingsVisibility = ns.Privacy.Normalize(raw.feelingsVisibility)
+	if p.feelingsVisibility == "public" and p.status ~= "established" then
+		p.feelingsVisibility = "private"
+	end
+	return p
 end

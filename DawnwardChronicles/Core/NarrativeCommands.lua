@@ -238,3 +238,48 @@ Commands.Register("continuity", function(ctx, rest)
 	run(ctx, function(c, now) return Continuity.Review(c, finding.key, choice, note, now) end,
 		"Noted as " .. choice .. ".")
 end)
+
+Commands.Register("person", function(ctx, rest)
+	local sub, args = Util.NextWord(rest)
+	sub = sub:lower()
+	local char = Actions.Character(ctx)
+	if sub == "" or sub == "list" then
+		local list = char and ns.People.OfKind(char, nil) or {}
+		out(ctx, string.format("People they know (%d):", #list))
+		for _, p in ipairs(list) do
+			out(ctx, line(p, string.format("%s%s (%s)%s", p.name, p.realm and ("-" .. p.realm) or "", p.kind,
+				p.relation and (": " .. p.relation) or "")))
+		end
+		out(ctx, "person add npc|player|family|other <name>; <relation>   (players: Name-Realm)")
+		out(ctx, "person feel <#> <how they feel> | person vis <#> <level> | person remove <#> confirm")
+		return
+	elseif sub == "add" then
+		local kind, restArgs = Util.NextWord(args)
+		local who, relation = restArgs:match("^([^;]+);?(.*)$")
+		if not who then
+			out(ctx, "Usage: /dawnward person add npc|player|family|other <name>; <relation>")
+			return
+		end
+		who = Util.Trim(who)
+		local name, realm = who, nil
+		if kind:lower() == "player" then
+			name, realm = who:match("^([^%-]+)%-(.+)$")
+			name = name or who
+		end
+		run(ctx, function(c, now) return ns.People.Add(c, { kind = kind:lower(), name = name, realm = realm,
+			relation = relation }, now) end, function(p) return "Added #" .. p.id .. " " .. p.name .. " (private)." end)
+		return
+	end
+	local idWord, tail = Util.NextWord(args)
+	local n = id(idWord)
+	if not n then
+		out(ctx, "Usage: /dawnward person list | add ... | feel|vis|remove <#> ...")
+		return
+	end
+	if sub == "feel" then
+		run(ctx, function(c, now) return ns.People.Edit(c, n, { feelings = tail }, now) end,
+			"Noted how they feel about #" .. n .. " (private).")
+	elseif not common(ctx, ns.People, "Person", sub, n, tail) then
+		out(ctx, "Unknown person command '" .. sub .. "'.")
+	end
+end)

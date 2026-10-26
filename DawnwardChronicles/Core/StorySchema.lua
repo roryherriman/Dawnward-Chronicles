@@ -38,7 +38,8 @@ StorySchema.LIMITS = {
 	custom = 1000,    -- bytes: a custom player response
 }
 
-StorySchema.CATEGORIES = { quest = true, levelup = true, death = true }
+StorySchema.CATEGORIES = { quest = true, levelup = true, death = true, reputation = true, zone = true,
+	instance = true, guild = true }
 StorySchema.EVENT_STATUS = { new = true, queued = true, recorded = true, reacted = true, dismissed = true }
 StorySchema.CONFIDENCE = { verified = true, partial = true }
 StorySchema.REACTION_STATUS = { pending = true, postponed = true }
@@ -55,7 +56,8 @@ StorySchema.DEFAULT_PREFS = {
 	flavor = true,       -- optional class-flavoured extra option
 	card = true,         -- show the small reaction card at a safe moment
 	trp3Style = "neutral",
-	tracking = { quest = true, levelup = true, death = true },
+	tracking = { quest = true, levelup = true, death = true, reputation = true, zone = true, instance = true,
+		guild = true },
 }
 
 -- Game tokens such as UnitClass's "WARLOCK" or UnitRace's "NightElf": stored
@@ -64,6 +66,40 @@ local TOKEN = "^[%a_]+$"
 
 function StorySchema.NewPrefs()
 	return Util.DeepCopy(StorySchema.DEFAULT_PREFS)
+end
+
+--- Snapshots of observed game state, compared to notice changes
+-- (Core/Observed.lua): reputation standings by faction ID, the guild, and
+-- whether the first (silent) baseline has been taken.
+function StorySchema.NewObserved()
+	return { standings = {}, baseline = false, guild = nil, guildSeen = false }
+end
+
+local function cleanObserved(raw)
+	local out = StorySchema.NewObserved()
+	if type(raw) ~= "table" then
+		return out
+	end
+	out.baseline = raw.baseline == true
+	out.guildSeen = raw.guildSeen == true
+	if type(raw.standings) == "table" then
+		local n = 0
+		for id, entry in pairs(raw.standings) do
+			if Util.IsPositiveInteger(id) and type(entry) == "table" and type(entry.standing) == "number"
+				and entry.standing >= 1 and entry.standing <= 8 and entry.standing == math.floor(entry.standing)
+				and n < 300 then
+				out.standings[id] = { standing = entry.standing, name = Util.CleanText(entry.name, 100) }
+				n = n + 1
+			end
+		end
+	end
+	if type(raw.guild) == "table" then
+		local name = Util.CleanText(raw.guild.name, 100)
+		if name and name ~= "" then
+			out.guild = { name = name, rank = Util.CleanText(raw.guild.rank, 100) }
+		end
+	end
+	return out
 end
 
 function StorySchema.New()
@@ -77,10 +113,12 @@ function StorySchema.New()
 		nextId = 1,
 		prefs = StorySchema.NewPrefs(),
 		pacing = { lastNoticeAt = 0, lastByCategory = {}, recentTemplates = {}, questZones = {} },
+		observed = StorySchema.NewObserved(),
 		memories = {},
 		arcs = {},
 		goals = {},
 		identity = {},
+		people = {},
 		reviews = {},
 	}
 end
@@ -91,6 +129,7 @@ StorySchema.RECORD_LISTS = {
 	arcs = { clean = RecordTypes.CleanArc, limit = RecordTypes.LIMITS.arcs },
 	goals = { clean = RecordTypes.CleanGoal, limit = RecordTypes.LIMITS.goals },
 	identity = { clean = RecordTypes.CleanIdentity, limit = RecordTypes.LIMITS.identity },
+	people = { clean = RecordTypes.CleanPerson, limit = RecordTypes.LIMITS.people },
 }
 
 local function ts(v)
@@ -150,8 +189,9 @@ local function effects(raw, axes)
 	return out
 end
 
-local META_TEXT = { "title" }
-local META_INT = { questId = 2 ^ 31, xp = 2 ^ 31, money = 2 ^ 31, questLevel = 1000 }
+local META_TEXT = { "title", "factionName", "instanceName", "guildName", "guildRank" }
+local META_INT = { questId = 2 ^ 31, xp = 2 ^ 31, money = 2 ^ 31, questLevel = 1000, factionId = 2 ^ 31, standing = 8,
+	previous = 8 }
 
 function StorySchema.CleanMeta(raw)
 	local out = {}
@@ -418,6 +458,7 @@ function StorySchema.Normalize(raw, axes, report)
 	end
 	story.prefs = cleanPrefs(raw.prefs)
 	story.pacing = cleanPacing(raw.pacing)
+	story.observed = cleanObserved(raw.observed)
 	for name, spec in pairs(StorySchema.RECORD_LISTS) do
 		story[name] = cleanList(raw[name], spec.clean, spec.limit, report, name)
 	end
@@ -431,7 +472,8 @@ function StorySchema.Normalize(raw, axes, report)
 	end
 	-- IDs are shared by every story list.
 	local maxId = 0
-	for _, listName in ipairs({ "reactions", "decisions", "changes", "memories", "arcs", "goals", "identity" }) do
+	for _, listName in ipairs({ "reactions", "decisions", "changes", "memories", "arcs", "goals", "identity",
+		"people" }) do
 		for _, item in ipairs(story[listName]) do
 			if item.id > maxId then maxId = item.id end
 		end

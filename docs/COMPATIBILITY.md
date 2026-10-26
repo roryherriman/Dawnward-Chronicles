@@ -165,6 +165,10 @@ Checked against Blizzard's Classic Era interface source for **1.15.9 (70003)** (
 | `UnitLevel`, `UnitClass` (2nd return: class file), `UnitRace` (2nd return: race file), `UnitFactionGroup` | Character context on event records, used only for optional class flavour | `UnitDocumentation.lua`; Classic UI code | S, not L3 | — |
 | `UnitIsDeadOrGhost` | No announcements while dead or a ghost | Classic UI code | S, not L3 | — |
 
+| `UPDATE_FACTION`, `GetNumFactions`, `GetFactionInfo(index)` (3rd return: standing 1–8; 14th: faction ID) | Reputation tier changes against a snapshot; the first reading is a silent baseline | `PaperDollInfoDocumentation.lua`; `Vanilla/ReputationFrame.lua` | S, not L3 | — |
+| `ZONE_CHANGED_NEW_AREA`, `IsInInstance`, `GetInstanceInfo` | First recorded zone visit; first recorded party/raid instance entry | `MapDocumentation.lua`, `InstanceDocumentation.lua`; Classic UI code | S, not L3 | — |
+| `PLAYER_GUILD_UPDATE`, `GetGuildInfo("player")`, `IsInGuild` | Joining or leaving a guild (rank changes only update the snapshot); inconclusive readings at login are ignored | `GuildInfoDocumentation.lua`; `Vanilla/PaperDollFrame.lua`, `Classic/MainMenuBarMicroButtons.lua` | S, not L3 | — |
+
 **Known Classic Era limits for the story engine:**
 - There is no "important quest" or story flag; significance comes from verified data only (quest level relative to the character, first quest in a zone, level milestones, first death).
 - The quest tag (`GetQuestLogTitle` third return) is localised text, so it is not used.
@@ -172,11 +176,12 @@ Checked against Blizzard's Classic Era interface source for **1.15.9 (70003)** (
 - Achievements exist as an API but are not part of Classic Era play, so they are not used.
 - Encounter events (`ENCOUNTER_END`, `BOSS_KILL`) are defined, but whether they fire for Classic dungeon bosses is unverified, so boss detection is not built yet.
 - The combat log is not read (cost, and the restriction risk).
+- Factions under a collapsed header in the reputation panel are not listed by `GetFactionInfo`; their snapshot simply waits until they are listed again.
+- Zone and instance "first visits" are the first ones Dawnward recorded, not necessarily the character's first ever (the client keeps no such history).
+- Standing names in story text use English fallbacks for now (localisation is planned).
 
 ## Planned APIs (not used yet)
 
 | API or event | Planned for |
 |---|---|
 | `ENCOUNTER_END` / `BOSS_KILL`, `IsInInstance`, `GetInstanceInfo` | Dungeon and boss moments, after an in-game probe confirms they fire (issue #11) |
-| `UPDATE_FACTION`, `GetNumFactions`, `GetFactionInfo` | Reputation standing changes (issue #18) |
-| `ZONE_CHANGED_NEW_AREA` + first-visit memory | Exploration moments (issue #11) |

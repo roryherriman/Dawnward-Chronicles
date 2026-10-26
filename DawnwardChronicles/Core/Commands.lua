@@ -43,7 +43,7 @@ local HELP = {
 	"  story | story <#> [<answer #> | write <text> | later | notnow | dismiss] | story settings",
 	"  develop | develop approve|reject|reverse <#>",
 	"  journal approve <#> | journal important <#> [off] | journal search <text> | journal drafts",
-	"  memory | arc | goal | stance | continuity   (each lists its own commands)",
+	"  memory | arc | goal | stance | person | continuity   (each lists its own commands)",
 }
 
 local function out(ctx, line)

@@ -34,6 +34,16 @@ local function happened(record, extra)
 		line = string.format("Reached level %d%s.", record.level or 0, zone)
 	elseif record.category == "death" then
 		line = string.format("Fell%s%s, and came back.", zone, level)
+	elseif record.category == "reputation" then
+		local m = record.meta
+		line = string.format("Reached %s standing with %s.", GameEvents.STANDINGS[m.standing] or "a new",
+			plain(m.factionName) or "a faction")
+	elseif record.category == "zone" then
+		line = string.format("Arrived in %s%s (the first visit Dawnward recorded).", record.zone, level)
+	elseif record.category == "instance" then
+		line = string.format("Entered %s%s (the first entry Dawnward recorded).", plain(record.meta.instanceName), level)
+	elseif record.category == "guild" then
+		line = string.format("%s %s.", record.meta.title == "left" and "Left" or "Joined", plain(record.meta.guildName))
 	else
 		line = GameEvents.Label(record.category) .. "."
 	end
@@ -51,6 +61,14 @@ local function titleFor(record)
 		return string.format("Level %d", record.level or 0)
 	elseif record.category == "death" then
 		return record.zone and ("A fall in " .. record.zone) or "A fall"
+	elseif record.category == "reputation" then
+		return plain(record.meta.factionName) or "A change in standing"
+	elseif record.category == "zone" then
+		return record.zone
+	elseif record.category == "instance" then
+		return plain(record.meta.instanceName)
+	elseif record.category == "guild" then
+		return plain(record.meta.guildName)
 	end
 	return GameEvents.Label(record.category)
 end

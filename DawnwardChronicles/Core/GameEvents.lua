@@ -124,6 +124,82 @@ GameEvents.CATEGORIES.death = {
 	end,
 }
 
+-- English fallbacks for reputation standings 1-8 (the client's localised
+-- FACTION_STANDING_LABELn strings are preferred when available).
+GameEvents.STANDINGS = { "Hated", "Hostile", "Unfriendly", "Neutral", "Friendly", "Honored", "Revered", "Exalted" }
+
+GameEvents.CATEGORIES.reputation = {
+	label = "Reputation standing",
+	-- data: { factionId, factionName, standing (1-8), previous, + context }.
+	-- An observed standing only: it says nothing about how the character
+	-- feels about that faction (that is the player's stance, Core/Identity).
+	build = function(data)
+		if not Util.IsPositiveInteger(data.factionId) or type(data.standing) ~= "number" then
+			return nil, "invalid reputation data"
+		end
+		local meta = StorySchema.CleanMeta({ factionId = data.factionId, factionName = data.factionName,
+			standing = data.standing, previous = data.previous })
+		if not meta.standing then
+			return nil, "invalid standing"
+		end
+		return withContext({
+			category = "reputation", key = string.format("reputation:%d:%d", data.factionId, meta.standing),
+			source = data.source or "UPDATE_FACTION", confidence = meta.factionName and "verified" or "partial", meta = meta,
+		}, data)
+	end,
+	significance = function(record)
+		local s, p = record.meta.standing, record.meta.previous
+		if s == 8 then return 3 end
+		if (p and s < p) or s >= 6 then return 2 end
+		return 1
+	end,
+}
+
+GameEvents.CATEGORIES.zone = {
+	label = "First recorded visit",
+	-- data: { zone, + context }: the first time this character arrives in a zone.
+	build = function(data)
+		if type(data.zone) ~= "string" or data.zone == "" then
+			return nil, "invalid zone"
+		end
+		return withContext({ category = "zone", key = "zone:" .. data.zone, source = data.source or "ZONE_CHANGED_NEW_AREA",
+			confidence = "verified", meta = {} }, data)
+	end,
+	significance = function() return 1 end,
+}
+
+GameEvents.CATEGORIES.instance = {
+	label = "First recorded entry",
+	-- data: { instanceName, instanceType ("party" or "raid"), + context }.
+	build = function(data)
+		local meta = StorySchema.CleanMeta({ instanceName = data.instanceName })
+		if not meta.instanceName or (data.instanceType ~= "party" and data.instanceType ~= "raid") then
+			return nil, "invalid instance"
+		end
+		return withContext({ category = "instance", key = "instance:" .. meta.instanceName,
+			source = data.source or "ZONE_CHANGED_NEW_AREA", confidence = "verified", meta = meta,
+		}, data)
+	end,
+	significance = function() return 2 end,
+}
+
+GameEvents.CATEGORIES.guild = {
+	label = "Guild",
+	-- data: { guildName (nil = left a guild), guildRank, previousGuild, + context }.
+	-- Membership is observed; allegiance is never implied.
+	build = function(data, now)
+		local meta = StorySchema.CleanMeta({ guildName = data.guildName or data.previousGuild, guildRank = data.guildRank })
+		if not meta.guildName then
+			return nil, "invalid guild"
+		end
+		local action = data.guildName and "join" or "leave"
+		meta.title = action == "join" and "joined" or "left"
+		return withContext({ category = "guild", key = string.format("guild:%s:%s:%d", action, meta.guildName, now or 0),
+			source = data.source or "PLAYER_GUILD_UPDATE", confidence = "verified", meta = meta }, data)
+	end,
+	significance = function() return 2 end,
+}
+
 function GameEvents.Label(category)
 	local def = GameEvents.CATEGORIES[category]
 	return def and def.label or tostring(category)

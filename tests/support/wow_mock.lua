@@ -158,6 +158,15 @@ function Mock.new(opts)
 		GetQuestLogTitle = function(index)
 			if index == 3 and mock.quest then return mock.quest.title, mock.quest.level end
 		end,
+		GetNumFactions = function() return #(mock.factions or {}) end,
+		GetFactionInfo = function(i)
+			local f = (mock.factions or {})[i]
+			if f then return f.name, "", f.standing, 0, 0, 0, false, false, f.header, false, f.hasRep, false, false, f.id end
+		end,
+		IsInInstance = function() return mock.instanceType ~= nil, mock.instanceType or "none" end,
+		GetInstanceInfo = function() return mock.instanceName, mock.instanceType end,
+		IsInGuild = function() if mock.guildKnown == false then return nil end return mock.guild ~= nil end,
+		GetGuildInfo = function() if mock.guild then return mock.guild.name, mock.guild.rank, 1 end end,
 		C_QuestLog = { GetQuestInfo = function(id) return mock.questTitles and mock.questTitles[id] end },
 		GetRealmName = function() return "Test Realm" end,
 		GetNormalizedRealmName = function() return "TestRealm" end,

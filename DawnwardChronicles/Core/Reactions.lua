@@ -212,6 +212,12 @@ local function tokensFor(char, record)
 		tokens.title = record.meta and record.meta.title
 		tokens.zone = record.zone
 		tokens.level = record.level and tostring(record.level)
+		local meta = record.meta or {}
+		tokens.faction = meta.factionName
+		tokens.standing = meta.standing and ns.GameEvents.STANDINGS[meta.standing]
+		tokens.instance = meta.instanceName
+		tokens.guild = meta.guildName
+		tokens.guildaction = record.category == "guild" and meta.title or nil
 	end
 	return tokens
 end
