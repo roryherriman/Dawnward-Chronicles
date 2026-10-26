@@ -86,6 +86,24 @@ Migrations.steps[3] = function(db)
 	return db
 end
 
+-- 4 -> 5: add an empty places log to every character's story (including
+-- import backups). Existing events, reactions, journal entries and
+-- approvals are left exactly as they were: past zone events keep their
+-- wording, and nothing is reclassified after the fact.
+Migrations.steps[4] = function(db)
+	for _, mapName in ipairs({ "characters", "importBackups" }) do
+		local map = db[mapName]
+		if type(map) == "table" then
+			for _, char in pairs(map) do
+				if type(char) == "table" and type(char.story) == "table" and type(char.story.places) ~= "table" then
+					char.story.places = {}
+				end
+			end
+		end
+	end
+	return db
+end
+
 local function readOnly(reason, version)
 	return Schema.NewDatabase(), { status = "readOnly", reason = reason, from = version, notes = {} }
 end

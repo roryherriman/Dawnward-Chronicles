@@ -169,6 +169,35 @@ Checked against Blizzard's Classic Era interface source for **1.15.9 (70003)** (
 | `ZONE_CHANGED_NEW_AREA`, `IsInInstance`, `GetInstanceInfo` | First recorded zone visit; first recorded party/raid instance entry | `MapDocumentation.lua`, `InstanceDocumentation.lua`; Classic UI code | S, not L3 | — |
 | `PLAYER_GUILD_UPDATE`, `GetGuildInfo("player")`, `IsInGuild` | Joining or leaving a guild (rank changes only update the snapshot); inconclusive readings at login are ignored | `GuildInfoDocumentation.lua`; `Vanilla/PaperDollFrame.lua`, `Classic/MainMenuBarMicroButtons.lua` | S, not L3 | — |
 
+## Client APIs and data for origins and places (#20, #11)
+
+Checked against the same `classic_era` mirror at **1.15.9 (70576)**, and the client's own data tables for build **1.15.9.70576** (`UiMap`, `AreaTable`, `ChrRaces`, via wago.tools). Nothing below has been verified in game yet.
+
+| API, event or data | Used for | Source evidence | Classic Era | Forever |
+|---|---|---|---|---|
+| `GetRealZoneText()` | The zone (unchanged from v0.4) | `ZoneScriptDocumentation.lua` | S, not L3 | — |
+| `GetSubZoneText()` | The named area inside the zone; empty in open country | `ZoneScriptDocumentation.lua`; `Classic/ZoneText.lua` | S, not L3 | — |
+| `GetZoneText()`, `GetMinimapZoneText()` | Not used: `GetRealZoneText` and `GetSubZoneText` are enough, and the minimap text mixes the two levels | `ZoneScriptDocumentation.lua` | — | — |
+| `ZONE_CHANGED`, `ZONE_CHANGED_INDOORS`, `ZONE_CHANGED_NEW_AREA`, `PLAYER_ENTERING_WORLD` | Location changes, event-driven (no polling). These are the events Blizzard's Classic zone text and minimap listen to | `Classic/ZoneText.lua`, `Classic/Minimap.lua` | S, not L3 | — |
+| `C_Map.GetBestMapForUnit("player")` | The zone's uiMapID ("Only works for the player and party members") | `MapDocumentation.lua` | S, not L3 | — |
+| `C_Map.GetAreaInfo(areaID)` | The client's own (localised) name for a mapped area, compared with `GetSubZoneText()` inside the same uiMap | `MapDocumentation.lua` | S, not L3 | — |
+| `UiMap` IDs 1411–1458 (zones and capitals), `AreaTable` IDs (named areas) | The small mapping in `Core/Places.lua` | client data, build 1.15.9.70576 | data checked, not L3 | not checked |
+| Race starting areas | Which areas count as the usual start for a race (`ChrRaces` file tokens) | Not in the client data (server-side). Classic Era convention; Human/Northshire matches the 2026-10-26 in-game observation | partly observed | not checked |
+
+**What Dawnward records about a location:**
+- zone name and uiMapID; subzone name, and its AreaTable ID only when it resolves through the mapping;
+- the time, the character's level, first recorded visit versus return, source (`ZONE_CHANGED`) and confidence (`verified`: the client reported it);
+- a classification only for mapped areas (starting area, settlement, inn, farmland, road, ruins, capital). Wilderness and dangerous areas have no verified entries, and dungeons are their own event category.
+
+No coordinates are read or stored. Subzone names are never compared with English strings, so the mapping also works on localised clients, but this is untested.
+
+**Limits:**
+- `GetSubZoneText()` names the innermost area. In open country it is empty, and some areas share a name with their zone.
+- The mapping is small and covers the starting zones, their first settlements and farms, Redridge, Westfall, a few inns and the six capitals. Every other area is "unknown": its visits are logged, it is never classified from its name, and it never prompts a question.
+- "Starting area" needs the classic_era client, level 5 or lower, the first location Dawnward ever recorded for the character, and a matching map and area. Alternate starts, boosted or older characters and custom servers get neutral "first recorded" wording instead.
+- **WoW Forever:** no place data applies until its UiMap and AreaTable IDs and starting areas are checked. Until then every place is unknown and nothing counts as a starting area.
+- Battlegrounds and other non-dungeon instances are no longer recorded as zones.
+
 **Known Classic Era limits for the story engine:**
 - There is no "important quest" or story flag; significance comes from verified data only (quest level relative to the character, first quest in a zone, level milestones, first death).
 - The quest tag (`GetQuestLogTitle` third return) is localised text, so it is not used.

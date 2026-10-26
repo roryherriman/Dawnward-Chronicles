@@ -104,6 +104,26 @@ function Director.Why(_, record)
 		why[#why + 1] = string.format("level %d is a milestone", record.level)
 	elseif record.category == "death" then
 		why[#why + 1] = record.significance >= 3 and "it was your first recorded fall" or "you fell"
+	elseif record.category == "zone" or record.category == "place" then
+		local m = record.meta or {}
+		local name = m.placeName or record.zone or "this place"
+		if m.visit == "start" then
+			why[#why + 1] = "a new character, first recorded in a known starting area"
+		elseif m.visit == "firstseen" then
+			why[#why + 1] = "it is the first place Dawnward recorded for this character"
+		elseif m.visit == "return" then
+			why[#why + 1] = "you came back to " .. name .. " after some time away"
+			if m.meaningful == 1 then
+				why[#why + 1] = "you marked it as meaningful"
+			elseif m.linked == 1 then
+				why[#why + 1] = "one of your memories is tied to it"
+			end
+		else
+			why[#why + 1] = "it was your first recorded visit to " .. name
+			if m.placeKind then
+				why[#why + 1] = "it is a " .. ns.Places.KIND_LABELS[m.placeKind]
+			end
+		end
 	end
 	if #why == 0 then
 		why[#why + 1] = "you completed it"

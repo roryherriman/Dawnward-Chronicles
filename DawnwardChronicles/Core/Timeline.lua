@@ -22,7 +22,7 @@ function Timeline.Build(char, opts)
 	end
 	local story = char.story
 	for _, e in ipairs(story.events) do
-		local what = ns.GameEvents.Label(e.category) .. (e.meta.title and (": " .. e.meta.title) or "")
+		local what = ns.GameEvents.RecordLabel(e) .. (e.meta.title and (": " .. e.meta.title) or "")
 			.. (e.meta.factionName and (": " .. e.meta.factionName) or "") .. (e.zone and (" in " .. e.zone) or "")
 		add(e.at, "event", what, Privacy.PRIVATE, e.key)
 	end

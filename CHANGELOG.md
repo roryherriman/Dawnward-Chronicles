@@ -16,7 +16,18 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 
 **Verified: L2** (mocked). Not tested in game yet; see the v0.4 checklist in [`docs/TESTING.md`](docs/TESTING.md#v04-in-game-checklist-l3-the-living-chronicle).
 
+### Fixed
+- **Journal development status:** a story draft no longer writes "(waiting for your approval)" into its text. The journal shows the current status of the proposed change (waiting, approved, rejected or reversed) next to it. Older drafts that still say "waiting" are shown with the real status. Display only: stored text, approved or not, is never rewritten. (Found in game on 2026-10-26.)
+
 ### Added
+- **Character origins and places (#20, #11, #14), schema v5:**
+  - A new character in its race's usual starting area (Classic Era only, level 5 or lower, the first location ever recorded) gets a beginning-of-journey moment instead of an arrival. An established character first seen by Dawnward gets neutral "first recorded" wording. Nothing is inferred about birthplace, home, upbringing or loyalty.
+  - Named areas inside zones are tracked separately from zones (`GetSubZoneText`, `C_Map.GetBestMapForUnit`, `C_Map.GetAreaInfo`). A small mapping checked against the 1.15.9.70576 client data classifies starting areas, settlements, inns, farmland, roads, ruins and capitals. Unknown places are logged, never classified from their name, and never asked about.
+  - New "place" events and moments: first visits to settlements, farmland and other mapped places, a first settlement in a new region, and returns after a real absence to settlements, capitals, starting areas, places you marked as meaningful (`/dawnward place mark <name>`) or places tied to an established memory.
+  - Pacing: zone and place moments share one cooldown and fold together (a zone followed by its subzone asks once, about the more meaningful place). A quest turned in right after arriving takes precedence over the arrival. Returns are asked at most weekly per place, and never for farmland or roads by themselves. New setting: **Places** on, fewer or off (`/dawnward story set places …`), plus `story track zone|place`.
+  - Pronouns: new questions follow the profile's Pronouns field when it clearly starts with she, he or they, and are neutral otherwise.
+  - `/dawnward places` lists where the character has been.
+  - Schema 5 is an additive 4 → 5 migration (an empty places log). Past events and approved journal entries are not changed. An older v0.4 build opens schema 5 data read-only.
 - **Schema v4:** a per-character `story` table and "story" journal entries, by an additive 3 → 4 migration. No existing value or visibility changes; nothing becomes public.
 - **Gameplay events:** quest turn-ins (`QUEST_COMPLETE` + `QUEST_TURNED_IN`), deaths and level-ups become normalised records with a stable key, time, zone, character context, verified metadata, source, confidence and status. They are never recorded twice, across reloads and sessions.
 - **Reactions:** authored, universal questions with several moral and emotional directions, a neutral answer, your own words, and Later / Not now / Dismiss. They are paced by frequency, a significance threshold and cooldowns, same-zone quests are folded together, and the queue is bounded. Announced only at a calm moment (never in combat, while dead, in a cinematic or loading).

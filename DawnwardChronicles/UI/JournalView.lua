@@ -125,7 +125,7 @@ local function create(parent)
 	end
 
 	-- Lays out one row for entry at vertical offset y; returns its height.
-	local function layoutRow(row, entry, y, width, theme)
+	local function layoutRow(row, entry, y, width, theme, char)
 		row.entryId = entry.id
 		row.entry = entry
 		row:ClearAllPoints()
@@ -154,7 +154,8 @@ local function create(parent)
 		if entry.text then
 			row.body:Show()
 			row.body:SetWidth(textWidth)
-			row.body:SetText(entry.text)
+			-- Story drafts show their development's current status (display only).
+			row.body:SetText(char and ns.Narrative.DisplayText(char, entry) or entry.text)
 			row.body:ClearAllPoints()
 			row.body:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -4)
 			Widgets.TextColor(row.body, theme.text)
@@ -195,7 +196,7 @@ local function create(parent)
 		local y, shown = 0, 0
 		for i = first, math.min(#entries, first + JournalView.PAGE_SIZE - 1) do
 			shown = shown + 1
-			y = y + layoutRow(getRow(shown), entries[i], y, width, view.theme)
+			y = y + layoutRow(getRow(shown), entries[i], y, width, view.theme, char)
 		end
 		for i = shown + 1, #self.rows do
 			self.rows[i]:Hide()

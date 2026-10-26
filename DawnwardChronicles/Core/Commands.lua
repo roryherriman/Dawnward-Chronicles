@@ -44,6 +44,7 @@ local HELP = {
 	"  develop | develop approve|reject|reverse <#>",
 	"  journal approve <#> | journal important <#> [off] | journal search <text> | journal drafts",
 	"  memory | arc | goal | stance | person | continuity   (each lists its own commands)",
+	"  places | place mark <name> | place unmark <name>",
 	"  moment <what happened> | timeline [n] | reflect",
 }
 
@@ -233,7 +234,7 @@ handlers.theme = function(ctx, rest)
 	out(ctx, message)
 end
 
-local function journalLine(entry)
+local function journalLine(entry, char)
 	local label
 	if entry.kind == "event" then
 		label = "[auto] "
@@ -243,7 +244,7 @@ local function journalLine(entry)
 		label = entry.title and (entry.title .. ": ") or ""
 	end
 	return string.format("  #%d %s%s%s [%s]", entry.id, entry.important and "* " or "", label,
-		preview(entry.text or ""), entry.visibility)
+		preview((char and ns.Narrative.DisplayText(char, entry) or entry.text) or ""), entry.visibility)
 end
 Commands.JournalLine = journalLine
 
@@ -259,7 +260,7 @@ handlers.journal = function(ctx, rest)
 		local entries = Journal.NewestFirst(char)
 		out(ctx, string.format("Journal, newest first (%d of %d):", math.min(#entries, 10), #entries))
 		for i = 1, math.min(#entries, 10) do
-			out(ctx, journalLine(entries[i]))
+			out(ctx, journalLine(entries[i], char))
 		end
 		return
 	end
@@ -269,7 +270,7 @@ handlers.journal = function(ctx, rest)
 			or { text = args }) or {}
 		out(ctx, string.format("%d matching entr%s:", #found, #found == 1 and "y" or "ies"))
 		for i = 1, math.min(#found, 10) do
-			out(ctx, journalLine(found[i]))
+			out(ctx, journalLine(found[i], char))
 		end
 		return
 	end

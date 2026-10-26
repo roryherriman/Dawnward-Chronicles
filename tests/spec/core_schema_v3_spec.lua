@@ -48,7 +48,7 @@ return function(t, expect)
 			local db, info = Migrations.Load(raw)
 			expect.equal(info.status, "migrated")
 			expect.equal(info.from, 2)
-			expect.equal(db.schemaVersion, 3 + 1, "v2 data migrates through v3 to the current schema")
+			expect.equal(db.schemaVersion, ns.Schema.VERSION, "v2 data migrates through v3 to the current schema")
 			expect.deepEqual(raw, before, "the saved v2 table is never modified")
 			for _, mapName in ipairs({ "characters", "importBackups" }) do
 				local char, old = db[mapName]["Aelin-Realm"], before[mapName]["Aelin-Realm"]

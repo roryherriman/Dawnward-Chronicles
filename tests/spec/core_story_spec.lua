@@ -431,7 +431,7 @@ return function(t, expect)
 			local before = ns.Util.DeepCopy(v3)
 			local db, info = ns.Migrations.Load(v3)
 			expect.equal(info.status, "migrated")
-			expect.equal(db.schemaVersion, 4)
+			expect.equal(db.schemaVersion, ns.Schema.VERSION)
 			expect.deepEqual(v3, before, "the saved table is never modified")
 			local char = db.characters["A-R"]
 			for _, part in ipairs({ "fields", "journal", "journalKeys", "personality" }) do

@@ -15,6 +15,9 @@
 --               narrative records with provenance, canon status and
 --               visibility (Core/Records.lua, Core/RecordTypes.lua)
 --   reviews     the player's answers to continuity findings
+--   places      (schema 5) logged locations: zone or zone / subzone -> first
+--               and last visit, visits, verified kind, and whether the
+--               player marked it meaningful (Core/Places.lua)
 --
 -- Everything here is private to the character: none of it is ever part of
 -- a projection, a share export or TRP3. Only journal entries the player
@@ -39,7 +42,14 @@ StorySchema.LIMITS = {
 }
 
 StorySchema.CATEGORIES = { quest = true, levelup = true, death = true, reputation = true, zone = true,
-	instance = true, guild = true, moment = true }
+	instance = true, guild = true, moment = true, place = true }
+-- How a location event relates to the character's journey (Core/Places.lua):
+-- start: the journey begins here (verified starting area, new character);
+-- firstseen: the first location Dawnward recorded, nothing more is claimed;
+-- first: the first recorded visit during play; return: back after a while.
+StorySchema.VISITS = { start = true, firstseen = true, first = true, ["return"] = true }
+-- Location moments: on, fewer (notable ones only) or off (still recorded).
+StorySchema.PLACE_PROMPTS = { on = true, fewer = true, off = true }
 StorySchema.EVENT_STATUS = { new = true, queued = true, recorded = true, reacted = true, dismissed = true }
 -- verified: the game reported it; partial: some details were unavailable;
 -- player: the player recorded it (a roleplay event, never a game claim).
@@ -58,8 +68,9 @@ StorySchema.DEFAULT_PREFS = {
 	flavor = true,       -- optional class-flavoured extra option
 	card = true,         -- show the small reaction card at a safe moment
 	trp3Style = "neutral",
+	places = "on",       -- location moments: on, fewer or off
 	tracking = { quest = true, levelup = true, death = true, reputation = true, zone = true, instance = true,
-		guild = true },
+		guild = true, place = true },
 }
 
 -- Game tokens such as UnitClass's "WARLOCK" or UnitRace's "NightElf": stored
@@ -122,6 +133,7 @@ function StorySchema.New()
 		identity = {},
 		people = {},
 		reviews = {},
+		places = {},
 	}
 end
 
@@ -191,9 +203,9 @@ local function effects(raw, axes)
 	return out
 end
 
-local META_TEXT = { "title", "factionName", "instanceName", "guildName", "guildRank" }
+local META_TEXT = { "title", "factionName", "instanceName", "guildName", "guildRank", "placeName" }
 local META_INT = { questId = 2 ^ 31, xp = 2 ^ 31, money = 2 ^ 31, questLevel = 1000, factionId = 2 ^ 31, standing = 8,
-	previous = 8 }
+	previous = 8, mapId = 2 ^ 31, areaId = 2 ^ 31, linked = 1, meaningful = 1, newRegion = 1 }
 
 function StorySchema.CleanMeta(raw)
 	local out = {}
@@ -206,6 +218,8 @@ function StorySchema.CleanMeta(raw)
 	for name, hi in pairs(META_INT) do
 		out[name] = smallInt(raw[name], 0, hi)
 	end
+	out.visit = StorySchema.VISITS[raw.visit] and raw.visit or nil
+	out.placeKind = ns.Places.KINDS[raw.placeKind] and raw.placeKind or nil
 	return out
 end
 
@@ -333,6 +347,7 @@ local function cleanPrefs(raw)
 	prefs.threshold = smallInt(raw.threshold, 1, 3) or prefs.threshold
 	if StorySchema.APPROVAL[raw.approval] then prefs.approval = raw.approval end
 	if StorySchema.TRP3_STYLES[raw.trp3Style] then prefs.trp3Style = raw.trp3Style end
+	if StorySchema.PLACE_PROMPTS[raw.places] then prefs.places = raw.places end
 	for _, flag in ipairs({ "drafts", "flavor", "card" }) do
 		if type(raw[flag]) == "boolean" then prefs[flag] = raw[flag] end
 	end
@@ -467,6 +482,7 @@ function StorySchema.Normalize(raw, axes, report)
 	story.prefs = cleanPrefs(raw.prefs)
 	story.pacing = cleanPacing(raw.pacing)
 	story.observed = cleanObserved(raw.observed)
+	story.places = ns.Places.CleanAll(raw.places)
 	for name, spec in pairs(StorySchema.RECORD_LISTS) do
 		story[name] = cleanList(raw[name], spec.clean, spec.limit, report, name)
 	end

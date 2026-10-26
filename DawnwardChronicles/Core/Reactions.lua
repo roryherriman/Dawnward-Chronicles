@@ -10,6 +10,14 @@
 -- Quests in the same zone while a quest reaction is still waiting are
 -- folded into it, so a session of questing asks one question, not ten.
 --
+-- Location moments (zone and place events) share one cooldown, can be
+-- reduced or switched off (prefs.places), and fold together: a location
+-- event in the same zone within LOCATION_WINDOW of a waiting, unannounced
+-- location moment either replaces it (if it is more significant: entering
+-- Goldshire right after Elwynn Forest asks about Goldshire) or is kept as a
+-- record only. A quest turned in there soon after takes precedence over a
+-- plain arrival, so the question is about the task, not the town.
+--
 -- Reactions wait until the player answers, postpones or dismisses them, or
 -- until they expire. Asking happens elsewhere (Platform/SafeTime decides
 -- when); this module never interrupts anything.
@@ -23,6 +31,8 @@ ns.Reactions = Reactions
 Reactions.COOLDOWN = { rare = 7200, normal = 2700, frequent = 900 }
 Reactions.EXPIRY = 7 * 24 * 3600
 Reactions.FREQUENCIES = { "off", "rare", "normal", "frequent" }
+Reactions.LOCATION = { zone = true, place = true }
+Reactions.LOCATION_WINDOW = 120
 
 local function newId(story)
 	local id = story.nextId
@@ -118,6 +128,33 @@ local function coalesceTarget(char, record)
 	return nil
 end
 
+-- A waiting, unannounced location moment in the same zone, from moments ago.
+local function recentLocation(char, record, now)
+	for index, r in ipairs(char.story.reactions) do
+		if Reactions.LOCATION[r.category] and r.status == "pending" and r.notifiedAt == nil and r.zone == record.zone
+			and (now or 0) - r.createdAt <= Reactions.LOCATION_WINDOW then
+			return r, index
+		end
+	end
+	return nil
+end
+
+local function lastLocation(pacing)
+	local a, b = pacing.lastByCategory.zone, pacing.lastByCategory.place
+	if a and b then return math.max(a, b) end
+	return a or b
+end
+
+-- A quest just queued in a zone replaces a plain arrival moment queued
+-- moments before (a beginning stays: it is major and happens once).
+local function questOverArrival(char, record, now)
+	local r, index = recentLocation(char, record, now)
+	if r and r.significance < 3 then
+		setEventStatus(char, r.eventKeys, "recorded")
+		table.remove(char.story.reactions, index)
+	end
+end
+
 -- Frees a queue slot for a reaction of this significance. Returns ok.
 local function makeRoom(char, significance)
 	local list = char.story.reactions
@@ -152,7 +189,11 @@ function Reactions.Consider(char, record, now)
 	if prefs.frequency == "off" then
 		return stay("prompts off")
 	end
-	if record.significance < prefs.threshold then
+	local location = Reactions.LOCATION[record.category]
+	if location and prefs.places == "off" then
+		return stay("place moments off")
+	end
+	if record.significance < prefs.threshold or (location and prefs.places == "fewer" and record.significance < 2) then
 		return stay("below threshold")
 	end
 	local target = coalesceTarget(char, record)
@@ -162,7 +203,25 @@ function Reactions.Consider(char, record, now)
 		record.status = "queued"
 		return target, "coalesced"
 	end
-	local last = pacing.lastByCategory[record.category]
+	if location then
+		local waiting = recentLocation(char, record, now)
+		if waiting then
+			if record.significance <= waiting.significance then
+				return stay("folded into a waiting moment")
+			end
+			-- The more meaningful place takes the moment's place.
+			local template = Reactions.ChooseTemplate(char, record)
+			if template then
+				setEventStatus(char, waiting.eventKeys, "recorded")
+				waiting.category, waiting.eventKeys, waiting.templateId = record.category, { record.key }, template.id
+				waiting.significance = record.significance
+				remember(pacing, template.id)
+				record.status = "queued"
+				return waiting, "replaced"
+			end
+		end
+	end
+	local last = location and lastLocation(pacing) or pacing.lastByCategory[record.category]
 	local cooldown = Reactions.COOLDOWN[prefs.frequency]
 	if last and record.significance < 3 and now - last < cooldown then
 		return stay("cooldown")
@@ -178,8 +237,15 @@ function Reactions.Consider(char, record, now)
 		id = newId(story), category = record.category, eventKeys = { record.key }, templateId = template.id,
 		significance = record.significance, status = "pending", createdAt = now or 0, zone = record.zone,
 	}
+	if record.category == "quest" then
+		questOverArrival(char, record, now)
+	end
 	story.reactions[#story.reactions + 1] = reaction
-	pacing.lastByCategory[record.category] = now or 0
+	if location then
+		pacing.lastByCategory.zone, pacing.lastByCategory.place = now or 0, now or 0
+	else
+		pacing.lastByCategory[record.category] = now or 0
+	end
 	remember(pacing, template.id)
 	record.status = "queued"
 	return reaction, "queued"
@@ -206,8 +272,23 @@ local function characterName(char)
 	return name or "Your character"
 end
 
+-- Possessive and object pronouns from the profile's Pronouns field, only
+-- when it clearly starts with she, he or they; anything else is neutral.
+local PRONOUNS = {
+	she = { their = "her", them = "her" },
+	he = { their = "his", them = "him" },
+	they = { their = "their", them = "them" },
+}
+
+function Reactions.Pronouns(char)
+	local field = char.fields and char.fields.pronouns and char.fields.pronouns.value
+	local first = type(field) == "string" and field:lower():match("^%s*(%a+)") or nil
+	return PRONOUNS[first] or PRONOUNS.they
+end
+
 local function tokensFor(char, record)
-	local tokens = { name = characterName(char) }
+	local pronouns = Reactions.Pronouns(char)
+	local tokens = { name = characterName(char), their = pronouns.their, them = pronouns.them }
 	if record then
 		tokens.title = record.meta and record.meta.title
 		tokens.zone = record.zone
@@ -218,6 +299,9 @@ local function tokensFor(char, record)
 		tokens.instance = meta.instanceName
 		tokens.guild = meta.guildName
 		tokens.guildaction = record.category == "guild" and meta.title or nil
+		tokens.place = meta.placeName
+		tokens.meaningful = meta.meaningful == 1 and "yes" or nil
+		tokens.linked = meta.linked == 1 and "yes" or nil
 	end
 	return tokens
 end

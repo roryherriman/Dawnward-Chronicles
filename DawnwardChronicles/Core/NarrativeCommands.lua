@@ -341,3 +341,39 @@ Commands.Register("reflect", function(ctx)
 		ctx.ui.ShowStory()
 	end
 end)
+
+-- /dawnward places: where the character has been, as the client named it.
+-- /dawnward place mark|unmark <name>: only the player decides a place matters.
+local function placesList(ctx)
+	local char = Actions.Character(ctx)
+	local list = char and ns.Places.List(char) or {}
+	if #list == 0 then
+		out(ctx, "No places recorded yet. Places are logged as you travel, once your character uses Dawnward.")
+		return
+	end
+	out(ctx, string.format("Places, most recent first (%d of %d):", math.min(#list, 15), #list))
+	for i = 1, math.min(#list, 15) do
+		local p = list[i]
+		out(ctx, string.format("  %s%s%s, %d visit%s%s", p.meaningful and "* " or "", ns.Places.Label(p),
+			p.kind and (" (" .. ns.Places.KIND_LABELS[p.kind] .. ")") or "", p.visits, p.visits == 1 and "" or "s",
+			p.level and (", first at level " .. p.level) or ""))
+	end
+	out(ctx, "* marked meaningful by you. Mark one: /dawnward place mark <name> | place unmark <name>")
+end
+
+Commands.Register("places", placesList)
+
+Commands.Register("place", function(ctx, rest)
+	local sub, name = Util.NextWord(rest)
+	sub = sub:lower()
+	if sub == "" or sub == "list" then
+		placesList(ctx)
+		return
+	end
+	if sub ~= "mark" and sub ~= "unmark" then
+		out(ctx, "Usage: /dawnward places | place mark <name> | place unmark <name>")
+		return
+	end
+	local _, message = Actions.MarkPlace(ctx, name, sub == "mark")
+	out(ctx, message)
+end)
