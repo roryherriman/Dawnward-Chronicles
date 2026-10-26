@@ -104,7 +104,7 @@ A feature is never called "tested" or "compatible" in this file unless it reache
   - `sim levelup <n>`.
 - **Saved data schema 2:** an additive, idempotent upgrade from schema 1 that preserves every v0.1 profile, family entry, history entry, privacy setting and import backup.
 - **Docs:**
-  - the story interpretation architecture (`docs/STORY_ARCHITECTURE.md`);
+  - the story interpretation architecture (`docs/planning/archive/story-architecture-v0.2.md`);
   - an updated architecture document, including the retention policy;
   - the v0.2 in-game checklist.
 

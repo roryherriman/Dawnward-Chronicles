@@ -25,6 +25,7 @@ SavedVariables/
 *.bak
 Logs/
 Cache/
+*.log
 
 # --- Build output ---
 dist/

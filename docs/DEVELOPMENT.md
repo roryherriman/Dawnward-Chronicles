@@ -28,3 +28,7 @@ Any operation that could destroy data, and any change to TRP3 profile data, need
 
 ## Local setup
 See [CONTRIBUTING.md](../CONTRIBUTING.md#setup). The tooling goes in `.tooling/`, which git ignores and which is never shipped.
+
+## Migration dry run on real saved data
+
+`tools/migration_dryrun.lua` loads a copy of a real `DawnwardChronicles.lua` SavedVariables file, runs the migrations and normalisation in memory, and prints only structure and counts, never content. It **never writes**. Usage: `lua5.1 tools/migration_dryrun.lua <copy of DawnwardChronicles.lua>`. Always run it on a copy, never on the live file inside `WTF\`.
