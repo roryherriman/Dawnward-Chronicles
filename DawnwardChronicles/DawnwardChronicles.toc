@@ -68,6 +68,7 @@ UI\JournalView.lua
 UI\CharacterView.lua
 UI\StoryView.lua
 UI\ReactionCard.lua
+UI\ChronicleView.lua
 UI\SettingsPanel.lua
 Platform\TRP3Bridge.lua
 Platform\Bootstrap.lua

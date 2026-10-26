@@ -35,9 +35,12 @@ return function(t, expect)
 			expect.falsy(panel.frame:IsShown())
 		end)
 
-		t:it("is not a fourth section", function()
+		t:it("is not a section of its own", function()
 			local _, _, ns = openSettings()
-			expect.equal(#ns.MainWindow.Sections(), 3)
+			for _, def in ipairs(ns.MainWindow.Sections()) do
+				expect.falsy(def.id == "settings")
+			end
+			expect.equal(#ns.MainWindow.Sections(), 4)
 		end)
 
 		t:it("changes the theme for this character only, and only the theme", function()

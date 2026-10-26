@@ -32,7 +32,7 @@ return function(t, expect)
 		end)
 
 		t:it("keeps tabs, gear, title, content and status apart and inside the background", function()
-			local regions = { r.title, r.tabs[1], r.tabs[2], r.tabs[3], r.gear, r.content, r.status }
+			local regions = { r.title, r.tabs[1], r.tabs[2], r.tabs[3], r.tabs[4], r.gear, r.content, r.status }
 			for i = 1, #regions do
 				expect.truthy(inside(regions[i], r.background), "region " .. i .. " escapes the background")
 				for j = i + 1, #regions do
@@ -92,12 +92,12 @@ return function(t, expect)
 			expect.truthy(found)
 		end)
 
-		t:it("shows exactly three sections and switches between them", function()
+		t:it("shows exactly four sections and switches between them", function()
 			local mock, _, ns = Boot.Start()
 			mock.Slash("")
 			local labels = {}
 			for _, def in ipairs(ns.MainWindow.Sections()) do labels[#labels + 1] = def.label end
-			expect.deepEqual(labels, { "Journal", "Character", "Story" })
+			expect.deepEqual(labels, { "Journal", "Character", "Story", "Chronicle" })
 			expect.equal(ns.MainWindow.CurrentSection(), "journal")
 			local frame = ns.MainWindow.GetFrame()
 			frame.tabs[2]:GetScript("OnClick")(frame.tabs[2])
