@@ -4,7 +4,10 @@ This report covers one Claude Code cloud session: v0.4 "The Living Chronicle" pl
 
 **Nothing in this report was tested in the real game client.** "Tested" always means the automated suite: Lua 5.1 with a mocked WoW client and a Total RP 3 3.4.1 fake.
 
-<!-- MERGE-STATUS -->
+**Integration status:**
+- PR [#9](https://github.com/roryherriman/Dawnward-Chronicles/pull/9) (v0.3) was merged into `main` as `32323a9`.
+- PR [#43](https://github.com/roryherriman/Dawnward-Chronicles/pull/43) (v0.4 and backlog) was merged into `main` after all automated gates passed. The resulting `main` SHA is in section M.
+- **No public release, tag, CurseForge project or website was published.**
 
 ---
 
@@ -28,7 +31,7 @@ This report covers one Claude Code cloud session: v0.4 "The Living Chronicle" pl
   - TRP3 presentation styles;
   - two new GUI areas (Story section, Chronicle section) and a reaction card;
   - a README overhaul with the companion-to-TRP3 positioning, an unpublished website and an unpublished CurseForge listing.
-- **Tests:** 180 → 338 (v0.3) → **441 passing, 0 failing** (`python tools/check.py`: hygiene, TOC, luacheck, tests).
+- **Tests:** 180 → 338 (v0.3) → **449 passing, 0 failing** (`python tools/check.py`: hygiene, TOC, luacheck, tests).
 - **Important unfinished work:**
   - no in-game verification of any v0.3/v0.4 feature;
   - GUI redesign (#17) and the import wizard (#23) not started;
@@ -166,8 +169,8 @@ Every module is pure Lua 5.1 under `DawnwardChronicles/Core/` unless noted. Ever
 ## E. Automated testing
 
 - **Command:** `python tools/check.py`. It runs repository hygiene, TOC completeness, luacheck (L0) and the Lua 5.1 suite (L1 unit, L2 mocked client and TRP3 3.4.1 fake).
-- **Final result:** **441 passed, 0 failed**; hygiene ok, TOC ok, luacheck ok (0 warnings).
-- **New spec files:** `core_story_spec`, `story_loop_spec`, `trp3_presentation_spec`, `ui_story_spec`, `core_narrative_spec`, `world_events_spec`, `ui_chronicle_spec`, `storytelling_spec`, `performance_spec`.
+- **Final result:** **449 passed, 0 failed** (441 before the review fixes); hygiene ok, TOC ok, luacheck ok (0 warnings).
+- **New spec files:** `core_story_spec`, `story_loop_spec`, `trp3_presentation_spec`, `ui_story_spec`, `core_narrative_spec`, `world_events_spec`, `ui_chronicle_spec`, `storytelling_spec`, `performance_spec`, `review_regressions_v04_spec`.
 - **Regression coverage includes:**
   - v3 → v4 migration with nothing changed and nothing published; idempotent normalisation;
   - duplicate events across reloads;
@@ -189,7 +192,31 @@ Every module is pure Lua 5.1 under `DawnwardChronicles/Core/` unless noted. Ever
   - No in-game profiling has been done.
 - **Mocked vs real:** everything above is mocked. No test touched a real WoW client, a real TRP3 or real SavedVariables.
 
-<!-- REVIEW-FINDINGS -->
+### Pre-merge safety review
+
+An independent read-only review of the whole branch reproduced 7 defects that the tests had missed. All 7 were fixed in `5e0f457`, each with a regression test (`tests/spec/review_regressions_v04_spec.lua`).
+
+| # | Severity | Defect | Fix |
+|---|---|---|---|
+| 1 | MAJOR | A backup "without secrets" contained secret story content: convictions, feelings, secret memories, the player's words in secret entries, and memories repeating them | Filtered in `Transfer.StoryForBackup`; `MergeForImport` carries the current secrets back on restore |
+| 2 | MAJOR | A long-played character's backup exceeded the 200,000-byte import limit and could never be restored | Full event records are left out of backups (keys kept); the import limit is 1,000,000 bytes; an export over the limit is refused instead of produced |
+| 3 | MAJOR | Any alt's first zone change, quest or death created a profile and story prompts | Story events go only to characters that already use Dawnward |
+| 4 | MINOR | A goal or arc answer chosen by number in chat could be refused (clock-dependent ranking) | Recency is measured from the event |
+| 5 | MINOR | Pending personality changes grew past the list limit and were dropped on reload | Capped at 50 pending; normalisation keeps pending changes |
+| 6 | MINOR | In simulation mode, the notice about a real moment pointed at the simulated character | No notice in simulation mode; it waits |
+| 7 | MINOR | The import confirmation didn't say the story would be replaced | It does now |
+
+The review also confirmed the following as safe:
+- TOC load order;
+- the 3 → 4 migration (values and visibility unchanged, idempotent);
+- shared ID allocation;
+- journal retention;
+- drafts can never be public;
+- the public projection, share export and TRP3 output contain only established public content;
+- the neutral TRP3 style is byte-identical to v0.3 (120 facts, including braces, newlines and UTF-8);
+- the TRP3 sync, adapter, trait plan and bridge are unchanged since v0.3;
+- no runaway timers;
+- read-only mode.
 
 ## F. Bugs and limitations
 
@@ -305,8 +332,153 @@ Full checklists: `docs/TESTING.md`, parts A–F (v0.3) and G–K (v0.4).
 5. Probe `ENCOUNTER_END` and `BOSS_KILL` with `/etrace` in a Classic dungeon before building boss moments (#11).
 6. Two-client TRP3 tests (#7, #15), then the Forever TOC (Interface 16001 per community reports), then #24 last.
 
-<!-- CLEANUP -->
+## Repository Cleanup and Organization
 
-<!-- SECTION-M -->
+Commit `966b69e`, separate from feature work.
 
-<!-- CHATGPT -->
+**Files moved** (5, none deleted):
+- `docs/STORY_ARCHITECTURE.md` → `docs/planning/archive/story-architecture-v0.2.md`. It was superseded by the v0.3 proposal; marked archived, links fixed.
+- `docs/planning/phase0-trp3-audit-and-plan.md` → `docs/planning/archive/`. Historical; the current findings are in `TRP3_INTEGRATION.md`.
+- `site/` (3 files) → `docs/site/`. This keeps the repository root to standard files.
+
+**Files added:** `docs/README.md` (a documentation index).
+
+**Documentation:**
+- `tools/migration_dryrun.lua` was not referenced anywhere. It is now documented in `docs/DEVELOPMENT.md`, and was verified to work against schema 4.
+- The CHANGELOG link to the archived document was fixed.
+
+**`.gitignore`:** added `*.log`.
+
+**Removed:** nothing. The audit found no dead Lua modules: every addon file is in the TOC, and the TOC check enforces this. There were no committed build artefacts, logs, backups or stray third-party files. All tools are used (`tools/lua51.py` by `check.py`).
+
+**Kept intentionally:**
+- the v0.3 planning documents in `docs/planning/` (still referenced by the living-character index);
+- `docs/VISION.md` and `docs/UI_DIRECTION.md` (referenced by code comments and the README).
+
+**After cleanup:**
+- `python tools/check.py`: all passed.
+- Markdown link check: 0 broken links (one false positive, a `[text](url)` example inside a code span).
+- `python tools/package.py`: the zip holds all 63 TOC files plus the TOC.
+- The dry run passes.
+
+**Recommendations:** consolidate the `living-character/` planning set into the current design docs once v0.4 is verified in game.
+
+## M. Integration details
+
+- **Merged:**
+  - PR #9 → `main` (`32323a9`, CI green on `7746032`);
+  - PR #43 → `main`, after merging `main` into the branch (`9dfe3a9`, CI green), locally re-validated (449 passed).
+- **Branch commits after `da5dfca`:**
+  - `c3e6c58`: report draft;
+  - `5e0f457`: review fixes;
+  - `a4476a7`: privacy docs;
+  - `9dfe3a9`: merge of `main`.
+- **Issue comments posted** (progress only; none closed): #4, #10, #11, #12, #13, #14, #18, #19, #20, #22, #25, #26, #27, #28, #29, #30, #36, #37, #40, #42, #44.
+- **Suggested repository settings.** These could not be applied with the tools available.
+  - Description: "A living chronicle for your WoW character: gameplay moments, your choices, player-approved personality growth. A companion to Total RP 3."
+  - Topics: `world-of-warcraft`, `wow-addon`, `roleplay`, `lua`, `classic-era`, `total-rp-3`, `storytelling`.
+- **Not done, by instruction:** issue #24 not run or touched; no release or tag; no CurseForge project; no website publication.
+
+## COPY EVERYTHING BELOW INTO CHATGPT
+
+**Project.** Dawnward Chronicles is a World of Warcraft roleplaying companion addon, written in Lua 5.1.
+- Repository: https://github.com/roryherriman/Dawnward-Chronicles (MIT licence).
+- Primary client: WoW Classic Era 1.15.9 (interface 11509). Final target: WoW Forever, still unverified.
+- It works alongside Total RP 3 (TRP3) and does not replace it. Tagline: "TRP3 tells the world who your character is. Dawnward Chronicles helps you discover who you become."
+- Dawnward records verified gameplay, asks optional roleplay questions at calm moments, lets the player's answers propose small personality changes, writes private journal drafts, and can optionally publish approved public content into a Dawnward-owned section of the player's own TRP3 profile.
+
+**Status after the overnight session (2026-10-26):**
+- Version `0.4.0-dev`, SavedVariables schema 4 (an additive migration from 3).
+- v0.1 and v0.2 were verified in game earlier. **v0.3 and v0.4 have NOT been tested in game. Every result below is automated (a mocked WoW client plus a TRP3 3.4.1 fake).**
+- `python tools/check.py` passes: hygiene, TOC check, luacheck with 0 warnings, and **449 tests passed, 0 failed**. GitHub CI is green.
+
+**Branches and PRs:**
+- PR #9 (v0.3: character foundations plus experimental TRP3 sync, head `7746032`) was merged into `main` as `32323a9`.
+- PR #43 (`feat/v0.4-living-chronicle`: v0.4 plus backlog) was merged into `main` after `main` was merged back into the branch (`9dfe3a9`). The final `main` SHA is recorded in `docs/handoffs/OVERNIGHT_DEVELOPMENT_REPORT.md`, section M.
+- Main v0.4 commits: `32bba27` core, `142bd64` observers and commands, `70ab58e` TRP3 presentation, `74faa39` UI, `2dc1933` narrative records, `d05b711` world events, `254f9b7` Chronicle section, `e1552d0` moments, timeline and reflection, `5e0f457` review fixes.
+
+**What was built (all modules in `DawnwardChronicles/Core/` unless noted):**
+1. **Gameplay events** (`GameEvents`, `Platform/Observers`):
+   - Categories: quests (`QUEST_COMPLETE` + `QUEST_TURNED_IN`), level-ups, deaths, first recorded zone visits, dungeon and raid entries (`IsInInstance`, `GetInstanceInfo`), reputation tier changes (`UPDATE_FACTION`, `GetFactionInfo` against a snapshot with a silent baseline) and guild joins and leaves.
+   - Records are deduplicated by stable key across reloads, with source, confidence and significance from verified data only.
+   - Recorded only for characters that already use Dawnward.
+2. **Reactions** (`ReactionLibrary`, `Reactions`, `Platform/SafeTime`, `UI/ReactionCard`):
+   - 11 universal templates, each with 4 directional answers plus a neutral one, and neutral fallback questions.
+   - An optional class-flavour answer with no effect.
+   - Pacing (frequency, threshold, cooldowns, same-zone coalescing, a queue of 20, expiry, Later / Not now / Dismiss).
+   - Announced only when not in combat, dead, in a cinematic or loading.
+3. **Personality evolution** (`Decisions`, `Evolution`):
+   - Answers propose ±1 on the six existing 0–20 axes (Courage, Compassion, Discipline, Faith, Honour, Sociability).
+   - Approval is required by default; "auto" is optional and still reversible.
+   - At most 2 steps per axis per day; baselines kept; a history that includes manual edits; at most 50 pending.
+4. **Living journal** (`Narrative`, `Journal`):
+   - Private drafts from verified data plus the player's answer.
+   - Edit, approve, defining moments, search. A draft cannot be public before approval.
+5. **Records contract** (`Records`, `RecordTypes`):
+   - Every memory, arc, goal, identity statement and person keeps provenance (observed / player / suggested), canon status (proposed / established / disputed / superseded) and visibility (public / private / secret) separate.
+   - Suggestions are proposed and private; public requires established.
+6. **Narrative systems:**
+   - Memories (#12) and arcs (#19), suggested when 3 answers share a theme.
+   - Goals (#27): verified level objective vs player-ticked milestones; never auto-completed.
+   - Public persona vs private conviction (#30).
+   - People: NPCs, players keyed by name and realm, family (#18, #28, #37).
+   - Story Director (#20, #25): context from established records, goal and arc answers, memory recall, "why now".
+   - Continuity review (#42): 6 rules, answered by the player; canon is never rewritten.
+   - Timeline (#26), reflection (#29), player-authored moments (#40).
+7. **GUI:**
+   - Story section: question, answers, own words, Reflect, approve or reject changes, why-now.
+   - New Chronicle section: Memories, Arcs, Goals, Stances, People and Review tabs with provenance, status and visibility.
+   - Journal Approve and defining-moment buttons; story settings in the settings panel; the reaction card.
+   - Many record types still need chat commands to create or edit (`memory`, `arc`, `goal`, `stance`, `person`, `moment`).
+8. **TRP3** (`Integrations/TRP3`):
+   - The v0.3 adapter is unchanged: TRP3 3.4.1 allowlist, opt-in per character on a non-default profile, backup before write, read-back with automatic restore, ownership by exact match, conflict detection, editor-draft protection (the false "editor open" after `/reload` was fixed in `7746032`), rollback, release.
+   - v0.4 adds presentation styles (Neutral is the default and byte-identical to v0.3, so an upgrade doesn't rewrite synced profiles; Silver Hand and Arcane use only `{h3}`, `{col:RRGGBB}` and `{icon:…}`, confirmed in TRP3 source).
+   - Dawnward's own section can now also show approved, important, public story entries ("Defining moments") and established public stances ("Where they stand").
+   - Private convictions, feelings, drafts and the story table never reach TRP3 or share exports.
+9. **Backups:** personal backups carry the story compactly (event keys, not full events) and honour "no secrets". The import limit was raised to 1,000,000 bytes, and oversized exports are refused.
+
+**Bugs found and fixed overnight:**
+- The TRP3 editor-detection false positive.
+- Template choice gave a "challenge" question for a first quest in a zone.
+- The pcall wrapper dropped return values after the 8th, so reputation would have failed in game.
+- From an independent review:
+  - a backup without secrets leaked secret story content (MAJOR);
+  - large backups were unrestorable (MAJOR);
+  - every alt got a profile and prompts (MAJOR);
+  - a clock-dependent answer list;
+  - unbounded pending changes;
+  - a simulation-mode notice pointing at the simulated character;
+  - an import message missing the story warning.
+
+**Known limits and risks:**
+- Nothing in v0.3 or v0.4 has been tested in game.
+- New UI layouts have never been seen on screen.
+- Boss and encounter detection is not built (its events are unverified on Classic Era).
+- Standing names are English fallbacks.
+- Pasting a backup near 1 MB into the game's edit box is unverified.
+- TRP3 sync must stay on a disposable profile.
+- Multiplayer propagation is unverified.
+- WoW Forever is unverified; it needs a Forever TOC (Interface 16001 according to community reports).
+
+**Issues:**
+- None closed.
+- Substantially implemented, awaiting in-game checks: #12, #19, #20, #25, #27, #30, #42.
+- Partial: #10, #11, #13, #14, #18, #22, #26, #28, #29, #36, #37, #40, #44.
+- Not started: #16, #17, #21, #23, #31, #32 (beyond the existing export/import), #33–#35, #38, #39, #41.
+- Blocked on the client or two players: #3–#7, #15. #8 waits on the owner.
+- **#24 (Forever release gate) was not run or touched.**
+
+**CurseForge:** Project URL **NOT CREATED**.
+- There was no account access, CurseForge documents no private drafts, and Forever is unverified.
+- The listing is prepared offline in `docs/marketing/curseforge/`; the status is in `docs/handoffs/CURSEFORGE_STATUS.md`.
+
+**Presentation:**
+- README rewritten with honest status markers and the "Built to Complement Total RP 3 — Not Replace It" section.
+- An unpublished static website in `docs/site/`.
+- A docs index; the repository was cleaned up (5 files moved, none deleted).
+- Repository description and topics were not changed (no tool available).
+
+**Recommended next actions:**
+1. Run the in-game plan: back up SavedVariables; install from `main`; check upgrade safety; then the quest → card → answer → approve → draft → approve → public loop. Then calm-moment guards, `/reload` persistence, the Chronicle tab, world events, then TRP3 on a disposable profile (preview, publish a defining moment, styles, conflict, rollback, release, editor guard via `/dawnward trp3 diagnose`).
+2. Fix what the in-game tests find.
+3. Then: #17 GUI redesign (edit forms, resizable window), #23 and #16 import wizard and onboarding, #21 custom personality rules, a probe of encounter events for #11, two-client TRP3 tests (#7, #15), a Forever TOC, and finally #24.
