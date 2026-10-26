@@ -302,3 +302,47 @@ Give the test profile two personality traits of your own: one preset and one cus
 | F6 | You open TRP3's About editor before a Dawnward write, close the window without saving, let Dawnward wait, then save in the editor | Player 2 sees **your saved** version (not a stale one) after re-targeting |
 
 **Record:** pass, fail or n/a per item, screenshots or `/chatlog` excerpts, and any difference outside Dawnward's section (that is a release blocker: roll back and report).
+
+### v0.4 in-game checklist (L3): the living chronicle
+
+Build: `0.4.0-dev`. Use a test character, and keep TRP3 sync on the **disposable** test profile only. Back up `WTF\Account\<account>\SavedVariables\DawnwardChronicles*.lua` before installing. Everything below has passed mocked tests (L2) only.
+
+#### Part G: Upgrade and quest moment (the vertical slice)
+
+| # | Steps | Pass when |
+|---|---|---|
+| G1 | Install over v0.3 and log in | Chat: "Saved data upgraded from schema 3." Journal, facts and personality are unchanged; nothing new is public |
+| G2 | `/dawnward status` | A "Story:" line: 0 events, 0 moments waiting |
+| G3 | Turn in any quest (reward panel shown) | No popup during the turn-in. Within a few seconds out of combat: one chat line "A moment for your story: ..." naming the quest and zone, and a small card |
+| G4 | `/dawnward story events` | The quest, with its real title and zone, `verified`, `queued` |
+| G5 | Click **Answer** on the card | The journal opens on the Story section with that question and 5 or 6 answers (the last is "Nothing worth remembering.") |
+| G6 | Click an answer that moves an axis (for example the first) | Status: "Decision recorded ... waiting for your approval". The Story section shows the change with Approve / Reject. Personality is **unchanged** so far |
+| G7 | Approve it | `/dawnward personality list` shows the axis moved by exactly 1 (a new axis starts at 10, private) |
+| G8 | Journal section | A **draft** entry with the quest title, what happened, your answer and the development line; Approve button visible |
+| G9 | Click the visibility button on the draft | Status explains it must be approved first; it stays Private |
+| G10 | Approve, click `*` (defining moment), then make it Public | Meta line says "story - defining moment"; visibility Public |
+| G11 | Turn in two more quests in the same zone quickly | No second notice; `/dawnward story events` shows them folded into the waiting moment, or recorded during the cooldown |
+| G12 | `/reload`, then `/dawnward story events` | The same events; none recorded twice |
+
+#### Part H: Calm moments and pacing
+
+| # | Steps | Pass when |
+|---|---|---|
+| H1 | Turn in a quest and immediately enter combat | No card or notice in combat. After combat ends, the notice appears |
+| H2 | Die (safely) | No notice while dead or as a ghost. After reviving, a death moment may appear (first death: always) |
+| H3 | Card visible, then enter combat | The card hides |
+| H4 | Settings (gear) > Moments: off; turn in a quest | Recorded (`story events`) but no moment |
+| H5 | Settings > Card: off; next moment | A chat line only, no card |
+| H6 | `story <#> later`, `notnow`, `dismiss` | Later: kept, marked "kept for later". Not now: stays, no reminder. Dismiss: gone; the event stays `dismissed` |
+| H7 | Write your own answer in the Story section and Save | Draft says "In <name>'s own words: ..."; no personality change proposed |
+
+#### Part I: TRP3 presentation (disposable profile, experimental sync on for biography)
+
+| # | Steps | Pass when |
+|---|---|---|
+| I1 | After G10, wait about 10 s (or `/dawnward trp3 sync`) | The About page shows your text unchanged, then Chronicle with "Defining moments:" and the entry's title |
+| I2 | Make the entry Private again, wait | The moment disappears; your own text is unchanged |
+| I3 | `/dawnward story set trp3Style arcane`, wait, open the About page | Violet heading with a book icon. Screenshot it. Repeat with `silverhand` and `neutral` |
+| I4 | `/dawnward trp3 release about confirm` | Your About text is exactly as before Dawnward's first write |
+
+**Record:** pass, fail or n/a per item, screenshots of G5, G8, I1 and I3, and any Lua error (BugSack or `/console scriptErrors 1`).

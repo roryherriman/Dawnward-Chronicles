@@ -12,6 +12,25 @@ Every release entry has a **Verified** line naming the highest test level reache
 
 A feature is never called "tested" or "compatible" in this file unless it reached L3 or L4.
 
+## [Unreleased]: 0.4.0-dev (the living chronicle)
+
+**Verified: L2** (mocked). Not tested in game yet; see the v0.4 checklist in [`docs/TESTING.md`](docs/TESTING.md#v04-in-game-checklist-l3-the-living-chronicle).
+
+### Added
+- **Schema v4:** a per-character `story` table and "story" journal entries, by an additive 3 → 4 migration. No existing value or visibility changes; nothing becomes public.
+- **Gameplay events:** quest turn-ins (`QUEST_COMPLETE` + `QUEST_TURNED_IN`), deaths and level-ups become normalised records with a stable key, time, zone, character context, verified metadata, source, confidence and status. They are never recorded twice, across reloads and sessions.
+- **Reactions:** authored, universal questions with several moral and emotional directions, a neutral answer, your own words, and Later / Not now / Dismiss. They are paced by frequency, a significance threshold and cooldowns, same-zone quests are folded together, and the queue is bounded. Announced only at a calm moment (never in combat, while dead, in a cinematic or loading).
+- **Optional class flavour:** one extra answer per class, with no personality effect. It can be switched off, and never changes the universal answers.
+- **Personality evolution:** answers propose one-step changes on the six axes. They apply only on approval (or automatically if you choose; still reversible), with a daily limit, a preserved baseline and a history that also records your manual edits.
+- **Living journal:** private story drafts from verified data and your answer; edit, approve, mark as a defining moment, search (`journal search`, `journal drafts`). Drafts cannot be made public before approval.
+- **TRP3 presentation:** formatting is separate from narrative data (Neutral, Silver Hand, Arcane), using only markup confirmed in TRP3 3.4.1's source. Approved, public defining moments can appear in Dawnward's own About section. Neutral is the default and gives exactly the v0.3 block.
+- **UI:** a working Story section, a small reaction card, journal Approve and defining-moment buttons, and story settings in the settings panel.
+- **Commands:** `story`, `develop`, `journal approve|important|search|drafts`, `sim quest`, `sim death`.
+
+### Changed
+- Personal backups carry the story. Share exports never do, and importing a share export or an older backup keeps the current story.
+- `/dawnward status` reports story counts.
+
 ## [Unreleased]: 0.3.0-dev (character foundations, experimental TRP3 sync)
 
 **Verified: L2** (mocked). Nothing in this section has been tested in game yet; see the v0.3 checklist in [`docs/TESTING.md`](docs/TESTING.md#v03-in-game-checklist-l3).

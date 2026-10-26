@@ -148,9 +148,35 @@ Every name below is also in the per-directory lists in `.luacheckrc`.
 
 TRP3 internals used by the experimental sync (TRP3 3.4.1 only) are listed with their risks in [TRP3_INTEGRATION.md](TRP3_INTEGRATION.md#internal-dependencies-and-their-risk). The sync is allowlisted for TRP3 3.4.1 by source audit only. It has **not** been tested in game.
 
+## Client APIs added in v0.4 (living chronicle)
+
+Checked against Blizzard's Classic Era interface source for **1.15.9 (70003)** (the `Gethe/wow-ui-source` mirror, branch `classic_era`). **S** = defined in the generated API documentation or called by Blizzard's own Classic Era UI code; nothing below has been verified in game yet.
+
+| API or event | Used for | Source evidence | Classic Era | Forever |
+|---|---|---|---|---|
+| `QUEST_COMPLETE` | The reward panel opened: cache the quest ID, title and level | `QuestLogDocumentation.lua`; `Classic/QuestFrame.lua` | S, not L3 | — |
+| `QUEST_TURNED_IN(questID, xpReward, moneyReward)` | A quest was turned in | `QuestLogDocumentation.lua` (payload) | S, not L3 | — |
+| `GetQuestID`, `GetTitleText` | Quest ID and title on the reward panel | `Vanilla/QuestInfo.lua` | S, not L3 | — |
+| `GetQuestLogIndexByID`, `GetQuestLogTitle` (2nd return = level) | Quest level, while the quest is still in the log | `Vanilla/QuestLogFrame.lua` | S, not L3 | — |
+| `C_QuestLog.GetQuestInfo(questID)` | Title fallback when the reward panel was not seen | `QuestLogDocumentation.lua` | S, not L3 | — |
+| `PLAYER_DEAD` | A death (the cause is not recorded) | `DeathInfoDocumentation.lua` | S, not L3 | — |
+| `PLAYER_ALIVE`, `PLAYER_UNGHOST`, `PLAYER_REGEN_ENABLED/DISABLED`, `PLAYER_UPDATE_RESTING`, `ZONE_CHANGED_NEW_AREA` | Calm moments to check for a waiting story moment; the card hides when combat starts | generated docs | S, not L3 | — |
+| `CINEMATIC_START/STOP`, `LOADING_SCREEN_ENABLED/DISABLED` | Never announce during a cinematic or loading screen | generated docs | S, not L3 | — |
+| `UnitLevel`, `UnitClass` (2nd return: class file), `UnitRace` (2nd return: race file), `UnitFactionGroup` | Character context on event records, used only for optional class flavour | `UnitDocumentation.lua`; Classic UI code | S, not L3 | — |
+| `UnitIsDeadOrGhost` | No announcements while dead or a ghost | Classic UI code | S, not L3 | — |
+
+**Known Classic Era limits for the story engine:**
+- There is no "important quest" or story flag; significance comes from verified data only (quest level relative to the character, first quest in a zone, level milestones, first death).
+- The quest tag (`GetQuestLogTitle` third return) is localised text, so it is not used.
+- Repeatable quests are recorded once per character (the key is the quest ID).
+- Achievements exist as an API but are not part of Classic Era play, so they are not used.
+- Encounter events (`ENCOUNTER_END`, `BOSS_KILL`) are defined, but whether they fire for Classic dungeon bosses is unverified, so boss detection is not built yet.
+- The combat log is not read (cost, and the restriction risk).
+
 ## Planned APIs (not used yet)
 
 | API or event | Planned for |
 |---|---|
-| `PLAYER_REGEN_ENABLED/DISABLED` | Combat queue for story popups (v0.3) |
-| `QUEST_TURNED_IN`, `ZONE_CHANGED_NEW_AREA`, `PLAYER_DEAD`, `ENCOUNTER_END` / `BOSS_KILL` | More milestone types (later; each needs a registered type and an L3 check) |
+| `ENCOUNTER_END` / `BOSS_KILL`, `IsInInstance`, `GetInstanceInfo` | Dungeon and boss moments, after an in-game probe confirms they fire (issue #11) |
+| `UPDATE_FACTION`, `GetNumFactions`, `GetFactionInfo` | Reputation standing changes (issue #18) |
+| `ZONE_CHANGED_NEW_AREA` + first-visit memory | Exploration moments (issue #11) |
