@@ -283,3 +283,61 @@ Commands.Register("person", function(ctx, rest)
 		out(ctx, "Unknown person command '" .. sub .. "'.")
 	end
 end)
+
+-- A roleplay moment the player records (#40): it becomes a story event at
+-- once, marked as player-authored, and may be reflected on immediately.
+Commands.Register("moment", function(ctx, rest)
+	if Util.Trim(rest) == "" then
+		out(ctx, "Usage: /dawnward moment <what happened>   (a ceremony, a vow, a meeting: anything you roleplayed)")
+		return
+	end
+	local _, message = Actions.WithCharacter(ctx, function(char)
+		local data = { title = rest, zone = ctx.zone and ctx.zone() or nil }
+		local record, err = ns.GameEvents.Record(char, "moment", data, ctx.now())
+		if not record then return Actions.Fail(err) end
+		local reaction = ns.Reactions.Consider(char, record, ctx.now())
+		return record, "Recorded your moment" .. (reaction and ("; reflect on it: /dawnward story " .. reaction.id)
+			or ".")
+	end)
+	out(ctx, message)
+end)
+
+Commands.Register("timeline", function(ctx, rest)
+	local char = Actions.Character(ctx)
+	if not char then
+		out(ctx, "Nothing recorded yet.")
+		return
+	end
+	local n = tonumber((Util.NextWord(rest))) or 12
+	local dated, undated = ns.Timeline.Build(char, { limit = n })
+	out(ctx, string.format("Timeline, newest first (%d shown):", #dated))
+	for _, item in ipairs(dated) do
+		out(ctx, string.format("  %s  %s: %s [%s]", ctx.formatTime and ctx.formatTime(item.at) or tostring(item.at),
+			item.kind, preview(item.text), item.visibility))
+	end
+	if #undated > 0 then
+		out(ctx, "Before the chronicle (undated):")
+		for _, item in ipairs(undated) do
+			out(ctx, string.format("  %s%s [%s]", item.when and (item.when .. ": ") or "", preview(item.text),
+				item.visibility))
+		end
+	end
+end)
+
+Commands.Register("reflect", function(ctx)
+	local _, message = Actions.WithCharacter(ctx, function(char)
+		local back = ns.Reactions.Reflect(char)
+		local waiting = #ns.Reactions.List(char, ctx.now())
+		local pending = #ns.Evolution.Pending(char)
+		local drafts = #ns.Journal.Search(char, { kind = "story", status = "draft" })
+		local review = #ns.Continuity.Findings(char)
+		return true, string.format("A quiet moment to reflect: %d waiting moment%s (%d brought back from later), %d "
+			.. "personality change%s, %d draft%s, %d thing%s to review. Nothing has to change: skipping is fine.",
+			waiting, waiting == 1 and "" or "s", back, pending, pending == 1 and "" or "s", drafts,
+			drafts == 1 and "" or "s", review, review == 1 and "" or "s")
+	end)
+	out(ctx, message)
+	if ctx.ui and ctx.ui.ShowStory then
+		ctx.ui.ShowStory()
+	end
+end)

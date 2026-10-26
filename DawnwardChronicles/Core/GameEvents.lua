@@ -200,6 +200,23 @@ GameEvents.CATEGORIES.guild = {
 	significance = function() return 2 end,
 }
 
+GameEvents.CATEGORIES.moment = {
+	label = "Roleplay moment",
+	-- data: { title, + context }: a ceremony, vow, meeting or turning point
+	-- the player records themselves (#40). Marked as player-authored, never
+	-- as a game event, and it names no other participants.
+	build = function(data, now)
+		local meta = StorySchema.CleanMeta({ title = data.title })
+		if not meta.title then
+			return nil, "a moment needs a title"
+		end
+		return withContext({ category = "moment", key = "moment:" .. (now or 0) .. ":" .. Util.Checksum(meta.title),
+			source = "PLAYER", confidence = "player", meta = meta }, data)
+	end,
+	-- The player asked for it, so it may be reflected on at once.
+	significance = function() return 3 end,
+}
+
 function GameEvents.Label(category)
 	local def = GameEvents.CATEGORIES[category]
 	return def and def.label or tostring(category)

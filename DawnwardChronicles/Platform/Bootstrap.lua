@@ -75,6 +75,10 @@ local function buildContext()
 			)
 		end,
 		ToggleJournal = MainWindow.Toggle,
+		ShowStory = function()
+			if not MainWindow.IsShown() then MainWindow.Show() end
+			MainWindow.Select("story")
+		end,
 	}
 	return ctx
 end

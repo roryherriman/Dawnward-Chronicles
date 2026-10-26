@@ -44,6 +44,8 @@ local function happened(record, extra)
 		line = string.format("Entered %s%s (the first entry Dawnward recorded).", plain(record.meta.instanceName), level)
 	elseif record.category == "guild" then
 		line = string.format("%s %s.", record.meta.title == "left" and "Left" or "Joined", plain(record.meta.guildName))
+	elseif record.category == "moment" then
+		line = string.format("A moment you recorded%s: %s.", zone, plain(record.meta.title))
 	else
 		line = GameEvents.Label(record.category) .. "."
 	end
@@ -69,6 +71,8 @@ local function titleFor(record)
 		return plain(record.meta.instanceName)
 	elseif record.category == "guild" then
 		return plain(record.meta.guildName)
+	elseif record.category == "moment" then
+		return plain(record.meta.title)
 	end
 	return GameEvents.Label(record.category)
 end

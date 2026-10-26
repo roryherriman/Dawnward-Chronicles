@@ -39,9 +39,11 @@ StorySchema.LIMITS = {
 }
 
 StorySchema.CATEGORIES = { quest = true, levelup = true, death = true, reputation = true, zone = true,
-	instance = true, guild = true }
+	instance = true, guild = true, moment = true }
 StorySchema.EVENT_STATUS = { new = true, queued = true, recorded = true, reacted = true, dismissed = true }
-StorySchema.CONFIDENCE = { verified = true, partial = true }
+-- verified: the game reported it; partial: some details were unavailable;
+-- player: the player recorded it (a roleplay event, never a game claim).
+StorySchema.CONFIDENCE = { verified = true, partial = true, player = true }
 StorySchema.REACTION_STATUS = { pending = true, postponed = true }
 StorySchema.CHANGE_STATUS = { pending = true, applied = true, rejected = true, reversed = true }
 StorySchema.FREQUENCY = { off = true, rare = true, normal = true, frequent = true }

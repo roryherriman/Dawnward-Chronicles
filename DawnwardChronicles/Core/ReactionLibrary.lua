@@ -237,6 +237,28 @@ ReactionLibrary.TEMPLATES = {
 				meaning = "They value their freedom." },
 		},
 	},
+
+	{
+		id = "moment.meaning", category = "moment", minSignificance = 1,
+		questions = {
+			{ text = "{name} marked a moment: \"{title}\". What does it mean to them?", needs = { "title" } },
+			{ text = "{name} marked a moment. What does it mean to them?", needs = {} },
+		},
+		options = {
+			{ id = "vow", theme = "commitment", text = "A promise they intend to keep.",
+				phrase = "made it a promise to keep", effects = { discipline = 1 },
+				meaning = "They will hold themselves to it." },
+			{ id = "beginning", theme = "change", text = "The start of something new.",
+				phrase = "saw it as a beginning", effects = { courage = 1 },
+				meaning = "Something has begun." },
+			{ id = "doubt", theme = "doubt", text = "They are not sure it was the right choice.",
+				phrase = "wondered if it was the right choice", effects = { courage = -1 },
+				meaning = "Doubt travels with them." },
+			{ id = "shared", theme = "companionship", text = "It mattered because of who they shared it with.",
+				phrase = "treasured who they shared it with", effects = { sociability = 1 },
+				meaning = "People give it its meaning." },
+		},
+	},
 }
 
 -- Optional class-flavoured extra answers (UnitClass file tokens). One per

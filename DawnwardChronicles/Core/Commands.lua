@@ -44,6 +44,7 @@ local HELP = {
 	"  develop | develop approve|reject|reverse <#>",
 	"  journal approve <#> | journal important <#> [off] | journal search <text> | journal drafts",
 	"  memory | arc | goal | stance | person | continuity   (each lists its own commands)",
+	"  moment <what happened> | timeline [n] | reflect",
 }
 
 local function out(ctx, line)

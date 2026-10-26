@@ -1,0 +1,60 @@
+-- L1/L2: player-authored moments (#40), timeline (#26), reflection (#29).
+local Loader = require("support.loader")
+local Fixtures = require("fixtures.characters")
+local Boot = require("support.boot")
+
+return function(t, expect)
+	local KEY = "Testchar-TestRealm"
+
+	t:describe("player-authored moments (#40)", function()
+		t:it("are marked as the player's, never as game events, and can be reflected on at once", function()
+			local mock, env = Boot.Start()
+			mock.Slash("set name Brannoc")
+			local reply = mock.Slash("moment Swore an oath at the old shrine")
+			expect.truthy(reply:find("reflect on it", 1, true), reply)
+			local e = env.DawnwardChroniclesDB.characters[KEY].story.events[1]
+			expect.equal(e.category, "moment")
+			expect.equal(e.confidence, "player")
+			expect.equal(e.source, "PLAYER")
+			expect.truthy(mock.Slash("story 1"):find("Swore an oath at the old shrine", 1, true))
+			mock.Slash("story 1 1")
+			local entry = env.DawnwardChroniclesDB.characters[KEY].journal[1]
+			expect.truthy(entry.text:find("A moment you recorded", 1, true), entry.text)
+			expect.truthy(mock.Slash("moment"):find("Usage"))
+		end)
+	end)
+
+	t:describe("timeline (#26)", function()
+		t:it("merges dated records newest first and keeps undated backstory apart, respecting visibility", function()
+			local ns = Loader.Core()
+			local char = Fixtures.Character(ns, Fixtures.CHARACTERS[2])
+			ns.GameEvents.Record(char, "quest", Fixtures.Context(Fixtures.CHARACTERS[2], { questId = 1, title = "Q" }), 100)
+			ns.Memories.Add(char, { title = "Secret shame", visibility = "secret" }, "player", 200)
+			ns.Journal.AddNote(char, { title = "Public note", visibility = "public" }, 300)
+			ns.Character.AddItem(char, "history", { when = "Long ago", text = "Born in a storm" }, 1)
+			local dated, undated = ns.Timeline.Build(char)
+			expect.equal(dated[1].text, "Public note")
+			expect.equal(dated[3].kind, "event")
+			expect.equal(undated[1].when, "Long ago")
+			expect.equal(undated[1].at, nil, "no invented date")
+			local public = ns.Timeline.Build(char, { allowed = { public = true } })
+			expect.equal(#public, 1)
+		end)
+	end)
+
+	t:describe("reflection (#29)", function()
+		t:it("brings back postponed moments and works with an empty history", function()
+			local mock, env = Boot.Start()
+			expect.truthy(mock.Slash("reflect"):find("0 waiting moments", 1, true))
+			mock.quest = { id = 5, title = "Later Quest", level = 20 }
+			mock.Fire("QUEST_COMPLETE")
+			mock.Fire("QUEST_TURNED_IN", 5, 0, 0)
+			mock.Slash("story 1 later")
+			local r = env.DawnwardChroniclesDB.characters[KEY].story.reactions[1]
+			expect.equal(r.status, "postponed")
+			expect.truthy(mock.Slash("reflect"):find("1 brought back", 1, true))
+			expect.equal(r.status, "pending")
+			expect.truthy(r.notifiedAt, "reflection does not trigger another reminder")
+		end)
+	end)
+end

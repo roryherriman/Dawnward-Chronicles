@@ -78,7 +78,16 @@ local function create(parent)
 
 	section.summary = Widgets.Label(f, "GameFontHighlightSmall", true)
 	section.summary:SetPoint("TOPLEFT", INSET, -6)
-	section.summary:SetWidth(WIDTH)
+	section.summary:SetWidth(WIDTH - 90)
+
+	-- Reflection (#29): bring back everything kept for later.
+	section.reflect = Widgets.Button(f, "Reflect", 80, 20)
+	section.reflect:SetPoint("TOPRIGHT", -INSET, -4)
+	section.reflect:SetScript("OnClick", function()
+		ns.Commands.Execute(ns.ctx, "reflect")
+		MainWindow.Refresh()
+	end)
+	Widgets.Tooltip(section.reflect, "Reflect", "Bring back the moments you kept for later. Nothing has to change.")
 
 	-- Navigation between waiting reactions.
 	section.prev = Widgets.Button(f, "<", 28, 20)

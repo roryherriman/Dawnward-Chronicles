@@ -296,6 +296,19 @@ function Reactions.FindOption(presentation, optionId)
 	return nil
 end
 
+--- A reflection session (#29): the player chose to sit with their story,
+-- so everything kept for later is brought back. Returns how many.
+function Reactions.Reflect(char)
+	local n = 0
+	for _, r in ipairs(char.story.reactions) do
+		if r.status == "postponed" then
+			r.status = "pending"
+			n = n + 1
+		end
+	end
+	return n
+end
+
 --- Later: kept in the Story section, never announced again.
 function Reactions.Postpone(char, id)
 	local r = Reactions.Find(char, id)
