@@ -231,18 +231,19 @@ local function recordEvent(char, category, data, now)
 end
 
 --- A gameplay event observed in the real game always goes to the real
--- character, even in simulation mode (like milestones).
+-- character, even in simulation mode (like milestones). Story events are
+-- recorded only for characters that already use Dawnward (any saved
+-- change, or a v0.2 level-up milestone), so upgrading never starts storing
+-- data or asking questions on every alt of an account.
 function Actions.RecordRealEvent(ctx, category, data)
-	local existed = ctx.store.real.characters[ctx.characterKey] ~= nil
-	local char, err = ctx.store:EnsureRealCharacter(ctx.characterKey, ctx.now())
+	if ctx.store.realReadOnly then
+		return nil, "saved data is read-only"
+	end
+	local char = ctx.store.real.characters[ctx.characterKey]
 	if not char then
-		return nil, err
+		return nil, "no profile"
 	end
-	local record, reaction, outcome = recordEvent(char, category, data, ctx.now())
-	if not record and not existed then
-		ctx.store.real.characters[ctx.characterKey] = nil
-	end
-	return record, reaction, outcome
+	return recordEvent(char, category, data, ctx.now())
 end
 
 --- Observed reputation standings (from Platform/Observers): records a

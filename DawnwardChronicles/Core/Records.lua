@@ -158,8 +158,13 @@ function Records.SetStatus(record, status, now, replacementId)
 	if status == "superseded" then
 		record.supersededBy = replacementId
 	end
-	if not Records.PUBLIC_STATUS[status] and record.visibility == Privacy.PUBLIC then
-		record.visibility = Privacy.PRIVATE
+	if not Records.PUBLIC_STATUS[status] then
+		-- Every public side of a record is withdrawn, at once.
+		for _, field in ipairs({ "visibility", "convictionVisibility", "feelingsVisibility" }) do
+			if record[field] == Privacy.PUBLIC then
+				record[field] = Privacy.PRIVATE
+			end
+		end
 	end
 	return record
 end

@@ -39,7 +39,9 @@ end
 --- Announces the next due reaction if it is safe. Returns the reaction or nil.
 function SafeTime.Check(ctx)
 	scheduled = false
-	if not SafeTime.IsSafe() or ctx.store.realReadOnly then
+	-- In simulation mode the Story commands act on test data, so a notice
+	-- about a real moment would point at the wrong character: it waits.
+	if not SafeTime.IsSafe() or ctx.store.realReadOnly or ctx.store:IsSimulation() then
 		return nil
 	end
 	local char = realCharacter(ctx)
@@ -58,9 +60,7 @@ function SafeTime.Check(ctx)
 	Reactions.MarkNotified(char, reaction.id, now)
 	ctx.print("A moment for your story: " .. view.question .. "  (/dawnward story " .. reaction.id
 		.. ", or the Story section of the journal)")
-	-- The card never appears in simulation mode, where the Story section
-	-- shows simulated data instead of this real reaction.
-	if char.story.prefs.card and SafeTime.ShowCard and not ctx.store:IsSimulation() then
+	if char.story.prefs.card and SafeTime.ShowCard then
 		SafeTime.ShowCard(reaction.id)
 	end
 	return reaction

@@ -396,11 +396,17 @@ local function cleanList(raw, cleaner, limit, report, label, axes)
 			report[#report + 1] = "story " .. label .. ": dropped an unusable record"
 		end
 	end
-	-- Oldest records go first when a list is over its limit.
-	while #out > limit do
-		table.remove(out, 1)
-		if report then
-			report[#report + 1] = "story " .. label .. ": dropped the oldest beyond the limit of " .. limit
+	-- Oldest records go first when a list is over its limit; pending
+	-- personality changes (not yet seen by the player) are kept, as at runtime.
+	local i = 1
+	while #out > limit and i <= #out do
+		if out[i].status == "pending" and label == "changes" then
+			i = i + 1
+		else
+			table.remove(out, i)
+			if report then
+				report[#report + 1] = "story " .. label .. ": dropped the oldest beyond the limit of " .. limit
+			end
 		end
 	end
 	return out

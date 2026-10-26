@@ -13,7 +13,11 @@ local Serializer = {}
 ns.Serializer = Serializer
 
 Serializer.MAX_DEPTH = 16
-Serializer.MAX_INPUT = 200000 -- bytes
+-- Bytes. v0.4 backups carry the story, so a long-played character needs more
+-- than v0.3's 200,000. Exports larger than this are refused (Transfer.Export),
+-- so a backup that cannot be restored is never produced. Pasting near this
+-- size into the game's edit box is not yet verified in game.
+Serializer.MAX_INPUT = 1000000
 
 local ESCAPES = { ["\\"] = "\\\\", ['"'] = '\\"', ["\n"] = "\\n", ["\r"] = "\\r", ["\t"] = "\\t" }
 

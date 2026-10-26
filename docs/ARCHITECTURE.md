@@ -118,7 +118,7 @@ Automatic entries can change visibility, but they can't be edited or deleted, so
 | Family / history entries | 100 / 200 |
 | Characters per database | 200 |
 | Short / long text | 100 / 2,000 bytes |
-| Import text | 200,000 bytes |
+| Import text | 1,000,000 bytes (v0.4; was 200,000). A larger export is refused rather than produced |
 | Facts / open suggestions / suggestion keys | 200 / 300 / 1,000 (oldest keys dropped first) |
 | Biography versions | 3 × 16 KB (the current one is never dropped; larger text is refused) |
 | Fact statement / excerpt | 300 / 300 bytes |

@@ -25,7 +25,9 @@ ns.Director = Director
 Director.MAX_CONTEXT_OPTIONS = 2
 Director.RECENT = 30 * 24 * 3600
 
-local function score(item, record, themes, now)
+-- Recency is measured from the event itself, never from the clock, so the
+-- answers shown and the answers accepted are always the same list.
+local function score(item, record, themes)
 	local s = item.importance or 1
 	if record and record.zone and item.zone == record.zone then
 		s = s + 3
@@ -33,16 +35,16 @@ local function score(item, record, themes, now)
 	for _, tag in ipairs(item.tags or {}) do
 		if themes[tag] then s = s + 2 end
 	end
-	if now and item.at and now - item.at < Director.RECENT then
+	if record and record.at and item.at and record.at - item.at < Director.RECENT then
 		s = s + 1
 	end
 	return s
 end
 
-local function ranked(list, record, themes, now)
+local function ranked(list, record, themes)
 	local out = {}
 	for _, item in ipairs(list) do
-		out[#out + 1] = { item = item, score = score(item, record, themes, now) }
+		out[#out + 1] = { item = item, score = score(item, record, themes) }
 	end
 	table.sort(out, function(a, b)
 		if a.score ~= b.score then return a.score > b.score end
@@ -62,7 +64,7 @@ end
 
 --- Context for a record: { memories, arcs, goals, identity } (each ranked,
 -- established only) plus why = { reasons from verified data }.
-function Director.Context(char, record, template, now)
+function Director.Context(char, record, template)
 	local story = char.story
 	local themes = Director.TemplateThemes(template)
 	local memories = {}
@@ -77,9 +79,9 @@ function Director.Context(char, record, template, now)
 		if g.status == "established" and g.state == "active" then goals[#goals + 1] = g end
 	end
 	return {
-		memories = ranked(memories, record, themes, now),
-		arcs = ranked(arcs, record, themes, now),
-		goals = ranked(goals, record, themes, now),
+		memories = ranked(memories, record, themes),
+		arcs = ranked(arcs, record, themes),
+		goals = ranked(goals, record, themes),
 		why = Director.Why(char, record),
 	}
 end

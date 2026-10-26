@@ -244,7 +244,7 @@ end
 -- optional flavour answer, answers drawn from the character's own history
 -- (goals, arcs) and the neutral one, each { id, text, phrase, effects,
 -- meaning }. recall names a relevant memory; why explains the moment.
-function Reactions.Present(char, reaction, now)
+function Reactions.Present(char, reaction)
 	local template = ReactionLibrary.BY_ID[reaction.templateId]
 	if not template then
 		return nil, "this reaction's template is not in this version of Dawnward"
@@ -269,7 +269,7 @@ function Reactions.Present(char, reaction, now)
 		end
 	end
 	-- Context from the character's own established history (Core/Director.lua).
-	local context = ns.Director.Context(char, record, template, now)
+	local context = ns.Director.Context(char, record, template)
 	for _, option in ipairs(ns.Director.Options(context)) do
 		options[#options + 1] = option
 	end

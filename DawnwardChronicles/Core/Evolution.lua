@@ -22,6 +22,9 @@ local Evolution = {}
 ns.Evolution = Evolution
 
 Evolution.DAILY_LIMIT = 2
+-- At most this many changes wait for approval; further answers propose
+-- nothing until some are approved or rejected (nothing is silently lost).
+Evolution.MAX_PENDING = 50
 Evolution.DAY = 24 * 3600
 Evolution.MIDPOINT = 10
 
@@ -114,6 +117,9 @@ function Evolution.Propose(char, axis, delta, reason, decisionId, now)
 		return nil, "invalid change"
 	end
 	local story = char.story
+	if #Evolution.Pending(char) >= Evolution.MAX_PENDING then
+		return nil, "too many changes are waiting for approval"
+	end
 	local change = { id = newId(story), axis = axis, delta = delta, reason = reason, decisionId = decisionId,
 		status = "pending", at = now or 0 }
 	story.changes[#story.changes + 1] = change
