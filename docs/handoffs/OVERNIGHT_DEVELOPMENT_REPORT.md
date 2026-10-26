@@ -6,7 +6,7 @@ This report covers one Claude Code cloud session: v0.4 "The Living Chronicle" pl
 
 **Integration status:**
 - PR [#9](https://github.com/roryherriman/Dawnward-Chronicles/pull/9) (v0.3) was merged into `main` as `32323a9`.
-- PR [#43](https://github.com/roryherriman/Dawnward-Chronicles/pull/43) (v0.4 and backlog) was merged into `main` after all automated gates passed. The resulting `main` SHA is in section M.
+- PR [#43](https://github.com/roryherriman/Dawnward-Chronicles/pull/43) (v0.4 and backlog) was merged into `main` as **`88caf6e`** after all automated gates passed. CI was green on the PR head `0bc25df`, and the full suite was re-run on the merged `main`: 449 passed, 0 failed.
 - **No public release, tag, CurseForge project or website was published.**
 
 ---
@@ -367,7 +367,8 @@ Commit `966b69e`, separate from feature work.
 
 - **Merged:**
   - PR #9 → `main` (`32323a9`, CI green on `7746032`);
-  - PR #43 → `main`, after merging `main` into the branch (`9dfe3a9`, CI green), locally re-validated (449 passed).
+  - PR #43 → `main` as **`88caf6e`**, after merging `main` into the branch (`9dfe3a9`). CI was green on `0bc25df`, and merged `main` was re-validated (449 passed, 0 failed; hygiene, TOC and luacheck ok).
+  - This report's final update is a docs-only commit on `main` after `88caf6e`.
 - **Branch commits after `da5dfca`:**
   - `c3e6c58`: report draft;
   - `5e0f457`: review fixes;
@@ -394,7 +395,7 @@ Commit `966b69e`, separate from feature work.
 
 **Branches and PRs:**
 - PR #9 (v0.3: character foundations plus experimental TRP3 sync, head `7746032`) was merged into `main` as `32323a9`.
-- PR #43 (`feat/v0.4-living-chronicle`: v0.4 plus backlog) was merged into `main` after `main` was merged back into the branch (`9dfe3a9`). The final `main` SHA is recorded in `docs/handoffs/OVERNIGHT_DEVELOPMENT_REPORT.md`, section M.
+- PR #43 (`feat/v0.4-living-chronicle`: v0.4 plus backlog) was merged into `main` as **`88caf6e`**, after `main` was merged back into the branch (`9dfe3a9`). CI was green, and merged `main` was re-validated (449 passed). A docs-only commit recording these results followed on `main`.
 - Main v0.4 commits: `32bba27` core, `142bd64` observers and commands, `70ab58e` TRP3 presentation, `74faa39` UI, `2dc1933` narrative records, `d05b711` world events, `254f9b7` Chronicle section, `e1552d0` moments, timeline and reflection, `5e0f457` review fixes.
 
 **What was built (all modules in `DawnwardChronicles/Core/` unless noted):**
