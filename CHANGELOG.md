@@ -26,6 +26,20 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 - **TRP3 presentation:** formatting is separate from narrative data (Neutral, Silver Hand, Arcane), using only markup confirmed in TRP3 3.4.1's source. Approved, public defining moments can appear in Dawnward's own About section. Neutral is the default and gives exactly the v0.3 block.
 - **UI:** a working Story section, a small reaction card, journal Approve and defining-moment buttons, and story settings in the settings panel.
 - **Commands:** `story`, `develop`, `journal approve|important|search|drafts`, `sim quest`, `sim death`.
+- **Narrative records with one shared contract:** each record has provenance (observed, player or suggested), a canon status (proposed, established, disputed or superseded) and a visibility. Suggestions are proposed and private, and only established records can be public.
+  - Memories (#12), arcs (#19), goals (#27).
+  - Public persona vs private convictions (#30).
+  - People: NPCs, other players' characters keyed by name and realm, and family (#18, #28, #37).
+- **Story Director (#20, #25):** context-aware answers drawn from your established goals and arcs, a recalled memory, and "why now" from verified data. It is deterministic and runs offline.
+- **Continuity review (#42):** finds contradictions and asks what each is (growth, unreliable narration, secret, correction or ignore). It never rewrites canon.
+- **World events (#11, #18, #36):** reputation tier changes (silent first baseline), first recorded zone visits and dungeon entries, and guild joins and leaves. An observed standing never implies an attitude.
+- **Roleplay moments (#40), timeline (#26), reflection (#29).**
+- **Chronicle section** in the window for all of the above.
+- Commands: `memory`, `arc`, `goal`, `stance`, `person`, `continuity`, `moment`, `timeline`, `reflect`.
+- Docs: a documentation index, the CurseForge (WoW Forever) listing prepared but **not published** (#44), and an unpublished project website (`docs/site/`).
+
+### Fixed
+- Story observers passed at most 8 return values from client functions, so the faction ID from `GetFactionInfo` (14th return) would always have been missing.
 
 ### Changed
 - Personal backups carry the story. Share exports never do, and importing a share export or an older backup keeps the current story.

@@ -57,6 +57,8 @@ player approves draft, marks it a defining moment, makes it public
           -> Projection.GetPublic -> TRP3 AboutBlock (opt-in experimental sync, all v0.3 guards)
 ```
 
+**Narrative records (v0.4):** `Records` defines one contract for memories, arcs, goals, identity statements and people: provenance (observed / player / suggested), canon status (proposed / established / disputed / superseded) and visibility, kept apart. `RecordTypes` holds their shapes; `Memories`, `Arcs`, `Goals`, `Identity`, `People` their behaviour; `Director` builds context for reactions from established records only; `Continuity` finds contradictions and records the player's answers; `Observed` compares reputation and guild snapshots; `Timeline` is a view, not a store. All of it lives in the character's `story` table. Only established, public identity personas (and approved, public defining moments) can reach the public projection.
+
 Class, race and faction tokens are stored on event records for optional flavour only. They are never an input to significance, template choice or personality (tested). See [planning/v0.4-plan.md](planning/v0.4-plan.md).
 
 **TRP3 sync** is described in [TRP3_INTEGRATION.md](TRP3_INTEGRATION.md#the-sync-design-as-built).

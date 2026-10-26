@@ -60,7 +60,7 @@ Every feature is marked with the highest verification it has reached: ✅ **veri
 
 | Feature | What it does | Status |
 |---|---|---|
-| **Journal window** | `/dawnward` opens a themed journal with Journal, Character and Story sections | ✅ v0.2 |
+| **Journal window** | `/dawnward` opens a themed journal with Journal, Character and Story sections (a Chronicle section is new in v0.4: 🧪) | ✅ v0.2 |
 | **Character profile** | Name, title, race, class, faith, motivation and more; family and history; every item is public, private or secret | ✅ v0.2 |
 | **Automatic milestones** | Level-ups recorded with time and place | ✅ v0.2 |
 | **Backups and sharing** | Personal backups (private data, secrets on request) and share exports (public only), with an import undo | ✅ v0.2 |
@@ -72,9 +72,11 @@ Every feature is marked with the highest verification it has reached: ✅ **veri
 | **Living journal** | Private story drafts from what happened and how you answered; edit, approve, mark defining moments, search | 🧪 v0.4 |
 | **TRP3 Chronicle sync** | Keeps a Dawnward-owned section of your TRP3 About page and Dawnward-owned personality traits up to date from **public** information only; backup, rollback, conflict and editor protection | 🚧 v0.3–v0.4, TRP3 3.4.1 only |
 | **TRP3 presentation styles** | Neutral (default), Silver Hand and Arcane formatting for Dawnward's section, using only TRP3-supported markup | 🚧 🧪 v0.4 |
-| **More events** | Exploration, dungeons and bosses, reputation | 🗺️ [#11](https://github.com/roryherriman/Dawnward-Chronicles/issues/11), [#18](https://github.com/roryherriman/Dawnward-Chronicles/issues/18) |
-| **Arcs, goals and memory** | Long-term arcs, personal goals, context-aware storytelling | 🗺️ [#12](https://github.com/roryherriman/Dawnward-Chronicles/issues/12), [#19](https://github.com/roryherriman/Dawnward-Chronicles/issues/19), [#20](https://github.com/roryherriman/Dawnward-Chronicles/issues/20), [#25](https://github.com/roryherriman/Dawnward-Chronicles/issues/25), [#27](https://github.com/roryherriman/Dawnward-Chronicles/issues/27) |
-| **Relationships and identity** | Player relationships, guilds, family trees, affiliations, public persona vs private convictions | 🗺️ [#28](https://github.com/roryherriman/Dawnward-Chronicles/issues/28), [#30](https://github.com/roryherriman/Dawnward-Chronicles/issues/30), [#33](https://github.com/roryherriman/Dawnward-Chronicles/issues/33), [#36](https://github.com/roryherriman/Dawnward-Chronicles/issues/36), [#37](https://github.com/roryherriman/Dawnward-Chronicles/issues/37) |
+| **World events** | First recorded zone visits and dungeon entries, reputation tier changes (observed standing only: it never decides how your character feels), guild membership | 🧪 v0.4 ([#11](https://github.com/roryherriman/Dawnward-Chronicles/issues/11), [#18](https://github.com/roryherriman/Dawnward-Chronicles/issues/18), [#36](https://github.com/roryherriman/Dawnward-Chronicles/issues/36)) |
+| **Memories, arcs and goals** | Memories linked to what happened; long-term arcs (suggested when your answers share a theme); personal goals with verified and player-judged progress; a Story Director that recalls your history; continuity review | 🧪 v0.4 ([#12](https://github.com/roryherriman/Dawnward-Chronicles/issues/12), [#19](https://github.com/roryherriman/Dawnward-Chronicles/issues/19), [#20](https://github.com/roryherriman/Dawnward-Chronicles/issues/20), [#25](https://github.com/roryherriman/Dawnward-Chronicles/issues/25), [#27](https://github.com/roryherriman/Dawnward-Chronicles/issues/27), [#42](https://github.com/roryherriman/Dawnward-Chronicles/issues/42)) |
+| **Identity and people** | Public persona vs private convictions per subject; people your character knows (NPCs, other players' characters, family), with private feelings | 🧪 v0.4 ([#30](https://github.com/roryherriman/Dawnward-Chronicles/issues/30), [#18](https://github.com/roryherriman/Dawnward-Chronicles/issues/18), [#28](https://github.com/roryherriman/Dawnward-Chronicles/issues/28), [#37](https://github.com/roryherriman/Dawnward-Chronicles/issues/37)) |
+| **Roleplay moments, timeline, reflection** | Record your own moments, browse a timeline, sit down to reflect | 🧪 v0.4 ([#40](https://github.com/roryherriman/Dawnward-Chronicles/issues/40), [#26](https://github.com/roryherriman/Dawnward-Chronicles/issues/26), [#29](https://github.com/roryherriman/Dawnward-Chronicles/issues/29)) |
+| **Dungeon bosses, relationship graph, scrapbook, letters** | Boss detection (unverified events), family-tree views, scrapbook and alternate journal formats | 🗺️ [#11](https://github.com/roryherriman/Dawnward-Chronicles/issues/11), [#31](https://github.com/roryherriman/Dawnward-Chronicles/issues/31), [#37](https://github.com/roryherriman/Dawnward-Chronicles/issues/37), [#41](https://github.com/roryherriman/Dawnward-Chronicles/issues/41) |
 | **Immersive journal redesign** | A resizable, customisable fantasy journal | 🗺️ [#17](https://github.com/roryherriman/Dawnward-Chronicles/issues/17) |
 
 > No screenshots yet: they will be added from real in-game captures once the v0.4 interface has been verified in game.
@@ -132,8 +134,8 @@ Use a **spare, non-default TRP3 profile** first. `/dawnward trp3 help` lists the
 | **0.1** | Saved data and migrations, profile and family history, export/import, simulation, read-only TRP3 detection | ✅ in game, Classic Era 1.15.9 |
 | **0.2** | Journal window, level-up milestones, themes | ✅ in-game acceptance checklist, Classic Era |
 | **0.3** (PR [#9](https://github.com/roryherriman/Dawnward-Chronicles/pull/9)) | Facts, personality axes, biography sources, experimental TRP3 sync | 🧪 automated; in-game checks in progress |
-| **0.4** (PR [#43](https://github.com/roryherriman/Dawnward-Chronicles/pull/43)) | The living chronicle: events, moments, decisions, personality evolution, story journal, TRP3 presentation | 🧪 automated; [in-game checklist](docs/TESTING.md#v04-in-game-checklist-l3-the-living-chronicle) pending |
-| **Next** | Expanded events, arcs and goals, relationships, journal redesign, import wizard | 🗺️ [open issues](https://github.com/roryherriman/Dawnward-Chronicles/issues) |
+| **0.4** (PR [#43](https://github.com/roryherriman/Dawnward-Chronicles/pull/43)) | The living chronicle: events, moments, decisions, personality evolution, story journal, TRP3 presentation; memories, arcs, goals, persona and convictions, people, world events, continuity review | 🧪 automated; [in-game checklist](docs/TESTING.md#v04-in-game-checklist-l3-the-living-chronicle) pending |
+| **Next** | Journal redesign, story import wizard, dungeon bosses, letters and scrapbook, custom personality rules | 🗺️ [open issues](https://github.com/roryherriman/Dawnward-Chronicles/issues) |
 | **Release gate** | WoW Forever compatibility and launch readiness | 🗺️ [#24](https://github.com/roryherriman/Dawnward-Chronicles/issues/24), not started |
 
 ### Compatibility

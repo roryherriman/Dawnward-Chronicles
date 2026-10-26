@@ -346,3 +346,28 @@ Build: `0.4.0-dev`. Use a test character, and keep TRP3 sync on the **disposable
 | I4 | `/dawnward trp3 release about confirm` | Your About text is exactly as before Dawnward's first write |
 
 **Record:** pass, fail or n/a per item, screenshots of G5, G8, I1 and I3, and any Lua error (BugSack or `/console scriptErrors 1`).
+
+#### Part J: Chronicle, memories, arcs, goals and identity
+
+| # | Steps | Pass when |
+|---|---|---|
+| J1 | Open the **Chronicle** tab. Type a memory in the line at the bottom, then click Add memory | A row shows it, labelled `player, established, private` |
+| J2 | Answer a notable moment (the first quest in a new zone) | A **suggested** memory appears (`suggested, proposed, private`) with an Accept button. Clicking Private → Public on it is refused until you accept it |
+| J3 | Answer three moments with the same kind of answer (for example the first answer each time), in different zones | Arcs tab: a suggested arc "A thread of …" |
+| J4 | `/dawnward goal add Become a master smith`, then `/dawnward goal level <#> <your level + 1>`. Level up | `goal list` shows the level reached; the goal stays **active** until you change it |
+| J5 | With an active goal, turn in a quest and open the moment | An extra answer "It mattered to their goal: …"; the universal answers are unchanged |
+| J6 | `/dawnward stance add <a faction>; Loyal; Privately resents them` | The Review tab asks about the contradiction; answer "secret" and the private side becomes secret |
+| J7 | Make the stance's public side Public (with biography sync on the disposable TRP3 profile) | The About section shows "Where they stand: …" with the public stance only, never the private conviction |
+| J8 | `/dawnward person add npc <name>; <relation>`, `person add player Name-Realm; <relation>` | Listed in the People tab; a second record for the same Name-Realm is refused |
+
+#### Part K: World events and storytelling
+
+| # | Steps | Pass when |
+|---|---|---|
+| K1 | Travel to a zone you have not been to since installing v0.4 | `story events` shows "First recorded visit" for it; no prompt in combat |
+| K2 | Enter a dungeon | "First recorded entry" with the dungeon's name |
+| K3 | Gain a reputation tier (or watch `story events` after one) | Only the change is recorded, never your existing standings at login |
+| K4 | Join or leave a guild on a test character | One guild event; nothing at login |
+| K5 | `/dawnward moment Swore an oath at the shrine` | Recorded as a player moment (`confidence player`) with a question to reflect on |
+| K6 | `/dawnward timeline` | Newest first; your history entries are listed as undated |
+| K7 | Keep a moment for later, then click **Reflect** in the Story section | It comes back to "waiting" without a new reminder |
