@@ -161,11 +161,22 @@ function Character.CountByVisibility(char)
 		local level = Privacy.Normalize(entry.visibility)
 		counts[level] = counts[level] + 1
 	end
-	for _, listName in ipairs({ "family", "history", "journal" }) do
+	for _, listName in ipairs({ "family", "history", "journal", "facts" }) do
 		for _, item in ipairs(char[listName] or {}) do
 			local level = Privacy.Normalize(item.visibility)
 			counts[level] = counts[level] + 1
 		end
 	end
 	return counts
+end
+
+--- Character foundations summary: facts, open suggestions, whether a
+-- biography source is stored.
+function Character.FoundationCounts(char)
+	local sources = char.sources
+	return {
+		facts = #(char.facts or {}),
+		suggestions = #(char.interpretations or {}),
+		biography = sources ~= nil and sources.current ~= nil,
+	}
 end

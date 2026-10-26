@@ -7,12 +7,19 @@ local Util, Privacy = ns.Util, ns.Privacy
 local Projection = {}
 ns.Projection = Projection
 
-local ITEM_LISTS = { "family", "history", "journal" }
+local ITEM_LISTS = { "family", "history", "journal", "facts" }
 
 --- allowed = { public = bool, private = bool, secret = bool }
--- The cosmetic theme is always included; journal event keys never are.
+-- The cosmetic theme is always included. Journal event keys, biography
+-- sources, interpretations and their key memory never are.
 function Projection.Filter(char, allowed)
-	local out = { fields = {}, family = {}, history = {}, journal = {}, theme = char.theme }
+	local out = { fields = {}, family = {}, history = {}, journal = {}, facts = {}, personality = {},
+		theme = char.theme }
+	for axisId, entry in pairs(char.personality or {}) do
+		if Privacy.Allows(allowed, entry.visibility) then
+			out.personality[axisId] = Util.DeepCopy(entry)
+		end
+	end
 	for key, entry in pairs(char.fields) do
 		if Privacy.Allows(allowed, entry.visibility) then
 			out.fields[key] = Util.DeepCopy(entry)

@@ -2,8 +2,8 @@
 ## Title: Dawnward Chronicles
 ## Notes: Roleplay storytelling engine: character profile, family history, private-by-default facts, export/import. Optional read-only Total RP 3 status.
 ## Author: roryherriman
-## Version: 0.2.0
-## SavedVariables: DawnwardChroniclesDB, DawnwardChroniclesSimDB
+## Version: 0.3.0-dev
+## SavedVariables: DawnwardChroniclesDB, DawnwardChroniclesSimDB, DawnwardChroniclesTRP3DB
 ## OptionalDeps: totalRP3
 ## X-License: MIT
 ## X-Website: https://github.com/roryherriman/Dawnward-Chronicles
@@ -16,6 +16,10 @@ Core\Migrations.lua
 Core\Character.lua
 Core\Journal.lua
 Core\Milestones.lua
+Core\Facts.lua
+Core\Sources.lua
+Core\Interpretations.lua
+Core\Personality.lua
 Core\Projection.lua
 Core\Serializer.lua
 Core\Transfer.lua
@@ -25,6 +29,13 @@ Core\Commands.lua
 
 Integrations\TRP3\VersionProfiles.lua
 Integrations\TRP3\Status.lua
+Integrations\TRP3\Ledger.lua
+Integrations\TRP3\AboutBlock.lua
+Integrations\TRP3\TraitPlan.lua
+Integrations\TRP3\Shape.lua
+Integrations\TRP3\Adapter.lua
+Integrations\TRP3\Sync.lua
+Integrations\TRP3\Commands.lua
 
 Platform\Detect.lua
 Platform\Events.lua
@@ -35,4 +46,5 @@ UI\JournalView.lua
 UI\CharacterView.lua
 UI\StoryView.lua
 UI\SettingsPanel.lua
+Platform\TRP3Bridge.lua
 Platform\Bootstrap.lua

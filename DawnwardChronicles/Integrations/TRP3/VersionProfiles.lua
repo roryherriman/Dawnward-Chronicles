@@ -12,9 +12,15 @@ VersionProfiles.KNOWN = {
 	["3.4.1"] = {
 		audited = true,
 		verified = nil, -- set to "L3"/"L4" only after in-game testing
-		tiers = { read = true, publicSetters = false, manualExport = false, ownedWrite = false },
+		-- experimentalWrite: the About and characteristics layouts, the save
+		-- path, the version rule and the update event were audited from the
+		-- 3.4.1 source (docs/TRP3_INTEGRATION.md). It only makes the
+		-- experimental driver *available*: each character must still opt in,
+		-- and every write re-checks the layout and the functions it uses.
+		tiers = { read = true, publicSetters = false, manualExport = true, experimentalWrite = true },
 	},
-	-- 3.5.3 is a design target but has not been audited; it is deliberately absent.
+	-- Newer versions (3.5.x, main) change icon storage and have not had a
+	-- full audit or in-game test; they are deliberately absent (read-only).
 }
 
 function VersionProfiles.Get(version)
@@ -23,7 +29,7 @@ function VersionProfiles.Get(version)
 		return {
 			known = false,
 			audited = false,
-			tiers = { read = true },
+			tiers = { read = true, manualExport = true },
 			label = "not audited - status only",
 		}
 	end

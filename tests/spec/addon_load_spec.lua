@@ -17,25 +17,32 @@ return function(t, expect)
 				end
 			end
 			expect.deepEqual(core, Loader.CORE)
+			local trp3 = {}
+			for _, path in ipairs(files) do
+				if path:match("^Integrations/TRP3/") then
+					trp3[#trp3 + 1] = path
+				end
+			end
+			expect.deepEqual(trp3, Loader.TRP3)
 		end)
 
 		t:it("declares the expected metadata", function()
 			local _, meta = readToc()
-			expect.equal(meta.Version, "0.2.0")
-			expect.equal(meta.SavedVariables, "DawnwardChroniclesDB, DawnwardChroniclesSimDB")
+			expect.equal(meta.Version, "0.3.0-dev")
+			expect.equal(meta.SavedVariables, "DawnwardChroniclesDB, DawnwardChroniclesSimDB, DawnwardChroniclesTRP3DB")
 			expect.equal(meta.OptionalDeps, "totalRP3")
 		end)
 	end)
 
 	t:describe("addon load (L2, mocked client)", function()
 		t:it("loads every file and answers /dawnward after login", function()
-			local mock, env = boot()
+			local mock, env, ns = boot()
 			expect.truthy(mock.Slash("status"):find("Still loading"))
 			login(mock)
 			local output = mock.Slash("set name Aelin")
 			expect.truthy(output:find("Set name"), output)
 			local db = env.DawnwardChroniclesDB
-			expect.equal(db.schemaVersion, 2)
+			expect.equal(db.schemaVersion, ns.Schema.VERSION)
 			expect.equal(db.characters["Testchar-TestRealm"].fields.name.value, "Aelin")
 			expect.truthy(mock.Slash("status"):find("WoW Classic Era"))
 		end)
@@ -127,6 +134,60 @@ return function(t, expect)
 			local mock = boot({ interface = 16001, project = 2 })
 			login(mock)
 			expect.truthy(mock.Slash("status"):find("provisional"))
+		end)
+	end)
+
+	t:describe("character foundations (L2, mocked client)", function()
+		local KEY = "Testchar-TestRealm"
+
+		t:it("upgrades v2 saved data to v3 and keeps every v2 value", function()
+			local saved = { schemaVersion = 2, characters = { [KEY] = {
+				createdAt = 1, updatedAt = 2, nextId = 3, theme = "arcane",
+				fields = { name = { value = "Aelin", visibility = "public" } },
+				family = {}, history = { { id = 1, text = "Joined", visibility = "private" } },
+				journal = { { id = 2, kind = "note", text = "Hi", visibility = "private", createdAt = 1 } },
+				journalKeys = { ["levelup:2"] = 1 },
+			} }, importBackups = {}, ui = {} }
+			local mock, env = boot({ savedVariables = { DawnwardChroniclesDB = saved } })
+			login(mock)
+			local db = env.DawnwardChroniclesDB
+			expect.equal(db.schemaVersion, 3)
+			local char = db.characters[KEY]
+			expect.equal(char.theme, "arcane")
+			expect.equal(char.history[1].text, "Joined")
+			expect.equal(char.journalKeys["levelup:2"], 1)
+			expect.deepEqual(char.facts, {})
+			expect.truthy(mock.Slash("status"):find("Foundations: 0 facts"))
+		end)
+
+		t:it("fact commands persist in the saved variable, and simulation stays separate", function()
+			local mock, env = boot()
+			login(mock)
+			expect.truthy(mock.Slash("fact add belief Protect those who cannot protect themselves"):find("Added fact"))
+			mock.Slash("fact vis 1 public")
+			mock.Slash("sim on")
+			mock.Slash("fact add fear SIM-ONLY")
+			mock.Slash("sim off")
+			local real = env.DawnwardChroniclesDB.characters[KEY].facts
+			expect.equal(#real, 1)
+			expect.equal(real[1].visibility, "public")
+			local sim = env.DawnwardChroniclesSimDB.characters[KEY].facts
+			expect.equal(#sim, 1)
+			expect.equal(sim[1].statement, "SIM-ONLY")
+			expect.falsy(mock.Slash("fact list"):find("SIM-ONLY"))
+		end)
+
+		t:it("calls no TRP3 setter or new getter while using foundations", function()
+			local fake = Fake.new({ profileName = "Adventuring" })
+			local mock = boot({ extra = { AddOn_TotalRP3 = fake.env.AddOn_TotalRP3 } })
+			login(mock)
+			local before = fake.snapshot()
+			mock.Slash("fact add trait Stubborn")
+			mock.Slash("fact list")
+			mock.Slash("export backup biography")
+			mock.Slash("status")
+			expect.equal(#fake.setterCalls, 0)
+			expect.deepEqual(fake.snapshot(), before)
 		end)
 	end)
 end

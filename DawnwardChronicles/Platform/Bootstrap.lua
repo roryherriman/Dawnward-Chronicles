@@ -1,8 +1,9 @@
 -- Connects the core to the WoW client: saved variables, events and /dawnward.
 -- Loaded last. Event-driven only; nothing polls.
 local addonName, ns = ...
-local Migrations, Store, Commands, Detect, CopyBox, TRP3Status, MainWindow, Events =
-	ns.Migrations, ns.Store, ns.Commands, ns.Detect, ns.CopyBox, ns.TRP3Status, ns.MainWindow, ns.Events
+local Migrations, Store, Commands, Detect, CopyBox, TRP3Status, MainWindow, Events, TRP3Bridge =
+	ns.Migrations, ns.Store, ns.Commands, ns.Detect, ns.CopyBox, ns.TRP3Status, ns.MainWindow, ns.Events,
+	ns.TRP3Bridge
 
 local PREFIX = "|cffe6c35cDawnward:|r "
 
@@ -39,6 +40,7 @@ local function loadSavedVariables()
 		DawnwardChroniclesSimDB = simDB
 	end
 	loadInfo = { real = realInfo, sim = simInfo }
+	TRP3Bridge.Load()
 	ns.store = Store.new(realDB, simDB, {
 		realReadOnly = realInfo.status == "readOnly" and realInfo.reason or nil,
 		simReadOnly = simInfo.status == "readOnly" and simInfo.reason or nil,
@@ -90,6 +92,9 @@ local function announceLoad()
 	if loadInfo.sim.status == "readOnly" then
 		chatPrint("Simulation data is read-only this session (" .. loadInfo.sim.reason .. ").")
 	end
+	if TRP3Bridge.readOnly then
+		chatPrint("Total RP 3 sync is paused: " .. TRP3Bridge.readOnly .. ". Its saved data was left untouched.")
+	end
 end
 
 local eventFrame = CreateFrame("Frame")
@@ -107,6 +112,7 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
 		end
 		ns.ctx = buildContext()
 		Events.Init(ns.ctx, MainWindow.Refresh)
+		TRP3Bridge.Attach(ns.ctx)
 		announceLoad()
 	end
 end)
@@ -119,6 +125,8 @@ SlashCmdList.DAWNWARD = function(message)
 		return
 	end
 	Commands.Execute(ns.ctx, message)
-	-- Commands may change data the open journal is showing.
+	-- Commands may change data the open journal is showing, or the public
+	-- facts an opted-in TRP3 profile mirrors.
 	MainWindow.Refresh()
+	TRP3Bridge.Request()
 end

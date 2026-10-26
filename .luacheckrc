@@ -30,13 +30,15 @@ local WOW_READ = {
 	-- v0.2 journal window and milestones
 	"GameTooltip", "StaticPopup_Show", "date", "GetRealZoneText", "GetSubZoneText",
 	"GameFontNormalLarge", "GameFontHighlight",
+	-- v0.3 TRP3 sync scheduling
+	"C_Timer",
 }
 
 files["DawnwardChronicles/Platform/"] = {
 	not_globals = NOT_IN_WOW,
 	read_globals = WOW_READ,
 	globals = {
-		"DawnwardChroniclesDB", "DawnwardChroniclesSimDB",
+		"DawnwardChroniclesDB", "DawnwardChroniclesSimDB", "DawnwardChroniclesTRP3DB",
 		"SLASH_DAWNWARD1", "SLASH_DAWNWARD2", "SlashCmdList",
 	},
 }

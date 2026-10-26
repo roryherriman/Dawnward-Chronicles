@@ -7,8 +7,8 @@
 --
 -- ctx needs: store, characterKey, now()
 local _, ns = ...
-local Character, Journal, Milestones, Themes =
-	ns.Character, ns.Journal, ns.Milestones, ns.Themes
+local Character, Journal, Milestones, Themes, Facts, Personality =
+	ns.Character, ns.Journal, ns.Milestones, ns.Themes, ns.Facts, ns.Personality
 
 local Actions = {}
 ns.Actions = Actions
@@ -149,6 +149,62 @@ function Actions.SetFieldVisibility(ctx, key, level)
 		local ok, result = Character.SetFieldVisibility(char, key, level, ctx.now())
 		if not ok then return fail(result) end
 		return true, key .. " is now " .. level .. "."
+	end)
+end
+
+--- Facts (canon) --------------------------------------------------------------
+
+function Actions.AddFact(ctx, category, statement, visibility)
+	return withCharacter(ctx, function(char)
+		local fact, err = Facts.Add(char, { category = category, statement = statement, visibility = visibility },
+			nil, ctx.now())
+		if not fact then return fail(err) end
+		return fact, string.format("Added fact #%d (%s) [%s].", fact.id, Facts.DisplayCategory(fact.category).label,
+			fact.visibility)
+	end)
+end
+
+function Actions.SetFactVisibility(ctx, id, level)
+	return withCharacter(ctx, function(char)
+		local fact, err = Facts.SetVisibility(char, id, level, ctx.now())
+		if not fact then return fail(err) end
+		return fact, "Fact #" .. id .. " is now " .. level .. "."
+	end)
+end
+
+function Actions.RemoveFact(ctx, id)
+	return withCharacter(ctx, function(char)
+		local fact, err = Facts.Remove(char, id, ctx.now())
+		if not fact then return fail(err) end
+		return fact, "Removed fact #" .. id .. "."
+	end)
+end
+
+--- Personality ----------------------------------------------------------------
+
+function Actions.SetPersonality(ctx, axisId, value)
+	return withCharacter(ctx, function(char)
+		local entry, err = Personality.Set(char, axisId, value, ctx.now())
+		if not entry then return fail(err) end
+		local axis = Personality.AXIS_BY_ID[axisId]
+		return entry, string.format("%s: %d/20 (%s %d - %d %s) [%s].", axisId, value, axis.left, 20 - value, value,
+			axis.right, entry.visibility)
+	end)
+end
+
+function Actions.SetPersonalityVisibility(ctx, axisId, level)
+	return withCharacter(ctx, function(char)
+		local entry, err = Personality.SetVisibility(char, axisId, level, ctx.now())
+		if not entry then return fail(err) end
+		return entry, axisId .. " is now " .. level .. "."
+	end)
+end
+
+function Actions.ClearPersonality(ctx, axisId)
+	return withCharacter(ctx, function(char)
+		local entry, err = Personality.Clear(char, axisId, ctx.now())
+		if not entry then return fail(err) end
+		return entry, "Cleared " .. axisId .. "."
 	end)
 end
 

@@ -10,11 +10,14 @@
 --   trp3Status()  read-only TRP3 status table (optional)
 --   zone()        current zone name, for simulated milestones (optional)
 --   ui            { ShowExport(title, text), ShowImport(), ToggleJournal() } (all optional)
+--   trp3          TRP3 sync integration: { Command(ctx, rest), StatusLines(ctx) } (optional;
+--                 provided by Integrations/TRP3, so the core never touches TRP3 itself)
 --
 -- Anything that deletes or replaces data requires the word "confirm".
 local _, ns = ...
-local Util, Schema, Character, Projection, Transfer, Journal, Actions, Themes =
-	ns.Util, ns.Schema, ns.Character, ns.Projection, ns.Transfer, ns.Journal, ns.Actions, ns.Themes
+local Util, Schema, Character, Projection, Transfer, Journal, Actions, Themes, Facts, Personality =
+	ns.Util, ns.Schema, ns.Character, ns.Projection, ns.Transfer, ns.Journal, ns.Actions, ns.Themes, ns.Facts,
+	ns.Personality
 
 local Commands = {}
 ns.Commands = Commands
@@ -31,7 +34,10 @@ local HELP = {
 	"  family vis <#> <level> | family remove <#> confirm",
 	"  history add <text> | history list | history set <#> when|text <text>",
 	"  history vis <#> <level> | history remove <#> confirm",
-	"  export backup [secrets] | export share | import | import confirm | import undo",
+	"  fact list | fact add <category> <statement> | fact vis <#> <level> | fact remove <#> confirm",
+	"  personality list | personality set <axis> <0-20> | personality vis <axis> <level>",
+	"  personality clear <axis> confirm",
+	"  export backup [secrets] [biography] | export share | import | import confirm | import undo",
 	"  sim on | sim off | sim copy confirm | sim reset confirm | sim levelup <level>",
 }
 
@@ -146,6 +152,9 @@ handlers.status = function(ctx)
 	else
 		out(ctx, "Profile: none yet. Start with /dawnward set name <your character's name>")
 	end
+	local f = char and Character.FoundationCounts(char) or { facts = 0, suggestions = 0, biography = false }
+	out(ctx, string.format("Foundations: %d facts, %d suggestions, biography stored: %s",
+		f.facts, f.suggestions, f.biography and "yes" or "no"))
 	handlers.trp3(ctx)
 end
 
@@ -169,13 +178,23 @@ function Commands.Trp3Lines(status)
 	elseif status.api and not status.api.getCurrentUser then
 		lines[#lines + 1] = "  Public API not found; integration unavailable for this version."
 	end
-	lines[#lines + 1] = "  Dawnward only reads from Total RP 3. It never changes your TRP3 profiles."
+	lines[#lines + 1] = "  Dawnward never changes your TRP3 profile unless you turn on experimental sync"
+		.. " (/dawnward trp3 help)."
 	return lines
 end
 
-handlers.trp3 = function(ctx)
+handlers.trp3 = function(ctx, rest)
+	if rest and rest ~= "" and ctx.trp3 and ctx.trp3.Command then
+		ctx.trp3.Command(ctx, rest)
+		return
+	end
 	for _, line in ipairs(Commands.Trp3Lines(ctx.trp3Status and ctx.trp3Status())) do
 		out(ctx, line)
+	end
+	if ctx.trp3 and ctx.trp3.StatusLines then
+		for _, line in ipairs(ctx.trp3.StatusLines(ctx)) do
+			out(ctx, line)
+		end
 	end
 end
 
@@ -254,6 +273,95 @@ handlers.journal = function(ctx, rest)
 		_, message = Actions.RemoveNote(ctx, id)
 	else
 		message = "Unknown journal command '" .. sub .. "'. Try /dawnward help"
+	end
+	out(ctx, message)
+end
+
+handlers.fact = function(ctx, rest)
+	local sub, args = Util.NextWord(rest)
+	sub = sub:lower()
+	if sub == "" or sub == "list" then
+		local char = Actions.Character(ctx)
+		if not char or #char.facts == 0 then
+			out(ctx, "No facts yet (" .. modeLabel(ctx) .. "). Add one: /dawnward fact add <category> <statement>")
+			out(ctx, "Categories: " .. Facts.CategoryList())
+			return
+		end
+		out(ctx, string.format("Facts (%d of %d):", #char.facts, Schema.FOUNDATION.facts))
+		for _, group in ipairs(Facts.ByCategory(char)) do
+			out(ctx, "  " .. group.category.label .. ":")
+			for _, fact in ipairs(group.facts) do
+				out(ctx, string.format("    #%d %s [%s]", fact.id, preview(fact.statement), fact.visibility))
+			end
+		end
+		return
+	end
+	if sub == "add" then
+		local category, statement = Util.NextWord(args)
+		if category == "" or statement == "" then
+			out(ctx, "Usage: /dawnward fact add <category> <statement>   Categories: " .. Facts.CategoryList())
+			return
+		end
+		local _, message = Actions.AddFact(ctx, category:lower(), statement, nil)
+		out(ctx, message)
+		return
+	end
+	local idText, tail = Util.NextWord(args)
+	local id = parseId(idText)
+	if not id or (sub ~= "vis" and sub ~= "remove") then
+		out(ctx, "Usage: /dawnward fact list | add <category> <statement> | vis <#> <level> | remove <#> confirm")
+		return
+	end
+	local message
+	if sub == "vis" then
+		_, message = Actions.SetFactVisibility(ctx, id, Util.NextWord(tail):lower())
+	else
+		if Util.NextWord(tail):lower() ~= "confirm" then
+			out(ctx, string.format("This deletes fact #%d. Type: /dawnward fact remove %d confirm", id, id))
+			return
+		end
+		_, message = Actions.RemoveFact(ctx, id)
+	end
+	out(ctx, message)
+end
+
+handlers.personality = function(ctx, rest)
+	local sub, args = Util.NextWord(rest)
+	sub = sub:lower()
+	if sub == "" or sub == "list" then
+		local char = Actions.Character(ctx)
+		local list = char and Personality.List(char) or {}
+		out(ctx, "Personality (0 = left, 20 = right). Axes: " .. Personality.AxisList())
+		if #list == 0 then
+			out(ctx, "  (no values set) Try: /dawnward personality set courage 14")
+		end
+		for _, item in ipairs(list) do
+			out(ctx, string.format("  %s: %s %d/20 %s [%s]", item.axis.id, item.axis.left, item.value, item.axis.right,
+				item.visibility))
+		end
+		return
+	end
+	local axisId, tail = Util.NextWord(args)
+	axisId = axisId:lower()
+	local word = Util.NextWord(tail):lower()
+	local message
+	if sub == "set" then
+		local value = tonumber(word)
+		if axisId == "" or not value then
+			out(ctx, "Usage: /dawnward personality set <axis> <0-20>   Axes: " .. Personality.AxisList())
+			return
+		end
+		_, message = Actions.SetPersonality(ctx, axisId, value)
+	elseif sub == "vis" then
+		_, message = Actions.SetPersonalityVisibility(ctx, axisId, word)
+	elseif sub == "clear" then
+		if word ~= "confirm" then
+			out(ctx, "This clears the value. Type: /dawnward personality clear " .. axisId .. " confirm")
+			return
+		end
+		_, message = Actions.ClearPersonality(ctx, axisId)
+	else
+		message = "Usage: /dawnward personality list | set <axis> <0-20> | vis <axis> <level> | clear <axis> confirm"
 	end
 	out(ctx, message)
 end
@@ -390,7 +498,7 @@ handlers.export = function(ctx, rest)
 		kind = Transfer.KIND_BACKUP
 	end
 	if kind ~= Transfer.KIND_BACKUP and kind ~= Transfer.KIND_SHARE then
-		out(ctx, "Usage: /dawnward export backup [secrets] | /dawnward export share")
+		out(ctx, "Usage: /dawnward export backup [secrets] [biography] | /dawnward export share")
 		return
 	end
 	local char = ctx.store:GetCharacter(ctx.characterKey)
@@ -398,8 +506,14 @@ handlers.export = function(ctx, rest)
 		out(ctx, "Nothing to export yet.")
 		return
 	end
-	local includeSecrets = kind == Transfer.KIND_BACKUP and Util.NextWord(opt):lower() == "secrets"
-	local text, err = Transfer.Export(char, kind, { includeSecrets = includeSecrets, addonVersion = ctx.version })
+	local options = {}
+	for word in opt:lower():gmatch("%S+") do
+		options[word] = true
+	end
+	local includeSecrets = kind == Transfer.KIND_BACKUP and options.secrets == true
+	local includeBiography = kind == Transfer.KIND_BACKUP and options.biography == true
+	local text, err = Transfer.Export(char, kind, { includeSecrets = includeSecrets,
+		includeBiography = includeBiography, addonVersion = ctx.version })
 	if not text then
 		out(ctx, "Export failed: " .. tostring(err))
 		return
@@ -411,6 +525,9 @@ handlers.export = function(ctx, rest)
 		title = "Backup WITH SECRETS - do not share this text"
 	else
 		title = "Personal backup - includes private facts, not secrets"
+	end
+	if includeBiography then
+		title = title .. " (with stored biography)"
 	end
 	if ctx.ui and ctx.ui.ShowExport then
 		ctx.ui.ShowExport(title, text)
@@ -469,7 +586,8 @@ handlers.import = function(ctx, rest)
 			out(ctx, "Cannot import: no room for another character.")
 			return
 		end
-		local merged, carried = Transfer.MergeForImport(current, plan.character, plan.includesSecrets, ctx.now())
+		local merged, carried = Transfer.MergeForImport(current, plan.character, plan.includesSecrets, ctx.now(),
+			plan.includesBiography)
 		ctx.store:ReplaceCharacter(ctx.characterKey, merged)
 		ctx.pendingImport = nil
 		out(ctx, "Imported into " .. modeLabel(ctx) .. "." ..

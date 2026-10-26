@@ -20,12 +20,29 @@ Loader.CORE = {
 	"Core/Character.lua",
 	"Core/Journal.lua",
 	"Core/Milestones.lua",
+	"Core/Facts.lua",
+	"Core/Sources.lua",
+	"Core/Interpretations.lua",
+	"Core/Personality.lua",
 	"Core/Projection.lua",
 	"Core/Serializer.lua",
 	"Core/Transfer.lua",
 	"Core/Store.lua",
 	"Core/Actions.lua",
 	"Core/Commands.lua",
+}
+
+-- TRP3 integration modules in TOC order (pure; they receive TRP3 explicitly).
+Loader.TRP3 = {
+	"Integrations/TRP3/VersionProfiles.lua",
+	"Integrations/TRP3/Status.lua",
+	"Integrations/TRP3/Ledger.lua",
+	"Integrations/TRP3/AboutBlock.lua",
+	"Integrations/TRP3/TraitPlan.lua",
+	"Integrations/TRP3/Shape.lua",
+	"Integrations/TRP3/Adapter.lua",
+	"Integrations/TRP3/Sync.lua",
+	"Integrations/TRP3/Commands.lua",
 }
 
 local SAFE_GLOBALS = {
@@ -71,6 +88,14 @@ function Loader.Core(count)
 	end
 	local ns = Loader.Load(files)
 	return ns
+end
+
+--- Core plus the TRP3 integration modules.
+function Loader.WithTRP3()
+	local files = {}
+	for _, rel in ipairs(Loader.CORE) do files[#files + 1] = rel end
+	for _, rel in ipairs(Loader.TRP3) do files[#files + 1] = rel end
+	return (Loader.Load(files))
 end
 
 --- Loads the first core modules up to and including the named file.

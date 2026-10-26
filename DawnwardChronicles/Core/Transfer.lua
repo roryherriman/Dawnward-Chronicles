@@ -5,10 +5,14 @@
 -- kind is "B" (personal backup) or "S" (shareable, public facts only).
 -- checksum is Adler-32 of the payload, catching truncated or mangled pastes.
 -- payload is Serializer text of { format, kind, schemaVersion, addonVersion,
--- includesSecrets, character }.
+-- includesSecrets, includesBiography, character }.
+--
+-- Share exports carry the public projection only: no biography sources, no
+-- interpretations and no key memory. Backups carry facts, interpretations
+-- and key memory; biography sources only when asked (includeBiography).
 local _, ns = ...
-local Schema, Privacy, Projection, Serializer, Util, Character =
-	ns.Schema, ns.Privacy, ns.Projection, ns.Serializer, ns.Util, ns.Character
+local Schema, Privacy, Projection, Serializer, Util, Character, Facts =
+	ns.Schema, ns.Privacy, ns.Projection, ns.Serializer, ns.Util, ns.Character, ns.Facts
 
 local Transfer = {}
 ns.Transfer = Transfer
@@ -21,36 +25,34 @@ Transfer.KIND_SHARE = "share"
 local KIND_CODE = { backup = "B", share = "S" }
 local CODE_KIND = { B = "backup", S = "share" }
 
---- Adler-32 as 8 hex digits. Formatted as two halves because %x on numbers
--- above 2^31 is not portable across Lua 5.1 builds.
-function Transfer.Checksum(text)
-	local a, b = 1, 0
-	local len = #text
-	local i = 1
-	while i <= len do
-		local chunkEnd = math.min(i + 3999, len)
-		local bytes = { text:byte(i, chunkEnd) }
-		for j = 1, #bytes do
-			a = (a + bytes[j]) % 65521
-			b = (b + a) % 65521
-		end
-		i = chunkEnd + 1
-	end
-	return string.format("%04x%04x", b, a)
-end
+-- Kept as an alias: the checksum moved to Util so biography hashes can share it.
+Transfer.Checksum = Util.Checksum
 
---- opts: { includeSecrets = bool, addonVersion = string }
+--- opts: { includeSecrets = bool, includeBiography = bool, addonVersion = string }
 function Transfer.Export(char, kind, opts)
 	opts = opts or {}
-	local data, includesSecrets
+	local data, includesSecrets, includesBiography
 	if kind == Transfer.KIND_SHARE then
 		data = Projection.GetPublic(char)
-		includesSecrets = false
+		includesSecrets, includesBiography = false, false
 	elseif kind == Transfer.KIND_BACKUP then
 		includesSecrets = opts.includeSecrets == true
-		data = Projection.Filter(char, { public = true, private = true, secret = includesSecrets })
-		-- A personal backup keeps milestone keys so a restore cannot re-record old milestones.
+		local allowed = { public = true, private = true, secret = includesSecrets }
+		data = Projection.Filter(char, allowed)
+		-- A personal backup keeps milestone and suggestion keys so a restore
+		-- cannot re-record old milestones or re-suggest dismissed proposals.
 		data.journalKeys = Util.DeepCopy(char.journalKeys)
+		data.interpretationKeys = Util.DeepCopy(char.interpretationKeys or {})
+		data.interpretations = {}
+		for _, item in ipairs(char.interpretations or {}) do
+			if Privacy.Allows(allowed, item.visibility) then
+				data.interpretations[#data.interpretations + 1] = Util.DeepCopy(item)
+			end
+		end
+		includesBiography = opts.includeBiography == true and char.sources ~= nil
+		if includesBiography then
+			data.sources = Util.DeepCopy(char.sources)
+		end
 	else
 		return nil, "unknown export kind '" .. tostring(kind) .. "'"
 	end
@@ -60,6 +62,7 @@ function Transfer.Export(char, kind, opts)
 		schemaVersion = Schema.VERSION,
 		addonVersion = opts.addonVersion,
 		includesSecrets = includesSecrets,
+		includesBiography = includesBiography,
 		character = data,
 	})
 	if not payload then
@@ -96,14 +99,21 @@ function Transfer.Decode(text)
 	if type(data.schemaVersion) ~= "number" or data.schemaVersion > Schema.VERSION then
 		return nil, "this export comes from a newer version of Dawnward Chronicles"
 	end
-	-- Schema 2 only added parts to a character, so schema 1 exports normalise
-	-- directly (with an empty journal and the neutral theme). A future change
-	-- that reshapes characters must migrate older exports here first.
+	-- Schemas 2 and 3 only added parts to a character, so older exports
+	-- normalise directly (with an empty journal, the neutral theme and empty
+	-- foundations). A future change that reshapes characters must migrate
+	-- older exports here first.
 	local report = {}
 	local character = Schema.NormalizeCharacter(data.character, report)
+	local includesBiography = data.includesBiography == true and data.kind == Transfer.KIND_BACKUP
+	if not includesBiography then
+		-- Only a backup made with the biography option may bring sources in.
+		character.sources = Schema.NewSources()
+	end
 	return {
 		kind = data.kind,
 		includesSecrets = data.includesSecrets == true,
+		includesBiography = includesBiography,
 		addonVersion = type(data.addonVersion) == "string" and data.addonVersion or nil,
 		character = character,
 		notes = report,
@@ -113,8 +123,10 @@ end
 --- Builds the character that replaces current on import.
 -- If the backup was exported without secrets, the current character's secret
 -- facts are carried over so importing your own backup never loses them.
+-- If it was exported without the biography, the current biography sources
+-- are kept, so a restore never discards a stored biography.
 -- Returns the merged character and the number of secrets carried over.
-function Transfer.MergeForImport(current, imported, includesSecrets, now)
+function Transfer.MergeForImport(current, imported, includesSecrets, now, includesBiography)
 	local result = Util.DeepCopy(imported)
 	result.createdAt = current and current.createdAt or now or 0
 	result.updatedAt = now or 0
@@ -140,6 +152,11 @@ function Transfer.MergeForImport(current, imported, includesSecrets, now)
 				end
 			end
 		end
+		for _, fact in ipairs(current.facts or {}) do
+			if fact.visibility == Privacy.SECRET and Facts.Restore(result, fact) then
+				carried = carried + 1
+			end
+		end
 		table.sort(result.journal, function(a, b)
 			if a.createdAt ~= b.createdAt then
 				return a.createdAt < b.createdAt
@@ -155,6 +172,21 @@ function Transfer.MergeForImport(current, imported, includesSecrets, now)
 			end
 		end
 		Schema.CapJournalKeys(result.journalKeys)
+		for key, entry in pairs(current.interpretationKeys or {}) do
+			if result.interpretationKeys[key] == nil then
+				result.interpretationKeys[key] = Util.DeepCopy(entry)
+			end
+		end
+		Schema.CapKeyMemory(result.interpretationKeys)
+		-- A suggestion resolved on either side stays resolved.
+		for i = #result.interpretations, 1, -1 do
+			if result.interpretationKeys[result.interpretations[i].key] then
+				table.remove(result.interpretations, i)
+			end
+		end
+		if not includesBiography then
+			result.sources = Util.DeepCopy(current.sources or Schema.NewSources())
+		end
 	end
 	return result, carried
 end
@@ -164,8 +196,11 @@ function Transfer.Describe(plan)
 	local char = plan.character
 	local counts = Character.CountByVisibility(char)
 	local name = char.fields.name and char.fields.name.value or "(unnamed)"
-	return string.format("%s: %d fields, %d family, %d history, %d journal (%d public, %d private, %d secret)%s",
-		name, Util.CountKeys(char.fields), #char.family, #char.history, #char.journal,
+	return string.format("%s: %d fields, %d family, %d history, %d journal, %d facts "
+		.. "(%d public, %d private, %d secret)%s%s",
+		name, Util.CountKeys(char.fields), #char.family, #char.history, #char.journal, #char.facts,
 		counts.public, counts.private, counts.secret,
-		plan.includesSecrets and "" or "; secrets not included in this backup")
+		plan.includesSecrets and "" or "; secrets not included in this backup",
+		plan.includesBiography and "; includes the stored biography"
+			or "; no biography in this backup (the current one is kept)")
 end

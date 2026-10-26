@@ -95,7 +95,7 @@ local FrameMT = {
 --- opts: { interface = number, project = number, savedVariables = table, extra = table }
 function Mock.new(opts)
 	opts = opts or {}
-	local mock = { eventFrames = {}, framesByName = {}, chat = {}, clock = 1700000000, popups = {},
+	local mock = { eventFrames = {}, framesByName = {}, chat = {}, clock = 1700000000, popups = {}, timers = {},
 		zone = "Elwynn Forest", subzone = "Goldshire" }
 
 	--- Accepts the most recent confirmation dialog, like clicking its first button.
@@ -132,7 +132,10 @@ function Mock.new(opts)
 		ChatFontNormal = {},
 		GameFontNormal = {},
 		GameFontHighlightSmall = {},
-		InCombatLockdown = function() return false end,
+		InCombatLockdown = function() return mock.inCombat == true end,
+		C_Timer = {
+			After = function(seconds, fn) mock.timers[#mock.timers + 1] = { seconds = seconds, fn = fn } end,
+		},
 		GameFontNormalLarge = {},
 		GameFontHighlight = {},
 		GameTooltip = mock.newFrame("GameTooltip", "GameTooltip"),
@@ -168,6 +171,16 @@ function Mock.new(opts)
 		env[k] = v
 	end
 	mock.env = env
+
+	--- Runs the timers queued so far (not ones they queue in turn).
+	function mock.RunTimers()
+		local due = mock.timers
+		mock.timers = {}
+		for _, timer in ipairs(due) do
+			timer.fn()
+		end
+		return #due
+	end
 
 	function mock.Fire(event, ...)
 		for frame in pairs(mock.eventFrames) do
