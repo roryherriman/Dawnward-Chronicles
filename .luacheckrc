@@ -32,6 +32,9 @@ local WOW_READ = {
 	"GameFontNormalLarge", "GameFontHighlight",
 	-- v0.3 TRP3 sync scheduling
 	"C_Timer",
+	-- v0.4 living chronicle observers and safe-time checks (docs/COMPATIBILITY.md)
+	"GetQuestID", "GetTitleText", "GetQuestLogIndexByID", "GetQuestLogTitle", "C_QuestLog",
+	"UnitLevel", "UnitClass", "UnitRace", "UnitFactionGroup", "UnitIsDeadOrGhost",
 }
 
 files["DawnwardChronicles/Platform/"] = {

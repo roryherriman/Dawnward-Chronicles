@@ -1,9 +1,9 @@
 -- Connects the core to the WoW client: saved variables, events and /dawnward.
 -- Loaded last. Event-driven only; nothing polls.
 local addonName, ns = ...
-local Migrations, Store, Commands, Detect, CopyBox, TRP3Status, MainWindow, Events, TRP3Bridge =
+local Migrations, Store, Commands, Detect, CopyBox, TRP3Status, MainWindow, Events, TRP3Bridge, Observers, SafeTime =
 	ns.Migrations, ns.Store, ns.Commands, ns.Detect, ns.CopyBox, ns.TRP3Status, ns.MainWindow, ns.Events,
-	ns.TRP3Bridge
+	ns.TRP3Bridge, ns.Observers, ns.SafeTime
 
 local PREFIX = "|cffe6c35cDawnward:|r "
 
@@ -112,6 +112,11 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
 		end
 		ns.ctx = buildContext()
 		Events.Init(ns.ctx, MainWindow.Refresh)
+		Observers.Init(ns.ctx, function()
+			MainWindow.Refresh()
+			SafeTime.Schedule(ns.ctx)
+		end)
+		SafeTime.Init(ns.ctx)
 		TRP3Bridge.Attach(ns.ctx)
 		announceLoad()
 	end
