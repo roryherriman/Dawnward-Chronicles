@@ -11,6 +11,7 @@
 Core\Util.lua
 Core\Privacy.lua
 Core\Themes.lua
+Core\StorySchema.lua
 Core\Schema.lua
 Core\Migrations.lua
 Core\Character.lua
@@ -20,6 +21,12 @@ Core\Facts.lua
 Core\Sources.lua
 Core\Interpretations.lua
 Core\Personality.lua
+Core\GameEvents.lua
+Core\ReactionLibrary.lua
+Core\Reactions.lua
+Core\Evolution.lua
+Core\Narrative.lua
+Core\Decisions.lua
 Core\Projection.lua
 Core\Serializer.lua
 Core\Transfer.lua

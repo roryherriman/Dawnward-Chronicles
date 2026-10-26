@@ -151,7 +151,7 @@ return function(t, expect)
 			local mock, env = boot({ savedVariables = { DawnwardChroniclesDB = saved } })
 			login(mock)
 			local db = env.DawnwardChroniclesDB
-			expect.equal(db.schemaVersion, 3)
+			expect.equal(db.schemaVersion, 4, "v2 data migrates to the current schema")
 			local char = db.characters[KEY]
 			expect.equal(char.theme, "arcane")
 			expect.equal(char.history[1].text, "Joined")

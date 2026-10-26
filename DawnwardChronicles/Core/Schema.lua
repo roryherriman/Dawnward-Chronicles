@@ -12,13 +12,17 @@
 --      sources, open interpretations, interpretation key memory, canon facts,
 --      personality axis values and a reserved wizard table. Purely additive. Frozen when v0.3 ships;
 --      until then later v0.3 milestones may add fields within v3.
+--   4  adds the living chronicle (v0.4): a per-character `story` table
+--      (Core/StorySchema.lua) and "story" journal entries (drafts written
+--      from the player's decisions), plus an "important" flag on any
+--      journal entry. Purely additive: no existing value or visibility changes.
 local _, ns = ...
-local Util, Privacy, Themes = ns.Util, ns.Privacy, ns.Themes
+local Util, Privacy, Themes, StorySchema = ns.Util, ns.Privacy, ns.Themes, ns.StorySchema
 
 local Schema = {}
 ns.Schema = Schema
 
-Schema.VERSION = 3
+Schema.VERSION = 4
 
 Schema.LIMITS = {
 	short = 100,       -- bytes, single-line fields
@@ -173,6 +177,7 @@ function Schema.NewCharacter(now)
 		facts = {},
 		personality = {},
 		wizard = {},
+		story = StorySchema.New(),
 	}
 end
 
@@ -305,10 +310,36 @@ function Schema.CleanJournalEntry(raw)
 		if not entry.event or not entry.text then
 			return nil
 		end
+	elseif raw.kind == "story" then
+		entry.title = Schema.CleanValue(Schema.SHORT, raw.title)
+		if not entry.title and not entry.text then
+			return nil
+		end
+		entry.status = raw.status == "approved" and "approved" or "draft"
+		-- Only an approved story entry may be public (Journal.SetVisibility).
+		if entry.status == "draft" and entry.visibility == Privacy.PUBLIC then
+			entry.visibility = Privacy.PRIVATE
+		end
+		local link = type(raw.story) == "table" and raw.story or {}
+		entry.story = {
+			category = StorySchema.CATEGORIES[link.category] and link.category or nil,
+			decisionId = Util.IsPositiveInteger(link.decisionId) and link.decisionId or nil,
+			eventKey = Schema.CleanValue(Schema.SHORT, link.eventKey),
+		}
 	else
 		return nil
 	end
+	if raw.important == true then
+		entry.important = true
+	end
 	return entry
+end
+
+--- Entries that retention may remove, in this order: automatic milestones,
+-- then unapproved story drafts. Notes and approved story entries are the
+-- player's own and are never removed automatically.
+function Schema.IsPrunable(entry)
+	return entry.kind == "event" or (entry.kind == "story" and entry.status ~= "approved")
 end
 
 local function chronological(a, b)
@@ -330,7 +361,7 @@ function Schema.ApplyJournalRetention(entries, limit)
 	local removedEvents, removedNotes = 0, 0
 	local i = 1
 	while #entries > limit and i <= #entries do
-		if entries[i].kind == "event" then
+		if Schema.IsPrunable(entries[i]) and not entries[i].important then
 			table.remove(entries, i)
 			removedEvents = removedEvents + 1
 		else
@@ -759,6 +790,7 @@ function Schema.NormalizeCharacter(raw, report)
 	char.interpretations = normalizeInterpretations(raw.interpretations, char.interpretationKeys, report)
 	-- Reserved for the setup wizard (v0.3 M3); nothing is stored here yet.
 	char.wizard = {}
+	char.story = StorySchema.Normalize(raw.story, Schema.PERSONALITY_AXIS_BY_ID, report)
 
 	-- IDs are unique across all lists so commands can never hit the wrong item.
 	local maxId = 0

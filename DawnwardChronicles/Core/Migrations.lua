@@ -68,6 +68,24 @@ Migrations.steps[2] = function(db)
 	return db
 end
 
+-- 3 -> 4 (v0.4): add an empty living-chronicle `story` table to every
+-- character (including import backups). Journal entries, personality values
+-- and every visibility stay exactly as they were: nothing private becomes
+-- public, and nothing is inferred from existing data.
+Migrations.steps[3] = function(db)
+	for _, mapName in ipairs({ "characters", "importBackups" }) do
+		local map = db[mapName]
+		if type(map) == "table" then
+			for _, char in pairs(map) do
+				if type(char) == "table" and type(char.story) ~= "table" then
+					char.story = ns.StorySchema.New()
+				end
+			end
+		end
+	end
+	return db
+end
+
 local function readOnly(reason, version)
 	return Schema.NewDatabase(), { status = "readOnly", reason = reason, from = version, notes = {} }
 end
