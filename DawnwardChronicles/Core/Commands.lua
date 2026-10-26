@@ -166,6 +166,11 @@ handlers.status = function(ctx)
 	local f = char and Character.FoundationCounts(char) or { facts = 0, suggestions = 0, biography = false }
 	out(ctx, string.format("Foundations: %d facts, %d suggestions, biography stored: %s",
 		f.facts, f.suggestions, f.biography and "yes" or "no"))
+	if char then
+		out(ctx, string.format("Story: %d events recorded, %d moments waiting, %d personality changes to approve "
+			.. "(/dawnward story)", #char.story.events, #ns.Reactions.List(char, ctx.now()),
+			#ns.Evolution.Pending(char)))
+	end
 	handlers.trp3(ctx)
 end
 
@@ -616,7 +621,7 @@ handlers.import = function(ctx, rest)
 			return
 		end
 		local merged, carried = Transfer.MergeForImport(current, plan.character, plan.includesSecrets, ctx.now(),
-			plan.includesBiography)
+			plan.includesBiography, plan.includesStory)
 		ctx.store:ReplaceCharacter(ctx.characterKey, merged)
 		ctx.pendingImport = nil
 		out(ctx, "Imported into " .. modeLabel(ctx) .. "." ..

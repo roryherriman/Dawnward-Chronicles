@@ -14,6 +14,52 @@ local INSET = 10
 SettingsPanel.BACKUP_HINT = "A backup includes private entries but not secrets "
 	.. "(to include them: /dawnward export backup secrets). Sharing exports contain public facts only."
 
+-- Story settings shown as cycle buttons. values are the cycle order; for
+-- booleans true/false. tracking settings switch an event category.
+SettingsPanel.STORY_SETTINGS = {
+	{ key = "frequency", label = "Moments", values = { "rare", "normal", "frequent", "off" },
+		help = "How often Dawnward may offer a story moment. Off still records events." },
+	{ key = "threshold", label = "Significance", values = { 1, 2, 3 },
+		help = "1: any recorded event may become a moment. 3: only major ones." },
+	{ key = "approval", label = "Changes", values = { "ask", "auto" },
+		help = "Ask: personality changes wait for your approval. Auto: applied at once, still reversible." },
+	{ key = "drafts", label = "Drafts", values = { true, false },
+		help = "Write a private journal draft for each answer." },
+	{ key = "card", label = "Card", values = { true, false },
+		help = "Show a small card when a moment is waiting (never in combat). Off: one chat line only." },
+	{ key = "flavor", label = "Class flavour", values = { true, false },
+		help = "Offer one optional extra answer flavoured by your class. Never changes the others." },
+	{ key = "trp3Style", label = "TRP3 style", values = { "neutral", "silverhand", "arcane" },
+		help = "How Dawnward's own section looks in Total RP 3 (only if you turned biography sync on)." },
+	{ tracking = "quest", label = "Quests", values = { true, false },
+		help = "Record completed quests as story events." },
+}
+
+local function currentValue(setting, prefs)
+	if setting.tracking then
+		return prefs.tracking[setting.tracking]
+	end
+	return prefs[setting.key]
+end
+
+function SettingsPanel.NextValue(setting, prefs)
+	local value = currentValue(setting, prefs)
+	for i, v in ipairs(setting.values) do
+		if v == value then
+			return setting.values[i % #setting.values + 1]
+		end
+	end
+	return setting.values[1]
+end
+
+function SettingsPanel.ButtonText(setting, prefs)
+	local value = currentValue(setting, prefs)
+	if type(value) == "boolean" then
+		value = value and "on" or "off"
+	end
+	return setting.label .. ": " .. tostring(value)
+end
+
 local function create(parent)
 	local panel = { frame = CreateFrame("Frame", nil, parent), labels = {} }
 	local f = panel.frame
@@ -89,9 +135,35 @@ local function create(parent)
 			"Reset", function() run("sim reset confirm") end)
 	end)
 
+	-- Story prompts (v0.4). Each button cycles one setting.
+	heading("Story moments", -252)
+	panel.storyButtons = {}
+	local SETTINGS = SettingsPanel.STORY_SETTINGS
+	for i, setting in ipairs(SETTINGS) do
+		local button = Widgets.Button(f, setting.label, 136, 22)
+		local col, rowIndex = (i - 1) % 4, math.floor((i - 1) / 4)
+		button:SetPoint("TOPLEFT", INSET + col * 140, -272 - rowIndex * 26)
+		button.setting = setting
+		button:SetScript("OnClick", function(self)
+			local char = Actions.Character(ns.ctx)
+			local prefs = char and char.story.prefs or ns.StorySchema.NewPrefs()
+			local nextValue = SettingsPanel.NextValue(self.setting, prefs)
+			local _, message
+			if self.setting.tracking then
+				_, message = Actions.SetTracking(ns.ctx, self.setting.tracking, nextValue)
+			else
+				_, message = Actions.SetStoryPref(ns.ctx, self.setting.key, nextValue)
+			end
+			MainWindow.SetStatus(message)
+			MainWindow.Refresh()
+		end)
+		Widgets.Tooltip(button, setting.label, setting.help)
+		panel.storyButtons[i] = button
+	end
+
 	-- Total RP 3
-	heading("Total RP 3 (read-only)", -252)
-	panel.trp3 = note(-272)
+	heading("Total RP 3 (status; sync is experimental: /dawnward trp3 help)", -332)
+	panel.trp3 = note(-352)
 
 	panel.done = Widgets.Button(f, "Done", 90, 22)
 	panel.done:SetPoint("BOTTOMRIGHT", -INSET, 10)
@@ -118,6 +190,11 @@ local function create(parent)
 			and "ON: changes go to separate test data. Your real journal is untouched."
 			or "OFF: you are using your real journal. Turn on to experiment safely.")
 		self.simToggle:SetText(simulation and "Turn off" or "Turn on")
+
+		local prefs = view.char and view.char.story.prefs or ns.StorySchema.NewPrefs()
+		for _, button in ipairs(self.storyButtons) do
+			button:SetText(SettingsPanel.ButtonText(button.setting, prefs))
+		end
 
 		local status = view.ctx.trp3Status and view.ctx.trp3Status()
 		self.trp3:SetText(table.concat(Commands.Trp3Lines(status), "\n"))

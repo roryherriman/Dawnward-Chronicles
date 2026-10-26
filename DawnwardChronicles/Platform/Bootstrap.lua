@@ -116,6 +116,7 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
 			MainWindow.Refresh()
 			SafeTime.Schedule(ns.ctx)
 		end)
+		SafeTime.ShowCard = ns.ReactionCard.Show
 		SafeTime.Init(ns.ctx)
 		TRP3Bridge.Attach(ns.ctx)
 		announceLoad()

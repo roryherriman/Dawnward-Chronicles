@@ -49,6 +49,9 @@ function Transfer.Export(char, kind, opts)
 				data.interpretations[#data.interpretations + 1] = Util.DeepCopy(item)
 			end
 		end
+		-- The living chronicle (events, decisions, development history) is
+		-- private by nature and travels only in personal backups.
+		data.story = Util.DeepCopy(char.story or ns.StorySchema.New())
 		includesBiography = opts.includeBiography == true and char.sources ~= nil
 		if includesBiography then
 			data.sources = Util.DeepCopy(char.sources)
@@ -99,7 +102,7 @@ function Transfer.Decode(text)
 	if type(data.schemaVersion) ~= "number" or data.schemaVersion > Schema.VERSION then
 		return nil, "this export comes from a newer version of Dawnward Chronicles"
 	end
-	-- Schemas 2 and 3 only added parts to a character, so older exports
+	-- Schemas 2, 3 and 4 only added parts to a character, so older exports
 	-- normalise directly (with an empty journal, the neutral theme and empty
 	-- foundations). A future change that reshapes characters must migrate
 	-- older exports here first.
@@ -110,10 +113,17 @@ function Transfer.Decode(text)
 		-- Only a backup made with the biography option may bring sources in.
 		character.sources = Schema.NewSources()
 	end
+	-- Only a v0.4+ personal backup carries a story; a share export never does.
+	local includesStory = data.kind == Transfer.KIND_BACKUP and type(data.character) == "table"
+		and type(data.character.story) == "table"
+	if not includesStory then
+		character.story = ns.StorySchema.New()
+	end
 	return {
 		kind = data.kind,
 		includesSecrets = data.includesSecrets == true,
 		includesBiography = includesBiography,
+		includesStory = includesStory,
 		addonVersion = type(data.addonVersion) == "string" and data.addonVersion or nil,
 		character = character,
 		notes = report,
@@ -126,7 +136,10 @@ end
 -- If it was exported without the biography, the current biography sources
 -- are kept, so a restore never discards a stored biography.
 -- Returns the merged character and the number of secrets carried over.
-function Transfer.MergeForImport(current, imported, includesSecrets, now, includesBiography)
+-- If it carries no story (an older backup or a share export), the current
+-- story is kept; otherwise the imported one is used, and events recorded on
+-- either side stay recorded.
+function Transfer.MergeForImport(current, imported, includesSecrets, now, includesBiography, includesStory)
 	local result = Util.DeepCopy(imported)
 	result.createdAt = current and current.createdAt or now or 0
 	result.updatedAt = now or 0
@@ -186,6 +199,18 @@ function Transfer.MergeForImport(current, imported, includesSecrets, now, includ
 		end
 		if not includesBiography then
 			result.sources = Util.DeepCopy(current.sources or Schema.NewSources())
+		end
+		if current.story then
+			if not includesStory then
+				result.story = Util.DeepCopy(current.story)
+			else
+				for key, at in pairs(current.story.eventKeys or {}) do
+					if result.story.eventKeys[key] == nil then
+						result.story.eventKeys[key] = at
+					end
+				end
+				ns.StorySchema.CapEventKeys(result.story.eventKeys)
+			end
 		end
 	end
 	return result, carried
