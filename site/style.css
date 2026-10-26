@@ -1,0 +1,103 @@
+/* Dawnward Chronicles project page. Parchment and ink, no third-party art. */
+:root {
+  --ink: #2b2118;
+  --ink-soft: #5a4a3a;
+  --parchment: #f4ead5;
+  --parchment-deep: #e8d9b8;
+  --gold: #9a6b1f;
+  --gold-bright: #c9952e;
+  --night: #1a1520;
+  --night-text: #efe6d2;
+  --ok: #2f6b3a;
+  --test: #2b5a8a;
+  --warn: #8a5a12;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #efe6d2;
+    --ink-soft: #c9bba2;
+    --parchment: #1d1914;
+    --parchment-deep: #29231b;
+    --gold: #e0b45c;
+    --gold-bright: #f0c674;
+    --night: #0f0c12;
+    --ok: #6fbf7c;
+    --test: #7fb0e0;
+    --warn: #e0a54a;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--parchment);
+  color: var(--ink);
+  font: 17px/1.6 Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+}
+.wrap { max-width: 980px; margin: 0 auto; padding: 0 16px; }
+h1, h2, h3 { font-family: "Cinzel", Georgia, serif; letter-spacing: 0.02em; line-height: 1.25; }
+h2 { color: var(--gold); font-size: 1.7rem; margin-top: 0; }
+a { color: var(--gold); }
+code, pre { font-family: ui-monospace, Consolas, monospace; font-size: 0.85em; }
+pre { background: var(--parchment-deep); padding: 12px; border-radius: var(--radius); overflow-x: auto; }
+
+.hero {
+  background: radial-gradient(ellipse at top, #3a2b44 0%, var(--night) 70%);
+  color: var(--night-text);
+  padding: 72px 0 64px;
+  text-align: center;
+}
+.hero h1 { font-size: clamp(2.2rem, 7vw, 3.6rem); margin: 0.2em 0; color: var(--gold-bright); }
+.eyebrow { text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.8rem; opacity: 0.8; margin: 0; }
+.tagline { font-size: 1.2rem; font-style: italic; max-width: 640px; margin: 0.5em auto 1em; }
+.cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 20px; }
+.button {
+  display: inline-block; padding: 10px 20px; border-radius: 999px; text-decoration: none;
+  background: var(--gold-bright); color: #1a1208; font-weight: bold;
+}
+.button.ghost { background: transparent; color: var(--night-text); border: 1px solid var(--night-text); }
+
+section { padding: 56px 0; }
+.band { background: var(--parchment-deep); }
+
+.pill {
+  display: inline-block; font-size: 0.75rem; padding: 2px 10px; border-radius: 999px;
+  border: 1px solid currentColor; font-family: system-ui, sans-serif; white-space: nowrap;
+}
+.pill.ok { color: var(--ok); }
+.pill.test { color: var(--test); }
+.pill.warn { color: var(--warn); }
+.hero .pill { color: var(--night-text); }
+.hero .pill.warn { color: var(--gold-bright); }
+
+.flow { list-style: none; padding: 0; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.flow li { background: var(--parchment-deep); border-radius: var(--radius); padding: 16px; position: relative; }
+.flow h3 { margin: 8px 0 4px; font-size: 1.05rem; }
+.flow p { margin: 0; font-size: 0.95rem; color: var(--ink-soft); }
+.step {
+  display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 50%;
+  background: var(--gold); color: var(--parchment); font-weight: bold; font-family: system-ui, sans-serif;
+}
+
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.grid article { border: 1px solid var(--parchment-deep); border-radius: var(--radius); padding: 16px; background: var(--parchment); }
+.grid h3 { margin: 0 0 6px; font-size: 1.05rem; }
+.grid p { margin: 0 0 10px; font-size: 0.95rem; color: var(--ink-soft); }
+.legend { margin-bottom: 20px; }
+.note, .credit { font-size: 0.9rem; color: var(--ink-soft); }
+
+.checks { padding-left: 1.2em; }
+.checks li { margin: 6px 0; }
+
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--parchment); vertical-align: top; }
+th { width: 34%; }
+@media (max-width: 600px) {
+  th, td { display: block; width: 100%; }
+  th { border-bottom: none; padding-bottom: 0; }
+}
+
+.roadmap { list-style: none; padding: 0; }
+.roadmap li { padding: 10px 0; border-bottom: 1px solid var(--parchment-deep); }
+
+footer { background: var(--night); color: var(--night-text); padding: 24px 0; font-size: 0.85rem; }
