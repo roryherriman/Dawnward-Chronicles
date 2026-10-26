@@ -47,7 +47,7 @@ function Decisions.Decide(char, reactionId, choice, now)
 	if not reaction then
 		return nil, "no waiting reaction #" .. tostring(reactionId)
 	end
-	local view, err = Reactions.Present(char, reaction)
+	local view, err = Reactions.Present(char, reaction, now)
 	if not view then
 		return nil, err
 	end
@@ -67,7 +67,7 @@ function Decisions.Decide(char, reactionId, choice, now)
 	local decision = {
 		id = newId(story), category = reaction.category, eventKeys = reaction.eventKeys,
 		templateId = reaction.templateId, optionId = option and option.id or nil, custom = custom,
-		phrase = option and option.phrase or nil, at = now or 0, effects = {},
+		phrase = option and option.phrase or nil, theme = option and option.theme or nil, at = now or 0, effects = {},
 	}
 	local changes = {}
 	if option then
@@ -97,6 +97,15 @@ function Decisions.Decide(char, reactionId, choice, now)
 			result.draftError = jerr
 		end
 	end
+	if option and option.contextual then
+		ns.Director.Apply(char, option, decision, now)
+	end
+	-- Suggestions only: proposed and private until the player accepts them.
+	result.memory = ns.Memories.SuggestFromDecision(char, { significance = reaction.significance, record = view.record,
+		title = result.entry and result.entry.title or (view.record and ns.GameEvents.Label(view.record.category)),
+		custom = custom, option = option, name = view.name, eventKeys = reaction.eventKeys, decisionId = decision.id,
+		journalId = decision.journalId }, now)
+	result.arc = ns.Arcs.SuggestFromPattern(char, now)
 	Reactions.Resolve(char, reactionId)
 	return result
 end

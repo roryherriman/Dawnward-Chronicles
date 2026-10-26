@@ -234,9 +234,11 @@ local function hasAll(tokens, needs)
 end
 
 --- What the player sees: { reaction, template, question, context, options,
--- record } where options are the universal answers, the optional flavour
--- answer and the neutral one, each { id, text, phrase, effects, meaning }.
-function Reactions.Present(char, reaction)
+-- record, recall, why } where options are the universal answers, the
+-- optional flavour answer, answers drawn from the character's own history
+-- (goals, arcs) and the neutral one, each { id, text, phrase, effects,
+-- meaning }. recall names a relevant memory; why explains the moment.
+function Reactions.Present(char, reaction, now)
 	local template = ReactionLibrary.BY_ID[reaction.templateId]
 	if not template then
 		return nil, "this reaction's template is not in this version of Dawnward"
@@ -260,6 +262,11 @@ function Reactions.Present(char, reaction)
 			options[#options + 1] = flavor
 		end
 	end
+	-- Context from the character's own established history (Core/Director.lua).
+	local context = ns.Director.Context(char, record, template, now)
+	for _, option in ipairs(ns.Director.Options(context)) do
+		options[#options + 1] = option
+	end
 	options[#options + 1] = ReactionLibrary.NEUTRAL
 	local extra = #reaction.eventKeys - 1
 	local contextLine
@@ -270,6 +277,7 @@ function Reactions.Present(char, reaction)
 	return {
 		reaction = reaction, template = template, question = question, context = contextLine,
 		options = options, record = record, name = tokens.name,
+		recall = ns.Director.Recall(context), why = context.why,
 	}
 end
 

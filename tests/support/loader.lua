@@ -15,6 +15,8 @@ Loader.CORE = {
 	"Core/Util.lua",
 	"Core/Privacy.lua",
 	"Core/Themes.lua",
+	"Core/Records.lua",
+	"Core/RecordTypes.lua",
 	"Core/StorySchema.lua",
 	"Core/Schema.lua",
 	"Core/Migrations.lua",
@@ -31,6 +33,12 @@ Loader.CORE = {
 	"Core/Evolution.lua",
 	"Core/Narrative.lua",
 	"Core/Decisions.lua",
+	"Core/Memories.lua",
+	"Core/Arcs.lua",
+	"Core/Goals.lua",
+	"Core/Identity.lua",
+	"Core/Director.lua",
+	"Core/Continuity.lua",
 	"Core/Projection.lua",
 	"Core/Serializer.lua",
 	"Core/Transfer.lua",
@@ -38,6 +46,7 @@ Loader.CORE = {
 	"Core/Actions.lua",
 	"Core/Commands.lua",
 	"Core/StoryCommands.lua",
+	"Core/NarrativeCommands.lua",
 }
 
 -- TRP3 integration modules in TOC order (pure; they receive TRP3 explicitly).

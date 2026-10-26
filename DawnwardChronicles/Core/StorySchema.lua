@@ -11,13 +11,17 @@
 --   baselines   axis -> the player's own value before Dawnward first changed it
 --   prefs       tracking, pacing, drafting and approval preferences
 --   pacing      timestamps and memory that keep prompts rare and varied
+--   memories, arcs, goals, identity
+--               narrative records with provenance, canon status and
+--               visibility (Core/Records.lua, Core/RecordTypes.lua)
+--   reviews     the player's answers to continuity findings
 --
 -- Everything here is private to the character: none of it is ever part of
 -- a projection, a share export or TRP3. Only journal entries the player
 -- approves and makes public, and personality values the player makes
 -- public, ever leave the core.
 local _, ns = ...
-local Util = ns.Util
+local Util, RecordTypes = ns.Util, ns.RecordTypes
 
 local StorySchema = {}
 ns.StorySchema = StorySchema
@@ -73,8 +77,21 @@ function StorySchema.New()
 		nextId = 1,
 		prefs = StorySchema.NewPrefs(),
 		pacing = { lastNoticeAt = 0, lastByCategory = {}, recentTemplates = {}, questZones = {} },
+		memories = {},
+		arcs = {},
+		goals = {},
+		identity = {},
+		reviews = {},
 	}
 end
+
+-- Narrative record lists: name -> cleaner and limit.
+StorySchema.RECORD_LISTS = {
+	memories = { clean = RecordTypes.CleanMemory, limit = RecordTypes.LIMITS.memories },
+	arcs = { clean = RecordTypes.CleanArc, limit = RecordTypes.LIMITS.arcs },
+	goals = { clean = RecordTypes.CleanGoal, limit = RecordTypes.LIMITS.goals },
+	identity = { clean = RecordTypes.CleanIdentity, limit = RecordTypes.LIMITS.identity },
+}
 
 local function ts(v)
 	if type(v) == "number" and v >= 0 and v == math.floor(v) and v < 2 ^ 40 then
@@ -223,6 +240,7 @@ function StorySchema.CleanDecision(raw, axes)
 		optionId = key(raw.optionId),
 		custom = text(raw.custom, StorySchema.LIMITS.custom, true),
 		phrase = text(raw.phrase, StorySchema.LIMITS.text),
+		theme = text(raw.theme, 32),
 		at = ts(raw.at),
 		effects = effects(raw.effects, axes),
 		journalId = id(raw.journalId),
@@ -400,9 +418,20 @@ function StorySchema.Normalize(raw, axes, report)
 	end
 	story.prefs = cleanPrefs(raw.prefs)
 	story.pacing = cleanPacing(raw.pacing)
-	-- IDs are shared by reactions, decisions and changes.
+	for name, spec in pairs(StorySchema.RECORD_LISTS) do
+		story[name] = cleanList(raw[name], spec.clean, spec.limit, report, name)
+	end
+	if type(raw.reviews) == "table" then
+		for _, review in ipairs(raw.reviews) do
+			local clean = RecordTypes.CleanReview(review)
+			if clean and #story.reviews < RecordTypes.LIMITS.reviews then
+				story.reviews[#story.reviews + 1] = clean
+			end
+		end
+	end
+	-- IDs are shared by every story list.
 	local maxId = 0
-	for _, listName in ipairs({ "reactions", "decisions", "changes" }) do
+	for _, listName in ipairs({ "reactions", "decisions", "changes", "memories", "arcs", "goals", "identity" }) do
 		for _, item in ipairs(story[listName]) do
 			if item.id > maxId then maxId = item.id end
 		end

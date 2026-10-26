@@ -45,7 +45,8 @@ AboutBlock.Moments = moments
 function AboutBlock.Compose(public)
 	local facts = public and public.facts or {}
 	local chosen = moments(public)
-	if #facts == 0 and #chosen == 0 then
+	local stances = public and public.stances or {}
+	if #facts == 0 and #chosen == 0 and #stances == 0 then
 		return ""
 	end
 	local style = Presentation.Get(public.trp3Style)
@@ -72,8 +73,14 @@ function AboutBlock.Compose(public)
 			add(Presentation.FactLine(style, category.label, fact.statement))
 		end
 	end
+	if #stances > 0 then
+		add((#facts > 0 and "\n" or "") .. style.stancesHeading)
+		for _, stance in ipairs(stances) do
+			add(Presentation.StanceLine(style, stance))
+		end
+	end
 	if #chosen > 0 then
-		add((#facts > 0 and "\n" or "") .. style.momentsHeading)
+		add(((#facts > 0 or #stances > 0) and "\n" or "") .. style.momentsHeading)
 		for _, title in ipairs(chosen) do
 			add(Presentation.MomentLine(style, title))
 		end

@@ -39,6 +39,11 @@ local function withCharacter(ctx, change)
 	return result, message
 end
 
+--- For other core modules' commands (Core/NarrativeCommands.lua): the same
+-- read-only, create-on-first-write and rollback-on-failure rules.
+Actions.WithCharacter = withCharacter
+Actions.Fail = fail
+
 --- Read access (never creates anything).
 function Actions.Character(ctx)
 	return ctx.store:GetCharacter(ctx.characterKey)

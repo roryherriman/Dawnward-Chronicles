@@ -24,18 +24,21 @@ Presentation.STYLES = {
 		heading = "{h3}Chronicle{/h3}",
 		momentsHeading = "Defining moments:",
 		momentPrefix = "- ",
+		stancesHeading = "Where they stand:",
 	},
 	silverhand = {
 		label = "Silver Hand (gold headings)",
 		heading = "{h3}{col:e6c35c}Chronicle{/col}{/h3}",
 		momentsHeading = "{col:e6c35c}Defining moments{/col}",
 		momentPrefix = "- ",
+		stancesHeading = "{col:e6c35c}Where they stand{/col}",
 	},
 	arcane = {
 		label = "Arcane (violet headings, book icon)",
 		heading = "{h3}{icon:INV_Misc_Book_09:18} {col:b89cff}Chronicle{/col}{/h3}",
 		momentsHeading = "{col:b89cff}Defining moments{/col}",
 		momentPrefix = "- ",
+		stancesHeading = "{col:b89cff}Where they stand{/col}",
 	},
 }
 
@@ -55,4 +58,14 @@ end
 
 function Presentation.MomentLine(style, title)
 	return style.momentPrefix .. Presentation.Escape(title:gsub("\n", " "))
+end
+
+--- A public stance: "Subject: persona" (plus the conviction only when the
+-- player made it public too).
+function Presentation.StanceLine(style, stance)
+	local text = stance.persona or stance.conviction
+	if stance.persona and stance.conviction then
+		text = stance.persona .. " (privately: " .. stance.conviction .. ")"
+	end
+	return style.momentPrefix .. Presentation.Escape((stance.subject .. ": " .. text):gsub("\n", " "))
 end

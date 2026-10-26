@@ -11,6 +11,8 @@
 Core\Util.lua
 Core\Privacy.lua
 Core\Themes.lua
+Core\Records.lua
+Core\RecordTypes.lua
 Core\StorySchema.lua
 Core\Schema.lua
 Core\Migrations.lua
@@ -27,6 +29,12 @@ Core\Reactions.lua
 Core\Evolution.lua
 Core\Narrative.lua
 Core\Decisions.lua
+Core\Memories.lua
+Core\Arcs.lua
+Core\Goals.lua
+Core\Identity.lua
+Core\Director.lua
+Core\Continuity.lua
 Core\Projection.lua
 Core\Serializer.lua
 Core\Transfer.lua
@@ -34,6 +42,7 @@ Core\Store.lua
 Core\Actions.lua
 Core\Commands.lua
 Core\StoryCommands.lua
+Core\NarrativeCommands.lua
 
 Integrations\TRP3\VersionProfiles.lua
 Integrations\TRP3\Status.lua

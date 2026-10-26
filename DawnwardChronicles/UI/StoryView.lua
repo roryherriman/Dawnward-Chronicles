@@ -54,6 +54,18 @@ function StoryView.Summary(char, now)
 	return table.concat(parts, "  -  ") .. "\nNext: " .. next .. "."
 end
 
+--- The small line under the question: folded events, a recalled memory and
+-- why the moment appeared (verified data only). Pure: used by tests.
+function StoryView.ContextText(presentation)
+	local parts = {}
+	if presentation.context then parts[#parts + 1] = presentation.context end
+	if presentation.recall then parts[#parts + 1] = presentation.recall end
+	if presentation.why and #presentation.why > 0 then
+		parts[#parts + 1] = "Why now: " .. table.concat(presentation.why, "; ")
+	end
+	return table.concat(parts, "  -  ")
+end
+
 local function create(parent)
 	local section = { frame = CreateFrame("Frame", nil, parent), index = 1, optionButtons = {}, changeRows = {} }
 	local f = section.frame
@@ -192,7 +204,7 @@ local function create(parent)
 		end
 		self.index = math.max(1, math.min(self.index, #list))
 		local reaction = list[self.index]
-		local presentation = reaction and Reactions.Present(char, reaction)
+		local presentation = reaction and Reactions.Present(char, reaction, now)
 		self.reactionId = reaction and reaction.id
 		local hasReaction = presentation ~= nil
 		for _, w in ipairs(reactionWidgets) do
@@ -206,7 +218,7 @@ local function create(parent)
 			self.prev:SetEnabled(self.index > 1)
 			self.next:SetEnabled(self.index < #list)
 			self.question:SetText(presentation.question)
-			self.context:SetText(presentation.context or "")
+			self.context:SetText(StoryView.ContextText(presentation))
 		end
 		for i, button in ipairs(self.optionButtons) do
 			local option = hasReaction and presentation.options[i]
