@@ -1,10 +1,15 @@
 <div align="center">
 
-# 📜 Dawnward Chronicles
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/branding/png/dawnward-lockup-dark.png">
+  <img src="assets/branding/png/dawnward-lockup-light.png" alt="Dawnward Chronicles" width="560">
+</picture>
 
 ### *A living chronicle for your World of Warcraft character*
 
-**Total RP 3 tells the world who your character is.<br>Dawnward Chronicles helps you discover who they become.**
+**TRP3 tells the world who your character is.<br>Dawnward Chronicles helps you discover who you become.**
+
+[How it works](#how-it-works) · [Features](#features) · [Install](#installation) · [Getting started](#getting-started) · [Status](#development-status) · [Docs](#documentation)
 
 [![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange)](#development-status)
 [![Client: Classic Era 1.15.9](https://img.shields.io/badge/client-Classic%20Era%201.15.9-blue)](docs/COMPATIBILITY.md)
@@ -19,7 +24,7 @@ Dawnward Chronicles is a roleplaying companion addon. It notices what your chara
 
 It works for **every class, race and faction**. A compassionate Warlock, a ruthless Paladin, a sceptical Priest and an honourable Rogue are all equally valid: class never decides personality, and nothing assumes your character is heroic, religious or loyal to anyone.
 
-> **Status: pre-alpha, no public release yet.** v0.2 (the journal window) passed its in-game acceptance checklist on Classic Era. v0.3 and v0.4 are in development and verified by automated tests only. See [Development status](#development-status).
+> **Status: pre-alpha, no public release yet.** On Classic Era 1.15.9 the developer has tested the journal window (v0.2) and the core of v0.4 in game: memories, arcs, goals, people, stances, places and opt-in TRP3 sync. The v0.5 window changes are verified by automated tests only. See [Development status](#development-status).
 
 ## Built to Complement Total RP 3 — Not Replace It
 
@@ -56,7 +61,7 @@ Two players completing identical content will develop different characters, beca
 
 ## Features
 
-Every feature is marked with the highest verification it has reached: ✅ **verified in game**, 🧪 **automated tests only** (awaiting in-game verification), 🚧 **experimental** (opt-in), 🗺️ **planned**.
+Every feature is marked with the highest verification it has reached: ✅ **verified in game** (by the developer, Classic Era 1.15.9), 🧪 **automated tests only** (awaiting in-game verification), 🚧 **experimental** (opt-in), 🗺️ **planned**.
 
 | Feature | What it does | Status |
 |---|---|---|
@@ -73,13 +78,18 @@ Every feature is marked with the highest verification it has reached: ✅ **veri
 | **TRP3 Chronicle sync** | Keeps a Dawnward-owned section of your TRP3 About page and Dawnward-owned personality traits up to date from **public** information only; backup, rollback, conflict and editor protection | 🚧 v0.3–v0.4, TRP3 3.4.1 only |
 | **TRP3 presentation styles** | Neutral (default), Silver Hand and Arcane formatting for Dawnward's section, using only TRP3-supported markup | 🚧 🧪 v0.4 |
 | **World events** | First recorded zone visits and dungeon entries, reputation tier changes (observed standing only: it never decides how your character feels), guild membership | 🧪 v0.4 ([#11](https://github.com/roryherriman/Dawnward-Chronicles/issues/11), [#18](https://github.com/roryherriman/Dawnward-Chronicles/issues/18), [#36](https://github.com/roryherriman/Dawnward-Chronicles/issues/36)) |
-| **Memories, arcs and goals** | Memories linked to what happened; long-term arcs (suggested when your answers share a theme); personal goals with verified and player-judged progress; a Story Director that recalls your history; continuity review | 🧪 v0.4 ([#12](https://github.com/roryherriman/Dawnward-Chronicles/issues/12), [#19](https://github.com/roryherriman/Dawnward-Chronicles/issues/19), [#20](https://github.com/roryherriman/Dawnward-Chronicles/issues/20), [#25](https://github.com/roryherriman/Dawnward-Chronicles/issues/25), [#27](https://github.com/roryherriman/Dawnward-Chronicles/issues/27), [#42](https://github.com/roryherriman/Dawnward-Chronicles/issues/42)) |
-| **Identity and people** | Public persona vs private convictions per subject; people your character knows (NPCs, other players' characters, family), with private feelings | 🧪 v0.4 ([#30](https://github.com/roryherriman/Dawnward-Chronicles/issues/30), [#18](https://github.com/roryherriman/Dawnward-Chronicles/issues/18), [#28](https://github.com/roryherriman/Dawnward-Chronicles/issues/28), [#37](https://github.com/roryherriman/Dawnward-Chronicles/issues/37)) |
+| **Memories, arcs and goals** | Memories linked to what happened; long-term arcs (suggested when your answers share a theme); personal goals with verified and player-judged progress; a Story Director that recalls your history; continuity review | ✅ v0.4 (owner-tested 2026-10-26) ([#12](https://github.com/roryherriman/Dawnward-Chronicles/issues/12), [#19](https://github.com/roryherriman/Dawnward-Chronicles/issues/19), [#20](https://github.com/roryherriman/Dawnward-Chronicles/issues/20), [#25](https://github.com/roryherriman/Dawnward-Chronicles/issues/25), [#27](https://github.com/roryherriman/Dawnward-Chronicles/issues/27), [#42](https://github.com/roryherriman/Dawnward-Chronicles/issues/42)) |
+| **Identity and people** | Public persona vs private convictions per subject; people your character knows (NPCs, other players' characters, family), with private feelings | ✅ v0.4 (owner-tested 2026-10-26) ([#30](https://github.com/roryherriman/Dawnward-Chronicles/issues/30), [#18](https://github.com/roryherriman/Dawnward-Chronicles/issues/18), [#28](https://github.com/roryherriman/Dawnward-Chronicles/issues/28), [#37](https://github.com/roryherriman/Dawnward-Chronicles/issues/37)) |
 | **Roleplay moments, timeline, reflection** | Record your own moments, browse a timeline, sit down to reflect | 🧪 v0.4 ([#40](https://github.com/roryherriman/Dawnward-Chronicles/issues/40), [#26](https://github.com/roryherriman/Dawnward-Chronicles/issues/26), [#29](https://github.com/roryherriman/Dawnward-Chronicles/issues/29)) |
+| **Places and homeland** | Towns, inns and starting areas logged as you travel; mark meaningful places; link one as your Homeland; returns can become moments | ✅ v0.4 (Elwynn Forest, Northshire, Goldshire) |
+| **Edit everything in the window** | New and Edit forms for memories, arcs, goals and milestones, stances, people, family and history; paged lists; a Places tab | 🧪 v0.5 ([#17](https://github.com/roryherriman/Dawnward-Chronicles/issues/17), [#46](https://github.com/roryherriman/Dawnward-Chronicles/issues/46)) |
+| **Guide, help and minimap button** | A first-run guide (replayable from **?**), searchable help, and a minimap button | 🧪 v0.5 ([#51](https://github.com/roryherriman/Dawnward-Chronicles/issues/51), [#45](https://github.com/roryherriman/Dawnward-Chronicles/issues/45)) |
+| **Weighted story moments** | Places ask by how much they matter to your character: homeland, marked places, memories, arcs, goals and people weigh most; ordinary travel is logged quietly | 🧪 v0.5 |
+| **Zone Atlas** | Each place ID labelled with how it was verified; `/dawnward atlas` checks them in game | 🧪 v0.5 ([#48](https://github.com/roryherriman/Dawnward-Chronicles/issues/48)) |
 | **Dungeon bosses, relationship graph, scrapbook, letters** | Boss detection (unverified events), family-tree views, scrapbook and alternate journal formats | 🗺️ [#11](https://github.com/roryherriman/Dawnward-Chronicles/issues/11), [#31](https://github.com/roryherriman/Dawnward-Chronicles/issues/31), [#37](https://github.com/roryherriman/Dawnward-Chronicles/issues/37), [#41](https://github.com/roryherriman/Dawnward-Chronicles/issues/41) |
 | **Immersive journal redesign** | A resizable, customisable fantasy journal | 🗺️ [#17](https://github.com/roryherriman/Dawnward-Chronicles/issues/17) |
 
-> No screenshots yet: they will be added from real in-game captures once the v0.4 interface has been verified in game.
+> No screenshots yet: they will be added from real in-game captures, never mock-ups.
 
 ## Installation
 
@@ -104,7 +114,7 @@ Dawnward is not yet published on an addon site. To try a development build:
 
 ## Getting started
 
-1. **Name your character:** `/dawnward set name <name>` (or the Character section). Everything you add is **private** until you change it.
+1. **Open the journal** with `/dawnward` or the minimap button. A short guide opens the first time; reopen it from the **?** button. **Name your character** in the Character section. Everything you add is **private** until you change it.
 2. **Add who they are:** facts with `/dawnward fact add belief Trusts no one`, personality with `/dawnward personality set courage 6`. Choose what is public with the visibility buttons or `vis` commands.
 3. **Play.** Story moments start once a character has a Dawnward profile (step 1), so your other characters are never recorded. When a moment is waiting, you will see one chat line and a small card, never in combat. Open it with **Answer**, or later from the **Story** section (`/dawnward story`).
 4. **Review your development:** approve or reject proposed personality changes in the Story section (`/dawnward develop`).
@@ -134,7 +144,8 @@ Use a **spare, non-default TRP3 profile** first. `/dawnward trp3 help` lists the
 | **0.1** | Saved data and migrations, profile and family history, export/import, simulation, read-only TRP3 detection | ✅ in game, Classic Era 1.15.9 |
 | **0.2** | Journal window, level-up milestones, themes | ✅ in-game acceptance checklist, Classic Era |
 | **0.3** (PR [#9](https://github.com/roryherriman/Dawnward-Chronicles/pull/9)) | Facts, personality axes, biography sources, experimental TRP3 sync | 🧪 automated; in-game checks in progress |
-| **0.4** (PR [#43](https://github.com/roryherriman/Dawnward-Chronicles/pull/43)) | The living chronicle: events, moments, decisions, personality evolution, story journal, TRP3 presentation; memories, arcs, goals, persona and convictions, people, world events, continuity review | 🧪 automated; [in-game checklist](docs/TESTING.md#v04-in-game-checklist-l3-the-living-chronicle) pending |
+| **0.4** (PR [#43](https://github.com/roryherriman/Dawnward-Chronicles/pull/43), [#47](https://github.com/roryherriman/Dawnward-Chronicles/pull/47)) | The living chronicle: events, moments, decisions, personality evolution, story journal, TRP3 presentation; memories, arcs, goals, persona and convictions, people, world events, continuity review; origins and places | ✅ core features owner-tested in game on 2026-10-26 ([results](docs/COMPATIBILITY.md)); some checklist parts still open |
+| **0.5** (PR [#52](https://github.com/roryherriman/Dawnward-Chronicles/pull/52)) | Forms for every record, Chronicle layout fix, Places tab, minimap button, first-run guide, weighted place moments, Zone Atlas verifier | 🧪 automated; in-game checks pending |
 | **Next** | Journal redesign, story import wizard, dungeon bosses, letters and scrapbook, custom personality rules | 🗺️ [open issues](https://github.com/roryherriman/Dawnward-Chronicles/issues) |
 | **Release gate** | WoW Forever compatibility and launch readiness | 🗺️ [#24](https://github.com/roryherriman/Dawnward-Chronicles/issues/24), not started |
 
@@ -170,7 +181,17 @@ Live details: [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) and [`docs/TESTIN
   python tools/check.py   # hygiene, TOC, luacheck and the Lua 5.1 test suite
   ```
 
-Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · Vision: [`docs/VISION.md`](docs/VISION.md) · Privacy: [`docs/PRIVACY.md`](docs/PRIVACY.md)
+## Documentation
+
+| | |
+|---|---|
+| [Architecture](docs/ARCHITECTURE.md) | Layers, saved data, UI, Story Director weighting |
+| [Testing](docs/TESTING.md) | Automated levels and the in-game checklists |
+| [Compatibility](docs/COMPATIBILITY.md) | Every client API used, with its evidence |
+| [Zone Atlas](docs/ZONE_ATLAS.md) | Place data, evidence levels and `/dawnward atlas` |
+| [Privacy](docs/PRIVACY.md) · [Vision](docs/VISION.md) | What stays private, and why Dawnward exists |
+| [TRP3 integration](docs/TRP3_INTEGRATION.md) | The experimental sync and its safeguards |
+| [Brand guide](docs/BRANDING_GUIDE.md) | Logo, palette and typography (proposal) |
 
 ## Licence and credits
 

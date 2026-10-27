@@ -1,0 +1,6 @@
+/* Shared by the brand templates. Fonts: Cinzel and EB Garamond (SIL OFL 1.1, Google Fonts). */
+@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=EB+Garamond:ital@0;1&display=swap");
+:root { --night: #14111C; --ink: #1A1714; --parchment: #EDE6D6; --gold: #DBBD75; --ember: #E08A3C; --violet: #4B3B6B; }
+* { box-sizing: border-box; margin: 0; }
+body { background: var(--night); color: var(--parchment); font-family: "EB Garamond", Georgia, serif; }
+.glow { background: radial-gradient(ellipse 70% 60% at 50% 105%, rgba(224,138,60,.35), rgba(75,59,107,.25) 45%, transparent 70%), var(--night); }

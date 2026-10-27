@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Dawnward Chronicles">
+<title>Dawnward Chronicles</title>
+<g transform="scale(1.0000)">
+  <defs>
+    <linearGradient id="sunlight" x1="0" y1="0" x2="0" y2="0.5">
+      <stop offset="0" stop-color="#DBBD75"/><stop offset="1" stop-color="#E08A3C"/>
+    </linearGradient>
+    <clipPath id="skylight"><rect x="0" y="0" width="256" height="150"/></clipPath>
+  </defs>
+  <rect width="256" height="256" rx="52" fill="#EDE6D6"/>
+  <g stroke="#E08A3C" stroke-width="11" stroke-linecap="round"><line x1="74.3" y1="119.0" x2="55.3" y2="108.0"/><line x1="97.0" y1="96.3" x2="86.0" y2="77.3"/><line x1="128.0" y1="88.0" x2="128.0" y2="58.0"/><line x1="159.0" y1="96.3" x2="170.0" y2="77.3"/><line x1="181.7" y1="119.0" x2="200.7" y2="108.0"/></g>
+  <circle cx="128" cy="150" r="48" fill="url(#sunlight)" clip-path="url(#skylight)"/>
+  <path fill="#14111C" d="M36 148 C66 140 104 142 122 156 L122 214 C104 200 66 198 36 206 Z"/>
+  <path fill="#14111C" d="M220 148 C190 140 152 142 134 156 L134 214 C152 200 190 198 220 206 Z"/>
+</g>
+</svg>

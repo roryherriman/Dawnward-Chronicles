@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Concept B: illuminated chronicle">
+<title>Concept B: illuminated chronicle</title>
+<rect width="256" height="256" rx="52" fill="#4B3B6B"/>
+<rect x="64" y="40" width="128" height="176" rx="10" fill="#14111C" stroke="#DBBD75" stroke-width="6"/>
+<rect x="64" y="40" width="18" height="176" rx="6" fill="#DBBD75"/>
+<circle cx="137" cy="118" r="34" fill="none" stroke="#DBBD75" stroke-width="6"/>
+<path d="M111 126 A26 26 0 0 1 163 126 Z" fill="#E08A3C"/>
+<line x1="105" y1="132" x2="169" y2="132" stroke="#DBBD75" stroke-width="6" stroke-linecap="round"/>
+<path d="M150 216 L150 236 L160 228 L170 236 L170 216 Z" fill="#E08A3C"/>
+</svg>
