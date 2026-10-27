@@ -138,6 +138,15 @@ Automatic entries can change visibility, but they can't be edited or deleted, so
 See [UI_DIRECTION.md](UI_DIRECTION.md).
 
 - **One window, four sections** (Journal, Character, Story, Chronicle), plus a settings panel behind a gear button and a guide behind a **?** button (#51). Neither panel is a section.
+- **Design system (v0.6):**
+  - `UI/Style.lua` holds the tokens, a theme registry (`Style.Register` and `Style.Apply`) and the frame chrome.
+  - `UI/Widgets.lua` holds the component kit: buttons with variants and states, icon buttons, segmented controls, cards, dividers, inputs and the confirmation dialog.
+  - Components paint themselves, and modules don't hand-colour controls.
+  - Specification: [design/UI_DESIGN_V06.md](design/UI_DESIGN_V06.md).
+- **First-time setup (v0.6):**
+  - `Core/Onboarding.lua` holds the rules and saved state: `char.wizard`, plus drafts in `ui.wizardDrafts` keyed by character.
+  - `UI/SetupWizard.lua` holds the six pages. It opens through `MainWindow.BeforeShow` for genuinely new characters only.
+  - `Core/SetupCommands.lua` adds `/dawnward setup` and the developer commands, which only work in `-dev` builds.
 - **Forms (v0.5):** `UI/Forms.lua` is one shared form (line, text area, cycle and number fields; Save, Cancel and a confirmed Remove) used for every record in the Chronicle and for family and history. Records no longer need slash commands.
 - **Chronicle rows (v0.5, #46):** two lines per record. The text has the full width on the first; status and up to five buttons share the second. `ChronicleView.RowRects` is the single source of the row's rectangles, and a test checks none overlap. Lists are paged, six rows per page.
 - **Minimap button (v0.5, #45):** `UI/MinimapButton.lua`; angle and hidden state are account-wide in `DawnwardChroniclesDB.ui.minimap`.

@@ -128,7 +128,7 @@ Everything is built from solid-colour textures. No art files ship and no Blizzar
 | Component | Variants and states |
 |---|---|
 | `Widgets.Button(parent, text, w, h, variant)` | `default` (surface), `primary` (accent fill), `ghost` (no fill until hovered), `danger` (danger text and edge). States: normal, hover (lighter fill, accent edge), pressed (1 px text offset), disabled (muted text, no hover) |
-| `Widgets.IconButton` | 22 × 22 glyph buttons (?, ⚙ drawn as text, ×) with hover |
+| `Widgets.IconButton` | 22 × 22 glyph buttons ("X" to close, "<" and ">") with hover. The window header's ? and settings buttons hold the game's own question-mark and gear icons, desaturated and tinted with the theme (muted, accent on hover) |
 | `Widgets.Tabs` / `Widgets.Segmented` | Primary nav: text with a 2 px accent underline for the selected item and hover colour. Segmented: joined surface buttons, the selected one filled |
 | `Widgets.EditLine`, `Widgets.TextArea` | Surface-coloured well with a 1 px edge; the accent edge shows while focused |
 | `Widgets.Card` | Surface fill and 1 px edge, for journal entries and choices |
@@ -231,4 +231,5 @@ Everything is built from solid-colour textures. No art files ship and no Blizzar
 ## 9. Known limitations
 - Scroll bars still use the stock `UIPanelScrollFrameTemplate` art. Restyling Blizzard's scroll bar safely across clients is left for later.
 - Mock-based tests prove wiring and layout maths, not real rendering. Every visual claim needs the v0.6 in-game checklist (TESTING.md, part N).
-- Glyphs: the gear is drawn as text, not an icon. Friz Quadrata lacks many symbols, so only ASCII and Latin-1 glyphs are used.
+- Glyphs: Friz Quadrata lacks many symbols, so text glyphs are ASCII only ("X", "<", ">"). The header's help and settings buttons use the game's own icons, desaturated and tinted.
+- Mock tests now fire OnShow and OnHide like the client. That exposed one build-time OnHide in the wizard, which is fixed.

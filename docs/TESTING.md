@@ -432,3 +432,73 @@ Build: schema 5, unchanged. Everything below has passed mocked tests (L2) only. 
 | M16 | Set your Homeland to a town you will visit later (or mark a place), then visit it | It asks, even shortly after another place moment; the notice waits for a calm moment |
 | M17 | `/dawnward atlas` in Goldshire and in Lion's Pride Inn; `/dawnward atlas verify`; `/dawnward atlas export` | Goldshire: area 87, settlement, in-game evidence. Lion's Pride Inn: no verified area ID. Verify: count of matches. **Paste the export into #48** |
 | M18 | `/dawnward atlas scan 1 5000` | A copy window with named areas. **Paste it into #48** (it lets coverage grow from the client's own data) |
+
+### v0.6 in-game checklist (L3): visual overhaul and first-time setup
+
+#### Part N: v0.6 design, setup wizard, themes, developer commands (branch `feat/v0.6-ui-overhaul`)
+
+Build: **0.6.0-dev**, schema 5 (unchanged). Everything below has passed mocked tests (L2) only. The design is described in [docs/design/UI_DESIGN_V06.md](design/UI_DESIGN_V06.md).
+
+**Before you start:** close the game. Back up `WTF\Account\<account>\SavedVariables\DawnwardChronicles*.lua`, then install the branch build.
+
+**Characters you need:**
+- **New:** a character that has never used Dawnward, either a fresh one or one with no Dawnward record.
+- **Established:** your usual test character, with v0.5 data.
+
+Turn on `/console scriptErrors 1` and note any Lua error with its text.
+
+**Setup wizard: new character**
+
+| # | Steps | Pass when |
+|---|---|---|
+| N1 | On the **new** character, type `/dawnward` (or click the minimap button) | The setup wizard opens on **1 Welcome**, *instead of* the journal. The eyebrow reads "FIRST-TIME SETUP". There is a step indicator with six steps |
+| N2 | **Next**. On Character, check the Name box | Your in-game name is pre-filled as a suggestion. Type a Title and a Homeland |
+| N3 | **Next**, change "How often" and "Place moments"; then **< Back** | Back on Character, your Title and Homeland are still there. Forward again, your story choices are kept |
+| N4 | Continue to **Privacy** | It explains Private, Secret and Public, says Total RP 3 sync stays off, and shows your TRP3 status read-only. There is no button that turns sync on |
+| N5 | **Appearance:** click each theme | The wizard recolours at once (live preview). Pick **Shadowbound** and set Minimap button to *Hide* |
+| N6 | Press **Escape** (or click X) on any page, then `/dawnward` again in the same session | The wizard closes. This time the journal opens (the wizard opens by itself only once per session). `/dawnward dev setup status` shows "Draft: saved, page N" |
+| N7 | `/reload`, then `/dawnward` | The wizard reopens on the same page, with your answers still filled in |
+| N8 | Go to **Finish**, read the review, click **Finish** | The journal opens on the Journal tab, in Shadowbound. Character shows your Name, Title and Homeland, all **Private**. The minimap button is hidden. Fields you left empty were not created |
+| N9 | `/reload`, then `/dawnward` twice | The journal opens and closes normally. The wizard does not return |
+
+**Setup wizard: established character**
+
+| # | Steps | Pass when |
+|---|---|---|
+| N10 | Log in on the **established** character, `/dawnward` | The journal opens directly. **No wizard** |
+| N11 | Settings (gear) → General → **Run setup**. On Character, empty the Homeland box and change the Title. **Finish** | Homeland is **unchanged**, because an empty box never erases. The Title is updated. Journal, memories, arcs, goals and places are exactly as before |
+
+**Developer commands (0.6.0-dev only)**
+
+| # | Steps | Pass when |
+|---|---|---|
+| N12 | `/dawnward dev setup status` | Shows complete or not, "Current wizard version: 1", the draft state, and whether the character counts as new |
+| N13 | `/dawnward dev setup` on the character from N8 | The wizard opens even though setup is complete. The eyebrow reads "PREVIEW - TEST MODE". There is no "Set up later" |
+| N14 | In the preview, change the Title, go to Finish, click **Close preview** | Nothing changed (check the Character tab). `dev setup status` still says complete |
+| N15 | `/dawnward dev setup` again, change the Title, click **Save choices** | The Title changes. `dev setup status` still says complete with the same date: setup status did not change |
+| N16 | `/dawnward dev setup reset` | It explains what will be reset and asks for `confirm`. **Nothing changed** |
+| N17 | `/dawnward dev setup reset confirm`, then `dev setup status` | "Setup: not complete." Profile, journal and story are unchanged. Because the character now has data, the wizard does **not** open by itself |
+
+**Themes and the redesigned interface**
+
+| # | Steps | Pass when |
+|---|---|---|
+| N18 | Settings → General: click Classic Dawnward, Lightbound and Shadowbound in turn | The whole window recolours: frame line, corner brackets, buttons, inputs, cards and text. The current theme tile is highlighted. Text is readable on each |
+| N19 | Pick Neutral, Silver Hand and Arcane (the v0.2 themes) | Still selectable. An established character that used one keeps it after the upgrade |
+| N20 | Log in on another character | It keeps its own theme. New characters start on Classic Dawnward |
+| N21 | Visit every tab: Journal (cards; New entry, Edit, Delete, Approve, Defining), Character (Edit, Add), Story (answer cards; Later, Not now, Dismiss), Chronicle (segmented tabs; New, Edit, Remove), Settings (General, Story, Data, Total RP 3 pages) | Nothing overlaps or is cut off. Buttons highlight on hover, and disabled buttons look disabled. Every v0.5 action still works |
+| N22 | Delete a journal entry | A Dawnward-styled confirmation appears above the window. **Cancel** and **Escape** do nothing; **Delete** deletes |
+| N23 | Wait for a story moment out of combat | The reaction card uses the same frame style. Answer, Later and Dismiss work; enter combat and it hides |
+| N24 | Settings → Data → Export backup | The copy window uses the new style; Ctrl+C copies and Escape closes |
+| N25 | Set the game's UI scale to its largest, then `/reload`, then open the journal and the wizard | Both fit on screen. If the screen is too small, the window scales itself down |
+| N26 | Check tooltips on the ?, gear and X buttons, the visibility buttons and a Settings button | Each tooltip shows, and hovering still highlights the control |
+
+**Report:**
+- Which steps passed, with your game version, UI scale and resolution.
+- Every Lua error, with its text.
+- Any screen that looks wrong: describe it, or attach a screenshot if you're happy to share one.
+
+**Not covered yet:**
+- Scroll bars keep the stock Blizzard style.
+- Localised clients are untested.
+- Nothing has been tested on WoW Forever.
