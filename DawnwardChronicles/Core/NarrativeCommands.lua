@@ -87,7 +87,8 @@ local EXAMPLES = {
 	arc = { state = "state 7 concluded", rename = "rename 7 Where I belong", turn = "turn 7 Left home",
 		accept = "accept 7", dispute = "dispute 7", vis = "vis 7 public", remove = "remove 7 confirm" },
 	goal = { state = "state 12 achieved", milestone = "milestone 12 Find a ship", done = "done 12 1",
-		undone = "undone 12 1", level = "level 12 20", vis = "vis 12 public", remove = "remove 12 confirm" },
+		undone = "undone 12 1", level = "level 12 20",
+		reputation = "reputation 12 honored Stormwind", vis = "vis 12 public", remove = "remove 12 confirm" },
 }
 
 --- A helpful message when a command needs a record number and got none.
@@ -147,12 +148,13 @@ Commands.Register("goal", function(ctx, rest)
 		out(ctx, string.format("Goals (%d):", #list))
 		for _, g in ipairs(list) do
 			local p = Goals.Progress(char, g)
-			local objective = p.objective and string.format(", level %s/%d%s", tostring(p.objective.current or "?"),
-				p.objective.target, p.objective.met and " (reached)" or "") or ""
+			local objective = p.objective and (", " .. Goals.ObjectiveText(p) .. (p.objective.met and " (reached)" or ""))
+				or ""
 			out(ctx, line(g, string.format("%s (%s, %d/%d milestones%s)", g.title, g.state, p.milestonesDone,
 				p.milestonesTotal, objective)))
 		end
-		out(ctx, "goal add <title> | goal level <#> <target level> | goal milestone <#> <text> | goal done <#> <n> | "
+		out(ctx, "goal add <title> | goal level <#> <target level> | goal reputation <#> <standing> <faction> | "
+			.. "goal milestone <#> <text> | goal done <#> <n> | "
 			.. "goal state <#> <state> | goal vis|remove <#>")
 		return
 	elseif sub == "add" then
@@ -184,6 +186,10 @@ Commands.Register("goal", function(ctx, rest)
 			g.objective, g.updatedAt = { kind = "level", target = target }, now
 			return g
 		end, "Goal #" .. n .. " now tracks reaching level " .. tostring(target) .. " (verified from your level-ups).")
+	elseif sub == "reputation" then
+		local standing, faction = Util.NextWord(tail)
+		run(ctx, function(c, now) return Goals.SetReputationObjective(c, n, faction, standing, now) end,
+			"Goal #" .. n .. " now tracks your observed standing. It shows progress; only you decide when it is achieved.")
 	elseif not common(ctx, Goals, "Goal", sub, n, tail) then
 		out(ctx, "Unknown goal command '" .. sub .. "'.")
 	end

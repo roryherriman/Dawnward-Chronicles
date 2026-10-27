@@ -519,12 +519,26 @@ function Places.SetHomeland(char, entry, now)
 	return entry
 end
 
+--- Whether this logged place is the character's homeland: linked from
+-- Places and still named by the Homeland field (if the player changes or
+-- clears the field, the old link no longer counts).
+function Places.IsHomeland(char, entry)
+	local field = char.fields and char.fields.homeland
+	local value = field and type(field.value) == "string" and field.value:lower()
+	return entry.homeland == true and value ~= nil and value == (entry.subzone or entry.zone):lower()
+end
+
 --- The place linked as the homeland, if any.
 function Places.Homeland(char)
 	for _, entry in pairs(char.story.places) do
-		if entry.homeland then return entry end
+		if Places.IsHomeland(char, entry) then return entry end
 	end
 	return nil
+end
+
+--- A logged place by its zone and subzone (exact, unlike FindByName).
+function Places.Entry(char, zone, subzone)
+	return char.story.places[Places.Key(zone, subzone)]
 end
 
 function Places.Label(entry)

@@ -207,7 +207,8 @@ function Director.LocationRelevance(char, record, prefs)
 		reasons[#reasons + 1] = reason
 	end
 	local homeland = char.fields and char.fields.homeland and char.fields.homeland.value
-	if (entry and entry.homeland) or (needle and type(homeland) == "string" and homeland:lower() == needle) then
+	if (entry and ns.Places.IsHomeland(char, entry))
+		or (needle and type(homeland) == "string" and homeland:lower() == needle) then
 		tie("homeland", "it is your character's homeland")
 	end
 	if m.meaningful == 1 or (entry and entry.meaningful) then

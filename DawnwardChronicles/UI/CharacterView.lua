@@ -203,7 +203,7 @@ function CharacterView.AttachEditing(section)
 
 	function section.decorateRow(row)
 		row.vis = Widgets.VisibilityButton(row, function(level)
-			local spec, message = row.spec
+			local spec, _, message = row.spec
 			if spec.kind == "item" then
 				_, message = section.ChangeItem(function(char, now)
 					return ns.Character.SetItemVisibility(char, spec.list, spec.item.id, level, now)
@@ -246,10 +246,10 @@ function CharacterView.AttachEditing(section)
 			noun = "family member",
 			hint = "Only you write this. New entries start private.",
 			fields = {
-				{ key = "relation", label = "Relation", kind = "line" },
-				{ key = "name", label = "Name", kind = "line" },
+				{ key = "relation", label = "Relation", kind = "line", max = Schema.LIMITS.short },
+				{ key = "name", label = "Name", kind = "line", max = Schema.LIMITS.short },
 				{ key = "status", label = "Status", kind = "cycle", values = STATUS },
-				{ key = "notes", label = "Notes", kind = "area" },
+				{ key = "notes", label = "Notes", kind = "area", max = Schema.LIMITS.long },
 			},
 		},
 		history = {
@@ -257,8 +257,8 @@ function CharacterView.AttachEditing(section)
 			hint = "When it happened, in any words (\"as a child\", \"the Third War\"), and what happened. "
 				.. "New entries start private.",
 			fields = {
-				{ key = "when", label = "When", kind = "line" },
-				{ key = "text", label = "What happened", kind = "area" },
+				{ key = "when", label = "When", kind = "line", max = Schema.LIMITS.short },
+				{ key = "text", label = "What happened", kind = "area", max = Schema.LIMITS.long },
 			},
 		},
 	}
