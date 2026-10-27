@@ -493,6 +493,16 @@ Turn on `/console scriptErrors 1` and note any Lua error with its text.
 | N25 | Set the game's UI scale to its largest, then `/reload`, then open the journal and the wizard | Both fit on screen. If the screen is too small, the window scales itself down |
 | N26 | Check tooltips on the ?, gear and X buttons, the visibility buttons and a Settings button | Each tooltip shows, and hovering still highlights the control |
 
+**Edge cases**
+
+| # | Steps | Pass when |
+|---|---|---|
+| N27 | Create a fresh character, reach level 2, *then* type `/dawnward` for the first time | The wizard still opens: an automatic level-up entry doesn't count as "established" |
+| N28 | On the established character: `/dawnward sim on`, then Settings → General → **Run setup** | The eyebrow reads "SIMULATION MODE: PREVIEW ONLY", and Finish is disabled. Close it, then `/dawnward sim off`. `/dawnward dev setup status` shows no draft |
+| N29 | Give a character a Summary of several paragraphs (Character tab), then run setup and click Next to Finish without touching it | The Summary is unchanged, with its line breaks intact |
+| N30 | Start setup, change the Title, choose "Set up later". In Settings change the theme and Moments. Run setup again and Finish | The Title is saved, and the theme and Moments keep your newer choices |
+| N31 | Open the journal, delete an entry, and press **Escape** on the confirmation | Only the confirmation closes; the journal stays open |
+
 **Report:**
 - Which steps passed, with your game version, UI scale and resolution.
 - Every Lua error, with its text.
