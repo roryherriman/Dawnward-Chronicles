@@ -16,6 +16,7 @@ Core\RecordTypes.lua
 Core\Places.lua
 Core\Guide.lua
 Core\Atlas.lua
+Core\Onboarding.lua
 Core\StorySchema.lua
 Core\Schema.lua
 Core\Migrations.lua
@@ -49,6 +50,7 @@ Core\Actions.lua
 Core\Commands.lua
 Core\StoryCommands.lua
 Core\NarrativeCommands.lua
+Core\SetupCommands.lua
 
 Integrations\TRP3\VersionProfiles.lua
 Integrations\TRP3\Status.lua
@@ -77,6 +79,7 @@ UI\ReactionCard.lua
 UI\ChronicleView.lua
 UI\SettingsPanel.lua
 UI\GuidePanel.lua
+UI\SetupWizard.lua
 UI\MinimapButton.lua
 Platform\AtlasProbe.lua
 Platform\TRP3Bridge.lua

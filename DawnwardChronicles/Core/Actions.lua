@@ -503,6 +503,85 @@ function Actions.FinishGuide(ctx)
 	end)
 end
 
+--- First-time setup (v0.6) ---------------------------------------------------
+
+local function drafts(ctx, create)
+	local ui = ctx.store.real.ui
+	if not ui and create then
+		ui = {}
+		ctx.store.real.ui = ui
+	end
+	if ui and not ui.wizardDrafts and create then
+		ui.wizardDrafts = {}
+	end
+	return ui and ui.wizardDrafts
+end
+
+--- This character's unfinished setup draft, or nil (never creates anything).
+function Actions.SetupDraft(ctx)
+	local list = drafts(ctx, false)
+	return list and list[ctx.characterKey]
+end
+
+--- Saves an unfinished setup (account-wide, by character key). It does not
+-- create a character record. Refused on read-only data.
+function Actions.SaveSetupDraft(ctx, draft)
+	if ctx.store.realReadOnly then
+		return nil, "Saved data is read-only. The draft was not kept."
+	end
+	local clean = ns.Onboarding.CleanDraft(draft)
+	if not clean then
+		return nil, "Nothing to keep."
+	end
+	drafts(ctx, true)[ctx.characterKey] = clean
+	return true
+end
+
+function Actions.ClearSetupDraft(ctx)
+	local list = drafts(ctx, false)
+	if list and not ctx.store.realReadOnly then
+		list[ctx.characterKey] = nil
+	end
+end
+
+--- Finish: writes the wizard's choices for the active character and marks
+-- setup complete. opts.test (developer preview): the choices are saved,
+-- but completion and the real draft are left exactly as they were.
+-- Never writes to Total RP 3; profile fields are only added or changed,
+-- never cleared.
+function Actions.CompleteSetup(ctx, values, opts)
+	opts = opts or {}
+	local ok, message = withCharacter(ctx, function(char)
+		local changed = ns.Onboarding.Apply(char, values, ctx.now(), { complete = not opts.test })
+		return changed, opts.test and "Preview choices saved. Setup status was not changed."
+			or "Setup complete. Welcome to your chronicle."
+	end)
+	if not ok then
+		return nil, message
+	end
+	if values.minimap ~= nil then
+		Actions.SaveMinimap(ctx, { hidden = values.minimap == false })
+	end
+	if not opts.test then
+		Actions.ClearSetupDraft(ctx)
+	end
+	return ok, message
+end
+
+--- Developer reset: forgets only this character's setup completion and
+-- draft. Nothing else is touched, and no character record is created.
+function Actions.ResetSetup(ctx)
+	if ctx.store.realReadOnly then
+		return nil, "Saved data is read-only. Nothing was changed."
+	end
+	local char = ctx.store.real.characters[ctx.characterKey]
+	if char then
+		char.wizard = {}
+	end
+	Actions.ClearSetupDraft(ctx)
+	return true, "Setup state reset for this character. Its profile, journal and story were not touched."
+end
+
 --- The minimap button's settings: { angle, hidden } (never nil).
 function Actions.MinimapSettings(ctx)
 	local ui = ctx.store.real.ui

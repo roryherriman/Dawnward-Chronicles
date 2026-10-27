@@ -54,6 +54,7 @@ local function buildContext()
 		now = time,
 		print = chatPrint,
 		version = addonMetadata("Version") or "?",
+		formatDate = ns.Widgets.FormatDate,
 		client = Detect.Client(_G),
 		trp3Status = function()
 			return TRP3Status.Read(_G)
@@ -76,6 +77,7 @@ local function buildContext()
 		end,
 		ToggleJournal = MainWindow.Toggle,
 		ShowGuide = function() ns.GuidePanel.Open(1) end,
+		ShowSetup = function(opts) ns.SetupWizard.Open(opts) end,
 		ShowStory = function()
 			if not MainWindow.IsShown() then MainWindow.Show() end
 			MainWindow.Select("story")

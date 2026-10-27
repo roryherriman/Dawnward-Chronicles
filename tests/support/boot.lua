@@ -40,9 +40,15 @@ function Boot.Login(mock)
 end
 
 --- Load + login in one step.
+-- opts.wizard: let the first-time setup wizard open by itself (as in game).
+-- Off by default, so tests that open the journal for a new character see
+-- the journal; tests/spec/ui_setup_wizard_spec.lua turns it on.
 function Boot.Start(opts)
 	local mock, env, ns = Boot.Load(opts)
 	Boot.Login(mock)
+	if not (opts and opts.wizard) and ns.ctx then
+		ns.SetupWizard.SkipAutoLaunchThisSession(ns.ctx.characterKey)
+	end
 	-- Confirmations use Dawnward's own dialog (UI/Widgets.lua): accept it
 	-- like a click on its accept button, and record what it asked.
 	function mock.AcceptPopup()

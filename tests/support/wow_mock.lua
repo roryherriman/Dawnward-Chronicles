@@ -30,8 +30,17 @@ function Methods:RegisterEvent(event)
 	self.__mock.eventFrames[self] = true
 end
 function Methods:UnregisterEvent(event) self.__events[event] = nil end
-function Methods:Show() self.__shown = true end
-function Methods:Hide() self.__shown = false end
+-- Like the client, hiding a shown frame fires its OnHide (showing: OnShow).
+function Methods:Show()
+	local was = self.__shown
+	self.__shown = true
+	if not was and self.__scripts.OnShow then self.__scripts.OnShow(self) end
+end
+function Methods:Hide()
+	local was = self.__shown
+	self.__shown = false
+	if was and self.__scripts.OnHide then self.__scripts.OnHide(self) end
+end
 function Methods:IsShown() return self.__shown end
 -- Like the client, an EditBox keeps at most maxBytes - 1 bytes of text.
 function Methods:SetText(text)
@@ -80,7 +89,9 @@ end
 function Methods:SetVerticalScroll(v) self.__vscroll = v end
 function Methods:GetVerticalScroll() return self.__vscroll or 0 end
 function Methods:SetWordWrap(on) self.__wordWrap = on end
-function Methods:SetShown(on) self.__shown = on and true or false end
+function Methods:SetShown(on)
+	if on then self:Show() else self:Hide() end
+end
 function Methods:SetEnabled(on) self.__enabled = on and true or false end
 function Methods:GetLeft() return self.__left or 100 end
 function Methods:GetTop() return self.__top or 600 end

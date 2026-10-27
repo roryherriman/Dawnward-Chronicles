@@ -793,8 +793,8 @@ function Schema.NormalizeCharacter(raw, report)
 	char.sources = normalizeSources(raw.sources, report)
 	char.interpretationKeys = normalizeInterpretationKeys(raw.interpretationKeys, report)
 	char.interpretations = normalizeInterpretations(raw.interpretations, char.interpretationKeys, report)
-	-- Reserved for the setup wizard (v0.3 M3); nothing is stored here yet.
-	char.wizard = {}
+	-- First-time setup state (v0.6, Core/Onboarding.lua): { done, version, doneAt }.
+	char.wizard = ns.Onboarding.Clean(raw.wizard)
 	char.guide = ns.Guide.Clean(raw.guide)
 	char.story = StorySchema.Normalize(raw.story, Schema.PERSONALITY_AXIS_BY_ID, report)
 
@@ -856,6 +856,10 @@ function Schema.NormalizeUi(raw)
 	if type(raw.position) == "table"
 		and finiteCoordinate(raw.position.left) and finiteCoordinate(raw.position.top) then
 		ui.position = { left = raw.position.left, top = raw.position.top }
+	end
+	-- Unfinished first-time setups, by character key (Core/Onboarding.lua).
+	if type(raw.wizardDrafts) == "table" then
+		ui.wizardDrafts = ns.Onboarding.CleanDrafts(raw.wizardDrafts)
 	end
 	if type(raw.minimap) == "table" then
 		local angle = raw.minimap.angle

@@ -1,10 +1,11 @@
 -- The guide (#51): a short, optional tour of Dawnward and a searchable help
--- reference. Shown once per character the first time the journal opens,
--- and replayable from the "?" button, Settings or /dawnward guide. It only
--- explains: it never changes story canon, profiles or Total RP 3 data.
+-- reference: contextual help from the "?" button, Settings or /dawnward
+-- guide. Since v0.6 new characters are welcomed by the setup wizard
+-- instead. It only explains: it never changes story canon, profiles or
+-- Total RP 3 data.
 --
--- Per character it remembers { done, page } in char.guide (cleaned by
--- Guide.Clean; nothing else is stored).
+-- char.guide ({ done, page }, from v0.5) is still cleaned on load
+-- (Guide.Clean) so saved data round-trips, but v0.6 no longer writes it.
 local _, ns = ...
 local Util = ns.Util
 
@@ -69,7 +70,8 @@ Guide.TOPICS = {
 	} },
 	{ id = "commands", title = "Commands", lines = {
 		"Everything above works from the window. Chat commands are optional shortcuts:",
-		"/dawnward (or /dwc): open or close the journal. /dawnward guide: this guide.",
+		"/dawnward (or /dwc): open or close the journal. /dawnward guide: this guide. "
+			.. "/dawnward setup: the first-time setup again.",
 		"/dawnward story: waiting questions. /dawnward develop: personality changes to approve.",
 		"/dawnward goal add Reach the capital   then   /dawnward goal level 12 20   (goal #12, target level 20)",
 		"/dawnward goal milestone 12 Find a ship   then   /dawnward goal done 12 1   (tick step 1)",

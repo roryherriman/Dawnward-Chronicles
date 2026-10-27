@@ -26,6 +26,7 @@ local SHOW_LIMIT = 180 -- bytes of long text shown per line in chat
 
 local HELP = {
 	"Dawnward Chronicles: /dawnward (or /dwc) opens and closes the journal.",
+	"  setup   (first-time setup: name, story moments, privacy, appearance) | guide   (help)",
 	"  status | show [public] | fields | trp3 | theme [neutral|silverhand|arcane] | minimap [show|hide]",
 	"  journal list | journal add <text> | journal edit <#> <text> | journal vis <#> <level>",
 	"  journal remove <#> confirm",
@@ -143,6 +144,9 @@ handlers.help = function(ctx, rest)
 	if word == "all" then
 		for _, line in ipairs(HELP) do
 			out(ctx, line)
+		end
+		if ns.SetupCommands and ns.SetupCommands.DevEnabled(ctx) then
+			out(ctx, "  dev setup | dev setup status | dev setup reset   (development builds only)")
 		end
 		return
 	end
