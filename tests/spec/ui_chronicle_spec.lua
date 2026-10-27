@@ -133,7 +133,7 @@ return function(t, expect)
 		end)
 
 		t:it("creates and edits arcs, goals, stances and people without slash commands", function()
-			local _, env, _, section = start()
+			local _, env, ns, section = start()
 			local story = function() return env.DawnwardChroniclesDB.characters[CHAR].story end
 			tab(section, "arcs")
 			click(section.new)
@@ -155,8 +155,20 @@ return function(t, expect)
 			click(button(section.rows[1], "Steps"))
 			form(section, { [1] = true })
 			expect.truthy(story().goals[1].milestones[1].done)
+			-- A reputation objective needs a faction the game has shown; then it replaces the level.
 			click(button(section.rows[1], "Edit"))
-			form(section, { target = 0, state = "achieved" })
+			form(section, { target = "", faction = "Darnassus", standing = 6 })
+			expect.truthy(section.form:IsOpen(), "Darnassus not seen yet")
+			click(section.form.cancel)
+			expect.equal(story().goals[1].objective.target, 20, "a refused save changes nothing")
+			ns.Observed.CompareStandings(env.DawnwardChroniclesDB.characters[CHAR],
+				{ { id = 69, name = "Darnassus", standing = 5 } })
+			click(button(section.rows[1], "Edit"))
+			form(section, { target = "", faction = "Darnassus", standing = 6 })
+			expect.equal(story().goals[1].objective.kind, "reputation")
+			expect.truthy(section.rows[1].text:GetText():find("Friendly/Honored with Darnassus", 1, true))
+			click(button(section.rows[1], "Edit"))
+			form(section, { target = 0, faction = "", state = "achieved" })
 			expect.falsy(story().goals[1].objective)
 			expect.equal(story().goals[1].state, "achieved")
 
@@ -198,7 +210,16 @@ return function(t, expect)
 			expect.truthy(ns.Places.Homeland(char))
 			click(button(section.rows[1], "Memory"))
 			form(section, { text = "Where I first felt at home" })
-			expect.equal(char.story.memories[1].zone, "Goldshire")
+			local memory = char.story.memories[1]
+			expect.equal(memory.zone, "Elwynn Forest")
+			expect.deepEqual(memory.links.events, { "place:Elwynn Forest / Goldshire" })
+			expect.truthy(ns.Places.Linked(char.story, ns.Places.FindByName(char, "Goldshire")),
+				"a return to Goldshire now recalls it")
+			-- Changing the Homeland field elsewhere unlinks the place.
+			mock.Slash("set homeland Lordaeron")
+			expect.falsy(ns.Places.Homeland(char))
+			ns.MainWindow.Refresh()
+			expect.falsy(section.rows[1].text:GetText():find("homeland", 1, true))
 		end)
 
 		t:it("answers continuity findings from the Review tab without changing canon", function()

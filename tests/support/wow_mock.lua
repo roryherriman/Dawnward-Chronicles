@@ -21,7 +21,14 @@ function Methods:UnregisterEvent(event) self.__events[event] = nil end
 function Methods:Show() self.__shown = true end
 function Methods:Hide() self.__shown = false end
 function Methods:IsShown() return self.__shown end
-function Methods:SetText(text) self.__text = text end
+-- Like the client, an EditBox keeps at most maxBytes - 1 bytes of text.
+function Methods:SetText(text)
+	if self.__maxBytes and self.__maxBytes > 0 and type(text) == "string" and #text > self.__maxBytes - 1 then
+		text = text:sub(1, self.__maxBytes - 1)
+	end
+	self.__text = text
+end
+function Methods:SetMaxBytes(n) self.__maxBytes = n end
 function Methods:GetText() return self.__text end
 function Methods:Enable() self.__enabled = true end
 function Methods:Disable() self.__enabled = false end

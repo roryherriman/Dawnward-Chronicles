@@ -79,8 +79,9 @@ function ChronicleView.RecordText(listId, r, char)
 				#r.turningPoints == 1 and "" or "s") or "")
 	elseif listId == "goals" then
 		local p = ns.Goals.Progress(char, r)
+		local objective = ns.Goals.ObjectiveText(p)
 		body = string.format("%s (%s, %d/%d milestones%s)", r.title, r.state, p.milestonesDone, p.milestonesTotal,
-			p.objective and string.format(", level %s/%d", tostring(p.objective.current or "?"), p.objective.target) or "")
+			objective and (", " .. objective) or "")
 	elseif listId == "identity" then
 		body = string.format("%s - in public: %s / privately (%s): %s", r.subject, r.persona or "-",
 			r.convictionVisibility, r.conviction or "-")
@@ -89,7 +90,7 @@ function ChronicleView.RecordText(listId, r, char)
 			r.relation and (": " .. r.relation) or "")
 	elseif listId == "places" then
 		local flags = {}
-		if r.homeland then flags[#flags + 1] = "homeland" end
+		if ns.Places.IsHomeland(char, r) then flags[#flags + 1] = "homeland" end
 		if r.meaningful then flags[#flags + 1] = "meaningful to you" end
 		body = string.format("%s%s", ns.Places.Label(r), #flags > 0 and (" - " .. table.concat(flags, ", ")) or "")
 		return body, string.format("%s%d visit%s", r.kind and (KIND_LABELS[r.kind] .. ", ") or "", r.visits,
@@ -160,27 +161,55 @@ FORMS.arcs = function(r)
 	}
 end
 
+-- Standings a reputation objective can target (Friendly and above are the
+-- usual aims, but any standing is allowed).
+local STANDINGS = { { 5, "Friendly" }, { 6, "Honored" }, { 7, "Revered" }, { 8, "Exalted" }, { 4, "Neutral" },
+	{ 3, "Unfriendly" }, { 2, "Hostile" }, { 1, "Hated" } }
+
 FORMS.goals = function(r)
+	local o = r and r.objective
+	local function blank(s) return not s or not s:match("%S") end
+	-- One verified objective at most: a level, or a standing with a faction.
+	local function objective(char, id, v, now)
+		if not blank(v.faction) then
+			if v.target then return nil, "choose a target level or a faction, not both" end
+			return ns.Goals.SetReputationObjective(char, id, v.faction, v.standing, now)
+		end
+		return ns.Goals.Edit(char, id, { target = v.target or false }, now)
+	end
 	return {
 		title = r and "Edit goal" or "New goal",
-		hint = "What your character wants. A target level is shown as verified progress; "
-			.. "only you decide when the goal is achieved.",
+		hint = "What your character wants. A target level, or a standing with a faction Dawnward has seen, is "
+			.. "shown as verified progress; only you decide when the goal is achieved.",
 		fields = {
 			{ key = "title", label = "Goal", kind = "line" },
 			{ key = "text", label = "Why it matters", kind = "area" },
 			{ key = "target", label = "Target level", kind = "number" },
+			{ key = "faction", label = "Or a faction", kind = "line" },
+			{ key = "standing", label = "Standing", kind = "cycle", values = STANDINGS },
 			r and { key = "state", label = "State", kind = "cycle", values = GOAL_STATES }
 				or { key = "visibility", label = "Visibility", kind = "cycle", values = VISIBILITY },
 		},
-		values = r and { title = r.title, text = r.text, target = r.objective and r.objective.target,
-			state = r.state } or {},
+		values = r and { title = r.title, text = r.text, state = r.state,
+			target = o and o.kind == "level" and o.target or nil,
+			faction = o and o.kind == "reputation" and o.factionName or nil,
+			standing = o and o.kind == "reputation" and o.target or nil } or {},
 		save = function(char, v, now)
 			if not r then
-				return ns.Goals.Add(char, { title = v.title, text = v.text, visibility = v.visibility,
-					objective = v.target and { kind = "level", target = v.target } or nil }, now)
+				local g, err = ns.Goals.Add(char, { title = v.title, text = v.text, visibility = v.visibility }, now)
+				if not g then return nil, err end
+				local ok, why = objective(char, g.id, v, now)
+				if not ok then
+					ns.Goals.Remove(char, g.id)
+					return nil, why
+				end
+				return g
 			end
-			local g, err = ns.Goals.Edit(char, r.id, { title = v.title, text = v.text, target = v.target or false }, now)
+			-- Checked first, so a refused save changes nothing.
+			if blank(v.title) then return nil, "a goal needs a title" end
+			local g, err = objective(char, r.id, v, now)
 			if not g then return nil, err end
+			ns.Goals.Edit(char, r.id, { title = v.title, text = v.text }, now)
 			return ns.Goals.SetState(char, r.id, v.state, now)
 		end,
 	}
@@ -278,7 +307,9 @@ local function placeMemoryForm(place)
 		},
 		values = { title = name },
 		save = function(char, v, now)
-			v.zone = name
+			-- Linked by the place's own key, so returning there recalls it (Places.Linked).
+			v.zone = place.zone
+			v.links = { events = { "place:" .. ns.Places.Key(place.zone, place.subzone) } }
 			return ns.Memories.Add(char, v, "player", now)
 		end,
 	}
@@ -412,22 +443,33 @@ local function create(parent)
 		fill(row, list)
 	end
 
-	local function placeButtons(row, entry)
+	local function placeButtons(row, entry, char)
 		local name = entry.subzone or entry.zone
+		-- Act on this row's place, looked up by its exact key, never by name.
+		local function this(c)
+			local place = ns.Places.Entry(c, entry.zone, entry.subzone)
+			if not place then return nil, "that place is no longer logged" end
+			return place
+		end
 		fill(row, {
 			{ "Memory", function() section:OpenForm(placeMemoryForm(entry)) end },
-			not entry.homeland and { "Homeland", function()
+			not ns.Places.IsHomeland(char, entry) and { "Homeland", function()
 				Widgets.Confirm(string.format("Set your Homeland to %s? This replaces the Homeland on your "
 					.. "profile; its visibility stays as it is.", name), "Set", function()
-					act(function(char, now)
-						local place, err = ns.Places.FindByName(char, name)
+					act(function(c, now)
+						local place, err = this(c)
 						if not place then return nil, err end
-						return ns.Places.SetHomeland(char, place, now)
+						return ns.Places.SetHomeland(c, place, now)
 					end)
 				end)
 			end } or false,
 			{ entry.meaningful and "Unmark" or "Mark", function()
-				act(function(char) return ns.Places.Mark(char, name, not entry.meaningful) end)
+				act(function(c)
+					local place, err = this(c)
+					if not place then return nil, err end
+					place.meaningful = (not place.meaningful) or nil
+					return place
+				end)
 			end },
 		})
 	end
@@ -495,7 +537,7 @@ local function create(parent)
 				row.text:SetText(text)
 				row.meta:SetText(meta)
 				if self.tab == "places" then
-					placeButtons(row, item)
+					placeButtons(row, item, char)
 				else
 					recordButtons(row, self.tab, spec.module, item)
 				end

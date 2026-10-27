@@ -22,6 +22,10 @@ local LABEL_WIDTH = 120
 local LINE_HEIGHT = 30
 local AREA_HEIGHT = 74
 Forms.MAX_FIELDS = 7
+-- Default input limits in bytes; a field's own max (its stored limit)
+-- replaces them, so editing never cuts saved text short.
+Forms.LINE_MAX = 300
+Forms.AREA_MAX = 2000
 
 --- Next value in a cycle field (pure; tested).
 function Forms.NextValue(field, value)
@@ -97,6 +101,9 @@ function Forms.Create(parent, width)
 			row.cycle:SetShown(shown and field.kind == "cycle")
 			if shown then
 				local value = form.spec.values and form.spec.values[field.key]
+				-- SetMaxBytes counts the terminating byte.
+				row.line:SetMaxBytes((field.kind ~= "area" and field.max or Forms.LINE_MAX) + 1)
+				row.area.edit:SetMaxBytes((field.kind == "area" and field.max or Forms.AREA_MAX) + 1)
 				row.label:SetText(field.label)
 				row.label:ClearAllPoints()
 				row.label:SetPoint("TOPLEFT", INSET, -(y + 4))

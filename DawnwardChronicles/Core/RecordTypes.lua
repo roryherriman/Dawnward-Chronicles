@@ -16,7 +16,7 @@ RecordTypes.ARC_KINDS = { goal = true, conflict = true, conviction = true, growt
 RecordTypes.ARC_STATES = { active = true, paused = true, concluded = true, abandoned = true }
 RecordTypes.GOAL_STATES = { active = true, paused = true, abandoned = true, achieved = true, unresolved = true }
 -- Objective progress Dawnward can verify from recorded events.
-RecordTypes.OBJECTIVES = { level = true }
+RecordTypes.OBJECTIVES = { level = true, reputation = true }
 
 local T = Records.Text
 
@@ -96,9 +96,17 @@ function RecordTypes.CleanGoal(raw)
 			end
 		end
 	end
-	if type(raw.objective) == "table" and RecordTypes.OBJECTIVES[raw.objective.kind] then
-		g.objective = { kind = raw.objective.kind, target = int(raw.objective.target, 2, 100) }
+	local o = raw.objective
+	if type(o) == "table" and o.kind == "level" then
+		g.objective = { kind = "level", target = int(o.target, 2, 100) }
 		if not g.objective.target then g.objective = nil end
+	elseif type(o) == "table" and o.kind == "reputation" then
+		-- A standing (1-8, Hated to Exalted) with one faction, by its client ID.
+		local factionId, target = int(o.factionId, 1, 2 ^ 31), int(o.target, 1, 8)
+		if factionId and target then
+			g.objective = { kind = "reputation", factionId = factionId, target = target,
+				factionName = T(o.factionName, 100) }
+		end
 	end
 	return g
 end

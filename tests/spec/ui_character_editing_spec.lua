@@ -131,6 +131,18 @@ return function(t, expect)
 			click(specRow("item", "family").vis)
 			expect.equal(char.family[1].visibility, "public")
 
+			-- Long notes written from chat survive an edit of another field.
+			local long = string.rep("n", 1500)
+			char.family[1].notes = long
+			click(specRow("item", "family").edit)
+			for _, row in ipairs(section.form.rows) do
+				if row.field and row.field.key == "notes" then
+					expect.equal(row.area.edit.__maxBytes, 2001)
+				end
+			end
+			fill({ status = "deceased" })
+			expect.equal(char.family[1].notes, long)
+
 			click(specRow("add", "history").edit)
 			fill({ when = "As a child", text = "Learned to ride" })
 			expect.equal(char.history[1].text, "Learned to ride")
