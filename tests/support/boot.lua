@@ -43,6 +43,15 @@ end
 function Boot.Start(opts)
 	local mock, env, ns = Boot.Load(opts)
 	Boot.Login(mock)
+	-- Confirmations use Dawnward's own dialog (UI/Widgets.lua): accept it
+	-- like a click on its accept button, and record what it asked.
+	function mock.AcceptPopup()
+		local d = ns.Widgets.dialog
+		assert(d and d:IsShown(), "no confirmation dialog is open")
+		local asked = { text = d.text:GetText() }
+		d.accept:GetScript("OnClick")(d.accept)
+		return asked
+	end
 	return mock, env, ns
 end
 

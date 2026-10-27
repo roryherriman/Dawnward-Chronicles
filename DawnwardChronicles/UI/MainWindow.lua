@@ -1,6 +1,6 @@
 -- The journal window: one shared layout with four sections (Journal,
--- Character, Story, Chronicle) and a gear button for the small settings panel.
--- See docs/UI_DIRECTION.md.
+-- Character, Story, Chronicle), a header with the guide (?) and settings
+-- buttons, and a status footer. See docs/design/UI_DESIGN_V06.md.
 --
 -- Layering: MEDIUM strata and toplevel, like the game's own panels, so game
 -- dialogs (DIALOG) and tooltips stay above it. The export/import window uses
@@ -9,7 +9,7 @@
 -- Sections register themselves (MainWindow.RegisterSection) and receive a
 -- "view" on every refresh: { ctx, char, theme, setStatus(text), refresh() }.
 local _, ns = ...
-local Widgets, Themes, Actions = ns.Widgets, ns.Themes, ns.Actions
+local Widgets, Themes, Actions, Style = ns.Widgets, ns.Themes, ns.Actions, ns.Style
 
 local MainWindow = {}
 ns.MainWindow = MainWindow
@@ -17,23 +17,26 @@ ns.MainWindow = MainWindow
 local FRAME_NAME = "DawnwardChroniclesJournal"
 MainWindow.STRATA = "MEDIUM"
 
--- Sizes in UI units. 620 x 520 fits the smallest UIParent the game allows
--- (about 668 units tall at the maximum UI scale).
+-- Sizes in UI units. 640 x 540 fits the smallest UIParent the game allows
+-- (about 668 units tall at the maximum UI scale); on smaller screens the
+-- window scales itself down (Style.FitScale).
 MainWindow.LAYOUT = {
-	width = 620,
-	height = 520,
-	borderInset = 8,
+	width = 640,
+	height = 540,
+	borderInset = 4,
 	pad = 20,
-	titleTop = 18,        -- title baseline below the top edge
-	tabTop = 46,          -- tab row top, below the top edge
-	tabHeight = 24,
-	tabWidth = 120,
+	emblemSize = 34,
+	headerTop = 14,       -- emblem and title block top, below the top edge
+	tabTop = 58,          -- navigation row top, below the top edge
+	tabHeight = 28,
+	tabWidth = 112,
 	tabCount = 4,
-	tabGap = 6,
-	iconSize = 24,
-	contentTop = 80,      -- content area top, below the top edge
-	contentBottom = 40,   -- content area bottom, above the bottom edge
-	statusBottom = 14,
+	tabGap = 4,
+	iconSize = 22,
+	iconGap = 6,
+	contentTop = 92,      -- content area top, below the top edge
+	contentBottom = 36,   -- content area bottom, above the bottom edge
+	statusBottom = 10,
 	statusHeight = 20,
 }
 
@@ -42,17 +45,21 @@ function MainWindow.ComputeLayout(L)
 	local r = {}
 	r.background = { left = L.borderInset, right = L.width - L.borderInset,
 		bottom = L.borderInset, top = L.height - L.borderInset }
-	r.title = { left = L.pad, right = L.width - L.pad - 2 * L.iconSize - 16,
-		bottom = L.height - L.titleTop - 18, top = L.height - L.titleTop + 2 }
+	local top = L.height - L.headerTop
+	r.emblem = { left = L.pad, right = L.pad + L.emblemSize, bottom = top - L.emblemSize, top = top }
+	r.close = { left = L.width - L.pad - L.iconSize, right = L.width - L.pad, bottom = top - L.iconSize, top = top }
+	r.gear = { left = r.close.left - L.iconGap - L.iconSize, right = r.close.left - L.iconGap,
+		bottom = r.close.bottom, top = top }
+	r.help = { left = r.gear.left - L.iconGap - L.iconSize, right = r.gear.left - L.iconGap,
+		bottom = r.close.bottom, top = top }
+	r.eyebrow = { left = r.emblem.right + 12, right = r.help.left - 12, bottom = top - 12, top = top }
+	r.title = { left = r.emblem.right + 12, right = r.help.left - 12, bottom = top - 34, top = top - 14 }
 	r.tabs = {}
 	for i = 1, L.tabCount do
 		local left = L.pad + (i - 1) * (L.tabWidth + L.tabGap)
 		r.tabs[i] = { left = left, right = left + L.tabWidth,
 			bottom = L.height - L.tabTop - L.tabHeight, top = L.height - L.tabTop }
 	end
-	r.gear = { left = L.width - L.pad - L.iconSize, right = L.width - L.pad,
-		bottom = L.height - L.tabTop - L.tabHeight, top = L.height - L.tabTop - L.tabHeight + L.iconSize }
-	r.help = { left = r.gear.left - L.iconSize - 6, right = r.gear.left - 6, bottom = r.gear.bottom, top = r.gear.top }
 	r.content = { left = L.pad, right = L.width - L.pad, bottom = L.contentBottom, top = L.height - L.contentTop }
 	r.status = { left = L.pad, right = L.width - L.pad,
 		bottom = L.statusBottom, top = L.statusBottom + L.statusHeight }
@@ -60,7 +67,6 @@ function MainWindow.ComputeLayout(L)
 end
 
 local sections = {}
-local autoGuided = {} -- characters shown the guide automatically this session
 local frame, layout, currentSection, settingsOpen, appliedTheme
 
 --- def = { id, label, order, create(parent) -> section }
@@ -84,25 +90,23 @@ local function setStatus(text)
 	end
 end
 
-local function tabColors(theme)
+local function paintTab(tab, theme)
+	local selected = tab.selected
+	Style.TextColor(tab.label, (selected or tab.hover) and theme.accent or theme.muted)
+	tab.underline:SetShown(selected and true or false)
+	Style.Color(tab.underline, theme.accent)
+end
+
+local function tabColors()
 	for _, tab in ipairs(frame.tabs) do
-		local selected = (not settingsOpen) and tab.id == currentSection
-		Widgets.TextColor(tab.label, selected and theme.accent or theme.muted)
-		tab.underline:SetShown(selected)
-		Widgets.SetColor(tab.underline, theme.accent)
+		tab.selected = (not settingsOpen) and tab.id == currentSection
+		Style.Repaint(tab)
 	end
 end
 
 local function applyTheme(theme)
 	appliedTheme = theme
-	Widgets.SetColor(frame.background, theme.background)
-	Widgets.SetColor(frame.contentWell, theme.panel)
-	if frame.SetBackdropBorderColor then
-		frame:SetBackdropBorderColor(theme.border[1], theme.border[2], theme.border[3], 1)
-	end
-	Widgets.TextColor(frame.title, theme.accent)
-	Widgets.TextColor(frame.status, theme.muted)
-	tabColors(theme)
+	Style.Apply(theme)
 	for _, def in ipairs(sections) do
 		if def.instance and def.instance.ApplyTheme then
 			def.instance:ApplyTheme(theme)
@@ -153,7 +157,7 @@ function MainWindow.Refresh()
 	end
 	local char = Actions.Character(ctx())
 	local theme = Actions.ThemeOf(char)
-	if theme ~= appliedTheme then
+	if theme ~= appliedTheme or Style.Current() ~= theme then
 		applyTheme(theme)
 	end
 	frame.title:SetText(MainWindow.TitleFor(char, ctx().store:IsSimulation()))
@@ -186,7 +190,7 @@ local function showSection(id)
 	end
 	setStatus("")
 	if appliedTheme then
-		tabColors(appliedTheme)
+		tabColors()
 	end
 	MainWindow.Refresh()
 end
@@ -219,7 +223,7 @@ function MainWindow.ToggleSettings()
 	MainWindow.settings.frame:Show()
 	setStatus("")
 	if appliedTheme then
-		tabColors(appliedTheme)
+		tabColors()
 	end
 	MainWindow.Refresh()
 end
@@ -254,17 +258,53 @@ local function buildTab(index, def, r)
 	tab.label:SetText(def.label)
 	tab.underline = Widgets.Solid(tab, "ARTWORK")
 	tab.underline:SetHeight(2)
-	tab.underline:SetPoint("BOTTOMLEFT", 8, 0)
-	tab.underline:SetPoint("BOTTOMRIGHT", -8, 0)
+	tab.underline:SetPoint("BOTTOMLEFT", 10, 0)
+	tab.underline:SetPoint("BOTTOMRIGHT", -10, 0)
 	tab:SetScript("OnClick", function() showSection(def.id) end)
-	return tab
+	tab:SetScript("OnEnter", function(self) self.hover = true; Style.Repaint(self) end)
+	tab:SetScript("OnLeave", function(self) self.hover = nil; Style.Repaint(self) end)
+	return Style.Register(tab, paintTab)
+end
+
+-- A square header button holding a desaturated game icon, tinted by the theme.
+local function iconButton(rect, icon, title, text, onClick)
+	local b = CreateFrame("Button", nil, frame)
+	Widgets.Place(b, frame, rect)
+	b.bg = Widgets.Solid(b, "BACKGROUND")
+	b.bg:SetAllPoints(b)
+	b.edges = Style.Edge(b, "BORDER")
+	b.icon = b:CreateTexture(nil, "ARTWORK")
+	b.icon:SetPoint("TOPLEFT", 3, -3)
+	b.icon:SetPoint("BOTTOMRIGHT", -3, 3)
+	if icon then
+		b.icon:SetTexture(icon)
+		b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+		if b.icon.SetDesaturated then b.icon:SetDesaturated(true) end
+	else
+		b.glyph = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+		b.glyph:SetPoint("CENTER", 0, 0)
+		b.glyph:SetText("X")
+	end
+	b:SetScript("OnClick", onClick)
+	b:SetScript("OnEnter", function(self) self.hover = true; Style.Repaint(self) end)
+	b:SetScript("OnLeave", function(self) self.hover = nil; Style.Repaint(self) end)
+	Widgets.Tooltip(b, title, text)
+	return Style.Register(b, function(self, theme)
+		local tint = self.hover and theme.accent or theme.muted
+		Style.Color(self.bg, theme.surfaceHover, self.hover and 1 or 0)
+		self.edges:Paint(self.hover and theme.accent or theme.edge, 1)
+		if self.glyph then
+			Style.TextColor(self.glyph, tint)
+		else
+			self.icon:SetVertexColor(tint[1], tint[2], tint[3])
+		end
+	end)
 end
 
 local function build()
 	layout = MainWindow.LAYOUT
 	local r = MainWindow.ComputeLayout(layout)
-	local template = BackdropTemplateMixin and "BackdropTemplate" or nil
-	frame = CreateFrame("Frame", FRAME_NAME, UIParent, template)
+	frame = CreateFrame("Frame", FRAME_NAME, UIParent)
 	frame:SetSize(layout.width, layout.height)
 	frame:SetFrameStrata(MainWindow.STRATA)
 	frame:SetToplevel(true)
@@ -274,54 +314,57 @@ local function build()
 	frame:RegisterForDrag("LeftButton")
 	frame:SetScript("OnDragStart", frame.StartMoving)
 	frame:SetScript("OnDragStop", savePosition)
-	if frame.SetBackdrop then
-		frame:SetBackdrop({
-			edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-			edgeSize = 32,
-			insets = { left = 11, right = 12, top = 12, bottom = 11 },
-		})
-	end
-	frame.background = Widgets.Solid(frame, "BACKGROUND", -8)
-	Widgets.Place(frame.background, frame, r.background)
-	frame.contentWell = Widgets.Solid(frame, "BACKGROUND", -7)
+	Style.Chrome(frame, "background")
+	frame.background = frame.chrome.fill
+	frame.contentWell = Style.Fill(frame, "panel", "BACKGROUND", -7)
 	Widgets.Place(frame.contentWell, frame, r.content)
+	-- Dividers under the navigation and above the status line.
+	frame.navLine = Widgets.Divider(frame)
+	frame.navLine:SetPoint("TOPLEFT", layout.pad, -(layout.contentTop - 1))
+	frame.navLine:SetPoint("TOPRIGHT", -layout.pad, -(layout.contentTop - 1))
+	frame.footLine = Widgets.Divider(frame)
+	frame.footLine:SetPoint("BOTTOMLEFT", layout.pad, layout.contentBottom)
+	frame.footLine:SetPoint("BOTTOMRIGHT", -layout.pad, layout.contentBottom)
 
-	frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+	-- Header: emblem, eyebrow, title, then ?, settings and close.
+	frame.emblem = frame:CreateTexture(nil, "ARTWORK")
+	Widgets.Place(frame.emblem, frame, r.emblem)
+	frame.emblem:SetTexture("Interface\\Icons\\INV_Misc_Book_09")
+	frame.emblem:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+	frame.emblemFrame = CreateFrame("Frame", nil, frame)
+	Widgets.Place(frame.emblemFrame, frame, { left = r.emblem.left - 2, right = r.emblem.right + 2,
+		bottom = r.emblem.bottom - 2, top = r.emblem.top + 2 })
+	frame.emblemEdge = Style.Edge(frame.emblemFrame, "OVERLAY")
+	Style.Register(frame.emblemEdge, function(e, theme) e:Paint(theme.ornament, 1) end)
+
+	frame.eyebrow = Widgets.Label(frame, nil, false, "eyebrow")
+	Widgets.Place(frame.eyebrow, frame, r.eyebrow)
+	frame.eyebrow:SetText("DAWNWARD CHRONICLES")
+	frame.title = Widgets.Label(frame, "GameFontNormalLarge", false, "title")
 	Widgets.Place(frame.title, frame, r.title)
-	frame.title:SetJustifyH("LEFT")
 
-	local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-	close:SetPoint("TOPRIGHT", -6, -6)
-
-	local gear = CreateFrame("Button", nil, frame)
-	Widgets.Place(gear, frame, r.gear)
-	gear:SetNormalTexture("Interface\\Icons\\INV_Misc_Gear_01")
-	gear:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
-	gear:SetScript("OnClick", MainWindow.ToggleSettings)
-	Widgets.Tooltip(gear, "Settings", "Theme, backup and import, simulation mode, Total RP 3 status.")
-	frame.gear = gear
-
-	local help = CreateFrame("Button", nil, frame)
-	Widgets.Place(help, frame, r.help)
-	help:SetNormalTexture("Interface\\Icons\\INV_Misc_QuestionMark")
-	help:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
-	help:SetScript("OnClick", function()
-		if MainWindow.guide and MainWindow.guide:IsOpen() then
-			MainWindow.guide:Close()
-		elseif MainWindow.guide then
-			MainWindow.guide:Show(1)
-		end
+	frame.close = iconButton(r.close, nil, "Close", "Close the journal (Escape also works).", function()
+		MainWindow.Hide()
 	end)
-	Widgets.Tooltip(help, "Guide and help", "A short tour of Dawnward, and a search for any feature or command.")
-	frame.help = help
+	frame.gear = iconButton(r.gear, "Interface\\Icons\\INV_Misc_Gear_01", "Settings",
+		"Theme, story moments, backup and import, simulation mode, Total RP 3 status.", function()
+			MainWindow.ToggleSettings()
+		end)
+	frame.help = iconButton(r.help, "Interface\\Icons\\INV_Misc_QuestionMark", "Guide and help",
+		"A short tour of Dawnward, and a search for any feature or command.", function()
+			if MainWindow.guide and MainWindow.guide:IsOpen() then
+				MainWindow.guide:Close()
+			elseif MainWindow.guide then
+				MainWindow.guide:Show(1)
+			end
+		end)
 
 	frame.content = CreateFrame("Frame", nil, frame)
 	Widgets.Place(frame.content, frame, r.content)
 
-	frame.status = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	frame.status = Widgets.Label(frame, "GameFontHighlightSmall", false, "muted")
 	Widgets.Place(frame.status, frame, r.status)
-	frame.status:SetJustifyH("LEFT")
-	frame.status:SetWordWrap(false)
+	frame.status:SetJustifyV("MIDDLE")
 
 	frame.tabs = {}
 	for index, def in ipairs(sections) do
@@ -352,21 +395,23 @@ local function build()
 	currentSection = sections[1] and sections[1].id
 end
 
-function MainWindow.Show()
+--- Called before the journal opens; returns true when something else (the
+-- first-time setup wizard) takes the player's attention instead.
+MainWindow.BeforeShow = nil
+
+--- Opens the journal. force skips BeforeShow (the wizard's own Finish).
+function MainWindow.Show(force)
+	if not force and MainWindow.BeforeShow and MainWindow.BeforeShow() then
+		return
+	end
 	if not frame then
 		build()
 	end
 	restorePosition()
+	frame:SetScale(Style.FitScale(layout.height, UIParent.GetHeight and UIParent:GetHeight()))
 	frame:Show()
 	frame:Raise()
 	showSection(currentSection)
-	-- First time this character opens the journal: show the guide once (#51).
-	local c = ctx()
-	if MainWindow.guide and c and not autoGuided[c.characterKey]
-		and ns.Guide.ShouldAutoOpen(Actions.Character(c)) then
-		autoGuided[c.characterKey] = true
-		MainWindow.guide:Show(1)
-	end
 end
 
 function MainWindow.Hide()

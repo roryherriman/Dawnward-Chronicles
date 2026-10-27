@@ -10,42 +10,24 @@ return function(t, expect)
 	end
 
 	t:describe("guide (#51)", function()
-		t:it("opens once by itself for a new character, and closing it is remembered", function()
+		t:it("is contextual help only: it never opens by itself, and closing it saves nothing (v0.6)", function()
 			local mock, env, ns = Boot.Start()
+			mock.Slash("set name Lirael")
 			mock.Slash("")
 			local guide = ns.GuidePanel.panel
-			expect.truthy(guide:IsOpen(), "first open shows the guide")
+			expect.falsy(guide:IsOpen(), "the setup wizard, not the guide, welcomes new characters")
+			local before = ns.Util.DeepCopy(env.DawnwardChroniclesDB.characters[CHAR])
+			mock.Slash("guide")
 			expect.equal(guide.title:GetText(), "Welcome")
 			click(guide.next)
 			expect.equal(guide.title:GetText(), "Journal")
+			expect.truthy(guide.topicButtons[2].selected, "the current topic is shown as selected")
 			click(guide.close)
 			expect.falsy(guide:IsOpen())
-			expect.truthy(env.DawnwardChroniclesDB.characters[CHAR].guide.done)
-			mock.Slash("")
-			mock.Slash("")
-			expect.falsy(guide:IsOpen(), "not shown again")
-			-- Survives a save and load.
-			local clean = ns.Schema.NormalizeDatabase(env.DawnwardChroniclesDB)
-			expect.truthy(clean.characters[CHAR].guide.done)
+			expect.deepEqual(env.DawnwardChroniclesDB.characters[CHAR], before, "closing the guide writes nothing")
 		end)
 
-		t:it("does not reopen within a session when it was never closed, and never touches canon", function()
-			local mock, env, ns = Boot.Start()
-			mock.Slash("set name Lirael")
-			local before = ns.Serializer and ns.Serializer.Encode
-				and ns.Serializer.Encode(env.DawnwardChroniclesDB.characters[CHAR].story)
-			mock.Slash("")
-			expect.truthy(ns.GuidePanel.panel:IsOpen())
-			ns.GuidePanel.panel.frame:Hide() -- hidden without being closed (e.g. a UI reload mid-tour)
-			mock.Slash("")
-			mock.Slash("")
-			expect.falsy(ns.GuidePanel.panel:IsOpen(), "only once per session")
-			if before then
-				expect.equal(ns.Serializer.Encode(env.DawnwardChroniclesDB.characters[CHAR].story), before)
-			end
-		end)
-
-		t:it("existing characters with data see it once too, and can replay it from ?, Settings and chat", function()
+		t:it("opens from ?, Settings and chat", function()
 			local mock, env, ns = Boot.Start()
 			mock.Slash("set name Lirael")
 			env.DawnwardChroniclesDB.characters[CHAR].guide = { done = true }

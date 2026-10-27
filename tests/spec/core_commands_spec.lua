@@ -246,7 +246,7 @@ return function(t, expect)
 
 		t:it("sets and lists themes", function()
 			local _, _, run, real = setup()
-			expect.truthy(run("theme"):find("Neutral"))
+			expect.truthy(run("theme"):find("Classic Dawnward"))
 			run("theme silverhand")
 			expect.equal(real.characters["Aelin-TestRealm"].theme, "silverhand")
 			expect.truthy(run("theme paladin"):find("Unknown theme"))

@@ -12,7 +12,9 @@ local STRATA_ORDER = {
 local function loadCopyBox()
 	local mock = Mock.new()
 	local env = Loader.NewEnv(mock.env)
-	local ns = Loader.Load({ "UI/CopyBox.lua" }, env, {})
+	-- The copy window draws with the v0.6 design system.
+	local ns = Loader.Load({ "Core/Util.lua", "Core/Privacy.lua", "Core/Themes.lua", "UI/Style.lua",
+		"UI/Widgets.lua", "UI/CopyBox.lua" }, env, {})
 	return ns.CopyBox, mock
 end
 
@@ -75,16 +77,12 @@ return function(t, expect)
 			local CopyBox = loadCopyBox()
 			CopyBox.ShowExport("A", "x")
 			local frame = CopyBox.GetFrame()
-			expect.equal(frame.__backdrop.bgFile, nil, "stock dialog background is translucent")
-			local solid = 0
-			for _, tex in ipairs(frame.__textures) do
-				if tex.__color then
-					expect.equal(tex.__layer, "BACKGROUND")
-					expect.equal(tex.__color[4], 1, "background alpha")
-					solid = solid + 1
-				end
+			expect.equal(frame.__backdrop, nil, "no stock dialog backdrop")
+			for _, tex in ipairs({ frame.background, frame.well }) do
+				expect.equal(tex.__layer, "BACKGROUND")
+				expect.equal(tex.__color[4], 1, "background alpha")
 			end
-			expect.equal(solid, 2, "window background and text well")
+			expect.truthy(frame.chrome, "Dawnward frame chrome")
 		end)
 
 		t:it("pads the text and sizes it to the visible area", function()

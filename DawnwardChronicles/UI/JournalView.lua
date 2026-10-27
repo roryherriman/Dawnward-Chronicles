@@ -1,5 +1,5 @@
--- Journal section: entries newest first, ten per page, each with its
--- visibility. Pages keep the number of frames small however large the
+-- Journal section: entries newest first, ten per page, each a card with its
+-- meta line, title, text, actions and visibility. Pages keep the number of frames small however large the
 -- journal grows (rows are created once and reused).
 local _, ns = ...
 local Widgets, MainWindow, Actions, Journal = ns.Widgets, ns.MainWindow, ns.Actions, ns.Journal
@@ -14,7 +14,9 @@ JournalView.EMPTY_TEXT = "Your journal is empty.\n\nWrite your first entry with 
 local TOOLBAR_HEIGHT = 24
 local LIST_TOP = 36       -- list starts this far below the section top
 local INSET = 8
-local ROW_PAD = 6
+local ROW_PAD = 8
+local CARD_GAP = 8
+local CARD_INSET = 10
 local VIS_WIDTH = 72
 
 --- Text for an entry's meta line (date, level, place, origin).
@@ -59,13 +61,13 @@ local function create(parent)
 	local f = section.frame
 
 	-- Toolbar: page navigation on the right.
-	section.older = Widgets.Button(f, "Older", 70, 22)
+	section.older = Widgets.Button(f, "Older >", 76, 22, "ghost")
 	section.older:SetPoint("TOPRIGHT", -INSET, -6)
-	section.pageLabel = Widgets.Label(f, "GameFontHighlightSmall")
+	section.pageLabel = Widgets.Label(f, "GameFontHighlightSmall", false, "muted")
 	section.pageLabel:SetJustifyH("CENTER")
 	section.pageLabel:SetWidth(90)
 	section.pageLabel:SetPoint("RIGHT", section.older, "LEFT", -4, 0)
-	section.newer = Widgets.Button(f, "Newer", 70, 22)
+	section.newer = Widgets.Button(f, "< Newer", 76, 22, "ghost")
 	section.newer:SetPoint("RIGHT", section.pageLabel, "LEFT", -4, 0)
 	section.newer:SetScript("OnClick", function()
 		section.page = section.page - 1
@@ -91,7 +93,7 @@ local function create(parent)
 	scroll:SetScrollChild(child)
 	section.scroll, section.child = scroll, child
 
-	section.empty = Widgets.Label(f, "GameFontHighlight", true)
+	section.empty = Widgets.Label(f, "GameFontHighlight", true, "muted")
 	section.empty:SetJustifyH("CENTER")
 	section.empty:SetPoint("TOP", 0, -(LIST_TOP + 60))
 	section.empty:SetWidth(420)
@@ -102,9 +104,9 @@ local function create(parent)
 		if row then
 			return row
 		end
-		row = CreateFrame("Frame", nil, child)
+		row = Widgets.Card(child)
 		row.meta = Widgets.Label(row, "GameFontHighlightSmall")
-		row.meta:SetPoint("TOPLEFT", 4, -ROW_PAD)
+		row.meta:SetPoint("TOPLEFT", CARD_INSET, -ROW_PAD)
 		row.title = Widgets.Label(row, "GameFontNormal", true)
 		row.body = Widgets.Label(row, "GameFontHighlight", true)
 		row.vis = Widgets.VisibilityButton(row, function(level)
@@ -112,11 +114,7 @@ local function create(parent)
 			MainWindow.SetStatus(message)
 			MainWindow.Refresh()
 		end)
-		row.vis:SetPoint("TOPRIGHT", -2, -2)
-		row.separator = Widgets.Solid(row, "ARTWORK")
-		row.separator:SetHeight(1)
-		row.separator:SetPoint("BOTTOMLEFT", 4, 0)
-		row.separator:SetPoint("BOTTOMRIGHT", -4, 0)
+		row.vis:SetPoint("TOPRIGHT", -6, -5)
 		if section.decorateRow then
 			section.decorateRow(row)
 		end
@@ -132,7 +130,7 @@ local function create(parent)
 		row:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -y)
 		row:SetWidth(width)
 
-		local textWidth = width - 8
+		local textWidth = width - 2 * CARD_INSET
 		row.meta:SetWidth(textWidth - VIS_WIDTH - (section.rowActionsWidth or 0) - 8)
 		row.meta:SetText(JournalView.MetaText(entry, Widgets.FormatDate))
 		Widgets.TextColor(row.meta, theme.muted)
@@ -163,21 +161,18 @@ local function create(parent)
 		else
 			row.body:Hide()
 		end
-		height = height + 10
+		height = height + 12
 		row:SetHeight(height)
 		row.vis:SetLevel(entry.visibility)
-		Widgets.SetColor(row.separator, theme.border)
 		if section.updateRowActions then
 			section.updateRowActions(row, entry)
 		end
 		row:Show()
-		return height
+		return height + CARD_GAP
 	end
 
 	function section:ApplyTheme(theme)
 		self.theme = theme
-		Widgets.TextColor(self.pageLabel, theme.muted)
-		Widgets.TextColor(self.empty, theme.muted)
 	end
 
 	function section:RenderList(view)
@@ -225,7 +220,7 @@ end
 local EDIT_BUTTON_WIDTH = 50
 local DELETE_BUTTON_WIDTH = 58
 local APPROVE_BUTTON_WIDTH = 64
-local MARK_BUTTON_WIDTH = 26
+local MARK_BUTTON_WIDTH = 64
 
 local function preview(text)
 	text = text or ""
@@ -240,19 +235,19 @@ function JournalView.AttachEditing(section)
 	local f = section.frame
 	section.rowActionsWidth = EDIT_BUTTON_WIDTH + DELETE_BUTTON_WIDTH + APPROVE_BUTTON_WIDTH + MARK_BUTTON_WIDTH + 16
 
-	section.newButton = Widgets.Button(section.toolbarLeft, "New entry", 100, 22)
+	section.newButton = Widgets.Button(section.toolbarLeft, "New entry", 100, 22, "primary")
 	section.newButton:SetPoint("LEFT", 0, 0)
 	section.newButton:SetScript("OnClick", function() section:OpenEditor(nil) end)
 
 	function section.decorateRow(row)
-		row.delete = Widgets.Button(row, "Delete", DELETE_BUTTON_WIDTH, 20)
+		row.delete = Widgets.Button(row, "Delete", DELETE_BUTTON_WIDTH, 20, "danger")
 		row.delete:SetPoint("RIGHT", row.vis, "LEFT", -4, 0)
 		row.delete:SetScript("OnClick", function() section:ConfirmDelete(row.entry) end)
-		row.edit = Widgets.Button(row, "Edit", EDIT_BUTTON_WIDTH, 20)
+		row.edit = Widgets.Button(row, "Edit", EDIT_BUTTON_WIDTH, 20, "ghost")
 		row.edit:SetPoint("RIGHT", row.delete, "LEFT", -4, 0)
 		row.edit:SetScript("OnClick", function() section:OpenEditor(row.entry) end)
 		-- Story drafts are Dawnward's words until the player approves them.
-		row.approve = Widgets.Button(row, "Approve", APPROVE_BUTTON_WIDTH, 20)
+		row.approve = Widgets.Button(row, "Approve", APPROVE_BUTTON_WIDTH, 20, "primary")
 		row.approve:SetPoint("RIGHT", row.edit, "LEFT", -4, 0)
 		row.approve:SetScript("OnClick", function()
 			local _, message = Actions.ApproveEntry(ns.ctx, row.entryId)
@@ -262,7 +257,7 @@ function JournalView.AttachEditing(section)
 		Widgets.Tooltip(row.approve, "Approve draft",
 			"Accept this draft as part of your character's story. It stays private until you change its visibility.")
 		-- Any entry can be marked as a defining moment.
-		row.mark = Widgets.Button(row, "*", MARK_BUTTON_WIDTH, 20)
+		row.mark = Widgets.Button(row, "Defining", MARK_BUTTON_WIDTH, 20, "ghost")
 		row.mark:SetPoint("RIGHT", row.approve, "LEFT", -4, 0)
 		row.mark:SetScript("OnClick", function()
 			local _, message = Actions.SetEntryImportant(ns.ctx, row.entryId, not (row.entry and row.entry.important))
@@ -280,7 +275,7 @@ function JournalView.AttachEditing(section)
 		row.edit:SetShown(written)
 		row.delete:SetShown(written)
 		row.approve:SetShown(entry.kind == "story" and entry.status ~= "approved")
-		row.mark:SetText(entry.important and "**" or "*")
+		row.mark:SetSelected(entry.important)
 	end
 
 	-- Editor panel (replaces the list while open).
@@ -289,17 +284,17 @@ function JournalView.AttachEditing(section)
 	editor:Hide()
 	section.editor = editor
 
-	editor.heading = Widgets.Label(editor, "GameFontNormalLarge")
+	editor.heading = Widgets.Label(editor, "GameFontNormalLarge", false, "title")
 	editor.heading:SetPoint("TOPLEFT", INSET, -10)
 
-	editor.titleLabel = Widgets.Label(editor, "GameFontHighlightSmall")
+	editor.titleLabel = Widgets.Label(editor, "GameFontHighlightSmall", false, "muted")
 	editor.titleLabel:SetPoint("TOPLEFT", INSET, -40)
 	editor.titleLabel:SetText("Title (optional)")
 	editor.title = Widgets.EditLine(editor, 101)
 	editor.title:SetPoint("TOPLEFT", INSET + 6, -56)
 	editor.title:SetPoint("TOPRIGHT", -INSET, -56)
 
-	editor.textLabel = Widgets.Label(editor, "GameFontHighlightSmall")
+	editor.textLabel = Widgets.Label(editor, "GameFontHighlightSmall", false, "muted")
 	editor.textLabel:SetPoint("TOPLEFT", INSET, -86)
 	editor.textLabel:SetText("Entry")
 	editor.area = Widgets.TextArea(editor, 2001, MainWindow.ContentWidth() - 2 * INSET)
@@ -310,7 +305,7 @@ function JournalView.AttachEditing(section)
 	editor.vis:SetPoint("BOTTOMLEFT", INSET, 12)
 	editor.cancel = Widgets.Button(editor, "Cancel", 90, 22)
 	editor.cancel:SetPoint("BOTTOMRIGHT", -INSET, 12)
-	editor.save = Widgets.Button(editor, "Save", 90, 22)
+	editor.save = Widgets.Button(editor, "Save", 90, 22, "primary")
 	editor.save:SetPoint("RIGHT", editor.cancel, "LEFT", -6, 0)
 
 	local function listParts(shown)
@@ -324,14 +319,8 @@ function JournalView.AttachEditing(section)
 		end
 	end
 
-	function section.ThemeEditor(_, theme)
-		Widgets.TextColor(editor.heading, theme.accent)
-		Widgets.TextColor(editor.titleLabel, theme.muted)
-		Widgets.TextColor(editor.textLabel, theme.muted)
-		Widgets.SetColor(editor.area.well, { 0, 0, 0 })
-		editor.area.edit:SetTextColor(theme.text[1], theme.text[2], theme.text[3])
-		editor.title:SetTextColor(theme.text[1], theme.text[2], theme.text[3])
-	end
+	-- The editor's controls paint themselves (UI/Style.lua).
+	function section.ThemeEditor() end
 
 	--- entry nil = new entry.
 	function section:OpenEditor(entry)

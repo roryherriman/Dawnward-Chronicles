@@ -29,14 +29,15 @@ ChronicleView.TABS = {
 }
 ChronicleView.REVIEW_CHOICES = { "growth", "unreliable", "secret", "correction", "ignore" }
 
--- Layout in section units (the content area is 580 x 400).
+-- Layout in section units (the content area is 600 x 412). Each row is a
+-- card; rowPad is its inner margin, and rowHeight includes the gap below it.
 ChronicleView.LAYOUT = {
-	inset = 8, width = 560,
-	tabWidth = 76, tabGap = 4, tabHeight = 22,
-	rowsTop = 36, rows = 6, rowHeight = 52,
+	inset = 8, width = 584,
+	tabWidth = 81, tabGap = 2, tabHeight = 22,
+	rowsTop = 38, rows = 6, rowHeight = 54, rowGap = 4, rowPad = 8,
 	textHeight = 26,           -- line 1: the record, two lines of small text
-	lineTwo = 28,              -- line 2 starts this far below the row's top
-	metaWidth = 200,
+	lineTwo = 26,              -- line 2 starts this far below the row's top
+	metaWidth = 210,
 	buttons = 5, buttonWidth = 64, buttonHeight = 20, buttonGap = 4,
 }
 ChronicleView.ROWS = ChronicleView.LAYOUT.rows
@@ -46,13 +47,14 @@ ChronicleView.ROWS = ChronicleView.LAYOUT.rows
 -- Pure: the frames are placed from it, and tests check nothing overlaps.
 function ChronicleView.RowRects(L)
 	L = L or ChronicleView.LAYOUT
+	local pad = L.rowPad or 0
 	local out = {
-		text = { x = 0, y = 2, w = L.width, h = L.textHeight },
-		meta = { x = 0, y = L.lineTwo + 3, w = L.metaWidth, h = 14 },
+		text = { x = pad, y = 4, w = L.width - 2 * pad, h = L.textHeight - 4 },
+		meta = { x = pad, y = L.lineTwo + 3, w = L.metaWidth, h = 14 },
 		buttons = {},
 	}
 	for b = 1, L.buttons do
-		local right = L.width - (b - 1) * (L.buttonWidth + L.buttonGap)
+		local right = L.width - pad + 2 - (b - 1) * (L.buttonWidth + L.buttonGap)
 		out.buttons[b] = { x = right - L.buttonWidth, y = L.lineTwo, w = L.buttonWidth, h = L.buttonHeight }
 	end
 	return out
@@ -342,25 +344,27 @@ local function create(parent)
 		self.form:Open(spec)
 	end
 
-	for i, tab in ipairs(ChronicleView.TABS) do
-		local b = Widgets.Button(f, tab.label, L.tabWidth, L.tabHeight)
-		b:SetPoint("TOPLEFT", L.inset + (i - 1) * (L.tabWidth + L.tabGap), -6)
-		b:SetScript("OnClick", function()
-			section.tab, section.page = tab.id, 1
-			section.form:Close()
-		end)
-		b.tabId = tab.id
+	-- Secondary navigation: a segmented control.
+	local tabItems = {}
+	for i, tab in ipairs(ChronicleView.TABS) do tabItems[i] = { id = tab.id, label = tab.label } end
+	section.tabs = Widgets.Segmented(f, tabItems, L.width + L.tabGap * #tabItems, L.tabHeight, function(id)
+		section.tab, section.page = id, 1
+		section.form:Close()
+	end)
+	section.tabs.buttons[1]:SetPoint("TOPLEFT", L.inset, -6)
+	for i, b in ipairs(section.tabs.buttons) do
+		b.tabId = ChronicleView.TABS[i].id
 		section.tabButtons[i] = b
 	end
 
-	section.empty = Widgets.Label(f, "GameFontHighlight", true)
+	section.empty = Widgets.Label(f, "GameFontHighlight", true, "muted")
 	section.empty:SetPoint("TOPLEFT", L.inset, -(L.rowsTop + 8))
 	section.empty:SetWidth(L.width)
 
 	local rects = ChronicleView.RowRects(L)
 	for i = 1, L.rows do
-		local row = CreateFrame("Frame", nil, f)
-		row:SetSize(L.width, L.rowHeight)
+		local row = Widgets.Card(f)
+		row:SetSize(L.width, L.rowHeight - L.rowGap)
 		row:SetPoint("TOPLEFT", L.inset, -L.rowsTop - (i - 1) * L.rowHeight)
 		row.text = Widgets.Label(row, "GameFontHighlightSmall", true)
 		row.text:SetPoint("TOPLEFT", rects.text.x, -rects.text.y)
@@ -370,29 +374,33 @@ local function create(parent)
 		row.meta:SetWidth(rects.meta.w)
 		row.buttons = {}
 		for b, rect in ipairs(rects.buttons) do
-			local button = Widgets.Button(row, "", rect.w, rect.h)
+			local button = Widgets.Button(row, "", rect.w, rect.h, "ghost")
 			button:SetPoint("TOPLEFT", rect.x, -rect.y)
 			row.buttons[b] = button
 		end
 		section.rows[i] = row
 	end
 
-	section.prev = Widgets.Button(f, "< Prev", 70, 22)
+	section.prev = Widgets.Button(f, "< Prev", 70, 22, "ghost")
 	section.prev:SetPoint("BOTTOMLEFT", L.inset, 8)
 	section.prev:SetScript("OnClick", function() section.page = section.page - 1; MainWindow.Refresh() end)
-	section.pageLabel = Widgets.Label(f, "GameFontHighlightSmall")
+	section.pageLabel = Widgets.Label(f, "GameFontHighlightSmall", false, "muted")
 	section.pageLabel:SetPoint("BOTTOMLEFT", L.inset + 78, 13)
-	section.next = Widgets.Button(f, "Next >", 70, 22)
+	section.next = Widgets.Button(f, "Next >", 70, 22, "ghost")
 	section.next:SetPoint("BOTTOMLEFT", L.inset + 150, 8)
 	section.next:SetScript("OnClick", function() section.page = section.page + 1; MainWindow.Refresh() end)
-	section.new = Widgets.Button(f, "New", 120, 22)
+	section.new = Widgets.Button(f, "New", 120, 22, "primary")
 	section.new:SetPoint("BOTTOMRIGHT", -L.inset, 8)
 	section.new:SetScript("OnClick", function() section:OpenForm(FORMS[section.tab]()) end)
+
+	-- Row actions: Remove is destructive, Accept is the one primary action.
+	local VARIANTS = { Remove = "danger", Accept = "primary" }
 
 	local function setButton(button, label, fn)
 		button:SetShown(label ~= nil)
 		if label then
 			button:SetText(label)
+			button:SetVariant(VARIANTS[label] or "ghost")
 			button:SetScript("OnClick", fn)
 		end
 	end
@@ -477,8 +485,6 @@ local function create(parent)
 	function section:ApplyTheme(theme)
 		self.theme = theme
 		self.form:ApplyTheme(theme)
-		Widgets.TextColor(self.empty, theme.muted)
-		Widgets.TextColor(self.pageLabel, theme.muted)
 		for _, row in ipairs(self.rows) do
 			Widgets.TextColor(row.text, theme.text)
 			Widgets.TextColor(row.meta, theme.muted)
@@ -502,9 +508,7 @@ local function create(parent)
 
 	function section:Refresh(view)
 		local char = view.char
-		for _, b in ipairs(self.tabButtons) do
-			b:SetEnabled(b.tabId ~= self.tab)
-		end
+		self.tabs:Select(self.tab)
 		local spec
 		for _, tab in ipairs(ChronicleView.TABS) do
 			if tab.id == self.tab then spec = tab end

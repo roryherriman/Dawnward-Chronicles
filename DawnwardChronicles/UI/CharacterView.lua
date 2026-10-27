@@ -48,6 +48,10 @@ local function create(parent)
 		row.label:SetPoint("TOPLEFT", 4, -4)
 		row.value = Widgets.Label(row, "GameFontHighlight", true)
 		row.detail = Widgets.Label(row, "GameFontHighlightSmall", true)
+		row.rule = Widgets.Divider(row)
+		row.rule:SetPoint("BOTTOMLEFT", 4, 4)
+		row.rule:SetPoint("BOTTOMRIGHT", -4, 4)
+		row.rule:Hide()
 		row.visText = Widgets.Label(row, "GameFontHighlightSmall")
 		row.visText:SetJustifyH("RIGHT")
 		row.visText:SetPoint("TOPRIGHT", -4, -6)
@@ -61,6 +65,7 @@ local function create(parent)
 
 	local function hideExtras(row)
 		row.detail:Hide()
+		row.rule:Hide()
 		row.visText:Hide()
 		if row.vis then row.vis:Hide() end
 		if row.edit then row.edit:Hide() end
@@ -80,9 +85,13 @@ local function create(parent)
 			row.label:SetText(spec.text)
 			Widgets.TextColor(row.label, spec.kind == "heading" and theme.accent or theme.muted)
 			row.value:Hide()
-			height = row.label:GetStringHeight() + (spec.kind == "heading" and 14 or 10)
+			height = row.label:GetStringHeight() + (spec.kind == "heading" and 18 or 10)
+			if spec.kind == "heading" then
+				row.rule:Show()
+			end
 			if spec.kind == "add" and row.edit then
 				row.edit:SetText("Add")
+				row.edit:SetVariant("primary")
 				row.edit:Show()
 				height = math.max(height, 26)
 			end
@@ -117,6 +126,7 @@ local function create(parent)
 				row.vis:Show()
 				row.vis:SetLevel(item.visibility)
 				row.edit:SetText("Edit")
+				row.edit:SetVariant("ghost")
 				row.edit:Show()
 			else
 				row.visText:Show()
@@ -215,7 +225,7 @@ function CharacterView.AttachEditing(section)
 			MainWindow.Refresh()
 		end)
 		row.vis:SetPoint("TOPRIGHT", -2, -2)
-		row.edit = Widgets.Button(row, "Edit", EDIT_WIDTH - 4, 20)
+		row.edit = Widgets.Button(row, "Edit", EDIT_WIDTH - 4, 20, "ghost")
 		row.edit:SetPoint("TOPRIGHT", -(VIS_WIDTH + 6), -2)
 		row.edit:SetScript("OnClick", function()
 			local spec = row.spec
@@ -306,6 +316,8 @@ function CharacterView.AttachEditing(section)
 
 	-- Fields always offer Edit; visibility only once a value exists.
 	function section.updateFieldActions(row, spec)
+		row.edit:SetText("Edit")
+		row.edit:SetVariant("ghost")
 		row.edit:Show()
 		if spec.entry then
 			row.vis:Show()
@@ -320,9 +332,9 @@ function CharacterView.AttachEditing(section)
 	editor:Hide()
 	section.editor = editor
 
-	editor.heading = Widgets.Label(editor, "GameFontNormalLarge")
+	editor.heading = Widgets.Label(editor, "GameFontNormalLarge", false, "title")
 	editor.heading:SetPoint("TOPLEFT", INSET, -10)
-	editor.hint = Widgets.Label(editor, "GameFontHighlightSmall", true)
+	editor.hint = Widgets.Label(editor, "GameFontHighlightSmall", true, "muted")
 	editor.hint:SetPoint("TOPLEFT", INSET, -36)
 	editor.hint:SetWidth(540)
 
@@ -335,18 +347,13 @@ function CharacterView.AttachEditing(section)
 
 	editor.cancel = Widgets.Button(editor, "Cancel", 90, 22)
 	editor.cancel:SetPoint("BOTTOMRIGHT", -INSET, 12)
-	editor.save = Widgets.Button(editor, "Save", 90, 22)
+	editor.save = Widgets.Button(editor, "Save", 90, 22, "primary")
 	editor.save:SetPoint("RIGHT", editor.cancel, "LEFT", -6, 0)
-	editor.clear = Widgets.Button(editor, "Clear", 90, 22)
+	editor.clear = Widgets.Button(editor, "Clear", 90, 22, "danger")
 	editor.clear:SetPoint("BOTTOMLEFT", INSET, 12)
 
-	function section.ThemeEditor(theme)
-		Widgets.TextColor(editor.heading, theme.accent)
-		Widgets.TextColor(editor.hint, theme.muted)
-		Widgets.SetColor(editor.area.well, { 0, 0, 0 })
-		editor.area.edit:SetTextColor(theme.text[1], theme.text[2], theme.text[3])
-		editor.line:SetTextColor(theme.text[1], theme.text[2], theme.text[3])
-	end
+	-- The editor's controls paint themselves (UI/Style.lua).
+	function section.ThemeEditor() end
 
 	local function input()
 		return editor.field.kind == "long" and editor.area.edit or editor.line

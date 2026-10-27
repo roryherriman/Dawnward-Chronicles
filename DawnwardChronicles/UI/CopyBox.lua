@@ -1,6 +1,6 @@
 -- A small window for copying export text and pasting import text.
 -- Chat cannot hold long text, so exports and imports go through this box.
--- Uses only long-standing FrameXML templates; verified at L3 only.
+-- Drawn with the v0.6 frame chrome and components (UI/Style.lua).
 --
 -- Readability rules (the window is often opened over other addons, such as
 -- Total RP 3, whose popups use the DIALOG strata):
@@ -9,6 +9,7 @@
 --  * every region placed from one layout table, so text, status line and
 --    buttons can never overlap (checked by tests/spec/ui_copybox_spec.lua)
 local _, ns = ...
+local Style, Widgets = ns.Style, ns.Widgets
 
 local CopyBox = {}
 ns.CopyBox = CopyBox
@@ -36,11 +37,6 @@ CopyBox.LAYOUT = {
 	scrollBarWidth = 26, -- UIPanelScrollFrameTemplate draws its bar outside the frame
 	textInset = 6,
 	minTextHeight = 160,
-}
-
-CopyBox.COLORS = {
-	background = { 0.06, 0.06, 0.08, 1 },
-	well = { 0, 0, 0, 1 },
 }
 
 --- Pure layout maths: rectangles relative to the frame's bottom-left corner.
@@ -86,17 +82,6 @@ local function place(region, rect)
 	region:SetPoint("TOPRIGHT", frame, "BOTTOMLEFT", rect.right, rect.top)
 end
 
-local function solidTexture(layer, sublevel, color)
-	local tex = frame:CreateTexture(nil, layer, nil, sublevel)
-	if tex.SetColorTexture then
-		tex:SetColorTexture(color[1], color[2], color[3], color[4])
-	else
-		tex:SetTexture("Interface\\Buttons\\WHITE8X8")
-		tex:SetVertexColor(color[1], color[2], color[3], color[4])
-	end
-	return tex
-end
-
 -- Keeps the caret visible while typing or moving through long text.
 local function followCursor(scroll, _, y, _, cursorHeight)
 	local offset = scroll:GetVerticalScroll()
@@ -112,8 +97,7 @@ end
 local function build()
 	local L = CopyBox.LAYOUT
 	local r = CopyBox.ComputeLayout(L)
-	local template = BackdropTemplateMixin and "BackdropTemplate" or nil
-	frame = CreateFrame("Frame", FRAME_NAME, UIParent, template)
+	frame = CreateFrame("Frame", FRAME_NAME, UIParent)
 	frame:SetSize(L.width, L.height)
 	frame:SetPoint("CENTER")
 	frame:SetFrameStrata(CopyBox.STRATA)
@@ -124,25 +108,19 @@ local function build()
 	frame:RegisterForDrag("LeftButton")
 	frame:SetScript("OnDragStart", frame.StartMoving)
 	frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-	if frame.SetBackdrop then
-		-- Border art only: the stock dialog background texture is translucent.
-		frame:SetBackdrop({
-			edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-			edgeSize = 32,
-			insets = { left = 11, right = 12, top = 12, bottom = 11 },
-		})
-	end
-
-	frame.background = solidTexture("BACKGROUND", -8, CopyBox.COLORS.background)
-	place(frame.background, r.background)
-	frame.well = solidTexture("BACKGROUND", -7, CopyBox.COLORS.well)
+	-- Opaque fill and chrome; the text sits on the theme's panel colour.
+	Style.Chrome(frame, "background")
+	frame.background = frame.chrome.fill
+	frame.well = Style.Fill(frame, "panel", "BACKGROUND", -7)
 	place(frame.well, r.well)
 
-	frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	frame.title = Widgets.Label(frame, "GameFontNormal", false, "heading")
+	frame.title:SetJustifyH("CENTER")
 	frame.title:SetPoint("TOP", 0, -L.titleTop)
 
-	local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-	close:SetPoint("TOPRIGHT", -6, -6)
+	local close = Widgets.IconButton(frame, "X", "Close", "Close this window (Escape also works).")
+	close:SetPoint("TOPRIGHT", -10, -10)
+	close:SetScript("OnClick", function() frame:Hide() end)
 
 	local scroll = CreateFrame("ScrollFrame", FRAME_NAME .. "Scroll", frame, "UIPanelScrollFrameTemplate")
 	place(scroll, r.scroll)
@@ -166,18 +144,16 @@ local function build()
 	scroll:SetScript("OnMouseDown", function() edit:SetFocus() end)
 	frame.editBox = edit
 
-	frame.status = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	frame.status = Widgets.Label(frame, "GameFontHighlightSmall", true, "muted")
 	place(frame.status, r.status)
 	frame.status:SetJustifyH("LEFT")
 	frame.status:SetJustifyV("TOP")
 	frame.status:SetWordWrap(true)
 
-	frame.primary = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-	frame.primary:SetSize(L.buttonWidth, L.buttonHeight)
+	frame.primary = Widgets.Button(frame, "", L.buttonWidth, L.buttonHeight)
 	frame.primary:SetPoint("BOTTOMRIGHT", -L.pad, L.buttonBottom)
 
-	frame.secondary = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-	frame.secondary:SetSize(L.buttonWidth, L.buttonHeight)
+	frame.secondary = Widgets.Button(frame, "", L.buttonWidth, L.buttonHeight, "primary")
 	frame.secondary:SetPoint("RIGHT", frame.primary, "LEFT", -L.buttonGap, 0)
 
 	edit:SetScript("OnTextChanged", function(self, userInput)

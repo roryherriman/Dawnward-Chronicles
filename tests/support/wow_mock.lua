@@ -13,6 +13,18 @@ local Methods = {}
 
 function Methods:SetScript(script, fn) self.__scripts[script] = fn end
 function Methods:GetScript(script) return self.__scripts[script] end
+-- Like the client: a hook runs after the existing handler.
+function Methods:HookScript(script, fn)
+	local old = self.__scripts[script]
+	if not old then
+		self.__scripts[script] = fn
+		return
+	end
+	self.__scripts[script] = function(...)
+		old(...)
+		fn(...)
+	end
+end
 function Methods:RegisterEvent(event)
 	self.__events[event] = true
 	self.__mock.eventFrames[self] = true
@@ -75,6 +87,7 @@ function Methods:GetTop() return self.__top or 600 end
 function Methods:GetCenter() return self.__cx or 500, self.__cy or 400 end
 function Methods:GetEffectiveScale() return 1 end
 function Methods:SetTextColor(r, g, b) self.__textColor = { r, g, b } end
+function Methods:SetFontString(fs) self.__fontString = fs end
 function Methods:GetFontString()
 	self.__fontString = self.__fontString or self.__mock.newFrame("FontString", nil, self)
 	return self.__fontString
@@ -189,7 +202,7 @@ function Mock.new(opts)
 		C_AddOns = {
 			GetAddOnMetadata = function(name, field)
 				if name == "DawnwardChronicles" and field == "Version" then
-					return "0.1.0"
+					return opts.version or "0.6.0-dev"
 				end
 				return nil
 			end,

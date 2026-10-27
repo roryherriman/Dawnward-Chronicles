@@ -24,8 +24,8 @@ StoryView.MAX_CHANGES = 2
 
 local INSET = 8
 local WIDTH = 540
-local OPTION_HEIGHT = 20
-local OPTION_STEP = 22
+local OPTION_HEIGHT = 22
+local OPTION_STEP = 24
 local OPTIONS_TOP = -108
 
 --- One-line summary of what is waiting. Pure: used by tests.
@@ -76,12 +76,12 @@ local function create(parent)
 		MainWindow.Refresh()
 	end
 
-	section.summary = Widgets.Label(f, "GameFontHighlightSmall", true)
+	section.summary = Widgets.Label(f, "GameFontHighlightSmall", true, "muted")
 	section.summary:SetPoint("TOPLEFT", INSET, -6)
 	section.summary:SetWidth(WIDTH - 90)
 
 	-- Reflection (#29): bring back everything kept for later.
-	section.reflect = Widgets.Button(f, "Reflect", 80, 20)
+	section.reflect = Widgets.Button(f, "Reflect", 80, 20, "ghost")
 	section.reflect:SetPoint("TOPRIGHT", -INSET, -4)
 	section.reflect:SetScript("OnClick", function()
 		ns.Commands.Execute(ns.ctx, "reflect")
@@ -90,24 +90,24 @@ local function create(parent)
 	Widgets.Tooltip(section.reflect, "Reflect", "Bring back the moments you kept for later. Nothing has to change.")
 
 	-- Navigation between waiting reactions.
-	section.prev = Widgets.Button(f, "<", 28, 20)
+	section.prev = Widgets.Button(f, "<", 28, 20, "ghost")
 	section.prev:SetPoint("TOPLEFT", INSET, -40)
-	section.position = Widgets.Label(f, "GameFontNormal")
+	section.position = Widgets.Label(f, "GameFontNormal", false, "muted")
 	section.position:SetPoint("LEFT", section.prev, "RIGHT", 8, 0)
-	section.next = Widgets.Button(f, ">", 28, 20)
+	section.next = Widgets.Button(f, ">", 28, 20, "ghost")
 	section.next:SetPoint("LEFT", section.position, "RIGHT", 8, 0)
 	section.prev:SetScript("OnClick", function() section.index = section.index - 1; MainWindow.Refresh() end)
 	section.next:SetScript("OnClick", function() section.index = section.index + 1; MainWindow.Refresh() end)
 
-	section.question = Widgets.Label(f, "GameFontNormal", true)
+	section.question = Widgets.Label(f, "GameFontNormal", true, "heading")
 	section.question:SetPoint("TOPLEFT", INSET, -66)
 	section.question:SetWidth(WIDTH)
-	section.context = Widgets.Label(f, "GameFontHighlightSmall", true)
+	section.context = Widgets.Label(f, "GameFontHighlightSmall", true, "muted")
 	section.context:SetPoint("TOPLEFT", section.question, "BOTTOMLEFT", 0, -2)
 	section.context:SetWidth(WIDTH)
 
 	for i = 1, StoryView.MAX_OPTIONS do
-		local button = Widgets.Button(f, "", WIDTH, OPTION_HEIGHT)
+		local button = Widgets.Button(f, "", WIDTH, OPTION_HEIGHT, "choice")
 		button:SetPoint("TOPLEFT", INSET, OPTIONS_TOP - (i - 1) * OPTION_STEP)
 		button:SetScript("OnClick", function(self)
 			act(Actions.Decide, section.reactionId, { optionId = self.optionId })
@@ -116,13 +116,13 @@ local function create(parent)
 	end
 
 	local customTop = OPTIONS_TOP - StoryView.MAX_OPTIONS * OPTION_STEP - 6
-	section.customLabel = Widgets.Label(f, "GameFontHighlightSmall")
+	section.customLabel = Widgets.Label(f, "GameFontHighlightSmall", false, "muted")
 	section.customLabel:SetPoint("TOPLEFT", INSET, customTop)
 	section.customLabel:SetText("Or in your own words:")
 	section.custom = Widgets.EditLine(f, 300)
 	section.custom:SetPoint("TOPLEFT", INSET + 130, customTop + 4)
 	section.custom:SetWidth(320)
-	section.save = Widgets.Button(f, "Save answer", 90, 22)
+	section.save = Widgets.Button(f, "Save answer", 96, 22, "primary")
 	section.save:SetPoint("LEFT", section.custom, "RIGHT", 6, 0)
 	section.save:SetScript("OnClick", function()
 		local text = section.custom:GetText()
@@ -132,26 +132,26 @@ local function create(parent)
 	end)
 
 	local controlsTop = customTop - 28
-	section.later = Widgets.Button(f, "Later", 80, 22)
+	section.later = Widgets.Button(f, "Later", 80, 22, "ghost")
 	section.later:SetPoint("TOPLEFT", INSET, controlsTop)
 	section.later:SetScript("OnClick", function() act(Actions.PostponeReaction, section.reactionId) end)
 	Widgets.Tooltip(section.later, "Later", "Keep it here for later. You will not be reminded again.")
-	section.notNow = Widgets.Button(f, "Not now", 80, 22)
+	section.notNow = Widgets.Button(f, "Not now", 80, 22, "ghost")
 	section.notNow:SetPoint("LEFT", section.later, "RIGHT", 6, 0)
 	section.notNow:SetScript("OnClick", function() act(Actions.IgnoreReaction, section.reactionId) end)
 	Widgets.Tooltip(section.notNow, "Not now", "Leave it waiting quietly, without reminders.")
-	section.dismiss = Widgets.Button(f, "Dismiss", 80, 22)
+	section.dismiss = Widgets.Button(f, "Dismiss", 80, 22, "danger")
 	section.dismiss:SetPoint("LEFT", section.notNow, "RIGHT", 6, 0)
 	section.dismiss:SetScript("OnClick", function() act(Actions.DismissReaction, section.reactionId) end)
 	Widgets.Tooltip(section.dismiss, "Dismiss", "Never ask about this. The event stays in your record.")
 
 	-- Empty state.
-	section.heading = Widgets.Label(f, "GameFontNormalLarge", true)
+	section.heading = Widgets.Label(f, "GameFontNormalLarge", true, "title")
 	section.heading:SetJustifyH("CENTER")
 	section.heading:SetPoint("TOP", 0, -60)
 	section.heading:SetWidth(440)
 	section.heading:SetText(StoryView.HEADING)
-	section.body = Widgets.Label(f, "GameFontHighlight", true)
+	section.body = Widgets.Label(f, "GameFontHighlight", true, "body")
 	section.body:SetJustifyH("CENTER")
 	section.body:SetPoint("TOP", section.heading, "BOTTOM", 0, -14)
 	section.body:SetWidth(440)
@@ -159,19 +159,19 @@ local function create(parent)
 
 	-- Development: changes waiting for approval.
 	local devTop = controlsTop - 34
-	section.devHeading = Widgets.Label(f, "GameFontNormal")
+	section.devHeading = Widgets.Label(f, "GameFontNormal", false, "heading")
 	section.devHeading:SetPoint("TOPLEFT", INSET, devTop)
 	for i = 1, StoryView.MAX_CHANGES do
 		local row = CreateFrame("Frame", nil, f)
 		row:SetSize(WIDTH, 22)
 		row:SetPoint("TOPLEFT", INSET, devTop - 18 - (i - 1) * 24)
-		row.label = Widgets.Label(row, "GameFontHighlightSmall")
+		row.label = Widgets.Label(row, "GameFontHighlightSmall", false, "small")
 		row.label:SetPoint("LEFT", 0, 0)
 		row.label:SetWidth(WIDTH - 170)
-		row.reject = Widgets.Button(row, "Reject", 70, 20)
+		row.reject = Widgets.Button(row, "Reject", 70, 20, "ghost")
 		row.reject:SetPoint("RIGHT", 0, 0)
 		row.reject:SetScript("OnClick", function() act(Actions.RejectChange, row.changeId) end)
-		row.approve = Widgets.Button(row, "Approve", 80, 20)
+		row.approve = Widgets.Button(row, "Approve", 80, 20, "primary")
 		row.approve:SetPoint("RIGHT", row.reject, "LEFT", -4, 0)
 		row.approve:SetScript("OnClick", function() act(Actions.ApplyChange, row.changeId) end)
 		section.changeRows[i] = row
@@ -180,19 +180,9 @@ local function create(parent)
 	local reactionWidgets = { section.prev, section.position, section.next, section.question, section.context,
 		section.customLabel, section.custom, section.save, section.later, section.notNow, section.dismiss }
 
+	-- Every label and control paints itself (UI/Style.lua).
 	function section:ApplyTheme(theme)
 		self.theme = theme
-		Widgets.TextColor(self.summary, theme.muted)
-		Widgets.TextColor(self.position, theme.muted)
-		Widgets.TextColor(self.question, theme.accent)
-		Widgets.TextColor(self.context, theme.muted)
-		Widgets.TextColor(self.customLabel, theme.muted)
-		Widgets.TextColor(self.heading, theme.accent)
-		Widgets.TextColor(self.body, theme.text)
-		Widgets.TextColor(self.devHeading, theme.accent)
-		for _, row in ipairs(self.changeRows) do
-			Widgets.TextColor(row.label, theme.text)
-		end
 	end
 
 	--- Selects a reaction by ID (from the reaction card).

@@ -12,7 +12,7 @@
 --   deleteLabel = "Remove",
 -- })
 local _, ns = ...
-local Widgets, MainWindow = ns.Widgets, ns.MainWindow
+local Widgets, MainWindow, Style = ns.Widgets, ns.MainWindow, ns.Style
 
 local Forms = {}
 ns.Forms = Forms
@@ -54,27 +54,27 @@ function Forms.Create(parent, width)
 	if f.EnableMouse then f:EnableMouse(true) end
 	f:Hide()
 	form.frame = f
-	form.background = Widgets.Solid(f, "BACKGROUND")
+	form.background = Style.Fill(f, "panel", "BACKGROUND")
 	form.background:SetAllPoints(f)
 	width = width or 560
 
-	form.title = Widgets.Label(f, "GameFontNormalLarge")
+	form.title = Widgets.Label(f, "GameFontNormalLarge", false, "title")
 	form.title:SetPoint("TOPLEFT", INSET, -8)
-	form.hint = Widgets.Label(f, "GameFontHighlightSmall", true)
+	form.hint = Widgets.Label(f, "GameFontHighlightSmall", true, "muted")
 	form.hint:SetPoint("TOPLEFT", INSET, -32)
 	form.hint:SetWidth(width - 2 * INSET)
-	form.message = Widgets.Label(f, "GameFontHighlightSmall", true)
+	form.message = Widgets.Label(f, "GameFontHighlightSmall", true, "danger")
 	form.message:SetPoint("BOTTOMLEFT", INSET, 40)
 	form.message:SetWidth(width - 2 * INSET)
 
 	for i = 1, Forms.MAX_FIELDS do
 		local row = { }
-		row.label = Widgets.Label(f, "GameFontNormal")
+		row.label = Widgets.Label(f, "GameFontNormal", false, "muted")
 		row.label:SetWidth(LABEL_WIDTH - 8)
 		row.line = Widgets.EditLine(f, 300)
 		row.line:SetWidth(width - LABEL_WIDTH - 2 * INSET - 6)
 		row.area = Widgets.TextArea(f, 1000, width - LABEL_WIDTH - 2 * INSET)
-		row.cycle = Widgets.Button(f, "", width - LABEL_WIDTH - 2 * INSET, 22)
+		row.cycle = Widgets.Button(f, "", width - LABEL_WIDTH - 2 * INSET, 22, "choice")
 		row.cycle:SetScript("OnClick", function(self)
 			row.value = Forms.NextValue(row.field, row.value)
 			self:SetText(Forms.LabelOf(row.field, row.value))
@@ -84,9 +84,9 @@ function Forms.Create(parent, width)
 
 	form.cancel = Widgets.Button(f, "Cancel", 90, 22)
 	form.cancel:SetPoint("BOTTOMRIGHT", -INSET, 10)
-	form.save = Widgets.Button(f, "Save", 90, 22)
+	form.save = Widgets.Button(f, "Save", 90, 22, "primary")
 	form.save:SetPoint("RIGHT", form.cancel, "LEFT", -6, 0)
-	form.delete = Widgets.Button(f, "Remove", 90, 22)
+	form.delete = Widgets.Button(f, "Remove", 90, 22, "danger")
 	form.delete:SetPoint("BOTTOMLEFT", INSET, 10)
 
 	local function layout()
@@ -190,18 +190,8 @@ function Forms.Create(parent, width)
 		return ok
 	end
 
-	function form:ApplyTheme(theme)
-		Widgets.SetColor(self.background, theme.panel)
-		Widgets.TextColor(self.title, theme.accent)
-		Widgets.TextColor(self.hint, theme.muted)
-		Widgets.TextColor(self.message, theme.accent)
-		for _, row in ipairs(self.rows) do
-			Widgets.TextColor(row.label, theme.accent)
-			Widgets.SetColor(row.area.well, { 0, 0, 0 })
-			row.area.edit:SetTextColor(theme.text[1], theme.text[2], theme.text[3])
-			row.line:SetTextColor(theme.text[1], theme.text[2], theme.text[3])
-		end
-	end
+	-- Every part paints itself (UI/Style.lua); kept for callers.
+	function form.ApplyTheme() end
 
 	form.save:SetScript("OnClick", function() form:Save() end)
 	form.cancel:SetScript("OnClick", function() form:Close() end)
