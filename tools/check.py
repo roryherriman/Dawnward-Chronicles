@@ -26,6 +26,9 @@ FORBIDDEN_PATH_PATTERNS = [
     (re.compile(r"(^|/)(private|review|\.tooling)(/|$)", re.I), "local-only directory"),
     (re.compile(r"(^|/)\.env(\.|$)", re.I), "environment/secrets file"),
     (re.compile(r"\.(pem|key|token)$", re.I), "key or token file"),
+    # Raw client database files (Zone Atlas research, #48) may only live in
+    # data/reference/client-db/ on a reference branch, never in the addon.
+    (re.compile(r"^DawnwardChronicles/.*\.(dbc|db2|scn)$", re.I), "client database file inside the addon"),
 ]
 
 # File contents that indicate copied third-party source or leaked secrets.
@@ -173,6 +176,9 @@ def main():
         results.append(("tests", False))
     else:
         results.append(("tests", run(lua + ["tests/run.lua"] + specs)))
+
+    print("\n== Zone Atlas tools")
+    results.append(("atlas tools", run([sys.executable, "tools/atlas/client_db.py", "selftest"])))
 
     print("\n== Summary")
     for name, ok in results:

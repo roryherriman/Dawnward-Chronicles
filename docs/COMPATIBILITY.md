@@ -11,11 +11,19 @@ This matrix records **observed** results only. Levels are defined in [TESTING.md
 | L4 | In game, WoW Forever |
 | — | Not tested |
 
+## Kinds of evidence
+
+Not every row below rests on the same kind of check:
+
+- **Source audit (S):** the API or behaviour is confirmed in Blizzard's or TRP3's own source code. This proves the client *knows* the function or event, not that Dawnward uses it correctly in play.
+- **Mocked tests (L1/L2):** automated tests against a mocked client or the TRP3 3.4.1 fake.
+- **In game (L3/L4):** someone ran it in a real client. Results reported by the owner are marked "owner-reported" and list exactly what was checked.
+
 ## Clients
 
 | Client | Interface | Role | Highest level reached |
 |---|---|---|---|
-| WoW Classic Era 1.15.9 | The TOC says `11509`. The number from `GetBuildInfo()` has not been reported yet. | Primary development client | **L3**: the v0.2 acceptance checklist passed all mandatory items (see below and `TESTING.md`) |
+| WoW Classic Era 1.15.9 | The TOC says `11509`. The number from `GetBuildInfo()` has not been reported yet. | Primary development client | **L3**: the v0.2 acceptance checklist passed all mandatory items; v0.4 and the origins/places features were partly checked in game on 2026-10-26 (owner-reported, see below) |
 | WoW Forever 1.60.1 | Believed to be 16001. **Unverified.** | Final deployment target | — (shown as "provisional", no client-specific features) |
 
 ### L3 results: v0.2 acceptance, Classic Era 1.15.9, 2026-10-25
@@ -71,6 +79,42 @@ Test build `14669c3`.
 - the combat check
 
 v0.1 uses no client-specific gameplay APIs, so the same code runs on any client that has the APIs below. That does **not** make it verified anywhere.
+
+### L3 results: v0.4 and origins/places, Classic Era 1.15.9, Total RP 3 3.4.1, 2026-10-26 (owner-reported)
+
+The owner tested the build of PR #9, PR #43 and PR #47 on a Human character in Elwynn Forest, using a disposable TRP3 profile for sync.
+
+| Area | Result |
+|---|---|
+| Character data persistence across `/reload` | Pass |
+| People and relationship records | Pass |
+| Stances, privacy and contradiction review | Pass |
+| Story arcs: creation, turning points, conclusion, reactivation, persistence | Pass |
+| Goals: creation, milestones, achievement, invalid-state validation | Pass |
+| Journal entries and memories | Pass |
+| TRP3 opt-in sync, editor protection, backup and rollback | Pass |
+| Place discovery and first-visit recording | Pass |
+| Detection of Elwynn Forest, Northshire Valley, Goldshire and Lion's Pride Inn | Pass |
+| Story Director location reactions recorded in the journal | Pass |
+| Approved personality development | Pass |
+| Meaningful place marking (Goldshire stayed marked after `/reload`) | Pass |
+| Character Homeland field (Northshire Valley stayed saved after `/reload`) | Pass. This is the free-text profile field; it does not prove a dedicated Origins system. |
+
+**Observations (not failures):**
+- A location reaction that does not appear at once is usually pacing, not a bug: cooldowns, significance and the place's kind decide it. See `/dawnward story events`.
+- Location prompts should depend on how relevant a place is to the character, rather than being guaranteed.
+- Homeland is free text and is not yet linked to place records.
+- Some Chronicle rows let long text overlap their buttons.
+- Too many actions need slash commands.
+
+**Not covered by this session:**
+- quest-moment cards and combat deferral in play;
+- reputation, guild and dungeon events;
+- TRP3 presentation styles and defining moments in Dawnward's section;
+- multiplayer propagation;
+- other races' starting areas;
+- localised clients;
+- WoW Forever.
 
 ## Known issues
 
@@ -168,6 +212,27 @@ Checked against Blizzard's Classic Era interface source for **1.15.9 (70003)** (
 | `UPDATE_FACTION`, `GetNumFactions`, `GetFactionInfo(index)` (3rd return: standing 1–8; 14th: faction ID) | Reputation tier changes against a snapshot; the first reading is a silent baseline | `PaperDollInfoDocumentation.lua`; `Vanilla/ReputationFrame.lua` | S, not L3 | — |
 | `ZONE_CHANGED_NEW_AREA`, `IsInInstance`, `GetInstanceInfo` | First recorded zone visit; first recorded party/raid instance entry | `MapDocumentation.lua`, `InstanceDocumentation.lua`; Classic UI code | S, not L3 | — |
 | `PLAYER_GUILD_UPDATE`, `GetGuildInfo("player")`, `IsInGuild` | Joining or leaving a guild (rank changes only update the snapshot); inconclusive readings at login are ignored | `GuildInfoDocumentation.lua`; `Vanilla/PaperDollFrame.lua`, `Classic/MainMenuBarMicroButtons.lua` | S, not L3 | — |
+
+## Client APIs for the Zone Atlas verifier (#48, v0.5)
+
+Checked on 2026-10-27 against `Gethe/wow-ui-source`, branch `classic_era`, `Blizzard_APIDocumentationGenerated/MapDocumentation.lua`. `/dawnward atlas` only reads; it never saves anything. Nothing below has been run in game yet.
+
+| API | Used for | Source evidence | Classic Era | Forever |
+|---|---|---|---|---|
+| `C_Map.GetAreaInfo(areaID)` | The client's own name for each expected AreaTable ID (`atlas verify`), and for any range (`atlas scan`) | `MapDocumentation.lua` | S, not L3 | — |
+| `C_Map.GetMapInfo(uiMapID)` (`name`, `parentMapID`, `mapType`) | The client's name and parent for each expected uiMap ID, and for the current map | `MapDocumentation.lua` (`UiMapDetails`, `parentMapID` not nilable) | S, not L3 | — |
+| `C_Map.GetBestMapForUnit("player")` | The current uiMap (as in v0.4 places) | `MapDocumentation.lua` | S, L3 owner-reported (1429 in Elwynn Forest) | — |
+
+## Client APIs for the minimap button (#45, v0.5)
+
+Checked on 2026-10-27 against `Gethe/wow-ui-source`, branch `classic_era`, `Interface/AddOns/Blizzard_Minimap/Classic/Minimap.lua` and `Minimap.xml`. Nothing below has been verified in game yet.
+
+| API or asset | Used for | Source evidence | Classic Era | Forever |
+|---|---|---|---|---|
+| `Minimap` (frame) | Parent and centre of the button | `Minimap.xml` declares `<Minimap name="Minimap">` | S, not L3 | — |
+| `GetCursorPosition()`, `frame:GetEffectiveScale()` | The angle while dragging the button | `Minimap.lua` uses the same pair (lines 131–133) | S, not L3 | — |
+| `Interface\Minimap\MiniMap-TrackingBorder`, `Interface\Minimap\UI-Minimap-ZoomButton-Highlight` | Border and highlight of the button | Both used by `Minimap.xml` | S, not L3 | — |
+| `Interface\Icons\INV_Misc_Book_09` | The button's icon | Not found in the UI source (icons are game data); a missing icon shows as a blank square, never an error | not checked | — |
 
 ## Client APIs and data for origins and places (#20, #11)
 

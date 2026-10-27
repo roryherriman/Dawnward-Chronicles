@@ -283,6 +283,7 @@ function Places.CleanEntry(raw)
 		visits = int(raw.visits, 2 ^ 31) or 1, level = int(raw.level, 1000),
 		returnedAt = int(raw.returnedAt, 2 ^ 40),
 		meaningful = raw.meaningful == true or nil,
+		homeland = raw.homeland == true or nil,
 	}
 end
 
@@ -499,6 +500,45 @@ function Places.Mark(char, name, on)
 	end
 	entry.meaningful = on and true or nil
 	return entry
+end
+
+--- The player names a visited place as their character's homeland: the
+-- Homeland profile field is set to the place's name (private unless the
+-- player already made it public) and the place is linked as the homeland,
+-- replacing any earlier link. A homeland is only ever the player's choice.
+function Places.SetHomeland(char, entry, now)
+	local ok, err = ns.Character.SetField(char, "homeland", entry.subzone or entry.zone, now)
+	if not ok then
+		return nil, err
+	end
+	for _, other in pairs(char.story.places) do
+		other.homeland = nil
+	end
+	entry.homeland = true
+	entry.meaningful = true
+	return entry
+end
+
+--- Whether this logged place is the character's homeland: linked from
+-- Places and still named by the Homeland field (if the player changes or
+-- clears the field, the old link no longer counts).
+function Places.IsHomeland(char, entry)
+	local field = char.fields and char.fields.homeland
+	local value = field and type(field.value) == "string" and field.value:lower()
+	return entry.homeland == true and value ~= nil and value == (entry.subzone or entry.zone):lower()
+end
+
+--- The place linked as the homeland, if any.
+function Places.Homeland(char)
+	for _, entry in pairs(char.story.places) do
+		if Places.IsHomeland(char, entry) then return entry end
+	end
+	return nil
+end
+
+--- A logged place by its zone and subzone (exact, unlike FindByName).
+function Places.Entry(char, zone, subzone)
+	return char.story.places[Places.Key(zone, subzone)]
 end
 
 function Places.Label(entry)

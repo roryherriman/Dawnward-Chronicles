@@ -489,6 +489,44 @@ function Actions.SaveWindowPosition(ctx, left, top)
 	return true
 end
 
+--- The player closed the guide (#51): remember it for this character so it
+-- does not open by itself again. Creates the character record only if the
+-- player already has one or the data is writable; never raises.
+function Actions.FinishGuide(ctx)
+	if not ctx or ctx.store:ReadOnlyReason() then
+		return nil
+	end
+	return withCharacter(ctx, function(char)
+		char.guide = char.guide or {}
+		char.guide.done = true
+		return true, "Guide closed. Reopen it with the ? button or /dawnward guide."
+	end)
+end
+
+--- The minimap button's settings: { angle, hidden } (never nil).
+function Actions.MinimapSettings(ctx)
+	local ui = ctx.store.real.ui
+	return ui and ui.minimap or {}
+end
+
+--- Saves the minimap button's angle (degrees) and/or hidden state.
+function Actions.SaveMinimap(ctx, values)
+	if ctx.store.realReadOnly then
+		return nil, "Saved data is read-only. Nothing was changed."
+	end
+	ctx.store.real.ui = ctx.store.real.ui or {}
+	local m = ctx.store.real.ui.minimap or {}
+	if values.angle ~= nil then
+		local a = values.angle
+		if type(a) ~= "number" or a ~= a then return nil, "invalid angle" end
+		m.angle = a % 360
+	end
+	if values.hidden ~= nil then m.hidden = values.hidden == true or nil end
+	ctx.store.real.ui.minimap = m
+	return true, m.hidden and "Minimap button hidden. Show it again from Settings or with /dawnward minimap."
+		or "Minimap button shown."
+end
+
 --- Theme (cosmetic only) -----------------------------------------------------
 
 function Actions.SetTheme(ctx, themeId)

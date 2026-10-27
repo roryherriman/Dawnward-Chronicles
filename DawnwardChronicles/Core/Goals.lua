@@ -49,6 +49,33 @@ function Goals.SetState(char, id, state, now)
 	return g
 end
 
+--- The player edits a goal: { title, text, target } (nil leaves a field as
+-- it is; "" clears the text; target 0 or false removes the level objective).
+function Goals.Edit(char, id, values, now)
+	local g = Goals.Find(char, id)
+	if not g then return nil, "no goal #" .. tostring(id) end
+	local title = g.title
+	if values.title ~= nil then
+		title = Records.Text(values.title, Records.LIMITS.title)
+		if not title then return nil, "a goal needs a title" end
+	end
+	local objective = g.objective
+	if values.target ~= nil then
+		local t = values.target
+		if t == false or t == 0 then
+			objective = nil
+		elseif type(t) == "number" and t == math.floor(t) and t >= 2 and t <= 100 then
+			objective = { kind = "level", target = t }
+		else
+			return nil, "a target level is a whole number from 2 to 100 (0 for none)"
+		end
+	end
+	g.title, g.objective = title, objective
+	if values.text ~= nil then g.text = Records.Text(values.text, Records.LIMITS.text, true) end
+	g.updatedAt = now or 0
+	return g
+end
+
 function Goals.AddMilestone(char, id, text, now)
 	local g = Goals.Find(char, id)
 	if not g then return nil, "no goal #" .. tostring(id) end
@@ -80,6 +107,36 @@ local function verifiedLevel(char)
 	return best
 end
 
+--- Sets a reputation objective from a standing the game has shown: the
+-- faction must already be in the character's observed standings (it is
+-- matched by name, ignoring case). standing is 1-8 or a standing name.
+-- The observed standing is shown as progress; it never decides the goal.
+function Goals.SetReputationObjective(char, id, factionName, standing, now)
+	local g = Goals.Find(char, id)
+	if not g then return nil, "no goal #" .. tostring(id) end
+	local target = tonumber(standing)
+	if not target and type(standing) == "string" then
+		for i, name in ipairs(ns.GameEvents.STANDINGS) do
+			if name:lower() == standing:lower() then target = i end
+		end
+	end
+	if not target or target < 1 or target > 8 or target ~= math.floor(target) then
+		return nil, "the standing must be one of Hated, Hostile, Unfriendly, Neutral, Friendly, Honored, Revered or Exalted"
+	end
+	local needle = Records.Text(factionName, 100)
+	if not needle then return nil, "name a faction" end
+	needle = needle:lower()
+	for factionId, entry in pairs(char.story.observed.standings) do
+		if entry.name and entry.name:lower() == needle then
+			g.objective = { kind = "reputation", factionId = factionId, target = target, factionName = entry.name }
+			g.updatedAt = now or 0
+			return g
+		end
+	end
+	return nil, "Dawnward has not seen your standing with '" .. factionName
+		.. "' yet. Open your Reputation panel once so it is recorded, then try again"
+end
+
 --- Progress report: { objective = { current, target, met } or nil,
 -- milestonesDone, milestonesTotal }. Pure; never changes the goal.
 function Goals.Progress(char, goal)
@@ -87,12 +144,31 @@ function Goals.Progress(char, goal)
 	for _, m in ipairs(goal.milestones) do
 		if m.done then p.milestonesDone = p.milestonesDone + 1 end
 	end
-	if goal.objective and goal.objective.kind == "level" then
+	local o = goal.objective
+	if o and o.kind == "level" then
 		local current = verifiedLevel(char)
-		p.objective = { current = current, target = goal.objective.target,
-			met = current ~= nil and current >= goal.objective.target }
+		p.objective = { kind = "level", current = current, target = o.target,
+			met = current ~= nil and current >= o.target }
+	elseif o and o.kind == "reputation" then
+		local seen = char.story.observed.standings[o.factionId]
+		local current = seen and seen.standing
+		p.objective = { kind = "reputation", current = current, target = o.target,
+			factionName = (seen and seen.name) or o.factionName or "a faction",
+			met = current ~= nil and current >= o.target }
 	end
 	return p
+end
+
+--- Short text for a goal's verified objective, or nil: "level 12/20",
+-- "Friendly/Honored with Stormwind". Pure.
+function Goals.ObjectiveText(p)
+	local o = p.objective
+	if not o then return nil end
+	if o.kind == "reputation" then
+		local S = ns.GameEvents.STANDINGS
+		return string.format("%s/%s with %s", o.current and S[o.current] or "?", S[o.target], o.factionName)
+	end
+	return string.format("level %s/%d", tostring(o.current or "?"), o.target)
 end
 
 function Goals.Active(char)

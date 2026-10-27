@@ -50,9 +50,32 @@ function People.Find(char, id) return Records.Find(list(char), id) end
 function People.Remove(char, id) return Records.Remove(list(char), id) end
 function People.SetVisibility(char, id, level, now) return Records.Visibility(list(char), id, level, now) end
 
+--- The player edits a person: { name, realm, kind, relation, feelings }.
+-- nil leaves a field as it is. A rename that would duplicate another
+-- record is refused, as when adding.
 function People.Edit(char, id, values, now)
 	local p = People.Find(char, id)
 	if not p then return nil, "no person #" .. tostring(id) end
+	local probe = { name = p.name, realm = p.realm, kind = p.kind }
+	if values.name ~= nil then
+		probe.name = Records.Text(values.name, 100)
+		if not probe.name then return nil, "a person needs a name" end
+	end
+	if values.kind ~= nil then
+		if not RecordTypes.PERSON_KINDS[values.kind] then return nil, "unknown kind of person" end
+		probe.kind = values.kind
+	end
+	if values.realm ~= nil then probe.realm = Records.Text(values.realm, 100) end
+	if probe.kind ~= "player" then probe.realm = nil end
+	if probe.kind == "player" and not probe.realm then
+		return nil, "another player's character needs a realm (Name-Realm), so they are never confused"
+	end
+	for _, other in ipairs(list(char)) do
+		if other ~= p and sameIdentity(other, probe) then
+			return nil, "#" .. other.id .. " is already " .. probe.name .. "; edit that record instead"
+		end
+	end
+	p.name, p.realm, p.kind = probe.name, probe.realm, probe.kind
 	if values.relation ~= nil then p.relation = Records.Text(values.relation, 300, true) end
 	if values.feelings ~= nil then p.feelings = Records.Text(values.feelings, 1000, true) end
 	p.updatedAt = now or 0

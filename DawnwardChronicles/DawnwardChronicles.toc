@@ -2,7 +2,7 @@
 ## Title: Dawnward Chronicles
 ## Notes: A living chronicle for your character: gameplay moments, your choices, gradual personality development and a private-by-default journal. A companion to Total RP 3, not a replacement.
 ## Author: roryherriman
-## Version: 0.4.0-dev
+## Version: 0.5.0-dev
 ## SavedVariables: DawnwardChroniclesDB, DawnwardChroniclesSimDB, DawnwardChroniclesTRP3DB
 ## OptionalDeps: totalRP3
 ## X-License: MIT
@@ -14,6 +14,8 @@ Core\Themes.lua
 Core\Records.lua
 Core\RecordTypes.lua
 Core\Places.lua
+Core\Guide.lua
+Core\Atlas.lua
 Core\StorySchema.lua
 Core\Schema.lua
 Core\Migrations.lua
@@ -66,11 +68,15 @@ Platform\SafeTime.lua
 UI\Widgets.lua
 UI\CopyBox.lua
 UI\MainWindow.lua
+UI\Forms.lua
 UI\JournalView.lua
 UI\CharacterView.lua
 UI\StoryView.lua
 UI\ReactionCard.lua
 UI\ChronicleView.lua
 UI\SettingsPanel.lua
+UI\GuidePanel.lua
+UI\MinimapButton.lua
+Platform\AtlasProbe.lua
 Platform\TRP3Bridge.lua
 Platform\Bootstrap.lua

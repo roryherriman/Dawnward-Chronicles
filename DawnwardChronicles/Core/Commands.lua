@@ -26,7 +26,7 @@ local SHOW_LIMIT = 180 -- bytes of long text shown per line in chat
 
 local HELP = {
 	"Dawnward Chronicles: /dawnward (or /dwc) opens and closes the journal.",
-	"  status | show [public] | fields | trp3 | theme [neutral|silverhand|arcane]",
+	"  status | show [public] | fields | trp3 | theme [neutral|silverhand|arcane] | minimap [show|hide]",
 	"  journal list | journal add <text> | journal edit <#> <text> | journal vis <#> <level>",
 	"  journal remove <#> confirm",
 	"  set <field> <text> | vis <field> public|private|secret | clear <field> confirm",
@@ -134,9 +134,47 @@ end
 
 Commands.Out, Commands.Preview, Commands.ModeLabel = out, preview, modeLabel
 
-handlers.help = function(ctx)
-	for _, line in ipairs(HELP) do
-		out(ctx, line)
+Commands.HELP = HELP
+
+-- Short help by default (#51): the window does most things now, and the
+-- full command list is one word away.
+handlers.help = function(ctx, rest)
+	local word = Util.NextWord(rest or ""):lower()
+	if word == "all" then
+		for _, line in ipairs(HELP) do
+			out(ctx, line)
+		end
+		return
+	end
+	local Guide = ns.Guide
+	local topic = Guide.BY_ID[word]
+	if topic then
+		out(ctx, topic.title .. ":")
+		for _, line in ipairs(topic.lines) do
+			out(ctx, "  " .. line)
+		end
+		return
+	end
+	if word ~= "" then
+		local results = Guide.Search(rest, HELP)
+		out(ctx, string.format("Help matching '%s' (%d):", Util.Trim(rest), #results))
+		for i = 1, math.min(#results, 8) do
+			out(ctx, "  " .. results[i].topic .. ": " .. preview(results[i].line))
+		end
+		return
+	end
+	local ids = {}
+	for _, t in ipairs(Guide.TOPICS) do ids[#ids + 1] = t.id end
+	out(ctx, "Dawnward Chronicles: /dawnward (or /dwc) opens the journal; everything can be done from there.")
+	out(ctx, "  /dawnward guide: the short tour. /dawnward help <topic or words>: " .. table.concat(ids, ", ") .. ".")
+	out(ctx, "  /dawnward help all: every chat command.")
+end
+
+handlers.guide = function(ctx)
+	if ctx.ui and ctx.ui.ShowGuide then
+		ctx.ui.ShowGuide()
+	else
+		handlers.help(ctx, "welcome")
 	end
 end
 
@@ -215,6 +253,21 @@ handlers.trp3 = function(ctx, rest)
 			out(ctx, line)
 		end
 	end
+end
+
+handlers.minimap = function(ctx, rest)
+	local word = Util.NextWord(rest):lower()
+	local hidden = Actions.MinimapSettings(ctx).hidden == true
+	if word == "show" or word == "on" then
+		hidden = false
+	elseif word == "hide" or word == "off" then
+		hidden = true
+	else
+		hidden = not hidden
+	end
+	local _, message = Actions.SaveMinimap(ctx, { hidden = hidden })
+	if ctx.ui and ctx.ui.UpdateMinimap then ctx.ui.UpdateMinimap() end
+	out(ctx, message)
 end
 
 handlers.theme = function(ctx, rest)

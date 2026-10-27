@@ -63,6 +63,26 @@ function Arcs.Rename(char, id, title, now)
 	return a
 end
 
+--- The player edits an arc: { title, summary, kind } (nil leaves a field
+-- as it is; "" clears the summary). The arc becomes player-authored.
+function Arcs.Edit(char, id, values, now)
+	local a = Arcs.Find(char, id)
+	if not a then return nil, "no arc #" .. tostring(id) end
+	local title = a.title
+	if values.title ~= nil then
+		title = Records.Text(values.title, Records.LIMITS.title)
+		if not title then return nil, "an arc needs a title" end
+	end
+	if values.kind ~= nil and not RecordTypes.ARC_KINDS[values.kind] then
+		return nil, "unknown arc kind"
+	end
+	a.title = title
+	if values.summary ~= nil then a.summary = Records.Text(values.summary, Records.LIMITS.text, true) end
+	if values.kind ~= nil then a.kind = values.kind end
+	a.provenance, a.updatedAt = "player", now or 0
+	return a
+end
+
 --- Adds a turning point (a note, optionally a memory). Returns the arc.
 function Arcs.AddTurningPoint(char, id, note, memoryId, now)
 	local a = Arcs.Find(char, id)

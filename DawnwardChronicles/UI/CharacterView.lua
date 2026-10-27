@@ -6,8 +6,8 @@ local Widgets, MainWindow, Schema, Themes = ns.Widgets, ns.MainWindow, ns.Schema
 local CharacterView = {}
 ns.CharacterView = CharacterView
 
-CharacterView.FAMILY_HINT = "Add or change family with /dawnward family (see /dawnward help)."
-CharacterView.HISTORY_HINT = "Add or change history with /dawnward history (see /dawnward help)."
+CharacterView.FAMILY_HINT = "Parents, siblings, a lost cousin: anyone your character counts as family."
+CharacterView.HISTORY_HINT = "Moments from before the story Dawnward records, in your own words."
 
 local INSET = 8
 local LABEL_WIDTH = 110
@@ -66,7 +66,7 @@ local function create(parent)
 		if row.edit then row.edit:Hide() end
 	end
 
-	-- Kinds: "heading", "field", "item", "hint". Returns the row height.
+	-- Kinds: "heading", "field", "item", "hint", "add". Returns the row height.
 	local function layoutRow(row, spec, y, width, theme)
 		row:ClearAllPoints()
 		row:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -y)
@@ -75,12 +75,17 @@ local function create(parent)
 		hideExtras(row)
 		local height
 
-		if spec.kind == "heading" or spec.kind == "hint" then
-			row.label:SetWidth(width - 8)
+		if spec.kind == "heading" or spec.kind == "hint" or spec.kind == "add" then
+			row.label:SetWidth(width - 8 - (spec.kind == "add" and EDIT_WIDTH + 8 or 0))
 			row.label:SetText(spec.text)
 			Widgets.TextColor(row.label, spec.kind == "heading" and theme.accent or theme.muted)
 			row.value:Hide()
 			height = row.label:GetStringHeight() + (spec.kind == "heading" and 14 or 10)
+			if spec.kind == "add" and row.edit then
+				row.edit:SetText("Add")
+				row.edit:Show()
+				height = math.max(height, 26)
+			end
 		elseif spec.kind == "field" then
 			local entry = spec.entry
 			row.label:SetWidth(LABEL_WIDTH - 8)
@@ -107,10 +112,18 @@ local function create(parent)
 			row.label:SetText(spec.text)
 			Widgets.TextColor(row.label, theme.text)
 			row.value:Hide()
-			row.visText:Show()
-			row.visText:SetText(Themes.VISIBILITY_LABELS[item.visibility])
-			Widgets.TextColor(row.visText, Themes.VISIBILITY_COLORS[item.visibility])
-			height = row.label:GetStringHeight() + 8
+			if row.vis then
+				row.label:SetWidth(width - VIS_WIDTH - EDIT_WIDTH - 16)
+				row.vis:Show()
+				row.vis:SetLevel(item.visibility)
+				row.edit:SetText("Edit")
+				row.edit:Show()
+			else
+				row.visText:Show()
+				row.visText:SetText(Themes.VISIBILITY_LABELS[item.visibility])
+				Widgets.TextColor(row.visText, Themes.VISIBILITY_COLORS[item.visibility])
+			end
+			height = math.max(row.label:GetStringHeight() + 8, 26)
 			if spec.detail then
 				row.detail:Show()
 				row.detail:ClearAllPoints()
@@ -134,19 +147,21 @@ local function create(parent)
 		end
 		specs[#specs + 1] = { kind = "heading", text = "Family" }
 		for _, item in ipairs(char and char.family or {}) do
-			specs[#specs + 1] = { kind = "item", item = item, text = CharacterView.FamilyText(item), detail = item.notes }
+			specs[#specs + 1] = { kind = "item", list = "family", item = item, text = CharacterView.FamilyText(item),
+				detail = item.notes }
 		end
-		specs[#specs + 1] = { kind = "hint", text = CharacterView.FAMILY_HINT }
+		specs[#specs + 1] = { kind = "add", list = "family", text = CharacterView.FAMILY_HINT }
 		specs[#specs + 1] = { kind = "heading", text = "History" }
 		for _, item in ipairs(char and char.history or {}) do
-			specs[#specs + 1] = { kind = "item", item = item, text = CharacterView.HistoryText(item) }
+			specs[#specs + 1] = { kind = "item", list = "history", item = item, text = CharacterView.HistoryText(item) }
 		end
-		specs[#specs + 1] = { kind = "hint", text = CharacterView.HISTORY_HINT }
+		specs[#specs + 1] = { kind = "add", list = "history", text = CharacterView.HISTORY_HINT }
 		return specs
 	end
 
 	function section:ApplyTheme(theme)
 		self.theme = theme
+		if self.form then self.form:ApplyTheme(theme) end
 	end
 
 	function section:RenderList(view)
@@ -188,14 +203,105 @@ function CharacterView.AttachEditing(section)
 
 	function section.decorateRow(row)
 		row.vis = Widgets.VisibilityButton(row, function(level)
-			local _, message = Actions.SetFieldVisibility(ns.ctx, row.spec.field.key, level)
+			local spec, _, message = row.spec
+			if spec.kind == "item" then
+				_, message = section.ChangeItem(function(char, now)
+					return ns.Character.SetItemVisibility(char, spec.list, spec.item.id, level, now)
+				end)
+			else
+				_, message = Actions.SetFieldVisibility(ns.ctx, spec.field.key, level)
+			end
 			MainWindow.SetStatus(message)
 			MainWindow.Refresh()
 		end)
 		row.vis:SetPoint("TOPRIGHT", -2, -2)
 		row.edit = Widgets.Button(row, "Edit", EDIT_WIDTH - 4, 20)
-		row.edit:SetPoint("RIGHT", row.vis, "LEFT", -4, 0)
-		row.edit:SetScript("OnClick", function() section:OpenEditor(row.spec.field) end)
+		row.edit:SetPoint("TOPRIGHT", -(VIS_WIDTH + 6), -2)
+		row.edit:SetScript("OnClick", function()
+			local spec = row.spec
+			if spec.kind == "field" then
+				section:OpenEditor(spec.field)
+			else
+				section:OpenItemForm(spec.list, spec.item)
+			end
+		end)
+	end
+
+	--- Family and history: one form for adding and editing (#17). -------------
+
+	section.form = ns.Forms.Create(f, MainWindow.ContentWidth())
+
+	function section.ChangeItem(fn)
+		return Actions.WithCharacter(ns.ctx, function(char)
+			local r, err = fn(char, ns.ctx.now())
+			if not r then return Actions.Fail(err) end
+			return r, "Saved."
+		end)
+	end
+
+	local STATUS = { { "unknown", "Unknown" }, { "living", "Living" }, { "deceased", "Deceased" },
+		{ "missing", "Missing" } }
+	CharacterView.ITEM_FORMS = {
+		family = {
+			noun = "family member",
+			hint = "Only you write this. New entries start private.",
+			fields = {
+				{ key = "relation", label = "Relation", kind = "line", max = Schema.LIMITS.short },
+				{ key = "name", label = "Name", kind = "line", max = Schema.LIMITS.short },
+				{ key = "status", label = "Status", kind = "cycle", values = STATUS },
+				{ key = "notes", label = "Notes", kind = "area", max = Schema.LIMITS.long },
+			},
+		},
+		history = {
+			noun = "history entry",
+			hint = "When it happened, in any words (\"as a child\", \"the Third War\"), and what happened. "
+				.. "New entries start private.",
+			fields = {
+				{ key = "when", label = "When", kind = "line", max = Schema.LIMITS.short },
+				{ key = "text", label = "What happened", kind = "area", max = Schema.LIMITS.long },
+			},
+		},
+	}
+
+	-- Saves an edited item field by field; refuses to leave it empty.
+	local function updateItem(char, listName, item, values, now)
+		local content = false
+		for _, field in ipairs(CharacterView.ITEM_FORMS[listName].fields) do
+			local v = values[field.key]
+			if field.kind ~= "cycle" and type(v) == "string" and v:match("%S") then content = true end
+		end
+		if not content then return nil, "nothing to save; use Remove to delete it" end
+		for _, field in ipairs(CharacterView.ITEM_FORMS[listName].fields) do
+			local ok, err = ns.Character.UpdateItem(char, listName, item.id, field.key, values[field.key], now)
+			if not ok then return nil, err end
+		end
+		return item
+	end
+
+	function section:OpenItemForm(listName, item)
+		local def = CharacterView.ITEM_FORMS[listName]
+		local values = {}
+		for _, field in ipairs(def.fields) do
+			values[field.key] = item and item[field.key]
+		end
+		self.form:Open({
+			title = (item and "Edit " or "Add ") .. def.noun,
+			hint = def.hint,
+			fields = def.fields,
+			values = values,
+			deleteLabel = "Remove",
+			onDelete = item and function()
+				return section.ChangeItem(function(char, now)
+					return ns.Character.RemoveItem(char, listName, item.id, now)
+				end)
+			end or nil,
+			onSave = function(v)
+				return section.ChangeItem(function(char, now)
+					if item then return updateItem(char, listName, item, v, now) end
+					return ns.Character.AddItem(char, listName, v, now)
+				end)
+			end,
+		})
 	end
 
 	-- Fields always offer Edit; visibility only once a value exists.

@@ -75,6 +75,7 @@ local function buildContext()
 			)
 		end,
 		ToggleJournal = MainWindow.Toggle,
+		ShowGuide = function() ns.GuidePanel.Open(1) end,
 		ShowStory = function()
 			if not MainWindow.IsShown() then MainWindow.Show() end
 			MainWindow.Select("story")
@@ -123,6 +124,7 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
 		SafeTime.ShowCard = ns.ReactionCard.Show
 		SafeTime.Init(ns.ctx)
 		TRP3Bridge.Attach(ns.ctx)
+		ns.MinimapButton.Init(ns.ctx)
 		announceLoad()
 	end
 end)

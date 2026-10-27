@@ -97,8 +97,8 @@ RULES[#RULES + 1] = function(char)
 			local p = ns.Goals.Progress(char, g)
 			if p.objective and p.objective.met then
 				out[#out + 1] = { key = "goalmet:" .. g.id, kind = "goal", refs = { goals = g.id },
-					message = string.format("Goal \"%s\": the game shows level %d reached. Is the goal achieved for them?",
-						g.title, p.objective.current) }
+					message = string.format("Goal \"%s\": the game shows %s. Is the goal achieved for them?",
+						g.title, ns.Goals.ObjectiveText(p)) }
 			end
 		end
 	end

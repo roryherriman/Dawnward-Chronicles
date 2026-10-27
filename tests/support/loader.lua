@@ -18,6 +18,8 @@ Loader.CORE = {
 	"Core/Records.lua",
 	"Core/RecordTypes.lua",
 	"Core/Places.lua",
+	"Core/Guide.lua",
+	"Core/Atlas.lua",
 	"Core/StorySchema.lua",
 	"Core/Schema.lua",
 	"Core/Migrations.lua",

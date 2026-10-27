@@ -10,8 +10,12 @@
 -- Quests in the same zone while a quest reaction is still waiting are
 -- folded into it, so a session of questing asks one question, not ten.
 --
--- Location moments (zone and place events) share one cooldown, can be
--- reduced or switched off (prefs.places), and fold together: a location
+-- Location moments (zone and place events) are weighted by how much the
+-- place matters to this character (Director.LocationRelevance: homeland,
+-- marked places, memories, arcs, goals and people weigh most; an ordinary
+-- town asks only now and then), share one cooldown that strongly tied
+-- places may skip, can be reduced or switched off (prefs.places), and fold
+-- together: a location
 -- event in the same zone within LOCATION_WINDOW of a waiting, unannounced
 -- location moment either replaces it (if it is more significant: entering
 -- Goldshire right after Elwynn Forest asks about Goldshire) or is kept as a
@@ -193,8 +197,20 @@ function Reactions.Consider(char, record, now)
 	if location and prefs.places == "off" then
 		return stay("place moments off")
 	end
-	if record.significance < prefs.threshold or (location and prefs.places == "fewer" and record.significance < 2) then
+	if record.significance < prefs.threshold then
 		return stay("below threshold")
+	end
+	-- Locations ask by weight (Director.LocationRelevance), not by rule.
+	local urgent = false
+	if location then
+		local relevance = ns.Director.LocationRelevance(char, record, prefs)
+		if relevance.chance <= 0 then
+			return stay("logged quietly")
+		end
+		if ns.Director.Roll(record) >= relevance.chance then
+			return stay("not this time")
+		end
+		urgent = relevance.urgent
 	end
 	local target = coalesceTarget(char, record)
 	if target then
@@ -223,7 +239,7 @@ function Reactions.Consider(char, record, now)
 	end
 	local last = location and lastLocation(pacing) or pacing.lastByCategory[record.category]
 	local cooldown = Reactions.COOLDOWN[prefs.frequency]
-	if last and record.significance < 3 and now - last < cooldown then
+	if last and record.significance < 3 and not urgent and now - last < cooldown then
 		return stay("cooldown")
 	end
 	if not makeRoom(char, record.significance) then

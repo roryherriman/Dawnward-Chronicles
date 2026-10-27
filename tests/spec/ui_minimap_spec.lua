@@ -1,0 +1,70 @@
+-- L2: the minimap button (#45). Mocked client: proves wiring, not placement in game.
+local Boot = require("support.boot")
+
+return function(t, expect)
+	local function click(button, mouse)
+		button:GetScript("OnClick")(button, mouse or "LeftButton")
+	end
+
+	t:describe("minimap button (#45)", function()
+		t:it("works out offsets and angles around the minimap", function()
+			local _, _, ns = Boot.Start()
+			local M = ns.MinimapButton
+			local x, y = M.Offset(0, 80)
+			expect.equal(math.floor(x + 0.5), 80)
+			expect.equal(math.floor(y + 0.5), 0)
+			expect.equal(math.floor(M.Angle(0, 10) + 0.5), 90)
+			expect.equal(math.floor(M.Angle(-10, -10) + 0.5), 225)
+		end)
+
+		t:it("is created at login, opens the journal, and right-click opens story moments", function()
+			local mock, _, ns = Boot.Start()
+			local b = ns.MinimapButton.button
+			expect.truthy(b, "created at login")
+			expect.truthy(b:IsShown())
+			expect.falsy(ns.MainWindow.IsShown())
+			click(b)
+			expect.truthy(ns.MainWindow.IsShown())
+			click(b)
+			expect.falsy(ns.MainWindow.IsShown())
+			click(b, "RightButton")
+			expect.truthy(ns.MainWindow.IsShown())
+			expect.equal(ns.MainWindow.CurrentSection(), "story")
+			expect.truthy(mock)
+		end)
+
+		t:it("remembers where it was dragged, account-wide", function()
+			local mock, env, ns = Boot.Start()
+			local b = ns.MinimapButton.button
+			mock.cursorX, mock.cursorY = 500, 480 -- straight above the mocked minimap centre (500, 400)
+			b:GetScript("OnDragStart")(b)
+			b:GetScript("OnDragStop")(b)
+			expect.equal(math.floor(env.DawnwardChroniclesDB.ui.minimap.angle + 0.5), 90)
+		end)
+
+		t:it("hides and shows from the command and the settings panel, and survives a reload", function()
+			local mock, env, ns = Boot.Start()
+			local reply = mock.Slash("minimap hide")
+			expect.truthy(reply:find("hidden", 1, true))
+			expect.falsy(ns.MinimapButton.button:IsShown())
+			expect.truthy(env.DawnwardChroniclesDB.ui.minimap.hidden)
+			local clean = ns.Schema.NormalizeDatabase(env.DawnwardChroniclesDB)
+			expect.truthy(clean.ui.minimap.hidden)
+			mock.Slash("")
+			ns.MainWindow.ToggleSettings()
+			local panel = ns.SettingsPanel.panel
+			expect.equal(panel.minimap:GetText(), "Minimap button: hidden")
+			click(panel.minimap)
+			expect.truthy(ns.MinimapButton.button:IsShown())
+			expect.equal(panel.minimap:GetText(), "Minimap button: shown")
+		end)
+
+		t:it("cleans bad saved settings", function()
+			local _, _, ns = Boot.Start()
+			local ui = ns.Schema.NormalizeUi({ minimap = { angle = 0 / 0, hidden = "yes" } })
+			expect.falsy(ui.minimap.angle)
+			expect.falsy(ui.minimap.hidden)
+			expect.equal(ns.Schema.NormalizeUi({ minimap = { angle = 359.5 } }).minimap.angle, 359.5)
+		end)
+	end)
+end

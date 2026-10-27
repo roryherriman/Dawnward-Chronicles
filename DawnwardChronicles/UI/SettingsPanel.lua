@@ -138,6 +138,17 @@ local function create(parent)
 			"Reset", function() run("sim reset confirm") end)
 	end)
 
+	-- Minimap button (#45), beside the simulation buttons.
+	panel.minimap = Widgets.Button(f, "Minimap button: shown", 180, 22)
+	panel.minimap:SetPoint("TOPLEFT", INSET + 380, -214)
+	panel.minimap:SetScript("OnClick", function() run("minimap") end)
+	Widgets.Tooltip(panel.minimap, "Minimap button", "Show or hide the Dawnward button on the minimap. "
+		.. "Drag the button to move it.")
+
+	panel.guide = Widgets.Button(f, "Open the guide", 180, 22)
+	panel.guide:SetPoint("TOPLEFT", INSET + 380, -178)
+	panel.guide:SetScript("OnClick", function() run("guide") end)
+
 	-- Story prompts (v0.4). Each button cycles one setting.
 	heading("Story moments", -252)
 	panel.storyButtons = {}
@@ -198,6 +209,9 @@ local function create(parent)
 		for _, button in ipairs(self.storyButtons) do
 			button:SetText(SettingsPanel.ButtonText(button.setting, prefs))
 		end
+
+		self.minimap:SetText(Actions.MinimapSettings(view.ctx).hidden and "Minimap button: hidden"
+			or "Minimap button: shown")
 
 		local status = view.ctx.trp3Status and view.ctx.trp3Status()
 		self.trp3:SetText(table.concat(Commands.Trp3Lines(status), "\n"))

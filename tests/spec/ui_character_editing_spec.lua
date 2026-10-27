@@ -95,5 +95,63 @@ return function(t, expect)
 			expect.truthy(ns.MainWindow.GetFrame().status:GetText():find("read%-only"))
 			expect.deepEqual(env.DawnwardChroniclesDB, { schemaVersion = 99, characters = {} })
 		end)
+
+		t:it("adds, edits, hides and removes family and history from forms (#17)", function()
+			local mock, env, ns, section = openCharacter()
+			local function specRow(kind, list)
+				for i, spec in ipairs(section.specs) do
+					if spec.kind == kind and spec.list == list then return section.rows[i] end
+				end
+			end
+			local function fill(values)
+				for _, row in ipairs(section.form.rows) do
+					local v = row.field and values[row.field.key]
+					if v ~= nil then
+						if row.field.kind == "area" then row.area.edit:SetText(v)
+						elseif row.field.kind == "cycle" then row.value = v
+						else row.line:SetText(v) end
+					end
+				end
+				click(section.form.save)
+			end
+			click(specRow("add", "family").edit)
+			fill({ relation = "sister", name = "Mira", status = "missing" })
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			expect.equal(char.family[1].name, "Mira")
+			expect.equal(char.family[1].status, "missing")
+			expect.equal(char.family[1].visibility, "private")
+			click(specRow("item", "family").edit)
+			fill({ notes = "Last seen in Westfall" })
+			expect.equal(char.family[1].notes, "Last seen in Westfall")
+			expect.equal(char.family[1].name, "Mira", "other fields kept")
+			click(specRow("item", "family").edit)
+			fill({ relation = "", name = "", notes = "" })
+			expect.truthy(section.form:IsOpen(), "an edit cannot empty the entry")
+			click(section.form.cancel)
+			click(specRow("item", "family").vis)
+			expect.equal(char.family[1].visibility, "public")
+
+			-- Long notes written from chat survive an edit of another field.
+			local long = string.rep("n", 1500)
+			char.family[1].notes = long
+			click(specRow("item", "family").edit)
+			for _, row in ipairs(section.form.rows) do
+				if row.field and row.field.key == "notes" then
+					expect.equal(row.area.edit.__maxBytes, 2001)
+				end
+			end
+			fill({ status = "deceased" })
+			expect.equal(char.family[1].notes, long)
+
+			click(specRow("add", "history").edit)
+			fill({ when = "As a child", text = "Learned to ride" })
+			expect.equal(char.history[1].text, "Learned to ride")
+			click(specRow("item", "history").edit)
+			click(section.form.delete)
+			expect.equal(#char.history, 1, "nothing removed before confirming")
+			mock.AcceptPopup()
+			expect.equal(#char.history, 0)
+			expect.falsy(ns.CharacterView.section.form:IsOpen())
+		end)
 	end)
 end
