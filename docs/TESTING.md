@@ -303,6 +303,17 @@ Give the test profile two personality traits of your own: one preset and one cus
 
 **Record:** pass, fail or n/a per item, screenshots or `/chatlog` excerpts, and any difference outside Dawnward's section (that is a release blocker: roll back and report).
 
+### Results recorded so far for v0.4 and origins/places (owner-reported, 2026-10-26)
+
+Recorded in [COMPATIBILITY.md](COMPATIBILITY.md#l3-results-v04-and-originsplaces-classic-era-1159-total-rp-3-341-2026-10-26-owner-reported).
+
+| Checklist part | Coverage |
+|---|---|
+| J1–J3, J4, J6, J8 | Passed in substance: memories, arcs (including turning points, conclusion and reactivation), goals with milestones, stances with contradiction review, people |
+| L1–L4, L8 | Passed in substance: Northshire, Goldshire and Lion's Pride Inn detection, first visits, a location reaction in the journal, a marked place persisting across `/reload` |
+| TRP3 sync (v0.3 parts C, D, E-subset) | Opt-in, editor protection, backup and rollback passed |
+| G (quest moment), H (pacing), I (presentation), K3–K4 (reputation, guild), L5–L11 | **Not yet reported.** Still to do |
+
 ### v0.4 in-game checklist (L3): the living chronicle
 
 Build: `0.4.0-dev`. Use a test character, and keep TRP3 sync on the **disposable** test profile only. Back up `WTF\Account\<account>\SavedVariables\DawnwardChronicles*.lua` before installing. Everything below has passed mocked tests (L2) only.
