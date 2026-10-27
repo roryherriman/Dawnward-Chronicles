@@ -844,12 +844,23 @@ local function finiteCoordinate(v)
 	return type(v) == "number" and v == v and v > -100000 and v < 100000
 end
 
---- Account-wide window preferences. Only a remembered position for now.
+--- Account-wide window preferences: the window's remembered position and
+-- the minimap button (its angle around the minimap, and whether it is hidden).
 function Schema.NormalizeUi(raw)
 	local ui = {}
-	if type(raw) == "table" and type(raw.position) == "table"
+	if type(raw) ~= "table" then
+		return ui
+	end
+	if type(raw.position) == "table"
 		and finiteCoordinate(raw.position.left) and finiteCoordinate(raw.position.top) then
 		ui.position = { left = raw.position.left, top = raw.position.top }
+	end
+	if type(raw.minimap) == "table" then
+		local angle = raw.minimap.angle
+		ui.minimap = {
+			angle = type(angle) == "number" and angle == angle and angle >= 0 and angle < 360 and angle or nil,
+			hidden = raw.minimap.hidden == true or nil,
+		}
 	end
 	return ui
 end

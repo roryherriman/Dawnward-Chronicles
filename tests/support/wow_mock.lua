@@ -65,6 +65,8 @@ function Methods:SetShown(on) self.__shown = on and true or false end
 function Methods:SetEnabled(on) self.__enabled = on and true or false end
 function Methods:GetLeft() return self.__left or 100 end
 function Methods:GetTop() return self.__top or 600 end
+function Methods:GetCenter() return self.__cx or 500, self.__cy or 400 end
+function Methods:GetEffectiveScale() return 1 end
 function Methods:SetTextColor(r, g, b) self.__textColor = { r, g, b } end
 function Methods:GetFontString()
 	self.__fontString = self.__fontString or self.__mock.newFrame("FontString", nil, self)
@@ -139,6 +141,8 @@ function Mock.new(opts)
 		GameFontNormalLarge = {},
 		GameFontHighlight = {},
 		GameTooltip = mock.newFrame("GameTooltip", "GameTooltip"),
+		Minimap = mock.newFrame("Frame", "Minimap"),
+		GetCursorPosition = function() return mock.cursorX or 500, mock.cursorY or 400 end,
 		StaticPopupDialogs = {},
 		StaticPopup_Show = function(name, textArg, _, data)
 			mock.popups[#mock.popups + 1] = { name = name, text = textArg, data = data }

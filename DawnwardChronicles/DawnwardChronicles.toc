@@ -73,5 +73,6 @@ UI\StoryView.lua
 UI\ReactionCard.lua
 UI\ChronicleView.lua
 UI\SettingsPanel.lua
+UI\MinimapButton.lua
 Platform\TRP3Bridge.lua
 Platform\Bootstrap.lua

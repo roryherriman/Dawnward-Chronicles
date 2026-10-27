@@ -36,6 +36,8 @@ local WOW_READ = {
 	"GetQuestID", "GetTitleText", "GetQuestLogIndexByID", "GetQuestLogTitle", "C_QuestLog", "C_Map",
 	"UnitLevel", "UnitClass", "UnitRace", "UnitFactionGroup", "UnitIsDeadOrGhost",
 	"GetNumFactions", "GetFactionInfo", "IsInInstance", "GetInstanceInfo", "GetGuildInfo", "IsInGuild",
+	-- v0.5 minimap button
+	"Minimap", "GetCursorPosition",
 }
 
 files["DawnwardChronicles/Platform/"] = {

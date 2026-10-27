@@ -26,7 +26,7 @@ local SHOW_LIMIT = 180 -- bytes of long text shown per line in chat
 
 local HELP = {
 	"Dawnward Chronicles: /dawnward (or /dwc) opens and closes the journal.",
-	"  status | show [public] | fields | trp3 | theme [neutral|silverhand|arcane]",
+	"  status | show [public] | fields | trp3 | theme [neutral|silverhand|arcane] | minimap [show|hide]",
 	"  journal list | journal add <text> | journal edit <#> <text> | journal vis <#> <level>",
 	"  journal remove <#> confirm",
 	"  set <field> <text> | vis <field> public|private|secret | clear <field> confirm",
@@ -215,6 +215,21 @@ handlers.trp3 = function(ctx, rest)
 			out(ctx, line)
 		end
 	end
+end
+
+handlers.minimap = function(ctx, rest)
+	local word = Util.NextWord(rest):lower()
+	local hidden = Actions.MinimapSettings(ctx).hidden == true
+	if word == "show" or word == "on" then
+		hidden = false
+	elseif word == "hide" or word == "off" then
+		hidden = true
+	else
+		hidden = not hidden
+	end
+	local _, message = Actions.SaveMinimap(ctx, { hidden = hidden })
+	if ctx.ui and ctx.ui.UpdateMinimap then ctx.ui.UpdateMinimap() end
+	out(ctx, message)
 end
 
 handlers.theme = function(ctx, rest)

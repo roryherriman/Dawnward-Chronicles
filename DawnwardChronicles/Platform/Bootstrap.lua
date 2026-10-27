@@ -123,6 +123,7 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
 		SafeTime.ShowCard = ns.ReactionCard.Show
 		SafeTime.Init(ns.ctx)
 		TRP3Bridge.Attach(ns.ctx)
+		ns.MinimapButton.Init(ns.ctx)
 		announceLoad()
 	end
 end)

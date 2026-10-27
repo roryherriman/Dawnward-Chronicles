@@ -213,6 +213,17 @@ Checked against Blizzard's Classic Era interface source for **1.15.9 (70003)** (
 | `ZONE_CHANGED_NEW_AREA`, `IsInInstance`, `GetInstanceInfo` | First recorded zone visit; first recorded party/raid instance entry | `MapDocumentation.lua`, `InstanceDocumentation.lua`; Classic UI code | S, not L3 | — |
 | `PLAYER_GUILD_UPDATE`, `GetGuildInfo("player")`, `IsInGuild` | Joining or leaving a guild (rank changes only update the snapshot); inconclusive readings at login are ignored | `GuildInfoDocumentation.lua`; `Vanilla/PaperDollFrame.lua`, `Classic/MainMenuBarMicroButtons.lua` | S, not L3 | — |
 
+## Client APIs for the minimap button (#45, v0.5)
+
+Checked on 2026-10-27 against `Gethe/wow-ui-source`, branch `classic_era`, `Interface/AddOns/Blizzard_Minimap/Classic/Minimap.lua` and `Minimap.xml`. Nothing below has been verified in game yet.
+
+| API or asset | Used for | Source evidence | Classic Era | Forever |
+|---|---|---|---|---|
+| `Minimap` (frame) | Parent and centre of the button | `Minimap.xml` declares `<Minimap name="Minimap">` | S, not L3 | — |
+| `GetCursorPosition()`, `frame:GetEffectiveScale()` | The angle while dragging the button | `Minimap.lua` uses the same pair (lines 131–133) | S, not L3 | — |
+| `Interface\Minimap\MiniMap-TrackingBorder`, `Interface\Minimap\UI-Minimap-ZoomButton-Highlight` | Border and highlight of the button | Both used by `Minimap.xml` | S, not L3 | — |
+| `Interface\Icons\INV_Misc_Book_09` | The button's icon | Not found in the UI source (icons are game data); a missing icon shows as a blank square, never an error | not checked | — |
+
 ## Client APIs and data for origins and places (#20, #11)
 
 Checked against the same `classic_era` mirror at **1.15.9 (70576)**, and the client's own data tables for build **1.15.9.70576** (`UiMap`, `AreaTable`, `ChrRaces`, via wago.tools). Nothing below has been verified in game yet.
