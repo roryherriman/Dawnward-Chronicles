@@ -285,6 +285,46 @@ function Actions.ObserveGuild(ctx, guild, context)
 	return recordEvent(char, "guild", change, ctx.now())
 end
 
+--- An observed location (Platform/Observers): logs the visit and records
+-- the events it produces (Core/Places.lua). Only the most meaningful one may
+-- become a moment; the rest are records only. Real data only, and only for
+-- characters that already use Dawnward. Returns the list created.
+function Actions.ObserveLocation(ctx, data)
+	local char = ctx.store.real.characters[ctx.characterKey]
+	if not char or ctx.store.realReadOnly then
+		return {}
+	end
+	local now = ctx.now()
+	local created, considered = {}, false
+	for _, step in ipairs(ns.Places.Observe(char, data, now)) do
+		local record = GameEvents.Record(char, step.category, step.data, now)
+		if record then
+			local reaction, outcome
+			if considered then
+				record.status = "recorded"
+			else
+				considered = true
+				reaction, outcome = Reactions.Consider(char, record, now)
+			end
+			created[#created + 1] = { record = record, reaction = reaction, outcome = outcome }
+		end
+	end
+	return created
+end
+
+--- The player marks a visited place as meaningful to their character, or
+-- unmarks it. Nothing else changes: no memory, journal entry or fact is made.
+function Actions.MarkPlace(ctx, name, on)
+	return withCharacter(ctx, function(char)
+		local entry, err = ns.Places.Mark(char, name, on)
+		if not entry then
+			return nil, "Not changed: " .. err .. "."
+		end
+		return entry, string.format("%s is %s.", ns.Places.Label(entry),
+			on and "now marked as meaningful to your character (private)" or "no longer marked as meaningful")
+	end)
+end
+
 --- A simulated event, into simulation data only (for testing the story loop).
 function Actions.RecordSimulatedEvent(ctx, category, data)
 	if not ctx.store:IsSimulation() then
@@ -396,6 +436,7 @@ local PREFS = {
 	threshold = function(v) local n = tonumber(v); return n and n >= 1 and n <= 3 and n == math.floor(n) and n or nil end,
 	approval = function(v) return ns.StorySchema.APPROVAL[v] and v or nil end,
 	trp3Style = function(v) return ns.StorySchema.TRP3_STYLES[v] and v or nil end,
+	places = function(v) return ns.StorySchema.PLACE_PROMPTS[v] and v or nil end,
 	drafts = function(v)
 		if v == "on" or v == true then return true end
 		if v == "off" or v == false then return false end
@@ -421,7 +462,7 @@ end
 
 function Actions.SetTracking(ctx, category, on)
 	if not ns.StorySchema.CATEGORIES[category] then
-		return nil, "Unknown event category '" .. tostring(category) .. "' (quest, levelup, death)."
+		return nil, "Unknown event category '" .. tostring(category) .. "' (quest, levelup, death, zone, place)."
 	end
 	return withCharacter(ctx, function(char)
 		char.story.prefs.tracking[category] = on and true or false

@@ -371,3 +371,26 @@ Build: `0.4.0-dev`. Use a test character, and keep TRP3 sync on the **disposable
 | K5 | `/dawnward moment Swore an oath at the shrine` | Recorded as a player moment (`confidence player`) with a question to reflect on |
 | K6 | `/dawnward timeline` | Newest first; your history entries are listed as undated |
 | K7 | Keep a moment for later, then click **Reflect** in the Story section | It comes back to "waiting" without a new reminder |
+
+#### Part L: Origins and places (#20, #11, #14)
+
+Build: schema 5. Everything below has passed mocked tests (L2) only. Use **a brand-new character** for L1–L4 and an established one for L5. Turn on `/chatlog`, and after each step copy the `/dawnward story events` lines into the report.
+
+| # | Steps | Pass when |
+|---|---|---|
+| L0 | Back up `DawnwardChronicles.lua`, install, log in on an existing character | Chat: "Saved data upgraded from schema 4." Approved journal entries read exactly as before. An older story draft's "Development:" line now shows the change's real status (for example "(approved)") |
+| L1 | Create a new **Human** (any class). In Northshire, set your name and pronouns (`/dawnward set name …`, `/dawnward set pronouns she/her`), then `/reload` | One notice. The question reads "Every story begins somewhere. As <name>'s journey begins in <Northshire subzone>, what occupies her thoughts?" `story events` shows "Journey begins: … (starting area)" and nothing says "arrived" |
+| L2 | `/dump GetSubZoneText()`, `/dump C_Map.GetBestMapForUnit("player")`, `/dump C_Map.GetAreaInfo(9)`, `/dump C_Map.GetAreaInfo(24)` | Record all four outputs. Expect a Northshire name, `1429`, "Northshire Valley" and "Northshire Abbey" |
+| L3 | Answer it, approve the change, open the Journal | The draft starts "The journey begins in …, Elwynn Forest, at level 1 (a known starting area)." Its "Development:" line says "(approved)", not "waiting" |
+| L4 | Walk to Goldshire, then to a farm (The Stonefield Farm or The Maclure Vineyards), then back and forth a few times | At most one moment for Goldshire ("<name> reaches Goldshire. What draws her attention?") and one for the farm. Going back and forth adds no events and no notices. `/dawnward places` lists them with "(settlement)" and "(farmland)" |
+| L5 | On an **established** character above level 5 that has never recorded a location, `/reload` in any zone | "Your chronicle first records <name> in <zone>. What does this place mean to …?" Nothing says it began, arrived or was born there |
+| L6 | Turn in a quest in Goldshire within two minutes of first arriving | The quest's moment replaces the Goldshire one: one notice, about the task |
+| L7 | Enter a new zone, then its first town within two minutes (for example Redridge, then Lakeshire) | One moment, about the town ("… reaches Lakeshire. What is her first impression of this new place?") |
+| L8 | `/dawnward place mark Goldshire`, `/dawnward places` | Goldshire shows `*`. No memory, fact or journal entry was created |
+| L9 | `/dawnward story set places fewer`, visit a new farm; then `story set places off`, visit a new town | Fewer: the farm is recorded but not asked about. Off: the town is recorded but not asked about. Set it back to `on` |
+| L10 | Enter a battleground, then a dungeon | The battleground is not recorded; the dungeon is "First recorded entry" as before |
+| L11 | Check Total RP 3 on the disposable profile (sync on) after the steps above | No place names, starting area or journey text appear in Dawnward's section |
+
+Returns (two or more days away from Goldshire, then back) need real time to pass. Test them later and record the date. Expect "… has returned to Goldshire. Does this place feel any different now?", at most once a week.
+
+**Not covered yet:** other races' starting areas in game, localised clients, and WoW Forever (no place data applies there yet).

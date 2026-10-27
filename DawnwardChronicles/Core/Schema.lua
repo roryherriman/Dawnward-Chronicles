@@ -16,13 +16,17 @@
 --      (Core/StorySchema.lua) and "story" journal entries (drafts written
 --      from the player's decisions), plus an "important" flag on any
 --      journal entry. Purely additive: no existing value or visibility changes.
+--   5  adds places (v0.4 origins and places): a per-character `story.places`
+--      log, a "place" event category, location metadata on zone events and
+--      a location-moments preference. Purely additive. Bumped so an older
+--      v0.4 build opens this data read-only instead of dropping place events.
 local _, ns = ...
 local Util, Privacy, Themes, StorySchema = ns.Util, ns.Privacy, ns.Themes, ns.StorySchema
 
 local Schema = {}
 ns.Schema = Schema
 
-Schema.VERSION = 4
+Schema.VERSION = 5
 
 Schema.LIMITS = {
 	short = 100,       -- bytes, single-line fields

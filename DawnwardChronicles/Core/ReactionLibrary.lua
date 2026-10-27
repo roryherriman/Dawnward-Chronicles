@@ -175,6 +175,12 @@ ReactionLibrary.TEMPLATES = {
 	},
 	{
 		id = "zone.arrival", category = "zone", minSignificance = 1,
+		-- A first visit during play. Older zone records carry no visit and are
+		-- treated as one. Beginnings, first sightings and capitals have their own.
+		when = function(record)
+			local m = record.meta or {}
+			return (m.visit == nil or m.visit == "first") and not ns.Places.SETTLEMENT_KINDS[m.placeKind]
+		end,
 		questions = {
 			{ text = "{name} has come to {zone}. What do they make of it?", needs = { "zone" } },
 			{ text = "{name} has come somewhere new. What do they make of it?", needs = {} },
@@ -192,6 +198,196 @@ ReactionLibrary.TEMPLATES = {
 			{ id = "business", theme = "purpose", text = "Just another road. They have work to do.",
 				phrase = "kept their mind on the work ahead", effects = { discipline = 1 },
 				meaning = "Purpose matters more than scenery." },
+		},
+	},
+	-- Origins and places (Core/Places.lua). {their} and {them} follow the
+	-- pronouns in the character's profile when they are clear, else "their"
+	-- and "them"; questions avoid verbs that would need to agree with them.
+	{
+		id = "origin.beginning", categories = { zone = true, place = true }, minSignificance = 1,
+		-- A new character in a verified starting area: the start of the
+		-- journey, never an arrival, and nothing said about where they are from.
+		when = function(record) return record.meta and record.meta.visit == "start" end,
+		questions = {
+			{ text = "Every story begins somewhere. As {name}'s journey begins in {place}, what occupies {their} thoughts?",
+				needs = { "place" } },
+			{ text = "Every story begins somewhere. As {name}'s journey begins in {zone}, what occupies {their} thoughts?",
+				needs = { "zone" } },
+			{ text = "Every story begins somewhere. As {name}'s journey begins, what occupies {their} thoughts?", needs = {} },
+		},
+		options = {
+			{ id = "curious", theme = "discovery", text = "Curiosity: there is a whole world past the next hill.",
+				phrase = "began with curiosity about the world ahead", effects = { courage = 1 },
+				meaning = "The road ahead draws them on." },
+			{ id = "duty", theme = "duty", text = "Duty: there is work to be done, and they mean to do it.",
+				phrase = "began with a sense of duty", effects = { discipline = 1 },
+				meaning = "They hold themselves to the work in front of them." },
+			{ id = "uncertain", theme = "doubt", text = "Uncertainty: they are not sure what lies ahead, or if they are ready.",
+				phrase = "began unsure of what lies ahead", effects = { courage = -1 },
+				meaning = "They step forward carefully." },
+			{ id = "ambition", theme = "ambition", text = "Ambition: this is where they start, not where they will end.",
+				phrase = "began with their sights set far beyond this place", effects = { sociability = -1 },
+				meaning = "Their own path comes first." },
+		},
+	},
+	{
+		id = "origin.firstseen", category = "zone", minSignificance = 1,
+		-- The first location Dawnward recorded for a character that was not
+		-- verifiably just starting out: no arrival, no origin, no claim.
+		when = function(record) return record.meta and record.meta.visit == "firstseen" end,
+		questions = {
+			{ text = "Your chronicle first records {name} in {zone}. What does this place mean to {them}?",
+				needs = { "zone" } },
+			{ text = "Your chronicle first records {name} here. What does this place mean to {them}?", needs = {} },
+		},
+		options = {
+			{ id = "familiar", theme = "belonging", text = "Familiar ground, for reasons of their own.",
+				phrase = "found it familiar ground, for reasons of their own", effects = { sociability = 1 },
+				meaning = "Some places know them." },
+			{ id = "passing", theme = "purpose", text = "Just where the road has led them for now.",
+				phrase = "saw it as just where the road had led them", effects = { discipline = 1 },
+				meaning = "They keep moving." },
+			{ id = "restless", theme = "freedom", text = "Somewhere they would rather not stay long.",
+				phrase = "did not mean to stay long", effects = { discipline = -1 },
+				meaning = "They are restless here." },
+			{ id = "unfinished", theme = "resolve", text = "Unfinished business keeps them here.",
+				phrase = "had unfinished business there", effects = { courage = 1 },
+				meaning = "Something here is not done with them." },
+		},
+	},
+	{
+		id = "place.newregion", category = "place", minSignificance = 1,
+		-- The first settlement reached in a zone that is new as well.
+		when = function(record)
+			local m = record.meta or {}
+			return m.visit == "first" and m.newRegion == 1 and ns.Places.SETTLEMENT_KINDS[m.placeKind] == true
+		end,
+		questions = {
+			{ text = "{name} reaches {place}. What is {their} first impression of this new place?", needs = { "place" } },
+			{ text = "{name} reaches somewhere new. What is {their} first impression of it?", needs = {} },
+		},
+		options = {
+			{ id = "hopeful", theme = "discovery", text = "Hopeful: a new place, a new chance.",
+				phrase = "met the new place with hope", effects = { courage = 1 },
+				meaning = "New places still feel like chances." },
+			{ id = "wary", theme = "caution", text = "Wary until they know who is who.",
+				phrase = "stayed wary until they knew who was who", effects = { sociability = -1 },
+				meaning = "Trust is earned." },
+			{ id = "people", theme = "companionship", text = "Glad of faces after the road.",
+				phrase = "was glad of faces after the road", effects = { sociability = 1 },
+				meaning = "Company matters to them." },
+			{ id = "work", theme = "purpose", text = "Only interested in what needs doing here.",
+				phrase = "looked only for what needed doing", effects = { discipline = 1 },
+				meaning = "Purpose before scenery." },
+		},
+	},
+	{
+		id = "place.settlement", categories = { zone = true, place = true }, minSignificance = 1,
+		-- The first recorded visit to a verified settlement, inn or capital.
+		when = function(record)
+			local m = record.meta or {}
+			return m.visit == "first" and ns.Places.SETTLEMENT_KINDS[m.placeKind] == true
+		end,
+		questions = {
+			{ text = "{name} reaches {place}. What draws {their} attention?", needs = { "place" } },
+			{ text = "{name} reaches {zone}. What draws {their} attention?", needs = { "zone" } },
+			{ text = "{name} reaches a settlement. What draws {their} attention?", needs = {} },
+		},
+		options = {
+			{ id = "people", theme = "companionship", text = "The people: who lives here, and how.",
+				phrase = "paid attention to the people there", effects = { sociability = 1 },
+				meaning = "People interest them." },
+			{ id = "work", theme = "purpose", text = "Whatever work can be found here.",
+				phrase = "looked for work to be done", effects = { discipline = 1 },
+				meaning = "They keep busy." },
+			{ id = "unseen", theme = "solitude", text = "Passing through without being noticed.",
+				phrase = "tried to pass through unnoticed", effects = { sociability = -1 },
+				meaning = "They keep to the edges." },
+			{ id = "rest", theme = "rest", text = "A moment to rest before the road goes on.",
+				phrase = "took a moment to rest", effects = {},
+				meaning = "Even they need to stop sometimes." },
+		},
+	},
+	{
+		id = "place.rural", category = "place", minSignificance = 1,
+		-- The first recorded visit to verified farmland.
+		when = function(record)
+			local m = record.meta or {}
+			return m.visit == "first" and m.placeKind == "farm"
+		end,
+		questions = {
+			{ text = "{name} is among the fields of {place}, in {zone}. What catches {their} interest?",
+				needs = { "place", "zone" } },
+			{ text = "{name} is among farmland. What catches {their} interest?", needs = {} },
+		},
+		options = {
+			{ id = "labour", theme = "compassion", text = "How hard the people here work for their living.",
+				phrase = "noticed how hard the people there worked", effects = { compassion = 1 },
+				meaning = "They see the work behind a harvest." },
+			{ id = "quiet", theme = "solitude", text = "The quiet, away from everyone.",
+				phrase = "enjoyed the quiet, away from everyone", effects = { sociability = -1 },
+				meaning = "Quiet suits them." },
+			{ id = "trouble", theme = "caution", text = "Whatever is troubling the place.",
+				phrase = "watched for whatever was troubling the place", effects = { courage = 1 },
+				meaning = "They notice trouble." },
+			{ id = "nothing", theme = "purpose", text = "Not much: open country between one place and the next.",
+				phrase = "saw it as open country between places", effects = { compassion = -1 },
+				meaning = "Their mind is elsewhere." },
+		},
+	},
+	{
+		id = "place.first", category = "place", minSignificance = 1,
+		-- Any other verified place (a road, ruins, a starting area visited later).
+		when = function(record)
+			local m = record.meta or {}
+			return m.visit == "first" and m.placeKind ~= "farm" and not ns.Places.SETTLEMENT_KINDS[m.placeKind]
+		end,
+		questions = {
+			{ text = "{name} comes to {place}. What is {their} impression of it?", needs = { "place" } },
+			{ text = "{name} comes somewhere new. What is {their} impression of it?", needs = {} },
+		},
+		options = {
+			{ id = "curious", theme = "discovery", text = "Curious: they want to know its story.",
+				phrase = "wanted to know its story", effects = { courage = 1 },
+				meaning = "Places have stories for them." },
+			{ id = "uneasy", theme = "caution", text = "Uneasy: they keep their guard up.",
+				phrase = "kept their guard up", effects = { courage = -1 },
+				meaning = "They stay alert." },
+			{ id = "practical", theme = "purpose", text = "Practical: is it useful to them or not?",
+				phrase = "judged it by how useful it was", effects = { discipline = 1 },
+				meaning = "Usefulness comes first." },
+			{ id = "indifferent", theme = "freedom", text = "Indifferent: one more place on the way.",
+				phrase = "took it as one more place on the way", effects = { discipline = -1 },
+				meaning = "They do not linger." },
+		},
+	},
+	{
+		id = "place.return", categories = { zone = true, place = true }, minSignificance = 1,
+		-- Back after a real absence, to a settlement, starting area, capital or a
+		-- place the player tied to their story. It never says what the place
+		-- meant before; the player's own record does.
+		when = function(record) return record.meta and record.meta.visit == "return" end,
+		questions = {
+			{ text = "{name} has returned to {place}, a place that matters to {them}. Does it feel any different now?",
+				needs = { "place", "meaningful" } },
+			{ text = "{name} has returned to {place}, a place tied to one of {their} memories. Has {their} view of it changed?",
+				needs = { "place", "linked" } },
+			{ text = "{name} has returned to {place}. Does this place feel any different now?", needs = { "place" } },
+			{ text = "{name} has returned somewhere familiar. Does it feel any different now?", needs = {} },
+		},
+		options = {
+			{ id = "changed", theme = "change", text = "The place is the same; they are not.",
+				phrase = "felt that they, not the place, had changed", effects = { courage = 1 },
+				meaning = "They have grown." },
+			{ id = "comfort", theme = "belonging", text = "It feels the same, and that is a comfort.",
+				phrase = "took comfort that it felt the same", effects = { sociability = 1 },
+				meaning = "Some things hold steady." },
+			{ id = "reluctant", theme = "doubt", text = "They would rather not have come back.",
+				phrase = "would rather not have come back", effects = { courage = -1 },
+				meaning = "Not every return is welcome." },
+			{ id = "measure", theme = "ambition", text = "It shows them how far they have come.",
+				phrase = "measured how far they had come", effects = { discipline = 1 },
+				meaning = "They keep count of the road." },
 		},
 	},
 	{
@@ -298,7 +494,8 @@ end
 function ReactionLibrary.For(category, significance, record)
 	local out = {}
 	for _, template in ipairs(ReactionLibrary.TEMPLATES) do
-		if template.category == category and (significance or 1) >= template.minSignificance
+		local fits = template.category == category or (template.categories ~= nil and template.categories[category])
+		if fits and (significance or 1) >= template.minSignificance
 			and (not template.when or (record ~= nil and template.when(record))) then
 			out[#out + 1] = template
 		end

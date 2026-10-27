@@ -31,6 +31,9 @@ SettingsPanel.STORY_SETTINGS = {
 		help = "Offer one optional extra answer flavoured by your class. Never changes the others." },
 	{ key = "trp3Style", label = "TRP3 style", values = { "neutral", "silverhand", "arcane" },
 		help = "How Dawnward's own section looks in Total RP 3 (only if you turned biography sync on)." },
+	{ key = "places", label = "Places", values = { "on", "fewer", "off" },
+		help = "Moments about places: beginnings, settlements, returns. Fewer: notable places only. "
+			.. "Off: places are still recorded, never asked about." },
 	{ tracking = "quest", label = "Quests", values = { true, false },
 		help = "Record completed quests as story events." },
 }
@@ -162,8 +165,8 @@ local function create(parent)
 	end
 
 	-- Total RP 3
-	heading("Total RP 3 (status; sync is experimental: /dawnward trp3 help)", -332)
-	panel.trp3 = note(-352)
+	heading("Total RP 3 (status; sync is experimental: /dawnward trp3 help)", -358)
+	panel.trp3 = note(-378)
 
 	panel.done = Widgets.Button(f, "Done", 90, 22)
 	panel.done:SetPoint("BOTTOMRIGHT", -INSET, 10)

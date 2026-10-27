@@ -124,10 +124,18 @@ return function(t, expect)
 			mock.guild = { name = "Wardens", rank = "Member" }
 			mock.Fire("PLAYER_GUILD_UPDATE")
 			expect.truthy(story.observed.guildSeen)
-			expect.equal(#story.events, 0, "baseline")
+			local function guildEvents()
+				local out = {}
+				for _, e in ipairs(story.events) do
+					if e.category == "guild" then out[#out + 1] = e end
+				end
+				return out
+			end
+			-- Logging in also records where the character is (Core/Places), never a guild event.
+			expect.equal(#guildEvents(), 0, "baseline")
 			mock.guild = { name = "New Dawn", rank = "Initiate" }
 			mock.Fire("PLAYER_GUILD_UPDATE")
-			expect.equal(story.events[1].meta.guildName, "New Dawn")
+			expect.equal(guildEvents()[1].meta.guildName, "New Dawn")
 		end)
 
 		t:it("does not create a record for a character that never used Dawnward", function()

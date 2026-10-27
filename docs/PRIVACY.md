@@ -43,6 +43,7 @@ Every fact Dawnward stores (a family member, a backstory paragraph, a journal en
   - your own words in an answer whose journal entry is secret, and the memory suggested from them.
 
   Restoring such a backup keeps the secrets you have now. Full event records are left out of backups (their keys are kept, so nothing is recorded twice).
+- **Places.** The places log (where the character has been, and which places you marked as meaningful) is part of the private `story` table. It is never public, never in a share export and never sent to Total RP 3. Marking a place as meaningful creates nothing else.
 - **Alts.** Story events are recorded only for characters that already use Dawnward, so installing it does not start recording every character on the account.
 
 ## Total RP 3 sync (experimental, v0.3)

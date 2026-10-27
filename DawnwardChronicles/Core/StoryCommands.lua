@@ -37,14 +37,14 @@ end
 local function settings(ctx, char)
 	local p = char and char.story.prefs or ns.StorySchema.NewPrefs()
 	local tracked = {}
-	for _, category in ipairs({ "quest", "levelup", "death" }) do
+	for _, category in ipairs({ "quest", "levelup", "death", "zone", "place" }) do
 		tracked[#tracked + 1] = category .. " " .. (p.tracking[category] and "on" or "off")
 	end
 	out(ctx, "Story settings:")
 	out(ctx, string.format("  frequency %s (off|rare|normal|frequent), threshold %d (1-3), approval %s (ask|auto)",
 		p.frequency, p.threshold, p.approval))
-	out(ctx, string.format("  drafts %s, flavor %s, card %s, trp3Style %s",
-		p.drafts and "on" or "off", p.flavor and "on" or "off", p.card and "on" or "off", p.trp3Style))
+	out(ctx, string.format("  drafts %s, flavor %s, card %s, trp3Style %s, places %s (on|fewer|off)",
+		p.drafts and "on" or "off", p.flavor and "on" or "off", p.card and "on" or "off", p.trp3Style, p.places))
 	out(ctx, "  tracking: " .. table.concat(tracked, ", "))
 	out(ctx, "Change: /dawnward story set <setting> <value> | story track <category> on|off")
 end
@@ -86,7 +86,7 @@ Commands.Register("story", function(ctx, rest)
 		local category, value = Util.NextWord(tail)
 		value = Util.NextWord(value):lower()
 		if value ~= "on" and value ~= "off" then
-			out(ctx, "Usage: /dawnward story track quest|levelup|death on|off")
+			out(ctx, "Usage: /dawnward story track quest|levelup|death|zone|place on|off")
 			return
 		end
 		local _, message = Actions.SetTracking(ctx, category:lower(), value == "on")
@@ -96,7 +96,7 @@ Commands.Register("story", function(ctx, rest)
 		local recent = char and GameEvents.Recent(char, 10) or {}
 		out(ctx, string.format("Recent events (%d recorded):", char and #char.story.events or 0))
 		for _, e in ipairs(recent) do
-			out(ctx, string.format("  %s%s%s [%s, %s, %s]", GameEvents.Label(e.category),
+			out(ctx, string.format("  %s%s%s [%s, %s, %s]", GameEvents.RecordLabel(e),
 				e.meta.title and (": " .. e.meta.title) or (e.level and e.category ~= "quest" and (" " .. e.level) or ""),
 				e.zone and (" in " .. e.zone) or "", SIGNIFICANCE[e.significance], e.confidence, e.status))
 		end

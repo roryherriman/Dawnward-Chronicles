@@ -12,7 +12,7 @@
 -- Significance (1 routine, 2 notable, 3 major) comes from explicit rules on
 -- verified data only; the game has no "this quest mattered" flag.
 local _, ns = ...
-local Util, StorySchema = ns.Util, ns.StorySchema
+local Util, StorySchema, Places = ns.Util, ns.StorySchema, ns.Places
 
 local GameEvents = {}
 ns.GameEvents = GameEvents
@@ -155,17 +155,59 @@ GameEvents.CATEGORIES.reputation = {
 	end,
 }
 
+-- Location metadata shared by zone and place events (Core/Places.lua).
+local function locationMeta(data)
+	return StorySchema.CleanMeta({ visit = data.visit, placeKind = data.placeKind, mapId = data.mapId,
+		areaId = data.areaId, placeName = data.place, linked = data.linked, meaningful = data.meaningful,
+		newRegion = data.newRegion })
+end
+
 GameEvents.CATEGORIES.zone = {
 	label = "First recorded visit",
-	-- data: { zone, + context }: the first time this character arrives in a zone.
+	-- data: { zone, visit?, placeKind?, mapId?, + context }: the first time
+	-- Dawnward records this character in a zone. visit says how it relates to
+	-- the journey (start, firstseen, first); older records have none and
+	-- read as a first visit.
 	build = function(data)
 		if type(data.zone) ~= "string" or data.zone == "" then
 			return nil, "invalid zone"
 		end
 		return withContext({ category = "zone", key = "zone:" .. data.zone, source = data.source or "ZONE_CHANGED_NEW_AREA",
-			confidence = "verified", meta = {} }, data)
+			confidence = "verified", meta = locationMeta(data) }, data)
 	end,
-	significance = function() return 1 end,
+	significance = function(record)
+		local m = record.meta
+		if m.visit == "start" then return 3 end
+		if m.visit == "firstseen" or m.placeKind == "capital" then return 2 end
+		return 1
+	end,
+}
+
+GameEvents.CATEGORIES.place = {
+	label = "Place",
+	-- data: { zone, place (the named area, or the zone for a zone-wide
+	-- return), visit, placeKind?, areaId?, mapId?, linked?, meaningful?, + context }.
+	-- Only places with a verified classification, or that the player tied to
+	-- their story, are recorded as events; every other subzone is only logged.
+	build = function(data, now)
+		local meta = locationMeta(data)
+		if type(data.zone) ~= "string" or data.zone == "" or not meta.placeName or not meta.visit then
+			return nil, "invalid place"
+		end
+		local key = Places.Key(data.zone, data.subzone)
+		key = meta.visit == "return" and string.format("return:%s:%d", key, now or 0) or ("place:" .. key)
+		return withContext({ category = "place", key = key, source = data.source or "ZONE_CHANGED",
+			confidence = "verified", meta = meta }, data)
+	end,
+	significance = function(record)
+		local m = record.meta
+		if m.visit == "start" then return 3 end
+		if m.visit == "return" then
+			return (m.linked == 1 or m.meaningful == 1) and 2 or 1
+		end
+		if m.visit == "first" and Places.SETTLEMENT_KINDS[m.placeKind] then return 2 end
+		return 1
+	end,
 }
 
 GameEvents.CATEGORIES.instance = {
@@ -220,6 +262,25 @@ GameEvents.CATEGORIES.moment = {
 function GameEvents.Label(category)
 	local def = GameEvents.CATEGORIES[category]
 	return def and def.label or tostring(category)
+end
+
+local VISIT_LABELS = { start = "Journey begins", firstseen = "First recorded location", first = "First recorded visit",
+	["return"] = "Return" }
+
+--- A label for one record: location events say how they relate to the journey.
+function GameEvents.RecordLabel(record)
+	local m = record.meta or {}
+	if (record.category == "zone" or record.category == "place") and m.visit then
+		local label = VISIT_LABELS[m.visit]
+		if record.category == "place" and m.placeName then
+			label = label .. ": " .. m.placeName
+		end
+		if m.placeKind then
+			label = label .. " (" .. Places.KIND_LABELS[m.placeKind] .. ")"
+		end
+		return label
+	end
+	return GameEvents.Label(record.category)
 end
 
 function GameEvents.Build(category, data, now)
