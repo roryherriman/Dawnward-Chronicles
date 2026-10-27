@@ -163,6 +163,16 @@ Everything is built from solid-colour textures. No art files ship and no Blizzar
 
 ---
 
+### 4.1 Approximate previews
+Browser renderings built from the same theme colours and layout sizes (`python tools/design/render_previews.py`). **They are not game screenshots.** The game uses Friz Quadrata and its own text rendering, so verify against the real client with TESTING.md part N.
+
+| | Classic Dawnward | Lightbound | Shadowbound |
+|---|---|---|---|
+| Journal | ![](previews/v06-journal-dawnward.png) | ![](previews/v06-journal-lightbound.png) | ![](previews/v06-journal-shadowbound.png) |
+| Setup wizard | ![](previews/v06-setup-dawnward.png) | ![](previews/v06-setup-lightbound.png) | ![](previews/v06-setup-shadowbound.png) |
+
+---
+
 ## 5. First-time setup wizard
 
 ### 5.1 Stages
