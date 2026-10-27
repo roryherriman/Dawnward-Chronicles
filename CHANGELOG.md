@@ -12,6 +12,36 @@ Every release entry has a **Verified** line naming the highest test level reache
 
 A feature is never called "tested" or "compatible" in this file unless it reached L3 or L4.
 
+## [Unreleased]: 0.6.0-dev (visual and onboarding overhaul)
+
+**Verified: L2** (mocked). Not tested in game yet; see part N of [`docs/TESTING.md`](docs/TESTING.md). Design: [`docs/design/UI_DESIGN_V06.md`](docs/design/UI_DESIGN_V06.md).
+
+### Added
+- **Design system:**
+  - Shared tokens, a theme registry and frame chrome (`UI/Style.lua`).
+  - A component kit (`UI/Widgets.lua`): template-free buttons in default, primary, ghost, danger and choice variants, with hover, pressed, disabled and selected states; icon buttons; segmented controls; cards; dividers; styled inputs; and a Dawnward confirmation dialog.
+- **Themes:** Classic Dawnward (new default for new characters), Lightbound and Shadowbound. Neutral, Silver Hand and Arcane are kept, and a saved theme is never changed. Themes are cosmetic and never depend on class, race or faction.
+- **First-time setup wizard:** Welcome, Character, Story, Privacy, Appearance, Finish.
+  - It opens by itself only for a genuinely new character, once per session.
+  - Drafts are kept on close and resume on the same page.
+  - Finish applies only what you changed and never clears an existing value.
+  - Nothing is written to Total RP 3.
+  - `/dawnward setup`, or Settings → Run setup, opens it on demand.
+- **Developer commands** (development builds only): `/dawnward dev setup` (a marked preview), `dev setup status`, and `dev setup reset confirm`, which resets only the setup state.
+
+### Changed
+- **Every screen restyled:**
+  - The window has an emblem header, ?/settings/close buttons, underlined navigation and a status footer. It is 640 × 540 and scales down to fit small screens.
+  - Journal entries are cards, Story answers are choice cards, and the Chronicle has a segmented sub-navigation.
+  - Settings is split into General, Story, Data and Total RP 3 pages, with a theme gallery.
+  - The reaction card, copy window, forms and guide use the same frame and controls.
+- **Guide:** now contextual help only. It no longer opens by itself, and closing it saves nothing.
+
+### Data
+- **Schema stays 5.** New saved values are additive and cleaned on load:
+  - `char.wizard`, reserved since schema 3;
+  - `ui.wizardDrafts`, keyed by character, capped at 50, so unfinished setups never create a character record.
+
 ## [Unreleased]: 0.4.0-dev (the living chronicle)
 
 **Verified: L2** (mocked). Not tested in game yet; see the v0.4 checklist in [`docs/TESTING.md`](docs/TESTING.md#v04-in-game-checklist-l3-the-living-chronicle).
