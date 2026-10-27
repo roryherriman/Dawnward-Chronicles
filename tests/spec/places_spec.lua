@@ -14,6 +14,10 @@ return function(t, expect)
 	local function setup(opts)
 		opts = opts or {}
 		local ns = opts.trp3 and Loader.WithTRP3() or Loader.Core()
+		-- These specs test what can become a moment; the weighted chance of
+		-- asking is tested separately (director_relevance_spec), so here
+		-- every eligible place asks.
+		if not opts.roll then ns.Director.Roll = function() return 0 end end
 		local char = ns.Schema.NewCharacter(1)
 		char.fields.name = { value = opts.name or "Kyssarra", visibility = "public" }
 		if opts.pronouns ~= false then
@@ -194,9 +198,8 @@ return function(t, expect)
 
 			made = observe(ns, ctx, clock, 9000, STONEFIELD)
 			expect.equal(made[1].record.meta.placeKind, "farm")
-			expect.equal(present(ns, char, made[1]).question,
-				"Kyssarra is among the fields of The Stonefield Farm, in Elwynn Forest. What catches her interest?")
-			answer(ns, char, made[1].reaction, "quiet", 9100)
+			expect.equal(made[1].outcome, "logged quietly", "ordinary farmland is recorded, not asked about")
+			expect.falsy(made[1].reaction)
 
 			made = observe(ns, ctx, clock, 13000, LAKESHIRE, { level = 15 })
 			expect.equal(#made, 2)
@@ -222,7 +225,7 @@ return function(t, expect)
 			expect.equal(present(ns, char, made[1]).question, "Kyssarra reaches Lakeshire. What draws her attention?")
 			-- A road right after: recorded only.
 			made = observe(ns, ctx, clock, 5060, { "Redridge Mountains", "Three Corners", 1433, 1002 }, { level = 15 })
-			expect.equal(made[1].outcome, "folded into a waiting moment")
+			expect.equal(made[1].outcome, "logged quietly")
 			expect.equal(made[1].record.status, "recorded")
 			expect.equal(#char.story.reactions, 1)
 		end)
@@ -276,23 +279,18 @@ return function(t, expect)
 			answer(ns, char, made[1].reaction, "curious", 150)
 			made = observe(ns, ctx, clock, 5000, GOLDSHIRE)
 			answer(ns, char, made[1].reaction, "work", 5050)
-			made = observe(ns, ctx, clock, 9000, STONEFIELD)
-			answer(ns, char, made[1].reaction, "labour", 9050)
+			observe(ns, ctx, clock, 9000, STONEFIELD)
 			return ns, char, ctx, clock
 		end
 
-		t:it("coming back to a settlement after days away is a quiet return moment, at most weekly", function()
+		t:it("coming back to an ordinary settlement is recorded quietly, at most weekly", function()
 			local ns, char, ctx, clock = visited()
 			local made = observe(ns, ctx, clock, 9000 + 3 * DAY, GOLDSHIRE)
 			expect.equal(#made, 1)
 			expect.equal(made[1].record.meta.visit, "return")
 			expect.equal(made[1].record.significance, 1)
-			local view = present(ns, char, made[1])
-			expect.equal(view.question, "Kyssarra has returned to Goldshire. Does this place feel any different now?")
-			noBackstory(view.question)
-			local entry = answer(ns, char, made[1].reaction, "measure", 9100 + 3 * DAY).entry
-			expect.truthy(entry.text:find("Returned to Goldshire, Elwynn Forest, at level 1.", 1, true), entry.text)
-			expect.equal(entry.title, "Back in Goldshire")
+			expect.equal(made[1].outcome, "logged quietly", "no tie to the character's story: no question")
+			expect.equal(#char.story.reactions, 0)
 			-- Away two more days, but within the week: no second return moment.
 			observe(ns, ctx, clock, 9000 + 3 * DAY + 600, STONEFIELD)
 			expect.equal(#observe(ns, ctx, clock, 9000 + 6 * DAY, GOLDSHIRE), 0)
@@ -336,7 +334,8 @@ return function(t, expect)
 
 		t:it("an active goal adds its own answer to a place moment; the universal answers stay", function()
 			local ns, char, ctx, clock = visited()
-			local goal = assert(ns.Goals.Add(char, { title = "Find the missing courier" }, 9500))
+			-- The goal names the place, so the return is relevant to it.
+			local goal = assert(ns.Goals.Add(char, { title = "Find the missing courier in Goldshire" }, 9500))
 			local view = present(ns, char, observe(ns, ctx, clock, 9000 + 3 * DAY, GOLDSHIRE)[1])
 			local ids = {}
 			for _, o in ipairs(view.options) do ids[#ids + 1] = o.id end
@@ -365,14 +364,18 @@ return function(t, expect)
 			local made = observe(ns, ctx, clock, 100, NORTHSHIRE)
 			answer(ns, char, made[1].reaction, "curious", 150)
 			char.story.prefs.places = "fewer"
-			expect.equal(observe(ns, ctx, clock, 5000, STONEFIELD)[1].outcome, "below threshold")
-			expect.equal(observe(ns, ctx, clock, 9000, GOLDSHIRE)[1].outcome, "queued", "a settlement is notable")
+			expect.equal(observe(ns, ctx, clock, 5000, STONEFIELD)[1].outcome, "logged quietly")
+			expect.equal(observe(ns, ctx, clock, 9000, GOLDSHIRE)[1].outcome, "logged quietly",
+				"with fewer, an ordinary town is only logged")
+			char.fields.homeland = { value = "Lakeshire", visibility = "private" }
+			made = observe(ns, ctx, clock, 20000, LAKESHIRE, { level = 15 })
+			expect.equal(made[1].outcome, "queued", "a homeland still asks")
 			ns.Reactions.Dismiss(char, char.story.reactions[1].id)
 			char.story.prefs.places = "off"
-			made = observe(ns, ctx, clock, 20000, LAKESHIRE, { level = 15 })
-			expect.equal(#made, 2)
+			made = observe(ns, ctx, clock, 40000, { "Westfall", nil, 1436, nil }, { level = 15 })
+			expect.equal(#made, 1)
 			expect.equal(#char.story.reactions, 0)
-			expect.truthy(ns.GameEvents.Find(char, "place:Redridge Mountains / Lakeshire"))
+			expect.truthy(ns.GameEvents.Find(char, "zone:Westfall"))
 		end)
 
 		t:it("turning off zone and place tracking stops logging places", function()
@@ -401,6 +404,7 @@ return function(t, expect)
 
 		t:it("v4 data upgrades to v5 without touching events, approvals or journal text", function()
 			local ns = Loader.Core()
+			ns.Director.Roll = function() return 0 end
 			local stale = "Arrived in Elwynn Forest at level 1 (the first visit Dawnward recorded).\n\n"
 				.. "Kyssarra wanted to see all of it.\n\nNew places draw them on.\n\n"
 				.. "Development: toward Bold (Courage +1) (waiting for your approval)."

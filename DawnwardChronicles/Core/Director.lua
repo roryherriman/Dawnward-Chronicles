@@ -87,7 +87,7 @@ function Director.Context(char, record, template)
 end
 
 --- Why this moment appeared, in plain words, from verified data only.
-function Director.Why(_, record)
+function Director.Why(char, record)
 	local why = {}
 	if not record then
 		return why
@@ -124,6 +124,11 @@ function Director.Why(_, record)
 				why[#why + 1] = "it is a " .. ns.Places.KIND_LABELS[m.placeKind]
 			end
 		end
+		local seen = {}
+		for _, r in ipairs(why) do seen[r] = true end
+		for _, r in ipairs(Director.LocationRelevance(char, record).reasons) do
+			if not seen[r] then why[#why + 1] = r end
+		end
 	end
 	if #why == 0 then
 		why[#why + 1] = "you completed it"
@@ -133,6 +138,112 @@ end
 
 local function plain(s)
 	return (s:gsub("[{}]", ""))
+end
+
+--- Location relevance --------------------------------------------------------
+-- A location becomes a story question by weight, not by rule: a beginning
+-- always asks; a place tied to the character's own story (their homeland,
+-- a place they marked, one their memories, arcs, goals or people mention)
+-- usually asks; an ordinary town only occasionally; other places are only
+-- logged. Only established records count, and the reasons name the kind of
+-- tie, never a record's private text.
+
+Director.LOCATION_BASE = {
+	start = 10, firstseen = 6,
+	first = { capital = 3, town = 1, inn = 1, start = 1 },
+	zoneFirst = { capital = 3 },
+	zoneFirstDefault = 1,
+	["return"] = 0,
+}
+Director.LOCATION_TIES = { homeland = 4, meaningful = 3, memory = 3, arc = 2, goal = 2, person = 2 }
+-- Chance of asking by score; at URGENT or more it also skips the location
+-- cooldown (the notice itself still waits for a calm moment and its own pacing).
+Director.LOCATION_CHANCE = { [1] = 0.2, [2] = 0.4, [3] = 0.6, [4] = 0.8 }
+Director.URGENT = 5
+Director.FEWER_PENALTY = 2
+
+local function mentions(haystack, needle)
+	return type(haystack) == "string" and haystack:lower():find(needle, 1, true) ~= nil
+end
+
+local function mentionedIn(list, needle, fields, filter)
+	for _, r in ipairs(list) do
+		if r.status == "established" and (not filter or filter(r)) then
+			for _, k in ipairs(fields) do
+				if mentions(r[k], needle) then return true end
+			end
+		end
+	end
+	return false
+end
+
+--- { score, chance, urgent, reasons = { ... } } for a zone or place record.
+-- prefs.places "fewer" lowers the score; "off" is handled by Reactions.
+function Director.LocationRelevance(char, record, prefs)
+	local m = record.meta or {}
+	local story = char.story
+	local base = Director.LOCATION_BASE
+	local points
+	local reasons = {}
+	if m.visit == "start" then
+		points = base.start
+	elseif m.visit == "firstseen" then
+		points = base.firstseen
+	elseif m.visit == "return" then
+		points = base["return"]
+	elseif record.category == "zone" then
+		points = base.zoneFirst[m.placeKind] or base.zoneFirstDefault
+	else
+		points = base.first[m.placeKind] or 0
+	end
+
+	local name = m.placeName or record.zone
+	local key = ns.Places.Key(record.zone or "", record.subzone)
+	local entry = story.places[key] or (record.zone and story.places[record.zone])
+	local needle = name and #name >= 4 and name:lower() or nil
+	local ties = Director.LOCATION_TIES
+	local function tie(kind, reason)
+		points = points + ties[kind]
+		reasons[#reasons + 1] = reason
+	end
+	local homeland = char.fields and char.fields.homeland and char.fields.homeland.value
+	if (entry and entry.homeland) or (needle and type(homeland) == "string" and homeland:lower() == needle) then
+		tie("homeland", "it is your character's homeland")
+	end
+	if m.meaningful == 1 or (entry and entry.meaningful) then
+		tie("meaningful", "you marked it as meaningful")
+	end
+	if m.linked == 1 or (entry and ns.Places.Linked(story, entry)) then
+		tie("memory", "one of your memories is tied to it")
+	end
+	if needle then
+		local function active(r) return r.state == "active" end
+		if mentionedIn(story.arcs, needle, { "title", "summary" }, active) then
+			tie("arc", "one of your active arcs mentions it")
+		end
+		if mentionedIn(story.goals, needle, { "title", "text" }, active) then
+			tie("goal", "one of your active goals mentions it")
+		end
+		if mentionedIn(story.people, needle, { "relation", "feelings" }) then
+			tie("person", "someone your character knows is connected to it")
+		end
+	end
+	if prefs and prefs.places == "fewer" and m.visit ~= "start" then
+		points = points - Director.FEWER_PENALTY
+	end
+	local chance = points >= Director.URGENT and 1 or Director.LOCATION_CHANCE[points] or 0
+	return { score = points, chance = chance, urgent = points >= Director.URGENT, reasons = reasons }
+end
+
+--- A number in [0, 1) for this event: fixed per event key, so the same
+-- moment is always decided the same way (and tests can replace it).
+function Director.Roll(record)
+	local h = 5381
+	local s = tostring(record.key) .. ":" .. tostring(record.at or 0)
+	for i = 1, #s do
+		h = (h * 33 + s:byte(i)) % 4294967296
+	end
+	return (h % 10000) / 10000
 end
 
 --- Extra answers drawn from the character's own history, in rank order,

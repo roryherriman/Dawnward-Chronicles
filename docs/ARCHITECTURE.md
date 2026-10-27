@@ -137,12 +137,32 @@ Automatic entries can change visibility, but they can't be edited or deleted, so
 
 See [UI_DIRECTION.md](UI_DIRECTION.md).
 
-- **One window, three sections** (Journal, Character, Story), plus a settings panel behind a gear button. The panel isn't a fourth section.
+- **One window, four sections** (Journal, Character, Story, Chronicle), plus a settings panel behind a gear button and a guide behind a **?** button (#51). Neither panel is a section.
+- **Forms (v0.5):** `UI/Forms.lua` is one shared form (line, text area, cycle and number fields; Save, Cancel and a confirmed Remove) used for every record in the Chronicle and for family and history. Records no longer need slash commands.
+- **Chronicle rows (v0.5, #46):** two lines per record. The text has the full width on the first; status and up to five buttons share the second. `ChronicleView.RowRects` is the single source of the row's rectangles, and a test checks none overlap. Lists are paged, six rows per page.
+- **Minimap button (v0.5, #45):** `UI/MinimapButton.lua`; angle and hidden state are account-wide in `DawnwardChroniclesDB.ui.minimap`.
 - **Layout:** every region comes from one layout table (`MainWindow.LAYOUT`). Tests check that regions don't overlap and that every region stays inside the opaque background. Text widths come from the layout, not from `GetWidth()`, which can be 0 before the first layout pass.
 - **Layering:** the journal uses the MEDIUM layer and toplevel, like the game's own panels, so game dialogs and tooltips stay above it. The export/import window uses FULLSCREEN_DIALOG and opens above the journal.
 - **Size and position:** the window is 620 × 520 UI units, small enough for the smallest UIParent the UI scale allows. It is kept on screen, and its position is saved account-wide (in real data only).
 - **Themes:** themes are data in `Core/Themes.lua`: colours plus a border tint over the game's own dialog border art. Each theme is chosen per character, and new characters get Neutral. Every text colour is tested for at least 4.5:1 contrast on both surfaces.
 - **Efficiency:** journal pages show 10 entries, so at most 10 row frames exist however large the journal grows. Rows are reused. Nothing redraws while the window is hidden.
+
+## Story Director: location relevance (v0.5)
+
+A zone or place event asks a question by weight, not by rule (`Director.LocationRelevance`, used by `Reactions.Consider`):
+
+| Source | Points |
+|---|---|
+| A beginning in a known starting area | 10 (always asks) |
+| The first place Dawnward records for an established character | 6 (always asks) |
+| First visit: capital 3, town, inn or a starting area visited later 1, other places 0. A new zone: 1 (a capital zone 3) | |
+| A return after days away | 0 |
+| Homeland (the place linked from Places, or the Homeland field naming it) | +4 |
+| Marked as meaningful, or tied to an established memory | +3 each |
+| Named by an active established arc or goal, or by a person's relation or feelings | +2 each |
+| `story set places fewer` | −2 (not for beginnings) |
+
+Chance of asking: 1 point 20%, 2 points 40%, 3 points 60%, 4 points 80%, 5 or more always. At 5 or more the place also skips the shared location cooldown: the question is queued and announced at the next calm moment, under the normal notice pacing. Each event's roll is fixed by its key (`Director.Roll`), so a moment is never re-rolled. Zero points: the visit is logged quietly. `prompts off` and `places off` win over any weight. Only established records count, and the "why" text names the kind of tie (for example "one of your memories is tied to it"), never a record's private words.
 
 ## Runtime behaviour
 - **Event-driven:** one frame for startup events and one for milestone events. There are no `OnUpdate` loops.
