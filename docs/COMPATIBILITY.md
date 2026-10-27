@@ -213,6 +213,16 @@ Checked against Blizzard's Classic Era interface source for **1.15.9 (70003)** (
 | `ZONE_CHANGED_NEW_AREA`, `IsInInstance`, `GetInstanceInfo` | First recorded zone visit; first recorded party/raid instance entry | `MapDocumentation.lua`, `InstanceDocumentation.lua`; Classic UI code | S, not L3 | — |
 | `PLAYER_GUILD_UPDATE`, `GetGuildInfo("player")`, `IsInGuild` | Joining or leaving a guild (rank changes only update the snapshot); inconclusive readings at login are ignored | `GuildInfoDocumentation.lua`; `Vanilla/PaperDollFrame.lua`, `Classic/MainMenuBarMicroButtons.lua` | S, not L3 | — |
 
+## Client APIs for the Zone Atlas verifier (#48, v0.5)
+
+Checked on 2026-10-27 against `Gethe/wow-ui-source`, branch `classic_era`, `Blizzard_APIDocumentationGenerated/MapDocumentation.lua`. `/dawnward atlas` only reads; it never saves anything. Nothing below has been run in game yet.
+
+| API | Used for | Source evidence | Classic Era | Forever |
+|---|---|---|---|---|
+| `C_Map.GetAreaInfo(areaID)` | The client's own name for each expected AreaTable ID (`atlas verify`), and for any range (`atlas scan`) | `MapDocumentation.lua` | S, not L3 | — |
+| `C_Map.GetMapInfo(uiMapID)` (`name`, `parentMapID`, `mapType`) | The client's name and parent for each expected uiMap ID, and for the current map | `MapDocumentation.lua` (`UiMapDetails`, `parentMapID` not nilable) | S, not L3 | — |
+| `C_Map.GetBestMapForUnit("player")` | The current uiMap (as in v0.4 places) | `MapDocumentation.lua` | S, L3 owner-reported (1429 in Elwynn Forest) | — |
+
 ## Client APIs for the minimap button (#45, v0.5)
 
 Checked on 2026-10-27 against `Gethe/wow-ui-source`, branch `classic_era`, `Interface/AddOns/Blizzard_Minimap/Classic/Minimap.lua` and `Minimap.xml`. Nothing below has been verified in game yet.
