@@ -548,18 +548,19 @@ end
 -- setup complete. opts.test (developer preview): the choices are saved,
 -- but completion and the real draft are left exactly as they were.
 -- Never writes to Total RP 3; profile fields are only added or changed,
--- never cleared.
+-- never cleared. opts.only: the set of keys the player changed (only those
+-- are applied); the minimap setting only when it is in that set.
 function Actions.CompleteSetup(ctx, values, opts)
 	opts = opts or {}
 	local ok, message = withCharacter(ctx, function(char)
-		local changed = ns.Onboarding.Apply(char, values, ctx.now(), { complete = not opts.test })
+		local changed = ns.Onboarding.Apply(char, values, ctx.now(), { complete = not opts.test, only = opts.only })
 		return changed, opts.test and "Preview choices saved. Setup status was not changed."
 			or "Setup complete. Welcome to your chronicle."
 	end)
 	if not ok then
 		return nil, message
 	end
-	if values.minimap ~= nil then
+	if values.minimap ~= nil and (not opts.only or opts.only.minimap) then
 		Actions.SaveMinimap(ctx, { hidden = values.minimap == false })
 	end
 	if not opts.test then

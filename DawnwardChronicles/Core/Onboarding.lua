@@ -31,7 +31,8 @@ Onboarding.FIELDS = {
 	{ key = "title", label = "Title", max = 100 },
 	{ key = "pronouns", label = "Pronouns", max = 100 },
 	{ key = "homeland", label = "Homeland", max = 100 },
-	{ key = "summary", label = "A line about them", max = 300 },
+	-- A long field: the wizard edits it in a text area at its full stored size.
+	{ key = "summary", label = "About them", max = 2000, multiline = true },
 }
 
 -- Story preferences the wizard offers: { key, label, values = { {value, label} } }.
@@ -81,7 +82,7 @@ function Onboarding.CleanDraft(raw)
 	for _, field in ipairs(Onboarding.FIELDS) do
 		local v = rawValues[field.key]
 		if type(v) == "string" then
-			values[field.key] = Util.CleanText(v, field.max)
+			values[field.key] = Util.CleanText(v, field.max, field.multiline)
 		end
 	end
 	for _, pref in ipairs(Onboarding.PREFS) do
@@ -123,29 +124,48 @@ function Onboarding.IsComplete(char)
 	return char ~= nil and type(char.wizard) == "table" and char.wizard.done == true
 end
 
---- Whether a character already has Dawnward data of its own (anything the
--- player wrote or the game recorded). Such characters never get the wizard
--- automatically; it stays available from Settings.
-function Onboarding.IsEstablished(char)
+-- A record holding only what Dawnward recorded by itself (level-ups,
+-- places, events) still counts as new for this long after it was created,
+-- so a fresh character that levelled before opening Dawnward gets the
+-- wizard, while an old record never does.
+Onboarding.NEW_WINDOW = 7 * 24 * 3600
+
+--- Whether a character already has Dawnward data of its own. Anything the
+-- player wrote or answered counts at once. Data Dawnward recorded by itself
+-- counts once the record is older than NEW_WINDOW (now is the current
+-- time; without it, automatic data always counts). Established characters
+-- never get the wizard automatically; it stays available from Settings.
+function Onboarding.IsEstablished(char, now)
 	if not char then
 		return false
 	end
 	if next(char.fields or {}) or next(char.personality or {}) then
 		return true
 	end
-	for _, list in ipairs({ "family", "history", "journal", "facts" }) do
+	for _, list in ipairs({ "family", "history", "facts" }) do
 		if char[list] and #char[list] > 0 then return true end
 	end
+	local automatic = false
+	for _, entry in ipairs(char.journal or {}) do
+		if entry.kind == "event" then automatic = true else return true end
+	end
 	local story = char.story or {}
-	for _, list in ipairs({ "events", "decisions", "memories", "arcs", "goals", "identity", "people", "reactions" }) do
+	for _, list in ipairs({ "decisions", "memories", "arcs", "goals", "identity", "people" }) do
 		if story[list] and #story[list] > 0 then return true end
 	end
-	return story.places ~= nil and next(story.places) ~= nil
+	if (story.events and #story.events > 0) or (story.places and next(story.places)) then
+		automatic = true
+	end
+	if not automatic then
+		return false
+	end
+	local created = type(char.createdAt) == "number" and char.createdAt or 0
+	return not now or now - created > Onboarding.NEW_WINDOW
 end
 
 --- Whether the wizard should open by itself for this character.
-function Onboarding.ShouldAutoLaunch(char)
-	return not Onboarding.IsComplete(char) and not Onboarding.IsEstablished(char)
+function Onboarding.ShouldAutoLaunch(char, now)
+	return not Onboarding.IsComplete(char) and not Onboarding.IsEstablished(char, now)
 end
 
 --- Starting values: the character's saved data where it exists (never
@@ -169,17 +189,23 @@ function Onboarding.DefaultValues(char, suggestedName, minimapShown)
 	return values
 end
 
---- Applies the wizard's values to char. Profile fields are written only
--- when non-empty and different from what is saved: nothing is cleared or
--- blanked. Returns { fields = { changed keys }, prefs = n, theme = id }.
--- opts.complete marks onboarding complete (never in test mode).
+--- Applies the wizard's values to char. Only keys the player changed in
+-- the wizard are applied when opts.only (a set of keys) is given, so
+-- settings changed elsewhere since a draft are never undone. Profile fields
+-- are written only when non-empty and different from what is saved:
+-- nothing is cleared or blanked. Returns { fields = { changed keys },
+-- prefs = n, theme = id }. opts.complete marks onboarding complete (never
+-- in test mode).
 function Onboarding.Apply(char, values, now, opts)
+	opts = opts or {}
+	local only = opts.only
+	local function wanted(key) return not only or only[key] end
 	local changed = { fields = {}, prefs = 0 }
 	for _, field in ipairs(Onboarding.FIELDS) do
 		local v = values[field.key]
 		v = type(v) == "string" and Util.Trim(v) or ""
 		local entry = char.fields[field.key]
-		if v ~= "" and (not entry or entry.value ~= v) then
+		if wanted(field.key) and v ~= "" and (not entry or entry.value ~= v) then
 			if ns.Character.SetField(char, field.key, v, now) then
 				changed.fields[#changed.fields + 1] = field.key
 			end
@@ -187,16 +213,16 @@ function Onboarding.Apply(char, values, now, opts)
 	end
 	for _, pref in ipairs(Onboarding.PREFS) do
 		local v = values[pref.key]
-		if validPref(pref, v) and char.story.prefs[pref.key] ~= v then
+		if wanted(pref.key) and validPref(pref, v) and char.story.prefs[pref.key] ~= v then
 			char.story.prefs[pref.key] = v
 			changed.prefs = changed.prefs + 1
 		end
 	end
-	if ns.Themes.IsValid(values.theme) then
+	if wanted("theme") and ns.Themes.IsValid(values.theme) and char.theme ~= values.theme then
 		char.theme = values.theme
 		changed.theme = values.theme
 	end
-	if opts and opts.complete then
+	if opts.complete then
 		char.wizard = { done = true, version = Onboarding.VERSION, doneAt = now or 0 }
 	end
 	return changed
@@ -214,8 +240,14 @@ function Onboarding.Summary(values)
 	local lines = {}
 	for _, field in ipairs(Onboarding.FIELDS) do
 		local v = values[field.key]
-		lines[#lines + 1] = string.format("%s: %s", field.label, (type(v) == "string" and v:match("%S")) and v
-			or "(not set; you can add it later)")
+		if type(v) == "string" and v:match("%S") then
+			-- One line each: long text is shortened here only, never when saved.
+			v = v:gsub("%s+", " ")
+			if #v > 70 then v = Util.TruncateUtf8(v, 70) .. "..." end
+		else
+			v = "(not set; you can add it later)"
+		end
+		lines[#lines + 1] = string.format("%s: %s", field.label, v)
 	end
 	for _, pref in ipairs(Onboarding.PREFS) do
 		lines[#lines + 1] = string.format("%s: %s", pref.label, labelOf(pref, values[pref.key]))

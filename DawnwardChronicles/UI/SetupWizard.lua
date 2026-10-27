@@ -3,13 +3,17 @@
 --
 --   * it opens by itself only for a genuinely new character, once per
 --     session, when the player opens Dawnward (MainWindow.BeforeShow)
---   * values are kept while moving between pages, and saved as a draft on
---     every step and on close, so it resumes where it was left
+--   * values are kept while moving between pages; what the player changed
+--     is saved as a draft on every step and on close, so it resumes where
+--     it was left (only changed keys are kept and applied, so settings
+--     changed elsewhere meanwhile are never undone)
 --   * nothing is written to the character, and setup is not marked
 --     complete, until Finish; Finish never clears an existing value and
 --     never writes to Total RP 3
 --   * test mode (/dawnward dev setup) is a clearly marked preview: no
 --     draft, no completion, and choices are saved only on "Save choices"
+--   * in simulation mode or on read-only data it is a preview that cannot
+--     save, so real and test data never mix
 local _, ns = ...
 local Widgets, Style, Actions, Onboarding, Themes, MainWindow =
 	ns.Widgets, ns.Style, ns.Actions, ns.Onboarding, ns.Themes, ns.MainWindow
@@ -64,6 +68,7 @@ local function cycleRow(parent, y, spec)
 			if v[1] == current then nextValue = values[i % #values + 1][1] end
 		end
 		wizard.values[self.spec.key] = nextValue
+		wizard.edited[self.spec.key] = true
 		SetupWizard.Refresh()
 	end)
 	function b.Update(self)
@@ -92,18 +97,27 @@ local function buildPages()
 		.. "otherwise. Existing details are kept; an empty box never erases anything.", "muted")
 	wizard.inputs = {}
 	for i, field in ipairs(Onboarding.FIELDS) do
-		local y = -48 - (i - 1) * 36
+		local y = -48 - (i - 1) * 34
 		local label = Widgets.Label(p, "GameFontNormal", false, "muted")
 		label:SetPoint("TOPLEFT", 0, y - 4)
 		label:SetWidth(LABEL_WIDTH - 8)
 		label:SetText(field.label)
-		local input = Widgets.EditLine(p, field.max + 1)
-		input:SetPoint("TOPLEFT", LABEL_WIDTH, y)
-		input:SetWidth(BODY_WIDTH - LABEL_WIDTH)
+		local input
+		if field.multiline then
+			-- Long text keeps its full size and line breaks.
+			local area = Widgets.TextArea(p, field.max + 1, BODY_WIDTH - LABEL_WIDTH)
+			area.frame:SetPoint("TOPLEFT", LABEL_WIDTH, y)
+			area.frame:SetSize(BODY_WIDTH - LABEL_WIDTH, 64)
+			input = area.edit
+		else
+			input = Widgets.EditLine(p, field.max + 1)
+			input:SetPoint("TOPLEFT", LABEL_WIDTH, y)
+			input:SetWidth(BODY_WIDTH - LABEL_WIDTH)
+		end
 		input.fieldKey = field.key
 		wizard.inputs[#wizard.inputs + 1] = input
 	end
-	paragraph(p, -236, "The name is suggested from the game. More fields, family and history are in the "
+	paragraph(p, -264, "The name is suggested from the game. More fields, family and history are in the "
 		.. "Character tab.", "muted")
 
 	-- 3 Story preferences
@@ -146,6 +160,7 @@ local function buildPages()
 		tile.themeId = theme.id
 		tile:SetScript("OnClick", function()
 			wizard.values.theme = theme.id
+			wizard.edited.theme = true
 			SetupWizard.Refresh()
 		end)
 		Widgets.Tooltip(tile, theme.name, theme.description)
@@ -247,10 +262,15 @@ end
 
 --- State --------------------------------------------------------------------------------
 
--- Reads the text inputs into the values table.
+-- Reads the text inputs into the values table, noting what the player
+-- changed (compared with what the box was filled with).
 local function collect()
 	for _, input in ipairs(wizard.inputs) do
-		wizard.values[input.fieldKey] = input:GetText() or ""
+		local text = input:GetText() or ""
+		if text ~= (wizard.initial[input.fieldKey] or "") then
+			wizard.edited[input.fieldKey] = true
+		end
+		wizard.values[input.fieldKey] = text
 		input:ClearFocus()
 	end
 end
@@ -261,11 +281,14 @@ local function fill()
 	end
 end
 
+-- Only what the player changed goes into the draft.
 local function saveDraft()
 	if wizard.test or wizard.readOnly or wizard.finished then
 		return
 	end
-	Actions.SaveSetupDraft(ns.ctx, { page = wizard.page, values = wizard.values })
+	local changed = {}
+	for key in pairs(wizard.edited) do changed[key] = wizard.values[key] end
+	Actions.SaveSetupDraft(ns.ctx, { page = wizard.page, values = changed })
 end
 
 local function characterTheme()
@@ -303,8 +326,11 @@ function SetupWizard.Refresh()
 	local last = wizard.page == #Onboarding.PAGES
 	if last then
 		wizard.summary:SetText(table.concat(Onboarding.Summary(wizard.values), "\n"))
-		wizard.finishNote:SetText(wizard.readOnly and "Saved data is read-only this session, so setup cannot be "
-			.. "saved. Nothing has been changed." or wizard.test and "Preview: Save choices applies these choices "
+		local blocked = wizard.simulation and "Simulation mode is on, so setup cannot be saved. Turn simulation "
+			.. "off (Settings > Data) and run setup again."
+			or wizard.readOnly and "Saved data is read-only this session, so setup cannot be saved. Nothing has "
+			.. "been changed."
+		wizard.finishNote:SetText(blocked or wizard.test and "Preview: Save choices applies these choices "
 			.. "to this character without changing its setup status. Close preview discards them."
 			or "Nothing is shared and nothing is sent to Total RP 3.")
 	end
@@ -329,22 +355,38 @@ function SetupWizard.Open(opts)
 	local ctx = ns.ctx
 	if not ctx then return false end
 	if not wizard then build() end
+	-- A running wizard keeps what was typed since the last step.
+	if wizard:IsShown() and wizard.values and not wizard.test then
+		collect()
+		saveDraft()
+	end
 	local char = Actions.Character(ctx)
 	local name = UnitName and UnitName("player") or nil
 	local values = Onboarding.DefaultValues(char, name, not Actions.MinimapSettings(ctx).hidden)
-	local page = 1
+	local page, edited = 1, {}
+	-- The draft holds only what the player changed; everything else comes
+	-- fresh from the character, so newer settings are kept.
+	local initial = {}
+	for k, v in pairs(values) do initial[k] = v end
 	if not opts.test then
 		local draft = Actions.SetupDraft(ctx)
 		if draft then
-			for k, v in pairs(draft.values) do values[k] = v end
+			for k, v in pairs(draft.values) do
+				values[k] = v
+				edited[k] = true
+			end
 			page = draft.page
 		end
 	end
 	wizard.test = opts.test and true or false
-	wizard.readOnly = ctx.store:ReadOnlyReason() ~= nil
+	wizard.simulation = ctx.store:IsSimulation()
+	-- Simulation mode: a preview that cannot save, so real and test data never mix.
+	wizard.readOnly = ctx.store:ReadOnlyReason() ~= nil or wizard.simulation
+	wizard.initial, wizard.edited = initial, edited
 	wizard.finished = false
 	wizard.values, wizard.page = values, page
 	wizard.eyebrow:SetText(wizard.test and "PREVIEW  -  TEST MODE: NOTHING IS SAVED UNLESS YOU CHOOSE"
+		or wizard.simulation and "FIRST-TIME SETUP  -  SIMULATION MODE: PREVIEW ONLY"
 		or wizard.readOnly and "FIRST-TIME SETUP  -  READ-ONLY: NOTHING CAN BE SAVED" or "FIRST-TIME SETUP")
 	wizard.eyebrow.textRole = (wizard.test or wizard.readOnly) and "danger" or "ornament"
 	Style.Repaint(wizard.eyebrow)
@@ -359,7 +401,7 @@ end
 function SetupWizard.Finish()
 	collect()
 	if wizard.readOnly then return end
-	local ok, message = Actions.CompleteSetup(ns.ctx, wizard.values, { test = wizard.test })
+	local ok, message = Actions.CompleteSetup(ns.ctx, wizard.values, { test = wizard.test, only = wizard.edited })
 	if not ok then
 		wizard.finishNote:SetText(message)
 		return
@@ -429,7 +471,7 @@ function SetupWizard.MaybeAutoLaunch()
 		return false
 	end
 	local char = ctx.store.real.characters[ctx.characterKey]
-	if not Onboarding.ShouldAutoLaunch(char) then
+	if not Onboarding.ShouldAutoLaunch(char, ctx.now()) then
 		return false
 	end
 	autoShown[ctx.characterKey] = true

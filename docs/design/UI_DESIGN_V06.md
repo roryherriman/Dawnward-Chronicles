@@ -179,7 +179,7 @@ Browser renderings built from the same theme colours and layout sizes (`python t
 | # | Stage | Contents | Defaults |
 |---|---|---|---|
 | 1 | Welcome | What Dawnward is; complements TRP3; private by default; about two minutes, everything changeable later | — |
-| 2 | Character | Name, Title, Pronouns, Homeland, "A line about them" (Summary). All optional | Name pre-filled with the in-game name as a suggestion. Existing values pre-filled |
+| 2 | Character | Name, Title, Pronouns and Homeland (one line each), and "About them" (Summary) in a text area at its full stored size (2,000 bytes, line breaks kept). All optional | Name pre-filled with the in-game name as a suggestion. Existing values pre-filled |
 | 3 | Story preferences | How often (rare, normal, frequent, off), Place moments (on, fewer, off), Moment card (on, off), Personality changes (ask, auto) | The character's current prefs, or `StorySchema.DEFAULT_PREFS` |
 | 4 | Privacy | Explains private, secret and public. Explains that Total RP 3 sync is off and stays off unless enabled later with `/dawnward trp3`. Shows read-only TRP3 detection | No toggles that publish or sync |
 | 5 | Appearance | Theme gallery (live preview), minimap button on or off | Current theme, or Classic Dawnward |
@@ -191,9 +191,13 @@ Browser renderings built from the same theme colours and layout sizes (`python t
 - Values are kept in a draft table while moving between pages.
 
 ### 5.2 Rules
-- **Auto-launch:** only when the player opens Dawnward (`/dawnward`, the minimap button or a reaction card) for a character that is **new**: it has no character record, or its record has nothing but default values (`Onboarding.IsEstablished` is false). The wizard is also not completed, and it hasn't been auto-shown this session.
-- **Established characters:** any profile field, journal entry, family or history item, fact, personality value, story event, record or decision counts. They never see it automatically. Settings → General → **Run setup** opens it on demand.
-- **Close or "Set up later":** saves the draft and opens nothing else. The next time Dawnward is opened, the wizard resumes on the same page. Completion is not marked.
+- **Auto-launch:** only when the player opens Dawnward (`/dawnward`, the minimap button or a reaction card) for a character that is **new** (`Onboarding.IsEstablished(char, now)` is false). The wizard is also not completed, it hasn't been auto-shown this session, simulation mode is off, and the saved data is writable.
+- **Established characters:**
+  - Anything the player wrote or answered counts at once: a profile field, a personality value, family, history, a fact, their own journal entry, a decision, memory, arc, goal, stance or person.
+  - Data Dawnward recorded by itself (automatic level-up entries, story events, places) counts once the record is more than **7 days** old. So a fresh character that levelled up before first opening Dawnward still gets the wizard, and an old record never does.
+  - Established characters never see the wizard automatically. Settings → General → **Run setup** (or `/dawnward setup`) opens it on demand.
+- **Close, Escape or "Set up later":** saves the draft. "Set up later" also opens the journal. The next session, the wizard resumes on the same page. Completion is not marked.
+- **Drafts and Finish hold only what the player changed** (each box is compared with what it was filled with). Everything else is read fresh from the character, so a setting changed elsewhere after a draft is never undone, and an untouched long Summary is never rewritten.
 - **Finish:**
   - creates the character record if needed;
   - writes only fields whose value is non-empty and differs from the saved one (it never clears or overwrites with an empty value);
@@ -201,7 +205,8 @@ Browser renderings built from the same theme colours and layout sizes (`python t
   - marks `wizard.done = true` with the version and time;
   - clears the draft and opens the journal.
 - **TRP3:** never written, enabled or synced.
-- **Read-only saved data:** the wizard opens as a preview and cannot save.
+- **Read-only saved data or simulation mode:** the wizard opens as a preview that cannot save and keeps no draft, so real and test data never mix.
+- **Confirmations:** Escape cancels only the dialog (keyboard handler), not the journal or wizard beneath it.
 
 ### 5.3 Saved state (no schema bump)
 - Per character: `char.wizard`, reserved since schema 3 and so far always `{}`. It becomes `{ done, version, doneAt }`, cleaned by `Onboarding.Clean` (unknown keys dropped, so `{ step = 3 }` still cleans to `{}`).
@@ -216,7 +221,9 @@ Browser renderings built from the same theme colours and layout sizes (`python t
 ---
 
 ## 6. Developer commands (development builds only)
-- **Gating:** enabled when the addon version contains `-dev` (from the TOC; `0.6.0-dev` now). Release builds answer "Developer commands are only available in development builds."
+- **Gating:**
+  - Enabled when the addon version contains `-dev` (from the TOC; `0.6.0-dev` now). Release builds answer "Developer commands are only available in development builds."
+  - `tools/package.py` prints a note whenever it packages a `-dev` build, so a release is never shipped with them enabled by mistake.
 - **Commands:**
   - `/dawnward dev setup`: the wizard in test mode, even if completed.
   - `/dawnward dev setup status`: complete or not, wizard version, completion date, whether a draft exists (and its page), and whether the character counts as established.

@@ -39,7 +39,7 @@ function SetupCommands.StatusLines(ctx)
 	else
 		lines[#lines + 1] = "Draft: none."
 	end
-	if Onboarding.IsEstablished(char) then
+	if Onboarding.IsEstablished(char, ctx.now()) then
 		lines[#lines + 1] = "This character has Dawnward data, so the wizard never opens by itself (Settings > Run setup)."
 	elseif wizard.done then
 		lines[#lines + 1] = "The wizard will not open by itself again."

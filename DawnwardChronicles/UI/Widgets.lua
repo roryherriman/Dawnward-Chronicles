@@ -353,10 +353,17 @@ local function buildDialog()
 		if fn then fn() end
 	end)
 	d:SetScript("OnHide", function(self) self.onAccept = nil end)
-	-- Escape closes it, as Cancel.
-	if UISpecialFrames then
-		tinsert(UISpecialFrames, Widgets.DIALOG_NAME)
-	end
+	-- Escape cancels the dialog only. (UISpecialFrames would also close the
+	-- journal or wizard beneath it.) Other keys pass through to the game.
+	d:EnableKeyboard(true)
+	d:SetScript("OnKeyDown", function(self, key)
+		if key == "ESCAPE" then
+			if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(false) end
+			self:Hide()
+		elseif self.SetPropagateKeyboardInput then
+			self:SetPropagateKeyboardInput(true)
+		end
+	end)
 	d:Hide()
 	return d
 end

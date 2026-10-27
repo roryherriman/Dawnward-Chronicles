@@ -157,7 +157,9 @@ function MainWindow.Refresh()
 	end
 	local char = Actions.Character(ctx())
 	local theme = Actions.ThemeOf(char)
-	if theme ~= appliedTheme or Style.Current() ~= theme then
+	-- While the setup wizard previews a theme, leave its preview alone.
+	local previewing = ns.SetupWizard and ns.SetupWizard.IsShown()
+	if theme ~= appliedTheme or (Style.Current() ~= theme and not previewing) then
 		applyTheme(theme)
 	end
 	frame.title:SetText(MainWindow.TitleFor(char, ctx().store:IsSimulation()))
