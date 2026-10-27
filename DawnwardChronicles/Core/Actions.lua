@@ -489,6 +489,20 @@ function Actions.SaveWindowPosition(ctx, left, top)
 	return true
 end
 
+--- The player closed the guide (#51): remember it for this character so it
+-- does not open by itself again. Creates the character record only if the
+-- player already has one or the data is writable; never raises.
+function Actions.FinishGuide(ctx)
+	if not ctx or ctx.store:ReadOnlyReason() then
+		return nil
+	end
+	return withCharacter(ctx, function(char)
+		char.guide = char.guide or {}
+		char.guide.done = true
+		return true, "Guide closed. Reopen it with the ? button or /dawnward guide."
+	end)
+end
+
 --- The minimap button's settings: { angle, hidden } (never nil).
 function Actions.MinimapSettings(ctx)
 	local ui = ctx.store.real.ui

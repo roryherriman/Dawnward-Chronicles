@@ -14,6 +14,7 @@ Core\Themes.lua
 Core\Records.lua
 Core\RecordTypes.lua
 Core\Places.lua
+Core\Guide.lua
 Core\StorySchema.lua
 Core\Schema.lua
 Core\Migrations.lua
@@ -73,6 +74,7 @@ UI\StoryView.lua
 UI\ReactionCard.lua
 UI\ChronicleView.lua
 UI\SettingsPanel.lua
+UI\GuidePanel.lua
 UI\MinimapButton.lua
 Platform\TRP3Bridge.lua
 Platform\Bootstrap.lua

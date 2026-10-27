@@ -82,6 +82,25 @@ Commands.Register("memory", function(ctx, rest)
 	end
 end)
 
+-- Examples for the commands that need a record number (#51).
+local EXAMPLES = {
+	arc = { state = "state 7 concluded", rename = "rename 7 Where I belong", turn = "turn 7 Left home",
+		accept = "accept 7", dispute = "dispute 7", vis = "vis 7 public", remove = "remove 7 confirm" },
+	goal = { state = "state 12 achieved", milestone = "milestone 12 Find a ship", done = "done 12 1",
+		undone = "undone 12 1", level = "level 12 20", vis = "vis 12 public", remove = "remove 12 confirm" },
+}
+
+--- A helpful message when a command needs a record number and got none.
+function NarrativeCommands.MissingNumber(kind, sub)
+	local example = EXAMPLES[kind][sub]
+	if not example then
+		return string.format("Unknown %s command '%s'. See /dawnward %s, or use the Chronicle tab in the journal.",
+			kind, sub, kind)
+	end
+	return string.format("Which %s? Give its number first, for example: /dawnward %s %s. Numbers are shown "
+		.. "by /dawnward %s (or use the Chronicle tab in the journal).", kind, kind, example, kind)
+end
+
 Commands.Register("arc", function(ctx, rest)
 	local sub, args = Util.NextWord(rest)
 	sub = sub:lower()
@@ -103,7 +122,7 @@ Commands.Register("arc", function(ctx, rest)
 	local idWord, tail = Util.NextWord(args)
 	local n = id(idWord)
 	if not n then
-		out(ctx, "Usage: /dawnward arc list | add <title> | <command> <#> ...")
+		out(ctx, NarrativeCommands.MissingNumber("arc", sub))
 		return
 	end
 	if sub == "state" then
@@ -144,7 +163,7 @@ Commands.Register("goal", function(ctx, rest)
 	local idWord, tail = Util.NextWord(args)
 	local n = id(idWord)
 	if not n then
-		out(ctx, "Usage: /dawnward goal list | add <title> | <command> <#> ...")
+		out(ctx, NarrativeCommands.MissingNumber("goal", sub))
 		return
 	end
 	if sub == "state" then

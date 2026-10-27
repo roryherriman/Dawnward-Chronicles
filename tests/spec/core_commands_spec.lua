@@ -68,7 +68,7 @@ return function(t, expect)
 
 		t:it("prints help and handles unknown commands", function()
 			local _, _, run = setup()
-			expect.truthy(run("help"):find("family add"))
+			expect.truthy(run("help all"):find("family add"))
 			expect.truthy(run("dance"):find("Unknown command"))
 		end)
 	end)

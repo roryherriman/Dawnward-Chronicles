@@ -174,6 +174,7 @@ function Schema.NewCharacter(now)
 		journal = {},
 		journalKeys = {},
 		theme = Themes.DEFAULT,
+		guide = {},
 		nextId = 1,
 		sources = Schema.NewSources(),
 		interpretations = {},
@@ -794,6 +795,7 @@ function Schema.NormalizeCharacter(raw, report)
 	char.interpretations = normalizeInterpretations(raw.interpretations, char.interpretationKeys, report)
 	-- Reserved for the setup wizard (v0.3 M3); nothing is stored here yet.
 	char.wizard = {}
+	char.guide = ns.Guide.Clean(raw.guide)
 	char.story = StorySchema.Normalize(raw.story, Schema.PERSONALITY_AXIS_BY_ID, report)
 
 	-- IDs are unique across all lists so commands can never hit the wrong item.

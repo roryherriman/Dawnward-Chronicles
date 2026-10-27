@@ -52,6 +52,7 @@ function MainWindow.ComputeLayout(L)
 	end
 	r.gear = { left = L.width - L.pad - L.iconSize, right = L.width - L.pad,
 		bottom = L.height - L.tabTop - L.tabHeight, top = L.height - L.tabTop - L.tabHeight + L.iconSize }
+	r.help = { left = r.gear.left - L.iconSize - 6, right = r.gear.left - 6, bottom = r.gear.bottom, top = r.gear.top }
 	r.content = { left = L.pad, right = L.width - L.pad, bottom = L.contentBottom, top = L.height - L.contentTop }
 	r.status = { left = L.pad, right = L.width - L.pad,
 		bottom = L.statusBottom, top = L.statusBottom + L.statusHeight }
@@ -59,6 +60,7 @@ function MainWindow.ComputeLayout(L)
 end
 
 local sections = {}
+local autoGuided = {} -- characters shown the guide automatically this session
 local frame, layout, currentSection, settingsOpen, appliedTheme
 
 --- def = { id, label, order, create(parent) -> section }
@@ -108,6 +110,9 @@ local function applyTheme(theme)
 	end
 	if MainWindow.settings and MainWindow.settings.ApplyTheme then
 		MainWindow.settings:ApplyTheme(theme)
+	end
+	if MainWindow.guide then
+		MainWindow.guide:ApplyTheme(theme)
 	end
 end
 
@@ -296,6 +301,20 @@ local function build()
 	Widgets.Tooltip(gear, "Settings", "Theme, backup and import, simulation mode, Total RP 3 status.")
 	frame.gear = gear
 
+	local help = CreateFrame("Button", nil, frame)
+	Widgets.Place(help, frame, r.help)
+	help:SetNormalTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+	help:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+	help:SetScript("OnClick", function()
+		if MainWindow.guide and MainWindow.guide:IsOpen() then
+			MainWindow.guide:Close()
+		elseif MainWindow.guide then
+			MainWindow.guide:Show(1)
+		end
+	end)
+	Widgets.Tooltip(help, "Guide and help", "A short tour of Dawnward, and a search for any feature or command.")
+	frame.help = help
+
 	frame.content = CreateFrame("Frame", nil, frame)
 	Widgets.Place(frame.content, frame, r.content)
 
@@ -315,6 +334,9 @@ local function build()
 		MainWindow.settings = MainWindow.createSettings(frame.content)
 		MainWindow.settings.frame:SetAllPoints(frame.content)
 		MainWindow.settings.frame:Hide()
+	end
+	if MainWindow.createGuide then
+		MainWindow.guide = MainWindow.createGuide(frame.content)
 	end
 
 	frame:SetScript("OnHide", function()
@@ -338,6 +360,13 @@ function MainWindow.Show()
 	frame:Show()
 	frame:Raise()
 	showSection(currentSection)
+	-- First time this character opens the journal: show the guide once (#51).
+	local c = ctx()
+	if MainWindow.guide and c and not autoGuided[c.characterKey]
+		and ns.Guide.ShouldAutoOpen(Actions.Character(c)) then
+		autoGuided[c.characterKey] = true
+		MainWindow.guide:Show(1)
+	end
 end
 
 function MainWindow.Hide()

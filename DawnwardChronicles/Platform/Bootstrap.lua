@@ -75,6 +75,7 @@ local function buildContext()
 			)
 		end,
 		ToggleJournal = MainWindow.Toggle,
+		ShowGuide = function() ns.GuidePanel.Open(1) end,
 		ShowStory = function()
 			if not MainWindow.IsShown() then MainWindow.Show() end
 			MainWindow.Select("story")
