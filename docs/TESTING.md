@@ -404,4 +404,31 @@ Build: schema 5. Everything below has passed mocked tests (L2) only. Use **a bra
 
 Returns (two or more days away from Goldshire, then back) need real time to pass. Test them later and record the date. Expect "… has returned to Goldshire. Does this place feel any different now?", at most once a week.
 
+> **Changed in v0.5 (PR #52):** place moments are now weighted (see Part M and ARCHITECTURE.md). On a v0.5 build, a farm (L4) and a plain return to Goldshire are logged quietly instead of asking. A return asks only when the place is tied to the character's story: marked, Homeland, a memory, an active arc or goal, or a person.
+
 **Not covered yet:** other races' starting areas in game, localised clients, and WoW Forever (no place data applies there yet).
+
+#### Part M: v0.5 window, guide, minimap, weighted moments, atlas (PR #52)
+
+Build: schema 5, unchanged. Everything below has passed mocked tests (L2) only. Back up `DawnwardChronicles.lua` first. Use an existing character unless a step says otherwise.
+
+| # | Steps | Pass when |
+|---|---|---|
+| M1 | Log in. Check the minimap | A book-icon button sits on the minimap rim. Its tooltip says click / right-click / drag (and how many moments are waiting, if any) |
+| M2 | Click it, then click it again; right-click it | The journal opens and closes; right-click opens the Story section |
+| M3 | Drag it around the minimap, `/reload` | It stays where you dropped it |
+| M4 | Settings → **Minimap button: shown**, then `/reload`, then `/dawnward minimap show` | It hides and stays hidden after the reload; the command brings it back |
+| M5 | On a character that has never closed the guide, open the journal | The guide opens on Welcome. Next and Back move through the topics. **Close guide** closes it, and it does not open by itself again (also after `/reload`) |
+| M6 | Click **?** beside the gear; search "goal level"; Settings → **Open the guide**; `/dawnward guide` | Each opens the guide. The search lists the goal level command |
+| M7 | `/dawnward help`, `/dawnward help story`, `/dawnward help all`, `/dawnward goal milestone Find a ship` | Short help; the story topic; the full list; an explanation with the example `/dawnward goal milestone 12 Find a ship` |
+| M8 | Chronicle → Memories: **New memory**, fill in Title and What happened, **Save** | One row: the text on the first line, `player, established, private` and the buttons on the second. **Nothing overlaps (#46)** |
+| M9 | Add 7+ memories | Page 1 of 2; **Next >** shows the rest |
+| M10 | Arcs: New, then **Edit** (title, state Concluded), then **Turn** | Saved; the row shows the state and "1 turning point" |
+| M11 | Goals: New with Target level 20; **Steps**, add a step; **Steps**, tick it; **Edit**, clear the target, state Achieved | Milestones 1/1; the level objective is gone; Achieved |
+| M12 | Stances and People: New, then Edit. Try saving a stance with both sides empty, and a player character without a realm | Saved; the two invalid saves are refused with a reason, and the form stays open |
+| M13 | Places tab: **Mark** Goldshire; **Homeland** → confirm; **Memory** | "meaningful to you", then "homeland" appear. Character → Homeland reads Goldshire, with its visibility unchanged. The memory is saved with the place |
+| M14 | Character → Family: **Add**, Edit, the visibility button, then Remove (confirm). The same for History | Each works without chat commands; Remove asks first |
+| M15 | Visit a new farm, then a new town (for example in Westfall). Over several sessions, note which places ask | Farms and roads never ask. A new town asks only sometimes. `/dawnward story events` shows each visit as recorded |
+| M16 | Set your Homeland to a town you will visit later (or mark a place), then visit it | It asks, even shortly after another place moment; the notice waits for a calm moment |
+| M17 | `/dawnward atlas` in Goldshire and in Lion's Pride Inn; `/dawnward atlas verify`; `/dawnward atlas export` | Goldshire: area 87, settlement, in-game evidence. Lion's Pride Inn: no verified area ID. Verify: count of matches. **Paste the export into #48** |
+| M18 | `/dawnward atlas scan 1 5000` | A copy window with named areas. **Paste it into #48** (it lets coverage grow from the client's own data) |
