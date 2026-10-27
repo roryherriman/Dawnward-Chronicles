@@ -49,6 +49,33 @@ function Goals.SetState(char, id, state, now)
 	return g
 end
 
+--- The player edits a goal: { title, text, target } (nil leaves a field as
+-- it is; "" clears the text; target 0 or false removes the level objective).
+function Goals.Edit(char, id, values, now)
+	local g = Goals.Find(char, id)
+	if not g then return nil, "no goal #" .. tostring(id) end
+	local title = g.title
+	if values.title ~= nil then
+		title = Records.Text(values.title, Records.LIMITS.title)
+		if not title then return nil, "a goal needs a title" end
+	end
+	local objective = g.objective
+	if values.target ~= nil then
+		local t = values.target
+		if t == false or t == 0 then
+			objective = nil
+		elseif type(t) == "number" and t == math.floor(t) and t >= 2 and t <= 100 then
+			objective = { kind = "level", target = t }
+		else
+			return nil, "a target level is a whole number from 2 to 100 (0 for none)"
+		end
+	end
+	g.title, g.objective = title, objective
+	if values.text ~= nil then g.text = Records.Text(values.text, Records.LIMITS.text, true) end
+	g.updatedAt = now or 0
+	return g
+end
+
 function Goals.AddMilestone(char, id, text, now)
 	local g = Goals.Find(char, id)
 	if not g then return nil, "no goal #" .. tostring(id) end

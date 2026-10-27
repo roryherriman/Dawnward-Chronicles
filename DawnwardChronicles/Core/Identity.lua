@@ -44,6 +44,28 @@ function Identity.Find(char, id) return Records.Find(list(char), id) end
 function Identity.Remove(char, id) return Records.Remove(list(char), id) end
 function Identity.SetVisibility(char, id, level, now) return Records.Visibility(list(char), id, level, now) end
 
+--- The player edits a stance: { subject, persona, conviction, deliberate }.
+-- nil leaves a field as it is; "" clears persona or conviction, but one of
+-- the two must remain.
+function Identity.Edit(char, id, values, now)
+	local i = Identity.Find(char, id)
+	if not i then return nil, "no identity statement #" .. tostring(id) end
+	local subject, persona, conviction = i.subject, i.persona, i.conviction
+	if values.subject ~= nil then
+		subject = Records.Text(values.subject, 100)
+		if not subject then return nil, "a stance needs a subject" end
+	end
+	if values.persona ~= nil then persona = Records.Text(values.persona, 300, true) end
+	if values.conviction ~= nil then conviction = Records.Text(values.conviction, 300, true) end
+	if not persona and not conviction then
+		return nil, "a stance needs a public stance or a private conviction"
+	end
+	i.subject, i.persona, i.conviction = subject, persona, conviction
+	if values.deliberate ~= nil then i.deliberate = values.deliberate == true or nil end
+	i.updatedAt = now or 0
+	return i
+end
+
 function Identity.SetConvictionVisibility(char, id, level, now)
 	local i = Identity.Find(char, id)
 	if not i then return nil, "no identity statement #" .. tostring(id) end

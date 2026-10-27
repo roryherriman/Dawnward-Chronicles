@@ -66,6 +66,7 @@ Platform\SafeTime.lua
 UI\Widgets.lua
 UI\CopyBox.lua
 UI\MainWindow.lua
+UI\Forms.lua
 UI\JournalView.lua
 UI\CharacterView.lua
 UI\StoryView.lua
