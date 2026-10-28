@@ -503,6 +503,46 @@ Turn on `/console scriptErrors 1` and note any Lua error with its text.
 | N30 | Start setup, change the Title, choose "Set up later". In Settings change the theme and Moments. Run setup again and Finish | The Title is saved, and the theme and Moments keep your newer choices |
 | N31 | Open the journal, delete an entry, and press **Escape** on the confirmation | Only the confirmation closes; the journal stays open |
 
+#### Part O: keyboard, inline validation and entry rows (same build)
+
+Automated: `tests/spec/ui_forms_keyboard_spec.lua` and `tests/spec/ui_entry_rows_spec.lua` (L2). Check these by eye in the game.
+
+**Keyboard**
+
+| # | Steps | Pass when |
+|---|---|---|
+| O1 | Chronicle → People → **New** | The cursor is in the first box (Name) and that box has an accent edge and bar. No click needed |
+| O2 | Press **Tab** repeatedly, then **Shift+Tab** | Focus moves through the text boxes in order and wraps; Shift+Tab goes back. Choice buttons and hidden fields are skipped |
+| O3 | In a one-line box that is not the last, press **Enter** | Focus moves to the next box; the form is **not** saved |
+| O4 | Memories → New, type in "What happened", press **Enter** | A new line is added; the form is not saved |
+| O5 | Fill the last one-line box, press **Enter** | The form saves (or shows an inline error, see O9) |
+| O6 | Open any form, type something, press **Escape** | A confirmation asks to discard. **Cancel** keeps the form and the text; confirming closes it |
+| O7 | Open a form, type nothing, press **Escape** | It closes at once, without a question |
+| O8 | Close every Dawnward form, press **Enter** and type in chat; press **Escape** with nothing open | Chat works normally; Escape opens the game menu as usual |
+| O8a | Repeat O1–O7 in Character → Edit (Name, Summary), Family and History forms, the journal editor and the setup wizard's Character page | Same behaviour. In the wizard, Enter on the last box goes to the next page |
+
+**Inline validation**
+
+| # | Steps | Pass when |
+|---|---|---|
+| O9 | People → New, leave Name empty, **Save** | "! …" in red appears directly under Name, the box has a red edge and has focus. The form stays open; anything typed elsewhere is kept |
+| O10 | Type a name | The message and red edge disappear as you type, and the rows below move back up |
+| O11 | Goals → New, type letters in **Target level**, **Save** | "Enter a whole number, or leave it empty" under that field |
+| O12 | Character → Edit Title, empty it, **Save** | The message is under the box, not in the status bar. Nothing was saved |
+| O13 | Trigger an error in the longest form (Goals or Arcs) at your largest UI scale | The message doesn't overlap the next row or the Save and Cancel buttons and is readable on every theme |
+
+**Entry rows (each action belongs to its record)**
+
+| # | Steps | Pass when |
+|---|---|---|
+| O14 | Character tab with a long Title and Summary, two family members and two history entries | Each field, family member and history entry is its own panel; its **Edit** and visibility buttons sit inside it, on its first line. There's a visible gap between panels |
+| O15 | Hover a panel, then hover its Edit button | The whole panel lights up with an accent bar on its left; only that panel, never its neighbour |
+| O16 | Chronicle → Places with at least three places; make one Homeland and mark one meaningful | The status (HOMELAND, MEANINGFUL) shows in accent capitals at the top right of that place, apart from the buttons below. The Homeland row has no "Set as homeland". The "Mark meaningful" button changes to "Unmark meaningful" |
+| O17 | Memories, Goals, Arcs, Stances and People with several records, including one with a very long title | Text wraps inside its own panel; buttons stay right-aligned inside the same panel and never sit nearer the next one. Page through with Next > |
+| O18 | Journal with several long entries; scroll | Each entry is a card with its own Edit, Delete and Defining buttons; scrolling never separates buttons from their entry |
+| O19 | Story → pending personality changes | Each change is a panel with its own Approve and Reject |
+| O20 | Repeat O14–O17 at the smallest and largest UI scale | Nothing overlaps or leaves its panel |
+
 **Report:**
 - Which steps passed, with your game version, UI scale and resolution.
 - Every Lua error, with its text.

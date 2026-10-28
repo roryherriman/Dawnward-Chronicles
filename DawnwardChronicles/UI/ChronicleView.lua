@@ -34,7 +34,8 @@ ChronicleView.REVIEW_CHOICES = { "growth", "unreliable", "secret", "correction",
 ChronicleView.LAYOUT = {
 	inset = 8, width = 584,
 	tabWidth = 81, tabGap = 2, tabHeight = 22,
-	rowsTop = 38, rows = 6, rowHeight = 54, rowGap = 4, rowPad = 8,
+	rowsTop = 38, rows = 6, rowHeight = 56, rowGap = 6, rowPad = 8,
+	statusWidth = 200,         -- a record's status, top right (Places: Homeland, Meaningful)
 	textHeight = 26,           -- line 1: the record, two lines of small text
 	lineTwo = 26,              -- line 2 starts this far below the row's top
 	metaWidth = 210,
@@ -91,14 +92,14 @@ function ChronicleView.RecordText(listId, r, char)
 		body = string.format("%s%s (%s)%s", r.name, r.realm and ("-" .. r.realm) or "", r.kind,
 			r.relation and (": " .. r.relation) or "")
 	elseif listId == "places" then
+		-- Status is shown apart from the actions that change it (third value).
 		local flags = {}
-		if ns.Places.IsHomeland(char, r) then flags[#flags + 1] = "homeland" end
-		if r.meaningful then flags[#flags + 1] = "meaningful to you" end
-		body = string.format("%s%s", ns.Places.Label(r), #flags > 0 and (" - " .. table.concat(flags, ", ")) or "")
-		return body, string.format("%s%d visit%s", r.kind and (KIND_LABELS[r.kind] .. ", ") or "", r.visits,
-			r.visits == 1 and "" or "s")
+		if ns.Places.IsHomeland(char, r) then flags[#flags + 1] = "HOMELAND" end
+		if r.meaningful then flags[#flags + 1] = "MEANINGFUL" end
+		return ns.Places.Label(r), string.format("%s%d visit%s", r.kind and (KIND_LABELS[r.kind] .. ", ") or "",
+			r.visits, r.visits == 1 and "" or "s"), table.concat(flags, "  -  ")
 	end
-	return body or "", Records.Label(r)
+	return body or "", Records.Label(r), ""
 end
 
 local CYCLE = { private = "public", public = "secret", secret = "private" }
@@ -375,6 +376,10 @@ local function create(parent)
 		row.text = Widgets.Label(row, "GameFontHighlightSmall", true)
 		row.text:SetPoint("TOPLEFT", rects.text.x, -rects.text.y)
 		row.text:SetSize(rects.text.w, rects.text.h)
+		row.status = Widgets.Label(row, "GameFontNormalSmall", false, "accent")
+		row.status:SetJustifyH("RIGHT")
+		row.status:SetPoint("TOPRIGHT", -L.rowPad, -6)
+		row.status:SetWidth(L.statusWidth)
 		row.meta = Widgets.Label(row, "GameFontDisableSmall")
 		row.meta:SetPoint("TOPLEFT", rects.meta.x, -rects.meta.y)
 		row.meta:SetWidth(rects.meta.w)
@@ -412,12 +417,20 @@ local function create(parent)
 	end
 
 	-- Buttons, filled from the right: { label, fn } or false to skip.
+	-- An entry may give its own width ({ label, fn, width }) for a longer,
+	-- clearer label; buttons are laid out from the record's right edge.
 	local function fill(row, list)
 		local n = 0
+		local right = L.width - L.rowPad + 2
 		for _, entry in ipairs(list) do
 			if entry then
 				n = n + 1
-				setButton(row.buttons[n], entry[1], entry[2])
+				local button, w = row.buttons[n], entry[3] or L.buttonWidth
+				setButton(button, entry[1], entry[2])
+				button:SetWidth(w)
+				button:ClearAllPoints()
+				button:SetPoint("TOPLEFT", right - w, -L.lineTwo)
+				right = right - w - L.buttonGap
 			end
 		end
 		for b = n + 1, #row.buttons do
@@ -466,8 +479,8 @@ local function create(parent)
 			return place
 		end
 		fill(row, {
-			{ "Memory", function() section:OpenForm(placeMemoryForm(entry)) end },
-			not ns.Places.IsHomeland(char, entry) and { "Homeland", function()
+			{ "Write memory", function() section:OpenForm(placeMemoryForm(entry)) end, 96 },
+			not ns.Places.IsHomeland(char, entry) and { "Set as homeland", function()
 				Widgets.Confirm(string.format("Set your Homeland to %s? This replaces the Homeland on your "
 					.. "profile; its visibility stays as it is.", name), "Set", function()
 					act(function(c, now)
@@ -476,15 +489,15 @@ local function create(parent)
 						return ns.Places.SetHomeland(c, place, now)
 					end)
 				end)
-			end } or false,
-			{ entry.meaningful and "Unmark" or "Mark", function()
+			end, 108 } or false,
+			{ entry.meaningful and "Unmark meaningful" or "Mark meaningful", function()
 				act(function(c)
 					local place, err = this(c)
 					if not place then return nil, err end
 					place.meaningful = (not place.meaningful) or nil
 					return place
 				end)
-			end },
+			end, 120 },
 		})
 	end
 
@@ -534,16 +547,25 @@ local function create(parent)
 			local item = items[offset + i]
 			row:SetShown(item ~= nil)
 			if item and self.tab == "review" then
+				row.status:SetText("")
+				row.text:SetWidth(rects.text.w)
 				row.text:SetText(item.message)
 				row.meta:SetText("What is it?")
-				for b, choice in ipairs(ChronicleView.REVIEW_CHOICES) do
-					-- Right to left, so the choices read in order.
-					setButton(row.buttons[#ChronicleView.REVIEW_CHOICES - b + 1], choice, function()
+				local list = {}
+				for b = #ChronicleView.REVIEW_CHOICES, 1, -1 do
+					-- Filled from the right, so the choices read in order.
+					local choice = ChronicleView.REVIEW_CHOICES[b]
+					list[#list + 1] = { choice, function()
 						act(function(c, now) return ns.Continuity.Review(c, item.key, choice, nil, now) end)
-					end)
+					end }
 				end
+				fill(row, list)
 			elseif item then
-				local text, meta = ChronicleView.RecordText(self.tab, item, char)
+				local text, meta, status = ChronicleView.RecordText(self.tab, item, char)
+				-- The status (Places: Homeland, Meaningful) sits top right, apart
+				-- from the buttons below that change it; the text makes room for it.
+				row.status:SetText(status or "")
+				row.text:SetWidth(status and status ~= "" and rects.text.w - L.statusWidth - 8 or rects.text.w)
 				row.text:SetText(text)
 				row.meta:SetText(meta)
 				if self.tab == "places" then

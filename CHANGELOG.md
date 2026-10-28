@@ -27,6 +27,9 @@ A feature is never called "tested" or "compatible" in this file unless it reache
   - Finish applies only what you changed and never clears an existing value.
   - Nothing is written to Total RP 3.
   - `/dawnward setup`, or Settings → Run setup, opens it on demand.
+- **Keyboard navigation in every form** (Stances, People, Memories, Goals, Arcs, Character fields, Family, History, the journal editor and the setup wizard): Tab and Shift+Tab move between inputs, skipping hidden or disabled ones; opening a form focuses its first input; the focused input is clearly marked; Enter moves on and saves only from the last one-line input; multi-line text keeps Enter for new lines; Escape cancels, asking first if something was typed.
+- **Inline validation:** when a save is refused, the reason appears directly under the field concerned, which is highlighted and focused. Everything typed is kept, the form stays open, and the message clears as soon as the field is corrected. The validation rules themselves are unchanged.
+- **Entry rows:** every record and its buttons form one panel, with a gap between panels and a highlight on hover, so each action clearly belongs to its record. Places show their status (Homeland, Meaningful) apart from the buttons that change it, with clearer labels: "Write memory", "Set as homeland", "Mark meaningful" / "Unmark meaningful".
 - **Developer commands** (development builds only): `/dawnward dev setup` (a marked preview), `dev setup status`, and `dev setup reset confirm`, which resets only the setup state.
 
 ### Changed

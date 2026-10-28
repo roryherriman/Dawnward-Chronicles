@@ -131,7 +131,9 @@ Everything is built from solid-colour textures. No art files ship and no Blizzar
 | `Widgets.IconButton` | 22 × 22 glyph buttons ("X" to close, "<" and ">") with hover. The window header's ? and settings buttons hold the game's own question-mark and gear icons, desaturated and tinted with the theme (muted, accent on hover) |
 | `Widgets.Tabs` / `Widgets.Segmented` | Primary nav: text with a 2 px accent underline for the selected item and hover colour. Segmented: joined surface buttons, the selected one filled |
 | `Widgets.EditLine`, `Widgets.TextArea` | Surface-coloured well with a 1 px edge; the accent edge shows while focused |
-| `Widgets.Card` | Surface fill and 1 px edge, for journal entries and choices |
+| `Widgets.Card` / `Widgets.EntryRow` | One record as one panel: surface fill, 1 px edge, inner padding `ENTRY.pad` (8) and a gap `ENTRY.gap` (6) to the next panel. Hovering the panel or any of its buttons lights the whole panel (`surfaceHover`) and shows a 2 px accent bar on its left. `SetPlain(true)` turns it into an unboxed line for headings and hints |
+| `Widgets.FocusChain(opts)` | Keyboard order for a form's inputs. Tab / Shift+Tab move and wrap, skipping hidden or disabled inputs; opening focuses the first editable input; Enter moves to the next one-line input and submits only from the last; multi-line inputs keep Enter for new lines; Escape cancels, asking first if something was typed. The focused input shows an accent edge, a 3 px accent bar and a lighter fill |
+| `Widgets.FieldError(input)` / `SetFieldError` | Inline validation: a danger-coloured message ("! …") directly beneath the input, a danger edge on the input, and the layout below it moves down to make room. It clears as soon as the input is changed. The core's validation rules are unchanged; only where the message appears changed |
 | `Widgets.Divider` | 1 px `edge` line |
 | `Widgets.Label(parent, font, wrap, role)` | `role` = title, eyebrow, heading, body, muted, accent. Coloured automatically |
 | `Widgets.Confirm` | Dawnward modal: heading, text, Cancel (default) and an accept button in the `danger` variant. Escape cancels |
@@ -160,6 +162,8 @@ Everything is built from solid-colour textures. No art files ship and no Blizzar
 | Forms | Same `Forms` API, with the new inputs and buttons; Save is primary, Remove is danger |
 | Reaction card | Chrome, eyebrow "A moment for your story", question, Answer (primary), Later, Dismiss (ghost) |
 | Copy window | Chrome and the new buttons; the v0.1 layout table and its tests are unchanged |
+
+**Entry-to-action association (all record lists).** Every record (journal entry, profile field, family member, history entry, memory, arc, goal, stance, person, place, pending change) is one `EntryRow`. Its title, details, status and buttons sit inside that panel, buttons are aligned from the panel's right edge, and panels are separated by a gap larger than their inner padding, so no button is ever nearer a neighbouring record than its own. Buttons use readable words, not icons ("Write memory", "Set as homeland", "Mark meaningful" / "Unmark meaningful"). On Places, the current state (HOMELAND, MEANINGFUL) is shown in accent capitals on the record's first line, apart from the buttons on its second line that change it, and "Set as homeland" is not offered for the current Homeland. On Character, each field's Edit and visibility buttons are inside that field's panel.
 
 ---
 

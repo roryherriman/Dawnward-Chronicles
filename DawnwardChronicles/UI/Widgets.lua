@@ -149,8 +149,24 @@ function Widgets.Button(parent, text, width, height, variant)
 	function b.SetVariant(self, v) self.variant = v; Style.Repaint(self) end
 	function b.GetFontString(self) return self.label end
 
-	hook(b, "OnEnter", function(self) self.hover = true; Style.Repaint(self) end)
-	hook(b, "OnLeave", function(self) self.hover = nil; placeLabel(self, false); Style.Repaint(self) end)
+	-- Hovering a button inside a record highlights that record too.
+	local function rowOf(self)
+		local p = self.GetParent and self:GetParent()
+		return p and p.SetRowHover and p or nil
+	end
+	hook(b, "OnEnter", function(self)
+		self.hover = true
+		Style.Repaint(self)
+		local row = rowOf(self)
+		if row then row:SetRowHover(true) end
+	end)
+	hook(b, "OnLeave", function(self)
+		self.hover = nil
+		placeLabel(self, false)
+		Style.Repaint(self)
+		local row = rowOf(self)
+		if row then row:SetRowHover(false) end
+	end)
 	hook(b, "OnMouseDown", function(self) if self:IsEnabled() then placeLabel(self, true) end end)
 	hook(b, "OnMouseUp", function(self) placeLabel(self, false) end)
 	return Style.Register(b, paintButton)
@@ -190,18 +206,47 @@ end
 
 --- Cards and dividers ------------------------------------------------------------
 
---- A frame with a surface fill and a 1 px edge. Paints itself.
+-- Entry rows: one record = one visual unit. A record's title, metadata,
+-- status and actions all sit inside its own panel (surface fill, 1 px
+-- edge, ENTRY.pad inside); panels are ENTRY.gap apart, so a button is always
+-- inside its own record and never nearer the next one. Hovering the record
+-- or any of its buttons highlights the whole unit (lighter fill and an
+-- accent bar on the left). SetPlain(true) makes the frame an unboxed line,
+-- for headings and hints in lists that reuse rows.
+Widgets.ENTRY = { pad = 8, gap = 6 }
+
+--- An entry panel (a "card"). Paints itself; :SetRowHover(on), :SetPlain(on).
 function Widgets.Card(parent)
 	local card = CreateFrame("Frame", nil, parent)
 	card.bg = Style.Solid(card, "BACKGROUND", -2)
 	card.bg:SetAllPoints(card)
 	card.edges = Style.Edge(card, "BORDER")
+	card.bar = Style.Solid(card, "ARTWORK")
+	card.bar:SetPoint("TOPLEFT", 0, 0)
+	card.bar:SetPoint("BOTTOMLEFT", 0, 0)
+	card.bar:SetWidth(2)
+	card.bar:Hide()
+	function card.SetRowHover(self, on)
+		self.hover = on and true or nil
+		Style.Repaint(self)
+	end
+	function card.SetPlain(self, on)
+		self.plain = on and true or nil
+		Style.Repaint(self)
+	end
+	if card.EnableMouse then card:EnableMouse(true) end
+	hook(card, "OnEnter", function(self) self:SetRowHover(true) end)
+	hook(card, "OnLeave", function(self) self:SetRowHover(false) end)
 	Style.Register(card, function(c, theme)
-		Style.Color(c.bg, theme.surface)
-		c.edges:Paint(c.highlight and theme.accent or theme.edge, 1)
+		local boxed = not c.plain
+		Style.Color(c.bg, c.hover and theme.surfaceHover or theme.surface, boxed and 1 or 0)
+		c.edges:Paint(c.highlight and theme.accent or theme.edge, boxed and 1 or 0)
+		c.bar:SetShown(boxed and (c.hover or c.highlight) and true or false)
+		Style.Color(c.bar, theme.accent)
 	end)
 	return card
 end
+Widgets.EntryRow = Widgets.Card
 
 --- A 1 px line in the theme's edge colour. Anchor it yourself.
 function Widgets.Divider(parent, layer)
