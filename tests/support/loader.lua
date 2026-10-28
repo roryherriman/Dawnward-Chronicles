@@ -55,6 +55,7 @@ Loader.CORE = {
 	"Core/StoryCommands.lua",
 	"Core/NarrativeCommands.lua",
 	"Core/SetupCommands.lua",
+	"Core/StoryDiagnostics.lua",
 }
 
 -- TRP3 integration modules in TOC order (pure; they receive TRP3 explicitly).

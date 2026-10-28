@@ -358,32 +358,85 @@ local function with(data, extra)
 	return data
 end
 
--- A return may become a moment only after a real absence, at most once a
--- week per place, and only for a settlement, a starting area, a capital,
--- or a place the player tied to their story.
-local function returnStep(story, entry, kind, obs, subzone, now)
-	if not entry or now - entry.last < Places.RETURN_AFTER then
-		return nil
+--- Why this logged place is tied to the character's story, or nil:
+-- "homeland" (linked from Places, or named by the Homeland field),
+-- "meaningful" (marked) or "memory" (an established memory is tied to it).
+-- Only the player creates these ties.
+function Places.Tie(char, entry)
+	local field = char.fields and char.fields.homeland
+	local homeland = field and type(field.value) == "string" and field.value:lower()
+	if Places.IsHomeland(char, entry) or (homeland and homeland == (entry.subzone or entry.zone):lower()) then
+		return "homeland"
+	end
+	if entry.meaningful then
+		return "meaningful"
+	end
+	if Places.Linked(char.story, entry) then
+		return "memory"
+	end
+	return nil
+end
+
+--- Whether a return to this logged place may be recorded now. Pure.
+-- Returns ok, reason, info. Reasons when not: "away" (not away long
+-- enough: RETURN_AFTER), "weekly" (a return was recorded within
+-- RETURN_REPEAT), "ordinary" (a kind whose returns never count by
+-- themselves, and nothing ties it to the story). info: { away, tie, wait }
+-- where wait is the seconds until it could count (for "away" and "weekly").
+function Places.ReturnCheck(char, entry, kind, now)
+	local info = { away = now - entry.last, tie = Places.Tie(char, entry) }
+	if info.away < Places.RETURN_AFTER then
+		info.wait = Places.RETURN_AFTER - info.away
+		return false, "away", info
 	end
 	if entry.returnedAt and now - entry.returnedAt < Places.RETURN_REPEAT then
-		return nil
+		info.wait = Places.RETURN_REPEAT - (now - entry.returnedAt)
+		return false, "weekly", info
 	end
-	local linked = Places.Linked(story, entry)
-	if not (entry.meaningful or linked or (kind and Places.RETURN_KINDS[kind])) then
-		return nil
+	if not (info.tie or (kind and Places.RETURN_KINDS[kind])) then
+		return false, "ordinary", info
 	end
+	return true, nil, info
+end
+
+--- The logged entry a return here would concern, and its kind: the named
+-- place if it is classified or tied to the story, else the zone if it is.
+-- Returns entry, kind, subzone (nil when the zone is the target), or nil.
+function Places.ReturnTarget(char, zone, subzone, areaKind, zoneKind)
+	local places = char.story.places
+	local placeEntry = subzone and places[Places.Key(zone, subzone)] or nil
+	local zoneEntry = places[zone]
+	if placeEntry and (areaKind or Places.Tie(char, placeEntry)) then
+		return placeEntry, areaKind, subzone
+	elseif zoneEntry and (zoneKind or Places.Tie(char, zoneEntry)) then
+		return zoneEntry, zoneKind, nil
+	end
+	return nil
+end
+
+-- A return may become a moment only after a real absence, at most once a
+-- week per place, and only for a settlement, a starting area, a capital,
+-- or a place the player tied to their story (Places.ReturnCheck).
+local function returnStep(char, entry, kind, obs, subzone, now)
+	local ok, why, info = Places.ReturnCheck(char, entry, kind, now)
+	if not ok then
+		return nil, why, info
+	end
+	local linked = Places.Linked(char.story, entry)
 	entry.returnedAt = now
 	return {
-		category = "place", priority = (entry.meaningful or linked) and 70 or 35,
+		category = "place", priority = (entry.meaningful or linked or info.tie) and 70 or 35,
 		data = with(context(obs, subzone), { place = entry.subzone or entry.zone, visit = "return", placeKind = kind,
 			areaId = entry.areaId, meaningful = entry.meaningful and 1 or nil, linked = linked and 1 or nil }),
-	}
+	}, nil, info
 end
 
 --- Logs a location observation and plans the events it may produce, most
 -- meaningful first: { { category, data, priority }, ... }. Only the first
 -- should be considered for a moment; the others are records only, so a zone
--- entry and its subzone produce at most one question.
+-- entry and its subzone produce at most one question. The second value
+-- explains the return decision: { origin, target, why, info } (see
+-- Places.ReturnCheck; why "first" means nothing here was logged before).
 -- obs: { zone, subzone, mapId, areaId, level, class, race, faction, client }.
 function Places.Observe(char, obs, now)
 	local story = char.story
@@ -435,15 +488,18 @@ function Places.Observe(char, obs, now)
 		end
 	end
 
-	-- A return: to the named place if it is classified or meaningful, else to the zone.
+	-- A return: to the named place if it is classified or tied to the story,
+	-- else to the zone. diag explains the decision (for /dawnward dev story).
+	local diag = { origin = origin }
 	if not origin then
-		local step
-		if placeEntry and (areaKind or placeEntry.meaningful) then
-			step = returnStep(story, placeEntry, areaKind, obs, subzone, now)
-		elseif zoneEntry and (zoneKind or zoneEntry.meaningful) then
-			step = returnStep(story, zoneEntry, zoneKind, obs, nil, now)
+		local target, kind, targetSub = Places.ReturnTarget(char, zone, subzone, areaKind, zoneKind)
+		if target then
+			local step, why, info = returnStep(char, target, kind, obs, targetSub, now)
+			diag.target, diag.why, diag.info = Places.Label(target), why, info
+			steps[#steps + 1] = step
+		else
+			diag.why = (placeEntry or zoneEntry) and "ordinary" or "first"
 		end
-		steps[#steps + 1] = step
 	end
 
 	logVisit(story.places, zone, nil, obs, zoneKind, nil, now)
@@ -453,7 +509,7 @@ function Places.Observe(char, obs, now)
 	Places.Prune(story.places)
 
 	table.sort(steps, function(a, b) return a.priority > b.priority end)
-	return steps
+	return steps, diag
 end
 
 --- Logged places, most recently visited first.

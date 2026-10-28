@@ -30,7 +30,14 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 - **Keyboard navigation in every form** (Stances, People, Memories, Goals, Arcs, Character fields, Family, History, the journal editor and the setup wizard): Tab and Shift+Tab move between inputs, skipping hidden or disabled ones; opening a form focuses its first input; the focused input is clearly marked; Enter moves on and saves only from the last one-line input; multi-line text keeps Enter for new lines; Escape cancels, asking first if something was typed.
 - **Inline validation:** when a save is refused, the reason appears directly under the field concerned, which is highlighted and focused. Everything typed is kept, the form stays open, and the message clears as soon as the field is corrected. The validation rules themselves are unchanged.
 - **Entry rows:** every record and its buttons form one panel, with a gap between panels and a highlight on hover, so each action clearly belongs to its record. Places show their status (Homeland, Meaningful) apart from the buttons that change it, with clearer labels: "Write memory", "Set as homeland", "Mark meaningful" / "Unmark meaningful".
+- **Story diagnostics** (development builds only):
+  - `/dawnward dev story status` explains the current place's ties, return eligibility, Director weight, location cooldown, and why the last arrival asked or not.
+  - `/dawnward dev story simulate [place]` runs a return on a discarded copy of the character and changes nothing.
 - **Developer commands** (development builds only): `/dawnward dev setup` (a marked preview), `dev setup status`, and `dev setup reset confirm`, which resets only the setup state.
+
+### Fixed
+- **Returns to unmapped places tied to the story:** an area without a verified area ID (for example Lion's Pride Inn) that the player tied to their story by an established memory or by naming it in the Homeland field never produced a return; the check fell through to the zone. It now counts like a marked place. Found while investigating v0.5 manual test M16.
+- **Investigated, expected behaviour (v0.5 M16):** returning to a marked Homeland in the same session records nothing, because a return needs 2 days away. The checklist step was ambiguous. It is now clarified, and the exact rules are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#return-visits-exact-eligibility).
 
 ### Changed
 - **Every screen restyled:**

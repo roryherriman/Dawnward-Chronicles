@@ -67,6 +67,29 @@ location event -> Observers.Location -> Actions.ObserveLocation -> Places.Observ
                   cooldown, fold into or replace a moment queued moments ago, places on/fewer/off)
 ```
 
+#### Return visits: exact eligibility
+
+A return to a place is recorded only when all of these hold. They are checked in `Places.ReturnTarget` and `Places.ReturnCheck`, and reported by `/dawnward dev story status`:
+
+1. **Not the first location.** It is not the first location Dawnward ever recorded for the character, which gets the beginning or "first recorded" wording instead.
+2. **A target exists.** It is the named area (subzone) if that is classified by the place mapping or tied to the character's story; otherwise the zone, if it is. A place never logged before is a first visit, not a return.
+3. **A real absence.** At least `Places.RETURN_AFTER` (2 days) since Dawnward last recorded the character there. Passing back through within a session, or within 2 days, records nothing at all: no event, no prompt, and nothing in `/dawnward story events`.
+4. **At most weekly.** No return to the same place was recorded in the last `Places.RETURN_REPEAT` (7 days).
+5. **It counts.** The place is a settlement, inn, capital or starting area, or it is tied to the character's story (`Places.Tie`):
+   - **Homeland:** linked from the Places tab, or named by the Homeland field;
+   - **marked meaningful:** `/dawnward place mark`, or the Places tab;
+   - **a memory:** an established memory linked to it.
+
+   Farms, roads and ruins never count by themselves.
+
+An eligible return is a `place` event with `visit = "return"`, and it is listed by `/dawnward story events` like any other event. Whether it *asks* is decided by `Reactions.Consider` and `Director.LocationRelevance`:
+
+- A plain return has weight 0 and is logged quietly.
+- Each tie adds weight: Homeland +4, marked +3, memory +3, an active arc +2, an active goal +2, a person +2. The weight gives a chance of asking (1 = 20%, 2 = 40%, 3 = 60%, 4 = 80%).
+- At weight 5 or more the return is **urgent**. It always asks and skips the shared location cooldown (45 minutes at the Normal frequency). The notice still waits for a calm moment.
+- Setting a Homeland from the Places tab also marks the place meaningful, so it weighs 7.
+- The Moments and Places settings (off or fewer) and the waiting-list limit still apply.
+
 Class, race and faction tokens are stored on event records for optional flavour. They are never an input to significance or personality (tested). The one exception for template choice: the race token decides whether a low-level character's very first recorded location is its race's usual Classic Era starting area. That only switches between "the journey begins here" and the neutral "first recorded here" wording. It never changes the answers offered, and never says where a character comes from. See [planning/v0.4-plan.md](planning/v0.4-plan.md).
 
 **TRP3 sync** is described in [TRP3_INTEGRATION.md](TRP3_INTEGRATION.md#the-sync-design-as-built).

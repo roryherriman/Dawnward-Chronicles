@@ -147,6 +147,7 @@ handlers.help = function(ctx, rest)
 		end
 		if ns.SetupCommands and ns.SetupCommands.DevEnabled(ctx) then
 			out(ctx, "  dev setup | dev setup status | dev setup reset   (development builds only)")
+			out(ctx, "  dev story status | dev story simulate [place]   (development builds only)")
 		end
 		return
 	end

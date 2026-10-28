@@ -4,7 +4,8 @@
 -- Developer commands exist only in development builds (an addon version
 -- containing "-dev"): release builds answer that they are unavailable.
 -- They never touch a character's profile, journal or story. The one reset
--- forgets only the setup state, and only after "confirm".
+-- forgets only the setup state, and only after "confirm". The story
+-- diagnostics (Core/StoryDiagnostics.lua) are read-only.
 local _, ns = ...
 local Util, Commands, Actions, Onboarding = ns.Util, ns.Commands, ns.Actions, ns.Onboarding
 
@@ -57,7 +58,12 @@ Commands.Register("setup", function(ctx)
 	end
 end)
 
-local DEV_USAGE = "Developer commands: /dawnward dev setup | dev setup status | dev setup reset"
+local DEV_USAGE = "Developer commands: /dawnward dev setup | dev setup status | dev setup reset | "
+	.. "dev story status | dev story simulate [place]"
+
+-- Other developer areas register here: DEV_AREAS[name] = { usage, run(ctx, rest) }
+-- (Core/StoryDiagnostics.lua adds "story"). They share the build gate below.
+SetupCommands.DEV_AREAS = {}
 
 Commands.Register("dev", function(ctx, rest)
 	if not SetupCommands.DevEnabled(ctx) then
@@ -66,6 +72,10 @@ Commands.Register("dev", function(ctx, rest)
 	end
 	local area, tail = Util.NextWord(rest or "")
 	area = area:lower()
+	if SetupCommands.DEV_AREAS[area] then
+		SetupCommands.DEV_AREAS[area].run(ctx, tail)
+		return
+	end
 	if area ~= "setup" then
 		out(ctx, DEV_USAGE)
 		return

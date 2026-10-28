@@ -51,6 +51,7 @@ Core\Commands.lua
 Core\StoryCommands.lua
 Core\NarrativeCommands.lua
 Core\SetupCommands.lua
+Core\StoryDiagnostics.lua
 
 Integrations\TRP3\VersionProfiles.lua
 Integrations\TRP3\Status.lua

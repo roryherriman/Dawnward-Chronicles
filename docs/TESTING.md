@@ -429,7 +429,7 @@ Build: schema 5, unchanged. Everything below has passed mocked tests (L2) only. 
 | M13 | Places tab: **Mark** Goldshire; **Homeland** → confirm; **Memory** | "meaningful to you", then "homeland" appear. Character → Homeland reads Goldshire, with its visibility unchanged. The memory is saved with the place |
 | M14 | Character → Family: **Add**, Edit, the visibility button, then Remove (confirm). The same for History | Each works without chat commands; Remove asks first |
 | M15 | Visit a new farm, then a new town (for example in Westfall). Over several sessions, note which places ask | Farms and roads never ask. A new town asks only sometimes. `/dawnward story events` shows each visit as recorded |
-| M16 | Set your Homeland to a town you will visit later (or mark a place), then visit it | It asks, even shortly after another place moment; the notice waits for a calm moment |
+| M16 | `/dawnward set homeland <a town you have never visited>` (for example Lakeshire), then visit it for the first time | It asks, even shortly after another place moment; the notice waits for a calm moment. **Clarified in v0.6:** a place you have already visited (marked, or set as Homeland from the Places tab) asks only on a *return*, which needs 2 days away; going back the same session records nothing. Use `/dawnward dev story simulate <place>` (part P) to check a return without waiting |
 | M17 | `/dawnward atlas` in Goldshire and in Lion's Pride Inn; `/dawnward atlas verify`; `/dawnward atlas export` | Goldshire: area 87, settlement, in-game evidence. Lion's Pride Inn: no verified area ID. Verify: count of matches. **Paste the export into #48** |
 | M18 | `/dawnward atlas scan 1 5000` | A copy window with named areas. **Paste it into #48** (it lets coverage grow from the client's own data) |
 
@@ -542,6 +542,21 @@ Automated: `tests/spec/ui_forms_keyboard_spec.lua` and `tests/spec/ui_entry_rows
 | O18 | Journal with several long entries; scroll | Each entry is a card with its own Edit, Delete and Defining buttons; scrolling never separates buttons from their entry |
 | O19 | Story → pending personality changes | Each change is a panel with its own Approve and Reject |
 | O20 | Repeat O14–O17 at the smallest and largest UI scale | Nothing overlaps or leaves its panel |
+
+#### Part P: Story Director place diagnostics (development builds only)
+
+Automated: `tests/spec/story_diagnostics_spec.lua` (L1/L2). The rules being checked are in [ARCHITECTURE.md](ARCHITECTURE.md#return-visits-exact-eligibility).
+
+| # | Steps | Pass when |
+|---|---|---|
+| P1 | Repeat the v0.5 M16 report: visit Goldshire, Places → **Mark meaningful** and **Set as homeland**, go to Stormwind, come back to Goldshire. Then `/dawnward dev story status` | No prompt, and no new line in `story events` (expected). Status shows the location as "Goldshire, Elwynn Forest (map 1429, area 87): settlement" and "Homeland: yes. Marked meaningful: yes". It says the return was not recorded because it was last recorded there minutes ago and a return counts only after 2 days away. It also shows the Director weight (urgent) and the cooldown |
+| P2 | `/dawnward dev story simulate` in Goldshire | It says it is simulating a return after 2 days, with the event, weight and roll. The result is "a moment was queued", followed by the question ("… has returned to Goldshire …") and the answers. The last line says nothing was saved |
+| P3 | After P2: `/dawnward story events`, Story tab, Journal, `/dawnward places`, then `dev story status` | Nothing changed: no new event, 0 waiting moments, no journal entry, the same visit count, and the same cooldown as before P2 |
+| P4 | `/dawnward dev story simulate The Stonefield Farm` (unmarked) | "Result: no event", saying returns count only for settlements and for places tied to your story |
+| P5 | `/dawnward dev story simulate Lakeshire` before ever visiting it | "Not simulated: no visited place called 'Lakeshire'" |
+| P6 | Enter a new zone, then `dev story status` | "Last arrival this session" names the new zone and says what was recorded and why it did or did not ask (for example "suppressed: the shared location cooldown") |
+| P7 | Two or more real days later, return to Goldshire | It asks, even shortly after another place moment, and `story events` lists "returned to Goldshire". Record the date |
+| P8 | On a release package (version without `-dev`): `/dawnward dev story status` | "Developer commands are only available in development builds." `help all` doesn't list them |
 
 **Report:**
 - Which steps passed, with your game version, UI scale and resolution.

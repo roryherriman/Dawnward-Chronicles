@@ -232,6 +232,16 @@ Browser renderings built from the same theme colours and layout sizes (`python t
   - `/dawnward dev setup`: the wizard in test mode, even if completed.
   - `/dawnward dev setup status`: complete or not, wizard version, completion date, whether a draft exists (and its page), and whether the character counts as established.
   - `/dawnward dev setup reset`: explains what will be reset and asks for `/dawnward dev setup reset confirm`. It then clears only `char.wizard` and this character's draft. It never touches fields, journal, story, memories, goals or any other data.
+  - `/dawnward dev story status`: read-only. Reports:
+    - the current location, with its map and area ID and its kind;
+    - whether it is logged, Homeland, marked meaningful or tied to a memory;
+    - whether a return there would count now, and if not, why and for how long;
+    - the Director's weight for a return there;
+    - the shared location cooldown and the number of waiting moments;
+    - why the last arrival this session did or did not ask.
+
+    That last decision is kept in memory for the session only, never saved.
+  - `/dawnward dev story simulate [place]`: runs a return to the current place (or a named, visited place) after a full absence. It runs on a deep copy of the character, which is then discarded. It shows the event, the Director's weight and roll, the cooldown, the result and the question that would be asked. Places, events, cooldowns, waiting moments and the journal are untouched. See [ARCHITECTURE.md](../ARCHITECTURE.md#return-visits-exact-eligibility) for the rules it reports.
 
 ---
 

@@ -288,7 +288,8 @@ end
 --- An observed location (Platform/Observers): logs the visit and records
 -- the events it produces (Core/Places.lua). Only the most meaningful one may
 -- become a moment; the rest are records only. Real data only, and only for
--- characters that already use Dawnward. Returns the list created.
+-- characters that already use Dawnward. Returns the list created, and
+-- keeps the decision in ctx.lastLocation for this session.
 function Actions.ObserveLocation(ctx, data)
 	local char = ctx.store.real.characters[ctx.characterKey]
 	if not char or ctx.store.realReadOnly then
@@ -296,7 +297,10 @@ function Actions.ObserveLocation(ctx, data)
 	end
 	local now = ctx.now()
 	local created, considered = {}, false
-	for _, step in ipairs(ns.Places.Observe(char, data, now)) do
+	local steps, diag = ns.Places.Observe(char, data, now)
+	-- The last decision, for /dawnward dev story status. Session only: never saved.
+	ctx.lastLocation = { at = now, zone = data.zone, subzone = data.subzone, diag = diag, created = created }
+	for _, step in ipairs(steps) do
 		local record = GameEvents.Record(char, step.category, step.data, now)
 		if record then
 			local reaction, outcome

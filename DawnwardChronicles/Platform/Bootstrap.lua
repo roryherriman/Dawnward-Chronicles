@@ -62,6 +62,10 @@ local function buildContext()
 		zone = function()
 			return (Events.Location())
 		end,
+		-- Full location (zone, subzone, map, area, client), for diagnostics.
+		location = function()
+			return ns.Observers.Location()
+		end,
 	}
 	ctx.ui = {
 		ShowExport = CopyBox.ShowExport,
