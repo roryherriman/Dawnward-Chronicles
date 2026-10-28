@@ -11,7 +11,10 @@ return function(t, expect)
 	local GOLDSHIRE = { "Elwynn Forest", "Goldshire", 1429, 87 }
 	local NORTHSHIRE = { "Elwynn Forest", "Northshire Valley", 1429, 9 }
 	local STORMWIND = { "Stormwind City", nil, 1453, nil }
-	local INN = { "Elwynn Forest", "Lion's Pride Inn", 1429, nil } -- no verified area ID
+	-- A real Elwynn subzone (AreaTable 18) that is not in Dawnward's mapping, so it
+	-- has no verified area ID. (Not Lion's Pride Inn: indoors, the client reports
+	-- the inn as the zone itself; see issue #48.)
+	local INN = { "Elwynn Forest", "Crystal Lake", 1429, nil }
 	local STONEFIELD = { "Elwynn Forest", "The Stonefield Farm", 1429, 63 }
 
 	local function where(place, level)
@@ -99,10 +102,10 @@ return function(t, expect)
 			observe(ns, ctx, clock, 100, NORTHSHIRE)
 			observe(ns, ctx, clock, 5000, INN)
 			assert(ns.Memories.Add(char, { title = "A warm night",
-				links = { events = { "place:Elwynn Forest / Lion's Pride Inn" } } }, "player", 5100))
+				links = { events = { "place:Elwynn Forest / Crystal Lake" } } }, "player", 5100))
 			local made = observe(ns, ctx, clock, 3 * DAY, INN)
 			expect.equal(#made, 1)
-			expect.equal(made[1].record.meta.placeName, "Lion's Pride Inn")
+			expect.equal(made[1].record.meta.placeName, "Crystal Lake")
 			expect.equal(made[1].record.meta.linked, 1)
 		end)
 
@@ -110,10 +113,10 @@ return function(t, expect)
 			local ns, char, ctx, clock = setup()
 			observe(ns, ctx, clock, 100, NORTHSHIRE)
 			observe(ns, ctx, clock, 5000, INN)
-			char.fields.homeland = { value = "Lion's Pride Inn", visibility = "private" }
-			expect.equal(ns.Places.Tie(char, ns.Places.FindByName(char, "Lion's Pride Inn")), "homeland")
+			char.fields.homeland = { value = "Crystal Lake", visibility = "private" }
+			expect.equal(ns.Places.Tie(char, ns.Places.FindByName(char, "Crystal Lake")), "homeland")
 			local made = observe(ns, ctx, clock, 3 * DAY, INN)
-			expect.equal(made[1].record.meta.placeName, "Lion's Pride Inn")
+			expect.equal(made[1].record.meta.placeName, "Crystal Lake")
 			-- Named only by the field it weighs 4 (an 80% chance, not urgent); the
 			-- roll here is 0.99, so it is recorded without asking.
 			expect.equal(ns.Director.LocationRelevance(char, made[1].record, char.story.prefs).chance, 0.8)

@@ -36,7 +36,7 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 - **Developer commands** (development builds only): `/dawnward dev setup` (a marked preview), `dev setup status`, and `dev setup reset confirm`, which resets only the setup state.
 
 ### Fixed
-- **Returns to unmapped places tied to the story:** an area without a verified area ID (for example Lion's Pride Inn) that the player tied to their story by an established memory or by naming it in the Homeland field never produced a return; the check fell through to the zone. It now counts like a marked place. Found while investigating v0.5 manual test M16.
+- **Returns to unmapped places tied to the story:** an area without a verified area ID (for example Crystal Lake in Elwynn Forest) that the player tied to their story by an established memory or by naming it in the Homeland field never produced a return; the check fell through to the zone. It now counts like a marked place. Found while investigating v0.5 manual test M16.
 - **Investigated, expected behaviour (v0.5 M16):** returning to a marked Homeland in the same session records nothing, because a return needs 2 days away. The checklist step was ambiguous. It is now clarified, and the exact rules are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#return-visits-exact-eligibility).
 
 ### Changed
