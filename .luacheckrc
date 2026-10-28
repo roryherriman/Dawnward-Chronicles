@@ -38,6 +38,8 @@ local WOW_READ = {
 	"GetNumFactions", "GetFactionInfo", "IsInInstance", "GetInstanceInfo", "GetGuildInfo", "IsInGuild",
 	-- v0.5 minimap button
 	"Minimap", "GetCursorPosition",
+	-- v0.6 keyboard navigation (Shift+Tab)
+	"IsShiftKeyDown",
 }
 
 files["DawnwardChronicles/Platform/"] = {

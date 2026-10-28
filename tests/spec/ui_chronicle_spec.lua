@@ -114,7 +114,9 @@ return function(t, expect)
 			click(section.new)
 			form(section, {})
 			expect.truthy(section.form:IsOpen())
-			expect.truthy(section.form.message:GetText():find("needs", 1, true))
+			local title = section.form.rows[1].line
+			expect.truthy(title.invalid, "the title field is highlighted")
+			expect.truthy(title.errorLabel:GetText():find("needs a title or some text", 1, true))
 			expect.equal(#env.DawnwardChroniclesDB.characters[CHAR].story.memories, 0)
 		end)
 

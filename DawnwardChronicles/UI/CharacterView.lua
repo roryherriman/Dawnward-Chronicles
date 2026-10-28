@@ -343,7 +343,15 @@ function CharacterView.AttachEditing(section)
 	editor.line:SetPoint("TOPRIGHT", -INSET, -64)
 	editor.area = Widgets.TextArea(editor, 2001, MainWindow.ContentWidth() - 2 * INSET)
 	editor.area.frame:SetPoint("TOPLEFT", INSET, -64)
-	editor.area.frame:SetPoint("BOTTOMRIGHT", -INSET, 44)
+	editor.area.frame:SetPoint("BOTTOMRIGHT", -INSET, 62) -- leaves room for an error line above the buttons
+	Widgets.FieldError(editor.line, 540)
+	Widgets.FieldError(editor.area.edit, 540)
+	-- Keyboard: Enter saves a one-line field (refused input stays, with its
+	-- reason beneath); Escape cancels, asking first if something was typed.
+	editor.chain = Widgets.FocusChain({
+		onSubmit = function() section.SaveEditor() end,
+		onEscape = function(dirty) editor.chain.ConfirmDiscard(dirty, function() section.CloseEditor() end) end,
+	})
 
 	editor.cancel = Widgets.Button(editor, "Cancel", 90, 22)
 	editor.cancel:SetPoint("BOTTOMRIGHT", -INSET, 12)
@@ -371,13 +379,16 @@ function CharacterView.AttachEditing(section)
 		editor.area.frame:SetShown(long)
 		editor.line:SetShown(not long)
 		editor.clear:SetShown(entry ~= nil)
+		Widgets.SetFieldError(editor.line, nil)
+		Widgets.SetFieldError(editor.area.edit, nil)
 		input():SetText(entry and entry.value or "")
 		section.scroll:Hide()
 		editor:Show()
 		if self.theme then
 			self.ThemeEditor(self.theme)
 		end
-		input():SetFocus()
+		editor.chain.SetFields({ input() })
+		editor.chain.FocusFirst()
 		MainWindow.SetStatus("")
 	end
 
@@ -393,8 +404,12 @@ function CharacterView.AttachEditing(section)
 		local ok, message = Actions.SetField(ns.ctx, editor.field.key, input():GetText())
 		if ok then
 			section.CloseEditor()
+			MainWindow.SetStatus(message)
+		else
+			-- Beside the field, which keeps what was typed and the focus.
+			Widgets.SetFieldError(input(), message)
+			input():SetFocus()
 		end
-		MainWindow.SetStatus(message)
 	end
 
 	function section.ConfirmClear()
@@ -409,7 +424,6 @@ function CharacterView.AttachEditing(section)
 	editor.save:SetScript("OnClick", section.SaveEditor)
 	editor.cancel:SetScript("OnClick", section.CloseEditor)
 	editor.clear:SetScript("OnClick", section.ConfirmClear)
-	editor.line:SetScript("OnEnterPressed", section.SaveEditor)
 end
 
 MainWindow.RegisterSection({ id = "character", label = "Character", order = 2, create = create })

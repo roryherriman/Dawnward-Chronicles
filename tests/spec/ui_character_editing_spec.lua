@@ -54,7 +54,12 @@ return function(t, expect)
 			section.editor.line:SetText("   ")
 			click(section.editor.save)
 			expect.truthy(section.editor:IsShown())
-			expect.truthy(ns.MainWindow.GetFrame().status:GetText():find("Not changed"))
+			local line = section.editor.line
+			expect.truthy(line.invalid, "the field is marked")
+			expect.truthy(line.errorLabel:GetText():find("! Value is empty.", 1, true), line.errorLabel:GetText())
+			expect.truthy(line:HasFocus(), "focus stays on the field")
+			expect.equal(line:GetText(), "   ", "what was typed is kept")
+			expect.falsy(ns.MainWindow.GetFrame().status:GetText():find("Not changed"), "not at the bottom")
 			expect.equal(env.DawnwardChroniclesDB.characters[CHAR], nil, "no empty character created")
 		end)
 
@@ -88,11 +93,11 @@ return function(t, expect)
 
 		t:it("refuses edits on read-only data", function()
 			local saved = { schemaVersion = 99, characters = {} }
-			local _, env, ns, section = openCharacter({ savedVariables = { DawnwardChroniclesDB = saved } })
+			local _, env, _, section = openCharacter({ savedVariables = { DawnwardChroniclesDB = saved } })
 			click(rowFor(section, "name").edit)
 			section.editor.line:SetText("X")
 			click(section.editor.save)
-			expect.truthy(ns.MainWindow.GetFrame().status:GetText():find("read%-only"))
+			expect.truthy(section.editor.line.errorLabel:GetText():find("read%-only"))
 			expect.deepEqual(env.DawnwardChroniclesDB, { schemaVersion = 99, characters = {} })
 		end)
 

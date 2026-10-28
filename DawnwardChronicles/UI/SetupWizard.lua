@@ -115,8 +115,17 @@ local function buildPages()
 			input:SetWidth(BODY_WIDTH - LABEL_WIDTH)
 		end
 		input.fieldKey = field.key
+		Widgets.FieldError(input, BODY_WIDTH - LABEL_WIDTH)
 		wizard.inputs[#wizard.inputs + 1] = input
 	end
+	-- Keyboard: Tab / Shift+Tab between the fields, Enter on a one-line field
+	-- moves on (and after the last, to the next page), Escape closes setup
+	-- (what was typed is kept in the draft, so nothing is lost).
+	wizard.chain = Widgets.FocusChain({
+		onSubmit = function() SetupWizard.Go(wizard.page + 1) end,
+		onEscape = function() SetupWizard.Close() end,
+	})
+	wizard.chain.SetFields(wizard.inputs)
 	paragraph(p, -264, "The name is suggested from the game. More fields, family and history are in the "
 		.. "Character tab.", "muted")
 
@@ -341,12 +350,20 @@ function SetupWizard.Refresh()
 	wizard.next:SetEnabled(not (last and wizard.readOnly))
 end
 
+-- Focuses the first editable field on the current page, if it has one.
+local function focusPage()
+	if Onboarding.PAGES[wizard.page].id == "character" then
+		wizard.chain.FocusFirst()
+	end
+end
+
 --- Goes to page n (values kept; the draft is saved).
 function SetupWizard.Go(n)
 	collect()
 	wizard.page = math.max(1, math.min(n, #Onboarding.PAGES))
 	saveDraft()
 	SetupWizard.Refresh()
+	focusPage()
 end
 
 --- Opens the wizard. opts.test: developer preview (/dawnward dev setup).
@@ -391,9 +408,11 @@ function SetupWizard.Open(opts)
 	wizard.eyebrow.textRole = (wizard.test or wizard.readOnly) and "danger" or "ornament"
 	Style.Repaint(wizard.eyebrow)
 	fill()
+	wizard.chain.SetFields(wizard.inputs) -- the starting text, for comparison
 	wizard:Show()
 	if wizard.Raise then wizard:Raise() end
 	SetupWizard.Refresh()
+	focusPage()
 	return true
 end
 

@@ -239,16 +239,37 @@ end
 
 --- Text input --------------------------------------------------------------------
 
+-- Field states, shared by one-line inputs and text areas. Focus is shown by
+-- a lighter fill, an accent edge and a 3 px bar on the left; an invalid
+-- field uses the danger colour for both, so focus and errors are visible
+-- without relying on colour alone (the error message also starts with "!").
+local function paintField(box, theme, fill, edges, bar, edit)
+	local state = box.invalid and theme.danger or box.focused and theme.accent or nil
+	Style.Color(fill, box.focused and theme.surfaceHover or theme.surface)
+	edges:Paint(state or theme.edge, 1)
+	bar:SetShown(state ~= nil)
+	if state then Style.Color(bar, state) end
+	edit:SetTextColor(theme.text[1], theme.text[2], theme.text[3])
+end
+
+local function focusBar(frame)
+	local bar = Style.Solid(frame, "ARTWORK")
+	bar:SetPoint("TOPLEFT", 0, 0)
+	bar:SetPoint("BOTTOMLEFT", 0, 0)
+	bar:SetWidth(3)
+	bar:Hide()
+	return bar
+end
+
 local function inputFrame(edit)
 	edit.bg = Style.Solid(edit, "BACKGROUND", -1)
 	edit.bg:SetAllPoints(edit)
 	edit.edges = Style.Edge(edit, "BORDER")
+	edit.focusBar = focusBar(edit)
 	hook(edit, "OnEditFocusGained", function(self) self.focused = true; Style.Repaint(self) end)
 	hook(edit, "OnEditFocusLost", function(self) self.focused = nil; Style.Repaint(self) end)
 	return Style.Register(edit, function(e, theme)
-		Style.Color(e.bg, theme.surface)
-		e.edges:Paint(e.focused and theme.accent or theme.edge, 1)
-		e:SetTextColor(theme.text[1], theme.text[2], theme.text[3])
+		paintField(e, theme, e.bg, e.edges, e.focusBar, e)
 	end)
 end
 
@@ -311,14 +332,165 @@ function Widgets.TextArea(parent, maxBytes, width)
 	scroll:SetScript("OnMouseDown", function() edit:SetFocus() end)
 	area.edit = edit
 	area.followCursor = followCursor
-	hook(edit, "OnEditFocusGained", function() area.focused = true; Style.Repaint(area) end)
-	hook(edit, "OnEditFocusLost", function() area.focused = nil; Style.Repaint(area) end)
+	area.focusBar = focusBar(area.frame)
+	-- The edit box is what forms and focus chains hold; its state is drawn
+	-- on the area around it.
+	edit.multiline = true
+	edit.paintTarget = area
+	edit.anchorRegion = area.frame
+	hook(edit, "OnEditFocusGained", function(self) self.focused = true; area.focused = true; Style.Repaint(area) end)
+	hook(edit, "OnEditFocusLost", function(self) self.focused = nil; area.focused = nil; Style.Repaint(area) end)
 	Style.Register(area, function(a, theme)
-		Style.Color(a.well, theme.surface)
-		a.edges:Paint(a.focused and theme.accent or theme.edge, 1)
-		a.edit:SetTextColor(theme.text[1], theme.text[2], theme.text[3])
+		a.invalid = a.edit.invalid
+		paintField(a, theme, a.well, a.edges, a.focusBar, a.edit)
 	end)
 	return area
+end
+
+--- Field errors (inline validation) -------------------------------------------------
+
+Widgets.ERROR_PREFIX = "! "
+
+--- Turns a core refusal ("Not changed: a stance needs a subject") into an
+-- inline message ("A stance needs a subject."). Pure.
+function Widgets.ErrorText(message)
+	local text = tostring(message or ""):gsub("^Not changed:%s*", "")
+	text = text:gsub("^%l", string.upper)
+	if text ~= "" and not text:find("[%.!?]$") then text = text .. "." end
+	return text
+end
+
+--- Gives an input (an EditLine, or a TextArea's edit) an error line directly
+-- beneath it, width wide. The error clears itself as soon as the player
+-- changes the field. Returns the label.
+function Widgets.FieldError(input, width)
+	local region = input.anchorRegion or input
+	local fs = Widgets.Label(region:GetParent(), "GameFontHighlightSmall", true, "danger")
+	fs:SetPoint("TOPLEFT", region, "BOTTOMLEFT", 0, -3)
+	fs:SetWidth(width or 300)
+	fs:Hide()
+	input.errorLabel = fs
+	hook(input, "OnTextChanged", function(self, userInput)
+		if userInput and self.invalid then
+			Widgets.SetFieldError(self, nil)
+		end
+	end)
+	return fs
+end
+
+--- Marks input invalid with message (nil clears it). Highlights the field
+-- and shows the message beneath it; onChange(input) lets a form make room.
+function Widgets.SetFieldError(input, message)
+	input.invalid = message and true or nil
+	local label = input.errorLabel
+	if label then
+		label:SetText(message and (Widgets.ERROR_PREFIX .. Widgets.ErrorText(message)) or "")
+		label:SetShown(message ~= nil)
+	end
+	Style.Repaint(input.paintTarget or input)
+	if input.onErrorChanged then input.onErrorChanged(input) end
+end
+
+--- Height an error line takes under its field (0 when there is none).
+function Widgets.ErrorHeight(input)
+	local label = input.errorLabel
+	if not (input.invalid and label) then return 0 end
+	return math.max(12, label.GetStringHeight and label:GetStringHeight() or 12) + 4
+end
+
+--- Keyboard navigation ---------------------------------------------------------------
+-- A focus chain links a form's editable fields, in order:
+--   Tab / Shift+Tab   next / previous usable field (wraps; skips fields that are
+--                     hidden, inside a hidden frame, or disabled)
+--   Enter             in a one-line field: the next field; on the last one,
+--                     opts.onSubmit (the form validates, so nothing incomplete
+--                     is saved). Multi-line fields keep Enter for new lines.
+--   Escape            opts.onEscape(dirty): the form cancels or closes, asking
+--                     first when typed changes would be lost
+-- Only Dawnward's own edit boxes take part and nothing captures the keyboard,
+-- so chat and key bindings behave as usual once a field loses focus.
+
+local function usable(box)
+	return box:IsVisible() and (not box.IsEnabled or box:IsEnabled() ~= false)
+end
+
+function Widgets.FocusChain(opts)
+	local chain = { fields = {}, onSubmit = opts and opts.onSubmit, onEscape = opts and opts.onEscape }
+
+	--- The usable fields, in order.
+	function chain.Usable()
+		local out = {}
+		for _, box in ipairs(chain.fields) do
+			if usable(box) then out[#out + 1] = box end
+		end
+		return out
+	end
+
+	--- Moves focus from box by step (1 or -1), wrapping. Returns the new field.
+	function chain.Move(box, step)
+		local list = chain.Usable()
+		if #list == 0 then return nil end
+		local at = 0
+		for i, b in ipairs(list) do
+			if b == box then at = i end
+		end
+		local target = list[(at - 1 + step) % #list + 1]
+		target:SetFocus()
+		return target
+	end
+
+	function chain.FocusFirst()
+		local first = chain.Usable()[1]
+		if first then first:SetFocus() end
+		return first
+	end
+
+	--- Whether any field's text differs from when the chain was set.
+	function chain.IsDirty()
+		for _, box in ipairs(chain.fields) do
+			if (box:GetText() or "") ~= (chain.snapshot[box] or "") then return true end
+		end
+		return false
+	end
+
+	function chain.Escape(box)
+		if box then box:ClearFocus() end
+		if chain.onEscape then chain.onEscape(chain.IsDirty()) end
+	end
+
+	--- Sets the fields (in Tab order) and remembers their current text.
+	function chain.SetFields(list)
+		chain.fields, chain.snapshot = list, {}
+		for _, box in ipairs(list) do
+			chain.snapshot[box] = box:GetText() or ""
+			box:SetScript("OnTabPressed", function(self)
+				chain.Move(self, IsShiftKeyDown and IsShiftKeyDown() and -1 or 1)
+			end)
+			box:SetScript("OnEscapePressed", function(self) chain.Escape(self) end)
+			if not box.multiline then
+				box:SetScript("OnEnterPressed", function(self)
+					local usableList = chain.Usable()
+					if usableList[#usableList] == self then
+						self:ClearFocus()
+						if chain.onSubmit then chain.onSubmit() end
+					else
+						chain.Move(self, 1)
+					end
+				end)
+			end
+		end
+	end
+
+	--- Asks before discarding typed changes; otherwise calls cancel at once.
+	function chain.ConfirmDiscard(dirty, cancel)
+		if dirty then
+			Widgets.Confirm("Discard the changes you typed?", "Discard", cancel)
+		else
+			cancel()
+		end
+	end
+
+	return chain
 end
 
 --- Confirmation -------------------------------------------------------------------

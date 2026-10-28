@@ -124,7 +124,7 @@ FORMS.memories = function(r)
 		title = r and "Edit memory" or "New memory",
 		hint = "A memory in your own words. Editing a suggested memory makes it yours.",
 		fields = {
-			{ key = "title", label = "Title", kind = "line" },
+			{ key = "title", label = "Title", kind = "line", errors = { "memory needs" } },
 			{ key = "text", label = "What happened", kind = "area" },
 			{ key = "importance", label = "Importance", kind = "cycle", values = IMPORTANCE },
 			not r and { key = "visibility", label = "Visibility", kind = "cycle", values = VISIBILITY } or nil,
@@ -147,7 +147,7 @@ FORMS.arcs = function(r)
 		title = r and "Edit arc" or "New arc",
 		hint = "A thread of your character's story. You decide when it turns, pauses or ends.",
 		fields = {
-			{ key = "title", label = "Title", kind = "line" },
+			{ key = "title", label = "Title", kind = "line", errors = { "needs a title" } },
 			{ key = "summary", label = "Summary", kind = "area" },
 			{ key = "kind", label = "Kind", kind = "cycle", values = ARC_KINDS },
 			r and { key = "state", label = "State", kind = "cycle", values = ARC_STATES }
@@ -184,10 +184,11 @@ FORMS.goals = function(r)
 		hint = "What your character wants. A target level, or a standing with a faction Dawnward has seen, is "
 			.. "shown as verified progress; only you decide when the goal is achieved.",
 		fields = {
-			{ key = "title", label = "Goal", kind = "line" },
+			{ key = "title", label = "Goal", kind = "line", errors = { "needs a title" } },
 			{ key = "text", label = "Why it matters", kind = "area" },
-			{ key = "target", label = "Target level", kind = "number" },
-			{ key = "faction", label = "Or a faction", kind = "line" },
+			{ key = "target", label = "Target level", kind = "number", errors = { "whole number from 2" } },
+			{ key = "faction", label = "Or a faction", kind = "line",
+				errors = { "not both", "has not seen", "name a faction", "the standing must" } },
 			{ key = "standing", label = "Standing", kind = "cycle", values = STANDINGS },
 			r and { key = "state", label = "State", kind = "cycle", values = GOAL_STATES }
 				or { key = "visibility", label = "Visibility", kind = "cycle", values = VISIBILITY },
@@ -223,11 +224,16 @@ FORMS.identity = function(r)
 		hint = "How your character presents themselves about something, and what they privately believe. "
 			.. "The private side stays private unless you change it.",
 		fields = {
-			{ key = "subject", label = "About", kind = "line" },
-			{ key = "persona", label = "In public", kind = "line" },
+			{ key = "subject", label = "About", kind = "line", errors = { "needs a subject" } },
+			{ key = "persona", label = "In public", kind = "line", errors = { "public stance or a private conviction" } },
 			{ key = "conviction", label = "Privately", kind = "line" },
 			{ key = "deliberate", label = "Contradiction", kind = "cycle", values = YES_NO },
 		},
+		-- Adding with neither side gives one message for two causes: point at the empty one.
+		locate = function(v)
+			if not (v.subject or ""):match("%S") then return "subject" end
+			return "persona"
+		end,
 		values = r and { subject = r.subject, persona = r.persona, conviction = r.conviction,
 			deliberate = r.deliberate == true } or { deliberate = false },
 		save = function(char, v, now)
@@ -243,9 +249,9 @@ FORMS.people = function(r)
 		title = r and "Edit person" or "New person",
 		hint = "Someone your character knows. Only you write this; nothing is read from other players' profiles.",
 		fields = {
-			{ key = "name", label = "Name", kind = "line" },
+			{ key = "name", label = "Name", kind = "line", errors = { "needs a name", "is already" } },
 			{ key = "kind", label = "Who", kind = "cycle", values = PERSON_KINDS },
-			{ key = "realm", label = "Realm (players)", kind = "line" },
+			{ key = "realm", label = "Realm (players)", kind = "line", errors = { "needs a realm" } },
 			{ key = "relation", label = "Relation", kind = "line" },
 			{ key = "feelings", label = "Private feelings", kind = "area" },
 		},
@@ -269,7 +275,7 @@ local function milestoneForm(goal)
 			values = { { false, "Not yet: " .. m.text }, { true, "Done: " .. m.text } } }
 		values[i] = m.done == true
 	end
-	fields[#fields + 1] = { key = "new", label = "New step", kind = "line" }
+	fields[#fields + 1] = { key = "new", label = "New step", kind = "line", errors = { "milestone" } }
 	return {
 		title = "Milestones: " .. goal.title,
 		hint = "Tick the steps your character has taken. Dawnward never ticks them for you.",
@@ -292,7 +298,7 @@ local function turningPointForm(arc)
 	return {
 		title = "Turning point: " .. arc.title,
 		hint = "A moment that changed the course of this arc.",
-		fields = { { key = "note", label = "What changed", kind = "area" } },
+		fields = { { key = "note", label = "What changed", kind = "area", errors = { "turning point" } } },
 		values = {},
 		save = function(char, v, now) return ns.Arcs.AddTurningPoint(char, arc.id, v.note, nil, now) end,
 	}

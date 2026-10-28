@@ -295,11 +295,18 @@ function JournalView.AttachEditing(section)
 	editor.title:SetPoint("TOPRIGHT", -INSET, -56)
 
 	editor.textLabel = Widgets.Label(editor, "GameFontHighlightSmall", false, "muted")
-	editor.textLabel:SetPoint("TOPLEFT", INSET, -86)
+	editor.textLabel:SetPoint("TOPLEFT", INSET, -100) -- below the title's error line
 	editor.textLabel:SetText("Entry")
 	editor.area = Widgets.TextArea(editor, 2001, MainWindow.ContentWidth() - 2 * INSET)
-	editor.area.frame:SetPoint("TOPLEFT", INSET, -102)
-	editor.area.frame:SetPoint("BOTTOMRIGHT", -INSET, 44)
+	editor.area.frame:SetPoint("TOPLEFT", INSET, -116)
+	editor.area.frame:SetPoint("BOTTOMRIGHT", -INSET, 62) -- room for an error line above the buttons
+	Widgets.FieldError(editor.title, 560)
+	Widgets.FieldError(editor.area.edit, 560)
+	-- Keyboard: Tab moves between title and text, Enter on the title moves
+	-- to the text (which keeps Enter for new lines), Escape cancels.
+	editor.chain = Widgets.FocusChain({
+		onEscape = function(dirty) editor.chain.ConfirmDiscard(dirty, function() section:CloseEditor() end) end,
+	})
 
 	editor.vis = Widgets.VisibilityButton(editor, function(level, button) button:SetLevel(level) end)
 	editor.vis:SetPoint("BOTTOMLEFT", INSET, 12)
@@ -334,7 +341,10 @@ function JournalView.AttachEditing(section)
 		if self.theme then
 			self:ThemeEditor(self.theme)
 		end
-		editor.area.edit:SetFocus()
+		Widgets.SetFieldError(editor.title, nil)
+		Widgets.SetFieldError(editor.area.edit, nil)
+		editor.chain.SetFields({ editor.title, editor.area.edit })
+		editor.chain.FocusFirst()
 		MainWindow.SetStatus(entry and "Editing your entry." or "Write in your character's voice, or your own.")
 	end
 
@@ -360,8 +370,12 @@ function JournalView.AttachEditing(section)
 		end
 		if ok then
 			self:CloseEditor()
+			MainWindow.SetStatus(message)
+		else
+			-- Journal refusals concern the entry text: shown beneath it, typed text kept.
+			Widgets.SetFieldError(editor.area.edit, message)
+			editor.area.edit:SetFocus()
 		end
-		MainWindow.SetStatus(message)
 	end
 
 	function section.ConfirmDelete(_, entry)

@@ -38,7 +38,11 @@ return function(t, expect)
 			section.editor.area.edit:SetText("   ")
 			click(section.editor.save)
 			expect.truthy(section.editor:IsShown())
-			expect.truthy(ns.MainWindow.GetFrame().status:GetText():find("empty"))
+			local area = section.editor.area.edit
+			expect.truthy(area.invalid)
+			expect.truthy(area.errorLabel:GetText():find("empty", 1, true))
+			expect.truthy(area:HasFocus())
+			expect.falsy(ns.MainWindow.GetFrame().status:GetText():find("empty"))
 			expect.equal(env.DawnwardChroniclesDB.characters[CHAR], nil)
 		end)
 
