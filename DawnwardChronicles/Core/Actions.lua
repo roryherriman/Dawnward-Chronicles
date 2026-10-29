@@ -620,6 +620,28 @@ function Actions.SaveMinimap(ctx, values)
 		or "Minimap button shown."
 end
 
+--- Character Showcase: show the portrait instead of the live model (v0.7).
+-- A per-character display choice, stored with the other window preferences
+-- (real data only, like the window position): ui.showcase[characterKey].
+function Actions.ShowcasePortrait(ctx)
+	local ui = ctx.store.real.ui
+	local prefs = ui and ui.showcase and ui.showcase[ctx.characterKey]
+	return prefs ~= nil and prefs.portrait == true
+end
+
+function Actions.SetShowcasePortrait(ctx, on)
+	if ctx.store.realReadOnly then
+		return nil, "Saved data is read-only. Nothing was changed."
+	end
+	local ui = ctx.store.real.ui or {}
+	ctx.store.real.ui = ui
+	ui.showcase = ui.showcase or {}
+	-- Only a "yes" is stored; the default (the live model) leaves no trace.
+	ui.showcase[ctx.characterKey] = on and { portrait = true } or nil
+	if next(ui.showcase) == nil then ui.showcase = nil end
+	return true, on and "The showcase shows your portrait." or "The showcase shows your live model."
+end
+
 --- Theme (cosmetic only) -----------------------------------------------------
 
 function Actions.SetTheme(ctx, themeId)

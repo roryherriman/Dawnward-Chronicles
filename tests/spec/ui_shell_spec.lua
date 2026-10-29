@@ -81,27 +81,40 @@ return function(t, expect)
 	end)
 
 	t:describe("Character Showcase", function()
-		t:it("shows the live model beside the profile, inside the content area", function()
+		local function showcaseOf(ns)
+			ns.MainWindow.Select("character")
+			local section = ns.CharacterView.section
+			click(section.showcaseButton)
+			return section.showcase, section
+		end
+
+		t:it("opens from the Character header and shows the live model, inside the content area", function()
 			local _, _, ns = open()
 			ns.MainWindow.Select("character")
 			local section = ns.CharacterView.section
-			local showcase = section.showcase
-			showcase:Hide()
-			showcase:Show()
+			expect.falsy(section.showcase:IsShown(), "the profile does not render the model")
+			expect.equal(section.showcase.model.__unit, nil)
+			local showcase = showcaseOf(ns)
+			expect.equal(section.mode, "showcase")
+			expect.truthy(showcase:IsShown())
 			expect.truthy(showcase.modelShown, "the model is shown")
 			expect.equal(showcase.model.__unit, "player")
 			expect.falsy(showcase.fallback:IsShown())
+			expect.equal(showcase.chip.label:GetText(), "Live model")
+			expect.equal(section.showcaseButton:GetText(), "Profile fields")
 			local W = ns.MainWindow.ContentWidth()
-			expect.truthy(ns.CharacterView.ListWidth(W) + ns.CharacterView.SHOWCASE_WIDTH + 22 <= W,
-				"list and showcase fit side by side")
+			local game = section.showcaseView.game
+			expect.truthy(ns.Showcase.MODEL_WIDTH + ns.Showcase.GAP + game:GetWidth() <= W,
+				"model and panels fit side by side")
+			click(section.showcaseButton)
+			expect.equal(section.mode, "profile")
+			expect.falsy(showcase:IsShown())
+			expect.equal(showcase.model.__unit, nil, "back on the profile, the model is released")
 		end)
 
 		t:it("renders nothing while hidden, and turns with the buttons", function()
 			local _, _, ns = open()
-			ns.MainWindow.Select("character")
-			local showcase = ns.CharacterView.section.showcase
-			showcase:Hide()
-			showcase:Show()
+			local showcase = showcaseOf(ns)
 			expect.truthy(showcase.__events.UNIT_MODEL_CHANGED, "listens only while shown")
 			click(showcase.right)
 			expect.truthy(math.abs(showcase.model:GetRotation() - ns.Showcase.ROTATE_STEP) < 1e-9)
@@ -115,27 +128,155 @@ return function(t, expect)
 
 		t:it("falls back to the portrait when the model cannot be shown", function()
 			local mock, _, ns = open()
-			ns.MainWindow.Select("character")
-			local showcase = ns.CharacterView.section.showcase
 			mock.modelFails = true
-			showcase:Hide()
-			showcase:Show()
+			local showcase, section = showcaseOf(ns)
 			expect.falsy(showcase.modelShown)
 			expect.truthy(showcase.fallback:IsShown())
 			expect.equal(showcase.fallback.portrait.__portrait, "player")
+			expect.equal(showcase.fallbackReason, "unavailable")
+			expect.truthy(showcase.chip.label:GetText():find("Portrait", 1, true))
+			expect.truthy(section.showcaseView.note.text:GetText():find("could not be shown", 1, true))
+			expect.falsy(showcase.zoomIn:IsEnabled(), "no zoom on the portrait")
+			-- Tried again when the gear changes.
+			mock.modelFails = false
+			showcase:GetScript("OnEvent")(showcase, "UNIT_MODEL_CHANGED", "player")
+			expect.truthy(showcase.modelShown)
+			expect.equal(showcase.model.__unit, "player")
 		end)
 
-		t:it("steps aside while a field is being edited", function()
+		t:it("zooms within Blizzard's model range, with the buttons and the mouse wheel", function()
+			local _, _, ns = open()
+			local showcase = showcaseOf(ns)
+			local S = ns.Showcase
+			expect.equal(showcase.zoom, S.ZOOM_MIN)
+			expect.falsy(showcase.zoomOut:IsEnabled(), "already fully out")
+			click(showcase.zoomIn)
+			expect.truthy(math.abs(showcase.zoom - S.ZOOM_STEP) < 1e-9)
+			for _ = 1, 10 do showcase.model:GetScript("OnMouseWheel")(showcase.model, 1) end
+			expect.equal(showcase.zoom, S.ZOOM_MAX, "clamped at the top")
+			expect.falsy(showcase.zoomIn:IsEnabled())
+			for _ = 1, 10 do showcase.model:GetScript("OnMouseWheel")(showcase.model, -1) end
+			expect.equal(showcase.zoom, S.ZOOM_MIN, "clamped at the bottom")
+			expect.truthy(S.ZOOM_MIN == 0 and S.ZOOM_MAX == 0.7, "MODELFRAME_MIN_ZOOM / MAX_ZOOM of the 1.15.9 UI")
+		end)
+
+		t:it("turns by dragging, with an update handler only while the button is held", function()
+			local mock, _, ns = open()
+			local showcase = showcaseOf(ns)
+			local model = showcase.model
+			expect.equal(model:GetScript("OnUpdate"), nil, "no per-frame work while idle")
+			mock.cursorX = 500
+			model:GetScript("OnMouseDown")(model)
+			expect.truthy(model:GetScript("OnUpdate"))
+			mock.cursorX = 550
+			model:GetScript("OnUpdate")(model, 0.016)
+			expect.truthy(math.abs(model:GetRotation() - 50 * ns.Showcase.DRAG_SPEED) < 1e-9)
+			model:GetScript("OnMouseUp")(model)
+			expect.equal(model:GetScript("OnUpdate"), nil)
+			model:GetScript("OnMouseDown")(model)
+			showcase:Hide()
+			expect.equal(model:GetScript("OnUpdate"), nil, "hiding ends a drag")
+		end)
+
+		t:it("lets the player choose the portrait, remembered per character", function()
+			local _, env, ns = open()
+			local showcase, section = showcaseOf(ns)
+			local toggle = section.showcaseView.note.toggle
+			expect.equal(toggle:GetText(), "Show portrait instead")
+			click(toggle)
+			expect.falsy(showcase.modelShown)
+			expect.equal(showcase.fallbackReason, "choice")
+			expect.equal(showcase.model.__unit, nil, "the model is not rendered")
+			expect.truthy(showcase.fallback:IsShown())
+			expect.equal(toggle:GetText(), "Show the live model")
+			expect.deepEqual(env.DawnwardChroniclesDB.ui.showcase, { [CHAR] = { portrait = true } })
+			-- Kept across reopening and across sessions.
+			showcase:Hide()
+			showcase:Show()
+			expect.falsy(showcase.modelShown)
+			local _, _, ns2 = Boot.Start({ savedVariables = { DawnwardChroniclesDB = env.DawnwardChroniclesDB } })
+			expect.truthy(ns2.Actions.ShowcasePortrait(ns2.ctx))
+			click(toggle)
+			expect.truthy(showcase.modelShown)
+			expect.equal(env.DawnwardChroniclesDB.ui.showcase, nil, "the default leaves no trace")
+		end)
+
+		t:it("cleans the stored portrait choice", function()
+			local ns = select(3, Boot.Load())
+			local ui = ns.Schema.NormalizeUi({ showcase = { ["A-R"] = { portrait = true }, ["B-R"] = { portrait = "yes" },
+				[5] = { portrait = true }, ["C-R"] = "x" } })
+			expect.deepEqual(ui.showcase, { ["A-R"] = { portrait = true } })
+			expect.equal(ns.Schema.NormalizeUi({ showcase = { ["B-R"] = {} } }).showcase, nil)
+		end)
+
+		t:it("shows the game's identity apart from what the player wrote", function()
+			local mock, _, ns = open()
+			mock.guild = { name = "The Lantern Watch", rank = "Member" }
+			mock.Slash("set name Aelin Brightwater")
+			mock.Slash("set title Keeper of the Road")
+			mock.Slash("vis title public")
+			mock.Slash("set summary Kind to strangers.")
+			local _, section = showcaseOf(ns)
+			local view = section.showcaseView
+			expect.equal(view.game.title:GetText(), "IN GAME")
+			expect.equal(view.own.title:GetText(), "Keeper of the Road")
+			local values = {}
+			for i, row in ipairs(view.game.rows) do values[i] = row.key:GetText() .. "=" .. row.value:GetText() end
+			expect.equal(values[1], "LEVEL=20")
+			expect.truthy(values[2]:find("RACE · CLASS=Orc · ", 1, true), values[2])
+			expect.truthy(values[2]:find("Mage", 1, true))
+			expect.equal(values[3], "GUILD=The Lantern Watch")
+			expect.equal(values[4], "REALM=Test Realm")
+			expect.equal(view.own.name:GetText(), "Aelin Brightwater")
+			expect.equal(view.own.summary:GetText(), "Kind to strangers.")
+			local chips = {}
+			for _, c in ipairs(view.own.chips) do
+				if c:IsShown() then chips[#chips + 1] = c.label:GetText() end
+			end
+			expect.deepEqual(chips, { "Name is Private", "Title is Public", "Summary is Private" })
+			-- Nothing about the game is stored.
+			local char = ns.Actions.Character(ns.ctx)
+			expect.equal(char.fields.guild, nil)
+			mock.guild = nil
+			ns.MainWindow.Refresh()
+			expect.equal(view.game.rows[3].value:GetText(), "No guild")
+		end)
+
+		t:it("colours the class with the game's class colour", function()
+			local ns = select(3, Boot.Load())
+			local rows = ns.Showcase.GameRows({ level = 3, raceName = "Human", className = "Paladin",
+				classColor = { 0.96, 0.55, 0.73 } })
+			expect.equal(rows[2].value, "Human · |cfff58cbaPaladin|r")
+			local empty = ns.Showcase.GameRows({})
+			expect.equal(empty[1].value, "Unknown")
+			expect.truthy(empty[3].empty)
+		end)
+
+		t:it("listens for guild changes only while the showcase is shown", function()
+			local _, _, ns = open()
+			local _, section = showcaseOf(ns)
+			local view = section.showcaseView
+			view:Hide()
+			view:Show()
+			expect.truthy(view.__events.PLAYER_GUILD_UPDATE)
+			click(section.showcaseButton)
+			expect.falsy(view.__events.PLAYER_GUILD_UPDATE)
+		end)
+
+		t:it("steps aside while a field is being edited, then comes back", function()
 			local mock, _, ns = open()
 			mock.Slash("set name Aelin")
-			ns.MainWindow.Select("character")
-			local section = ns.CharacterView.section
-			for i, spec in ipairs(section.specs) do
-				if spec.kind == "field" and spec.field.key == "name" then click(section.rows[i].edit) end
-			end
-			expect.falsy(section.showcase:IsShown())
+			local showcase, section = showcaseOf(ns)
+			section:OpenEditor(ns.Schema.FIELD_BY_KEY.name)
+			expect.falsy(showcase:IsShown())
+			expect.equal(showcase.model.__unit, nil)
+			expect.falsy(section.header:IsShown(), "header actions wait for the editor")
 			click(section.editor.cancel)
-			expect.truthy(section.showcase:IsShown())
+			expect.truthy(showcase:IsShown())
+			expect.equal(section.mode, "showcase")
+			expect.equal(showcase.model.__unit, "player")
+			click(section.showcaseView.own.edit)
+			expect.equal(section.mode, "profile")
 		end)
 	end)
 

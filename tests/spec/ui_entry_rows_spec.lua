@@ -206,17 +206,28 @@ return function(t, expect)
 			expect.truthy(checked >= 4, "fields, family and history all checked")
 		end)
 
-		t:it("separates consecutive panels by a gap, even with long wrapped text", function()
+		-- v0.7: fields are tiles in a grid and cards beside the family column,
+		-- so panels are checked in two dimensions: no two overlap, and each
+		-- pair is at least ENTRY.gap apart across or down.
+		t:it("separates panels by a gap, even with long wrapped text", function()
 			local _, _, ns, section = open()
-			local prev
+			local boxes = {}
 			for i, spec in ipairs(section.specs) do
 				local row = section.rows[i]
-				local boxed = spec.kind == "field" or spec.kind == "item"
-				if prev and boxed then
-					local gap = y(row) - (y(prev) + prev:GetHeight())
-					expect.truthy(gap >= ns.Widgets.ENTRY.gap, "a gap of at least ENTRY.gap between panels")
+				if spec.kind == "field" or spec.kind == "item" then
+					local p = row.__points[1]
+					boxes[#boxes + 1] = { x = p[4] or 0, y = y(row), w = row:GetWidth(), h = row:GetHeight() }
 				end
-				prev = boxed and row or nil
+			end
+			expect.truthy(#boxes >= 14, "fields, family and history checked")
+			local gap = ns.Widgets.ENTRY.gap
+			for a = 1, #boxes do
+				for b = a + 1, #boxes do
+					local A, B = boxes[a], boxes[b]
+					local across = math.max(B.x - (A.x + A.w), A.x - (B.x + B.w))
+					local down = math.max(B.y - (A.y + A.h), A.y - (B.y + B.h))
+					expect.truthy(across >= gap or down >= gap, "a gap of at least ENTRY.gap between panels")
+				end
 			end
 		end)
 

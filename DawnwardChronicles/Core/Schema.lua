@@ -868,6 +868,17 @@ function Schema.NormalizeUi(raw)
 			hidden = raw.minimap.hidden == true or nil,
 		}
 	end
+	-- Character Showcase display choice, by character key (v0.7): only
+	-- { portrait = true } is kept.
+	if type(raw.showcase) == "table" then
+		local showcase = {}
+		for key, prefs in pairs(raw.showcase) do
+			if type(key) == "string" and key ~= "" and type(prefs) == "table" and prefs.portrait == true then
+				showcase[key] = { portrait = true }
+			end
+		end
+		if next(showcase) ~= nil then ui.showcase = showcase end
+	end
 	return ui
 end
 
