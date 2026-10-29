@@ -223,7 +223,8 @@ return function(t, expect)
 			local _, _, ns = start()
 			local L = ns.SetupWizard.LAYOUT
 			expect.truthy(L.height <= 640 and L.width <= 1000)
-			expect.truthy(L.bodyTop + 260 <= L.height - L.footer, "room for the tallest page")
+			-- The Character stage is the tallest: its note ends 390 px below bodyTop.
+			expect.truthy(L.bodyTop + 390 <= L.height - L.footer, "room for the tallest page")
 		end)
 	end)
 
