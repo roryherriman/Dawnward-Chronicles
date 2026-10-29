@@ -65,6 +65,10 @@ return function(t, expect)
 			expect.truthy(table.concat(mock.chat, "\n"):find("left untouched"))
 			expect.truthy(mock.Slash("set name X"):find("read%-only"))
 			expect.deepEqual(saved, { schemaVersion = 99, characters = { ["Testchar-TestRealm"] = { future = true } } })
+			-- The narrative clock keeps running, but never writes into read-only data.
+			mock.Play(600)
+			mock.Fire("PLAYER_LOGOUT")
+			expect.deepEqual(saved, { schemaVersion = 99, characters = { ["Testchar-TestRealm"] = { future = true } } })
 		end)
 
 		t:it("keeps simulation data in its own saved variable", function()
