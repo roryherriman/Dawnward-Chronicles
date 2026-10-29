@@ -24,6 +24,11 @@ local function build()
 	card.title = Widgets.Label(card, "GameFontNormalSmall", false, "eyebrow")
 	card.title:SetPoint("TOPLEFT", 16, -14)
 	card.title:SetText("A MOMENT FOR YOUR STORY")
+	-- What happened and where, from the event record (as in the Story section).
+	card.meta = Widgets.Label(card, "GameFontHighlightSmall", false, "muted")
+	card.meta:SetPoint("TOPRIGHT", -44, -15)
+	card.meta:SetJustifyH("RIGHT")
+	card.meta:SetWidth(ReactionCard.WIDTH - 220)
 	card.question = Widgets.Label(card, "GameFontHighlight", true, "body")
 	card.question:SetPoint("TOPLEFT", 16, -34)
 	card.question:SetWidth(ReactionCard.WIDTH - 32)
@@ -47,8 +52,8 @@ local function build()
 		card:Hide()
 		MainWindow.Refresh()
 	end)
-	card.dismiss = Widgets.Button(card, "Dismiss", 80, 22, "ghost")
-	card.dismiss:SetPoint("LEFT", card.later, "RIGHT", 6, 0)
+	card.dismiss = Widgets.Button(card, "Dismiss", 80, 22, "danger")
+	card.dismiss:SetPoint("BOTTOMRIGHT", -16, 14)
 	card.dismiss:SetScript("OnClick", function()
 		Actions.DismissReaction(ns.ctx, card.reactionId)
 		card:Hide()
@@ -79,6 +84,13 @@ function ReactionCard.Show(reactionId)
 	end
 	card.reactionId = reactionId
 	card.question:SetText(view.question)
+	local record = view.record
+	local meta = {}
+	if record then
+		meta[1] = ns.GameEvents.RecordLabel(record)
+		if record.zone then meta[2] = record.zone end
+	end
+	card.meta:SetText(table.concat(meta, " · "))
 	card:Show()
 	return true
 end
