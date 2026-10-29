@@ -12,6 +12,41 @@ Every release entry has a **Verified** line naming the highest test level reache
 
 A feature is never called "tested" or "compatible" in this file unless it reached L3 or L4.
 
+## [Unreleased]: 0.7.0-dev (approved visual direction, gameplay time)
+
+**Verified: L2** (mocked). Not tested in game yet; see parts Q and R of [`docs/TESTING.md`](docs/TESTING.md). Design: [`docs/design/UI_DESIGN_V07.md`](docs/design/UI_DESIGN_V07.md). Builds on 0.6.0-dev below, which is also unreleased.
+
+### Added
+- **Approved mockups** in [`docs/design/mockups`](docs/design/mockups/README.md): seven approved design concepts (Journal, Character, Story Director, Chronicle memories and places, first-time setup, design system) and two proposals awaiting approval (Total RP 3 sync page, Character Showcase). They are design concepts with sample data, not screenshots, and are not part of the addon package.
+- **Window shell (stage A):**
+  - A permanent character rail with the player's portrait, name, title, race, class, pronouns and level, and the section navigation, with a badge counting moments waiting on Story.
+  - Guide and Settings are at the bottom of the rail.
+  - A header with an eyebrow and a title.
+  - A Total RP 3 status line.
+  - The window scales down to fit small screens by width as well as height.
+- **Character Showcase:** the player's live 3D model beside the profile, in the gear being worn. Turn it with buttons or by dragging. The portrait is shown when the model is unavailable, and nothing renders while the journal is closed.
+- **Bundled fonts:** Cinzel and Alegreya Sans (SIL OFL 1.1). Clients in languages the fonts do not cover keep the game's fonts.
+- **Story pace** setting (Settings → Story): Brisk, Standard (default) or Slow narrative days.
+- `/dawnward dev story simulate time <n>m|h|d [place]`: shows what a return would do after that much more play, on a discarded copy (development builds only).
+
+### Changed
+- **Story Director counts gameplay time.**
+  - Return visits and moment cooldowns now use a per-character narrative clock that advances only while you play: not while logged out, and not while AFK.
+  - A narrative day is 2 hours of play by default.
+  - A return needs 1 narrative day away, and a place's weekly return 7.
+  - Unanswered moments expire after 7 narrative days.
+  - Changing the computer's clock no longer affects any of this.
+  - Details: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#gameplay-time-the-narrative-clock).
+- `/dawnward dev story status` shows the narrative clock and day, time away from the place, play still needed, cooldowns and why a return would or would not happen.
+- The Classic Dawnward theme uses the colours of the approved design system.
+
+### Migration
+- Additive. The schema number is unchanged.
+- Each character gains a narrative clock starting at zero.
+- Places, marks, Homeland, memories and history are untouched.
+- Places logged before the upgrade start counting time away from their next visit, so the upgrade cannot cause a burst of return moments.
+- Old real-time timestamps are kept, but are never read as play time.
+
 ## [Unreleased]: 0.6.0-dev (visual and onboarding overhaul)
 
 **Verified: L2** (mocked). Not tested in game yet; see part N of [`docs/TESTING.md`](docs/TESTING.md). Design: [`docs/design/UI_DESIGN_V06.md`](docs/design/UI_DESIGN_V06.md).

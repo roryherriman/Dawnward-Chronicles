@@ -576,6 +576,29 @@ Automated: `tests/spec/narrative_clock_spec.lua` (L1/L2). The model is in [ARCHI
 | Q10 | Settings → Story → **Story pace**: Brisk, then `dev story status`; set it back to Standard | The narrative day becomes 1 h of play, and returns need less play accordingly |
 | Q11 | Change the computer's date or time forward a day, `/reload`, then `dev story status`; set it back | The narrative clock is unaffected |
 
+#### Part R: v0.7 window shell, Character Showcase and fonts (stage A)
+
+Automated: `tests/spec/ui_shell_spec.lua` (L2) proves the wiring only. Compare each screen with its approved mockup in [design/mockups](design/mockups/README.md); differences that Classic Era cannot avoid are listed in [UI_DESIGN_V07.md](design/UI_DESIGN_V07.md#3-classic-era-limits-and-the-closest-alternatives). The section layouts (stage B) are not built yet, so only the shell, rail and Showcase are expected to match.
+
+| # | Steps | Pass when |
+|---|---|---|
+| R1 | Upgrade from v0.6, `/dawnward` | The window opens with a rail on the left. No Lua error. Every section, entry and setting from v0.6 is still there |
+| R2 | Look at the rail on a character with a profile name and title | Your profile name and title, then race · class · pronouns, and your real level. With no profile name, your character's name |
+| R3 | Compare the rail with the mockups | Same order: portrait, name, title, identity line, level, navigation, Guide and Settings at the bottom |
+| R4 | Look at the portrait | Your own portrait, round, inside a gold ring that sits centred on it (not cut off or offset) |
+| R5 | Look at the four navigation icons | Each shows an icon (no green square or blank). Click each: the section changes and the selected one is marked |
+| R6 | Leave a moment unanswered, then look at Story in the rail | A badge with the number waiting |
+| R7 | Character → the Showcase | Your character in the gear you are wearing. ‹ and › turn it; dragging turns it |
+| R8 | Change a piece of gear with the journal open on Character | The model updates |
+| R9 | Edit a field on Character, then cancel | The Showcase hides while editing and comes back afterwards |
+| R10 | Close the journal | The model is gone; frame rate is the same as with the addon closed |
+| R11 | Read text in every section | Titles in Cinzel, text in Alegreya Sans; nothing clipped or overlapping. (On a non-English client: the game's fonts, and nothing missing) |
+| R12 | Set UI scale to the smallest and largest values, and try a 1366×768 window | The whole window fits on screen in every case |
+| R13 | Switch theme to each of the six themes (Settings → General → Appearance) | Every theme repaints the rail, header and Showcase frame |
+| R14 | With Total RP 3 off, and then on | The rail line says "not installed (optional)" or names your TRP3 profile. Nothing is written to Total RP 3 |
+
+**Screenshots requested:** Journal, Character (with the Showcase) and Story, at your normal UI scale, so they can be compared side by side with the mockups. Crop or blur anything you would rather not share.
+
 **Report:**
 - Which steps passed, with your game version, UI scale and resolution.
 - Every Lua error, with its text.

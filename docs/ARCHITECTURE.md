@@ -223,7 +223,7 @@ See [UI_DIRECTION.md](UI_DIRECTION.md).
   - `UI/Style.lua` holds the tokens, a theme registry (`Style.Register` and `Style.Apply`) and the frame chrome.
   - `UI/Widgets.lua` holds the component kit: buttons with variants and states, icon buttons, segmented controls, cards, dividers, inputs and the confirmation dialog.
   - Components paint themselves, and modules don't hand-colour controls.
-  - Specification: [design/UI_DESIGN_V06.md](design/UI_DESIGN_V06.md).
+  - Specification: [design/UI_DESIGN_V06.md](design/UI_DESIGN_V06.md), superseded visually by [design/UI_DESIGN_V07.md](design/UI_DESIGN_V07.md) and the [approved mockups](design/mockups/README.md).
 - **First-time setup (v0.6):**
   - `Core/Onboarding.lua` holds the rules and saved state: `char.wizard`, plus drafts in `ui.wizardDrafts` keyed by character.
   - `UI/SetupWizard.lua` holds the six pages. It opens through `MainWindow.BeforeShow` for genuinely new characters only.

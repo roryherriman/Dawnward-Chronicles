@@ -1,6 +1,6 @@
 # UI direction (from v0.2)
 
-Status: **principles still in use; the visual design is superseded by [design/UI_DESIGN_V06.md](design/UI_DESIGN_V06.md)** (v0.6: design system, themes, setup wizard). v0.2 implemented the first part: the three-section window, the settings panel and three cosmetic themes. The principles below, such as restraint, reading first, player-chosen themes and no class-based look, still apply.
+Status: **principles still in use; the visual design is superseded by [design/UI_DESIGN_V07.md](design/UI_DESIGN_V07.md) and the [approved mockups](design/mockups/README.md)** (v0.7), which build on [design/UI_DESIGN_V06.md](design/UI_DESIGN_V06.md) (v0.6: design system, themes, setup wizard). v0.2 implemented the first part: the three-section window, the settings panel and three cosmetic themes. The principles below, such as restraint, reading first, player-chosen themes and no class-based look, still apply.
 
 ## Why
 An earlier project showed that too many tabs, controls and features can hurt usability. Dawnward Chronicles should feel like a **character's journal you read and write in**, not a management dashboard.

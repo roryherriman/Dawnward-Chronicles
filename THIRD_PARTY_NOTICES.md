@@ -4,7 +4,18 @@ The MIT licence in [`LICENSE`](LICENSE) covers only the original code and docume
 
 ## Bundled third-party code
 
-**None.** Dawnward Chronicles currently ships no third-party libraries. If one is added, it will be listed here with its licence, and its licence file will be shipped next to it.
+**No third-party code.** Dawnward Chronicles ships no third-party libraries. If one is added, it will be listed here with its licence, and its licence file will be shipped next to it.
+
+## Bundled fonts (from v0.7-dev)
+
+These fonts ship in `DawnwardChronicles/Media/Fonts/`, with their licence files beside them (`OFL-Cinzel.txt`, `OFL-AlegreyaSans.txt`; summary in `FONTS.txt`). The MIT licence does not apply to them.
+
+| Font | Files | Licence | Notes |
+|---|---|---|---|
+| [Cinzel](https://github.com/NDISCOVER/Cinzel) | `Cinzel-SemiBold.ttf` | SIL Open Font License 1.1 | A static weight-600 instance made from the variable font with fontTools. The name is unchanged because Cinzel declares no Reserved Font Name. Used for display text: titles, names and eyebrows |
+| [Alegreya Sans](https://github.com/huertatipografica/Alegreya-Sans) | `AlegreyaSans-Regular.ttf`, `AlegreyaSans-Bold.ttf` | SIL Open Font License 1.1 | Unmodified. Used for reading text and labels |
+
+On clients whose language the fonts do not cover, or when a file fails to load, the addon uses the game's own fonts instead.
 
 ## Software we interoperate with, but do not include
 

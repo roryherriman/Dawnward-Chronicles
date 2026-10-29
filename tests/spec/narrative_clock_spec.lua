@@ -313,5 +313,17 @@ return function(t, expect)
 			mock2.Play(1200)
 			expect.equal(env2.DawnwardChroniclesDB.characters[key].story.clock.played, after, "AFK: paused")
 		end)
+
+		t:it("the pace is a story setting, refused when unknown", function()
+			local mock, env, ns = Boot.Start()
+			mock.Slash("set name Kyssarra")
+			local char = env.DawnwardChroniclesDB.characters[ns.ctx.characterKey]
+			expect.truthy(mock.Slash("story set pace brisk"):find("brisk", 1, true))
+			expect.equal(char.story.prefs.pace, "brisk")
+			expect.equal(ns.NarrativeClock.DayLength(char), 3600)
+			mock.Slash("story set pace hourly")
+			expect.equal(char.story.prefs.pace, "brisk", "an unknown pace changes nothing")
+			expect.truthy(mock.Slash("story settings"):find("a narrative day is 1 hour of play", 1, true))
+		end)
 	end)
 end
