@@ -2,32 +2,31 @@
 
 Project: Dawnward Chronicles
 
-Target platform: World of Warcraft — WoW Forever
+Target platform: World of Warcraft (WoW Forever flavour intended; see LISTING.md)
 
-Project URL: NOT CREATED
+Project URL (preview): https://www.curseforge.com/wow/addons/dawnward-chronicles/preview
 
-Visibility: Not created
+Visibility: **Unlisted**, as reported by the owner on 2026-10-27. Not checked independently: curseforge.com is unreachable from the build environment, and no CurseForge account access was requested or used.
 
-Project ID: N/A
+Project ID: unknown (read it from the author console and record it here)
 
-Project creation date: N/A
+Project creation date: before 2026-10-27, by the owner (exact date not recorded)
 
-WoW Forever category verified: No. Search results (2026-10-26) show other addons listed under a WoW Forever flavour with game version 1.60.1 and Interface 16001, but the CurseForge author console was not available to confirm it for a new project.
+Files uploaded: none known. No addon file has been uploaded by this project's tooling, and none should be until release gate #24 passes.
 
-Publicly accessible: No
+WoW Forever category verified: not confirmed (see LISTING.md, Sources).
 
-Reason if not created:
-1. There was no CurseForge account access or credentials in the preparation environment, and none should be requested.
-2. CurseForge documents no private or draft project state. Per its support article "Project Statuses 101", a project becomes available to the community once the project and a file are approved, so privacy cannot be guaranteed.
-3. WoW Forever compatibility has not been verified in game (release gate #24 has not been run), and the addon has no Forever TOC yet.
+Publicly accessible: not listed. Do not change visibility.
 
-Prepared listing files:
-- `docs/marketing/curseforge/LISTING.md` (listing copy, settings, FAQ, changelog template, media plan, sources)
-- `docs/marketing/curseforge/PUBLICATION_CHECKLIST.md`
+Prepared materials (ready for a manual update by the owner):
+- `docs/marketing/curseforge/FINAL_DESCRIPTION.md`: the description to paste
+- `docs/marketing/curseforge/BRANDING_GUIDE.md`: which images go where (proposal; needs #49 approval)
+- `docs/marketing/curseforge/UPLOAD_INSTRUCTIONS.md`: step by step, description and images only
+- `docs/marketing/curseforge/LISTING.md` and `PUBLICATION_CHECKLIST.md`: settings, FAQ, changelog template, release blockers
 
-Next action required:
-1. The owner reviews `LISTING.md`.
-2. The owner confirms in the CurseForge author console that the WoW Forever flavour is selectable for a new project.
-3. After in-game Forever verification and a Forever TOC exist, follow `PUBLICATION_CHECKLIST.md`. Only then create the project (it enters moderation), upload an Alpha file, and record the URL, ID and date here.
+Next action required (owner):
+1. Approve or reject the new identity (#49).
+2. Update the description (and, if approved, the images) by hand, following UPLOAD_INSTRUCTIONS.md.
+3. Record the project ID and the visibility shown in the console here.
 
-_Last updated: 2026-10-26. Update this file whenever the CurseForge project's status changes._
+_Last updated: 2026-10-27._

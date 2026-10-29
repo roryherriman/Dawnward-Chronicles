@@ -1,10 +1,15 @@
 <div align="center">
 
-# Dawnward Chronicles
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/branding/png/dawnward-lockup-dark.png">
+  <img src="assets/branding/png/dawnward-lockup-light.png" alt="Dawnward Chronicles" width="560">
+</picture>
 
 ### *A living chronicle for your World of Warcraft character*
 
 **Total RP 3 tells the world who your character is.<br>Dawnward Chronicles helps you discover who they become.**
+
+[How it works](#how-it-works) · [Features](#features) · [Install](#installation) · [Getting started](#getting-started) · [Status](#development-status) · [Docs](#documentation)
 
 [![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange)](#development-status)
 [![Client: Classic Era 1.15.9](https://img.shields.io/badge/client-Classic%20Era%201.15.9-blue)](docs/COMPATIBILITY.md)
@@ -186,7 +191,18 @@ Sync is allowlisted for TRP3 3.4.1, never writes in combat or while TRP3's edito
   python tools/check.py   # hygiene, TOC, luacheck, the Lua 5.1 test suite and the atlas tools
   ```
 
-Design: [`docs/design/UI_DESIGN_V07.md`](docs/design/UI_DESIGN_V07.md) · Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · Vision: [`docs/VISION.md`](docs/VISION.md) · Privacy: [`docs/PRIVACY.md`](docs/PRIVACY.md)
+## Documentation
+
+| | |
+|---|---|
+| [Architecture](docs/ARCHITECTURE.md) | Layers, saved data, UI, Story Director weighting, the narrative clock |
+| [UI design v0.7](docs/design/UI_DESIGN_V07.md) · [mockups](docs/design/mockups/README.md) | The approved visual direction and the build stages |
+| [Testing](docs/TESTING.md) | Automated levels and the in-game checklists |
+| [Compatibility](docs/COMPATIBILITY.md) | Every client API used, with its evidence |
+| [Zone Atlas](docs/ZONE_ATLAS.md) | Place data, evidence levels and `/dawnward atlas` |
+| [Privacy](docs/PRIVACY.md) · [Vision](docs/VISION.md) | What stays private, and why Dawnward exists |
+| [TRP3 integration](docs/TRP3_INTEGRATION.md) | The experimental sync and its safeguards |
+| [Brand guide](docs/BRANDING_GUIDE.md) | Logo, palette and typography (proposal) |
 
 ## Licence and credits
 
