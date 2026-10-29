@@ -67,15 +67,22 @@ A feature is never called "tested" or "compatible" in this file unless it reache
   - Return visits and moment cooldowns now use a per-character narrative clock that advances only while you play: not while logged out, and not while AFK.
   - A narrative day is 2 hours of play by default.
   - A return needs 1 narrative day away, and a place's weekly return 7.
-  - Unanswered moments expire after 7 narrative days.
+  - Unanswered moments expire after 7 narrative days, at the pace in force when they were created, so changing the pace never removes a moment already waiting.
   - Changing the computer's clock no longer affects any of this.
   - Details: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#gameplay-time-the-narrative-clock).
 - `/dawnward dev story status` shows the narrative clock and day, time away from the place, play still needed, cooldowns and why a return would or would not happen.
 - The Classic Dawnward theme uses the colours of the approved design system.
 - Setup wizard: an over-long field now shows an inline error instead of being cut silently, and clicking a step in the rail jumps to it.
+- **Total RP 3 rollback** now warns, before confirming, that the restored section comes back exactly as it was, including anything Dawnward wrote then from items since made Private or Secret. Rollback itself is unchanged.
+- Changes made in the window now prompt an opted-in Total RP 3 sync to catch up, as slash commands already did.
 - The README, site and CurseForge drafts describe Dawnward's own full character profile accurately: it is not meant to replace Total RP 3's public social profile, and shares approved public information through the optional integration.
 
+### Fixed (found in review before merge)
+- The bundled fonts never loaded in the real client: a Font object's `SetFont` returns nothing in 1.15.9. Each font file is now checked once on a hidden font string.
+- Tooltips on plain hover areas could not show (mouse input was off).
+
 ### Saved data
+- Waiting moments gain `expiresPlay` (their own deadline in play time).
 - One additive key, `DawnwardChroniclesDB.ui.showcase[characterKey]`, holds the Showcase portrait choice only when chosen. It is cleaned on load.
 
 ### Migration

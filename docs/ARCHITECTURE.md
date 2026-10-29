@@ -105,7 +105,7 @@ Story pacing runs on **gameplay time**, never on real time. A character does not
 | A return needs time away | 1 narrative day of play (`Places.RETURN_AFTER_DAYS`) |
 | One return per place | per 7 narrative days of play (`Places.RETURN_REPEAT_DAYS`) |
 | Story cooldowns, including the shared location cooldown | Seconds of play: Rare 2 h, Normal 45 min, Frequent 15 min |
-| Waiting moments expire | After 7 narrative days of play (`Reactions.EXPIRY_DAYS`); the event itself stays recorded |
+| Waiting moments expire | After 7 narrative days of play (`Reactions.EXPIRY_DAYS`), counted at the pace in force when the moment was created (its own `expiresPlay` deadline), so changing the pace never removes a moment already waiting; the event itself stays recorded |
 
 **Still real time (interruption control within a session):**
 - notice spacing (when the card may appear);
@@ -117,7 +117,7 @@ Story pacing runs on **gameplay time**, never on real time. A character does not
 - **Clock:** characters start at `played = 0`.
 - **Old timestamps:** real timestamps (`last`, `returnedAt`, `pacing.lastByCategory`) are kept for display and never read as gameplay time.
 - **Places without a reading:** a logged place with no `lastPlay` reports `"new"` on its next visit. Its absence starts counting from that visit, so an upgrade can never cause a burst of return moments.
-- **Waiting moments:** one saved without `createdPlay` starts its expiry wait from the upgrade.
+- **Waiting moments:** one saved without `createdPlay` starts its expiry wait from the upgrade; one without `expiresPlay` gets its deadline from `createdPlay` the first time it is read.
 - **Untouched:** places, marks, Homeland links and memories are not changed.
 - **Restored backups:** if a place reading is ahead of the clock (an older backup was restored), it counts as no absence rather than an error.
 
