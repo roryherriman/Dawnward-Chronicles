@@ -253,6 +253,12 @@ function MainWindow.Refresh()
 	frame.eyebrow:SetText(settingsOpen and "SETTINGS" or (def and def.label:upper() or ""))
 	frame.title:SetText(settingsOpen and "Settings"
 		or MainWindow.HeadingFor(def, char, ctx().store:IsSimulation()))
+	-- A section with its own controls in the header row (def.titleInset px at
+	-- the right) gets a shorter title, which the client cuts with "...".
+	local inset = (not settingsOpen and def and def.titleInset) or 0
+	local rect = frame.titleRect
+	Widgets.Place(frame.title, frame, { left = rect.left, right = rect.right - inset, bottom = rect.bottom,
+		top = rect.top })
 	refreshRail(char)
 	local view = makeView(theme, char)
 	if settingsOpen and MainWindow.settings then
@@ -468,6 +474,7 @@ local function build()
 	Widgets.Place(frame.eyebrow, frame, r.eyebrow)
 	frame.title = Widgets.Label(frame, "GameFontNormalHuge", false, "title")
 	Widgets.Place(frame.title, frame, r.title)
+	frame.titleRect = r.title
 	frame.close = Widgets.IconButton(frame, "X", "Close", "Close the journal (Escape also works).")
 	Widgets.Place(frame.close, frame, r.close)
 	frame.close:SetScript("OnClick", function() MainWindow.Hide() end)

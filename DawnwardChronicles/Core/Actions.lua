@@ -36,6 +36,12 @@ local function withCharacter(ctx, change)
 	if not result and not existed then
 		ctx.store:Root().characters[ctx.characterKey] = nil
 	end
+	-- A change made in the window may change what is public, so ask an
+	-- opted-in Total RP 3 sync to catch up, as slash commands already do
+	-- (debounced; nothing happens unless sync was turned on).
+	if result and ctx.trp3RequestSync then
+		ctx.trp3RequestSync()
+	end
 	return result, message
 end
 

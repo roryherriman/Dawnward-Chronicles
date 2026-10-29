@@ -65,5 +65,13 @@ return function(t, expect)
 			local callout = ns.Widgets.Callout(env.CreateFrame("Frame"), "A moment awaits")
 			expect.truthy(callout.callout)
 		end)
+
+		t:it("a tooltip on a plain frame turns its mouse input on, so the tooltip can show", function()
+			local _, env, ns = load()
+			local area = env.CreateFrame("Frame")
+			expect.falsy(area:IsMouseEnabled())
+			ns.Widgets.Tooltip(area, "Title", "Text")
+			expect.truthy(area:IsMouseEnabled())
+		end)
 	end)
 end

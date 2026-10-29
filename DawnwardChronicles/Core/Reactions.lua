@@ -112,22 +112,32 @@ end
 
 --- Removes reactions waiting longer than EXPIRY_DAYS of play; their events
 -- stay recorded. play is the narrative clock (default: the saved total); the
--- second argument (the real date) is kept for callers but not used. A
--- reaction from before the clock existed starts its wait now.
+-- second argument (the real date) is kept for callers but not used.
+-- Each reaction carries its own deadline (expiresPlay), set when it is
+-- created at the pace in force then, so changing the story pace later never
+-- removes a moment that is already waiting. A reaction from before the clock
+-- existed, or with a reading ahead of the clock (an older backup restored),
+-- starts its wait now.
 function Reactions.Expire(char, _, play)
 	play = play or ns.NarrativeClock.Peek(char)
 	local expiry = Reactions.EXPIRY_DAYS * ns.NarrativeClock.DayLength(char)
 	local list = char.story.reactions
 	local i = 1
 	while i <= #list do
-		if not list[i].createdPlay or list[i].createdPlay > play then
-			list[i].createdPlay = play
+		local r = list[i]
+		if not r.createdPlay or r.createdPlay > play then
+			r.createdPlay, r.expiresPlay = play, play + expiry
 			i = i + 1
-		elseif play - list[i].createdPlay > expiry then
-			setEventStatus(char, list[i].eventKeys, "recorded")
-			table.remove(list, i)
 		else
-			i = i + 1
+			if not r.expiresPlay or r.expiresPlay < r.createdPlay then
+				r.expiresPlay = r.createdPlay + expiry
+			end
+			if play > r.expiresPlay then
+				setEventStatus(char, r.eventKeys, "recorded")
+				table.remove(list, i)
+			else
+				i = i + 1
+			end
 		end
 	end
 end
@@ -266,6 +276,7 @@ function Reactions.Consider(char, record, now, play)
 	local reaction = {
 		id = newId(story), category = record.category, eventKeys = { record.key }, templateId = template.id,
 		significance = record.significance, status = "pending", createdAt = now or 0, createdPlay = play,
+		expiresPlay = play and (play + Reactions.EXPIRY_DAYS * ns.NarrativeClock.DayLength(char)) or nil,
 		zone = record.zone,
 	}
 	if record.category == "quest" then

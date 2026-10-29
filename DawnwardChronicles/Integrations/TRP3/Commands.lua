@@ -189,8 +189,14 @@ function TRP3Commands.EnableWarning(feature)
 		.. "first."
 end
 
+-- A backup holds the section exactly as it was, including what Dawnward
+-- wrote from facts that were public then. Rollback is a recovery tool and
+-- restores it unchanged, so the player is told before confirming.
+TRP3Commands.ROLLBACK_PRIVACY = "Privacy: the section comes back exactly as it was then. Anything Dawnward "
+	.. "had written from items you have since made Private or Secret would be visible again; check the section "
+	.. "afterwards, or run a sync (or release) to bring Dawnward's part up to date."
 TRP3Commands.ROLLBACK_WARNING = "This restores a Total RP 3 section from Dawnward's newest backup "
-	.. "(see /dawnward trp3 backups)."
+	.. "(see /dawnward trp3 backups). " .. TRP3Commands.ROLLBACK_PRIVACY
 
 --- Switches a feature on or off: Sync.SetOptIn, then (when turning on) the
 -- same debounced automatic run request the command makes. Returns ok, message.

@@ -58,6 +58,24 @@ return function(t, expect)
 			expect.truthy(frame.title:GetText():find("simulation", 1, true))
 		end)
 
+		t:it("keeps a section's header controls clear of the title", function()
+			local mock, _, ns, frame = open()
+			mock.Slash("sim on")
+			local function titleRight()
+				for _, p in ipairs(frame.title.__points) do
+					if p[1] == "TOPRIGHT" then return p[4] end
+				end
+			end
+			local full = frame.titleRect.right
+			expect.equal(titleRight(), full, "the journal title uses the whole row")
+			ns.MainWindow.Select("character")
+			expect.equal(titleRight(), full - 420, "room for Preview, Showcase and Total RP 3")
+			ns.MainWindow.Select("story")
+			expect.equal(titleRight(), full - 230, "room for the moment pager")
+			ns.MainWindow.Select("journal")
+			expect.equal(titleRight(), full)
+		end)
+
 		t:it("states Total RP 3 availability without touching it", function()
 			local ns = select(3, open())
 			expect.equal(ns.MainWindow.TRP3Line({ installed = false }), "Total RP 3 · not installed (optional)")

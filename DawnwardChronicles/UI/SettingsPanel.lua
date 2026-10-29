@@ -254,9 +254,9 @@ local function create(parent)
 		self.minimap:SetText(Actions.MinimapSettings(view.ctx).hidden and "Minimap button: hidden"
 			or "Minimap button: shown")
 
-		-- Read-only on every refresh: nothing is written to Total RP 3 here.
-		self.trp3Page:Refresh()
+		-- Only while its page is open (it reads Total RP 3); read-only either way.
 		if self.page == "trp3" then
+			self.trp3Page:Refresh()
 			local frame = MainWindow.GetFrame()
 			if frame and frame.title then
 				frame.title:SetText("Total RP 3")

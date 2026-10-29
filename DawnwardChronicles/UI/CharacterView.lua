@@ -339,8 +339,9 @@ local function create(parent)
 	-- Showcase: model, game identity and the player's own words.
 	section.showcaseView = ns.Showcase.View(f, contentWidth, contentHeight, {
 		onPreferPortrait = function(on)
-			local _, message = ns.Actions.SetShowcasePortrait(ns.ctx, on)
+			local ok, message = ns.Actions.SetShowcasePortrait(ns.ctx, on)
 			MainWindow.SetStatus(message)
+			return ok
 		end,
 		onEditProfile = function() section:SetMode("profile") end,
 	})
@@ -975,5 +976,5 @@ function CharacterView.AttachEditing(section)
 	editor.clear:SetScript("OnClick", section.ConfirmClear)
 end
 
-MainWindow.RegisterSection({ id = "character", label = "Character", order = 2, heading = "Profile",
+MainWindow.RegisterSection({ id = "character", label = "Character", order = 2, heading = "Profile", titleInset = 420,
 	icon = "Interface\\Icons\\INV_Misc_Head_Human_01", create = create })

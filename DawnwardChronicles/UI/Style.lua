@@ -63,17 +63,33 @@ function Style.InitFonts()
 	if not Style.LATIN_LOCALES[locale] then
 		return 0
 	end
+	-- A Font object's SetFont returns nothing in 1.15.9 (SimpleFontAPIDocumentation),
+	-- but a FontString's returns whether the file loaded
+	-- (SimpleFontStringAPIDocumentation). So each file is tried once on a
+	-- hidden font string, and only files that load are used.
+	local fileLoads = {}
+	local probe = type(CreateFrame) == "function" and CreateFrame("Frame") or nil
+	local probeText = probe and probe:CreateFontString(nil, "OVERLAY")
+	if probe then probe:Hide() end
+	local function loads(file)
+		if fileLoads[file] == nil then
+			local ok, success = pcall(function()
+				return probeText:SetFont(Style.FONT_DIR .. Style.FONT_FILES[file], 12, "")
+			end)
+			fileLoads[file] = (probeText and ok and success) and true or false
+		end
+		return fileLoads[file]
+	end
 	local loaded = 0
 	for _, f in ipairs(Style.FONTS) do
 		local ok, set = pcall(function()
+			if not loads(f.file) then return false end
 			local object = Style.fontObjects[f.name] or CreateFont(f.name)
 			Style.fontObjects[f.name] = object
-			local success = object:SetFont(Style.FONT_DIR .. Style.FONT_FILES[f.file], f.size, "")
-			if success then
-				object:SetShadowOffset(1, -1)
-				object:SetShadowColor(0, 0, 0, 0.75)
-			end
-			return success
+			object:SetFont(Style.FONT_DIR .. Style.FONT_FILES[f.file], f.size, "")
+			object:SetShadowOffset(1, -1)
+			object:SetShadowColor(0, 0, 0, 0.75)
+			return true
 		end)
 		if ok and set then
 			fontFor[f.template] = f.name

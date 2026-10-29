@@ -83,11 +83,19 @@ function Methods:CreateFontString(name, layer, template)
 	return fs
 end
 -- Fonts: SetFont succeeds unless mock.fontFails names the file (a missing font).
+-- As in 1.15.9 (SimpleFontAPIDocumentation), a Font object's SetFont returns
+-- nothing; a FontString's or EditBox's returns success.
 function Methods:SetFont(file, height, flags)
-	if self.__mock.fontFails and tostring(file):find(self.__mock.fontFails, 1, true) then return false end
-	self.__font = { file = file, height = height, flags = flags }
-	return true
+	local failed = self.__mock.fontFails and tostring(file):find(self.__mock.fontFails, 1, true)
+	if not failed then
+		self.__font = { file = file, height = height, flags = flags }
+	end
+	if self.__kind == "Font" then return end
+	return not failed
 end
+function Methods:GetObjectType() return self.__kind end
+function Methods:EnableMouse(on) self.__mouse = on and true or false end
+function Methods:IsMouseEnabled() return self.__mouse == true end
 function Methods:GetFont() return self.__font and self.__font.file, self.__font and self.__font.height end
 function Methods:SetFontObject(font) self.__fontObject = font end
 -- Models: SetUnit succeeds unless mock.modelFails is set.

@@ -280,6 +280,7 @@ function StorySchema.CleanReaction(raw)
 		createdAt = ts(raw.createdAt),
 		notifiedAt = raw.notifiedAt ~= nil and ts(raw.notifiedAt) or nil,
 		createdPlay = raw.createdPlay ~= nil and ts(raw.createdPlay) or nil,
+		expiresPlay = raw.expiresPlay ~= nil and ts(raw.expiresPlay) or nil,
 		zone = text(raw.zone, 100),
 	}
 	if not reaction.id or not reaction.templateId or #reaction.eventKeys == 0 then

@@ -718,4 +718,5 @@ local function create(parent)
 end
 
 MainWindow.RegisterSection({ id = "story", label = "Story", order = 3, heading = "A moment for your story",
+	titleInset = 230,
 	icon = "Interface\\Icons\\INV_Misc_Note_01", create = create })

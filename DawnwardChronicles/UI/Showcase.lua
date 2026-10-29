@@ -408,7 +408,8 @@ function Showcase.View(parent, width, height, opts)
 	v.note.toggle = Widgets.Button(v.note, "Show portrait instead", 170, 22)
 	v.note.toggle:SetScript("OnClick", function()
 		local on = not v.model.preferPortrait
-		if opts.onPreferPortrait then opts.onPreferPortrait(on) end
+		-- A refused save (read-only data) leaves the view as it was.
+		if opts.onPreferPortrait and not opts.onPreferPortrait(on) then return end
 		v.model:SetPreferPortrait(on)
 		v.UpdateNote()
 	end)

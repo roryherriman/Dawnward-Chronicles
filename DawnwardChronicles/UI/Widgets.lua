@@ -76,6 +76,11 @@ function Widgets.Tooltip(frame, title, text)
 		return
 	end
 	frame.tooltipHooked = true
+	-- A plain Frame receives OnEnter only when mouse input is on (buttons
+	-- already have it); hover-only areas need it for their tooltip.
+	if frame.EnableMouse and frame.GetObjectType and frame:GetObjectType() == "Frame" then
+		frame:EnableMouse(true)
+	end
 	hook(frame, "OnEnter", function(self) showTooltip(self, self.tooltipTitle, self.tooltipText) end)
 	hook(frame, "OnLeave", function() GameTooltip:Hide() end)
 end

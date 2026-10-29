@@ -207,6 +207,23 @@ return function(t, expect)
 			expect.equal(#ns.Reactions.List(char, clock.now, ns.NarrativeClock.Read(char, ctx)), 0)
 			expect.equal(ns.GameEvents.Find(char, "quest:1").status, "recorded", "the event itself stays")
 		end)
+
+		t:it("changing the story pace never removes a moment already waiting", function()
+			local ns, char, ctx, clock = setup()
+			local record = ns.GameEvents.Record(char, "quest", { questId = 2, title = "Q", zone = "Z", level = 10 },
+				clock.now)
+			assert(ns.Reactions.Consider(char, record, clock.now, ns.NarrativeClock.Read(char, ctx)))
+			-- Ten hours of play at the standard pace: well inside its 7-day (14 h) wait.
+			play(ns, char, ctx, clock, 10 * 3600)
+			char.story.prefs.pace = "brisk" -- a 1 h day would make the wait 7 h
+			expect.equal(#ns.Reactions.List(char, clock.now, ns.NarrativeClock.Read(char, ctx)), 1,
+				"its deadline was set when it was created")
+			char.story.prefs.pace = "slow"
+			expect.equal(#ns.Reactions.List(char, clock.now, ns.NarrativeClock.Read(char, ctx)), 1)
+			play(ns, char, ctx, clock, 5 * 3600)
+			expect.equal(#ns.Reactions.List(char, clock.now, ns.NarrativeClock.Read(char, ctx)), 0,
+				"it still expires on its own deadline")
+		end)
 	end)
 
 	t:describe("narrative clock: upgrading saved data", function()

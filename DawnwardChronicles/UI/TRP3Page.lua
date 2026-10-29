@@ -455,7 +455,8 @@ function TRP3Page.Build(parent, width, height)
 		local text = id and ("Restore your Total RP 3 section from Dawnward's backup #" .. id .. "?")
 			or TRP3Page.ROLLBACK_NEWEST
 		Widgets.Confirm(text .. "\n\nThis also undoes any other edits made to that section since then. The current "
-			.. "state is backed up first, and automatic sync for it is switched off.", "Roll back", function()
+			.. "state is backed up first, and automatic sync for it is switched off.\n\n"
+			.. ns.TRP3Commands.ROLLBACK_PRIVACY, "Roll back", function()
 			act(function()
 				local _, message = ns.TRP3Sync.Rollback(deps(), id)
 				return message
