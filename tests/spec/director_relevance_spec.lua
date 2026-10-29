@@ -99,7 +99,7 @@ return function(t, expect)
 
 	t:describe("Story Director: eligibility and cooldowns", function()
 		local function consider(ns, char, r, now)
-			return ns.Reactions.Consider(char, r, now)
+			return ns.Reactions.Consider(char, r, now, now)
 		end
 
 		t:it("an ordinary place is logged quietly; a weighted one asks only when its roll allows", function()

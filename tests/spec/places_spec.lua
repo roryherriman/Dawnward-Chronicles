@@ -42,8 +42,13 @@ return function(t, expect)
 	local STONEFIELD = { "Elwynn Forest", "The Stonefield Farm", 1429, 63 }
 	local LAKESHIRE = { "Redridge Mountains", "Lakeshire", 1433, 69 }
 
+	-- These specs model a character that plays the whole time between two
+	-- observations: the narrative clock (seconds of play) keeps pace with
+	-- the real clock. Offline time is tested in narrative_clock_spec.
 	local function observe(ns, ctx, clock, at, place, extra)
 		clock.now = at
+		local char = ctx.store.real.characters[KEY]
+		if char.story.clock.played < at then char.story.clock.played = at end
 		return ns.Actions.ObserveLocation(ctx, where(place[1], place[2], place[3], place[4], extra))
 	end
 
@@ -285,19 +290,20 @@ return function(t, expect)
 
 		t:it("coming back to an ordinary settlement is recorded quietly, at most weekly", function()
 			local ns, char, ctx, clock = visited()
-			local made = observe(ns, ctx, clock, 9000 + 3 * DAY, GOLDSHIRE)
+			local ND = ns.NarrativeClock.DayLength(char) -- a narrative day of play
+			local made = observe(ns, ctx, clock, 9000 + 2 * ND, GOLDSHIRE)
 			expect.equal(#made, 1)
 			expect.equal(made[1].record.meta.visit, "return")
 			expect.equal(made[1].record.significance, 1)
 			expect.equal(made[1].outcome, "logged quietly", "no tie to the character's story: no question")
 			expect.equal(#char.story.reactions, 0)
-			-- Away two more days, but within the week: no second return moment.
-			observe(ns, ctx, clock, 9000 + 3 * DAY + 600, STONEFIELD)
-			expect.equal(#observe(ns, ctx, clock, 9000 + 6 * DAY, GOLDSHIRE), 0)
+			-- Away more narrative days, but within the narrative week: no second return moment.
+			observe(ns, ctx, clock, 9000 + 2 * ND + 600, STONEFIELD)
+			expect.equal(#observe(ns, ctx, clock, 9000 + 5 * ND, GOLDSHIRE), 0)
 			-- Farmland returns are never moments by themselves.
-			expect.equal(#observe(ns, ctx, clock, 9000 + 9 * DAY, STONEFIELD), 0)
-			-- A week later, after a real absence: again.
-			expect.equal(observe(ns, ctx, clock, 9000 + 12 * DAY, GOLDSHIRE)[1].record.meta.visit, "return")
+			expect.equal(#observe(ns, ctx, clock, 9000 + 7 * ND, STONEFIELD), 0)
+			-- A narrative week after the last return, after a real absence: again.
+			expect.equal(observe(ns, ctx, clock, 9000 + 10 * ND, GOLDSHIRE)[1].record.meta.visit, "return")
 		end)
 
 		t:it("a place the player marked as meaningful is asked about on return", function()
@@ -350,7 +356,7 @@ return function(t, expect)
 			expect.equal(#char.story.reactions, 1)
 			local quest = assert(ns.GameEvents.Record(char, "quest", { questId = 60, title = "Kobold Candles",
 				zone = "Elwynn Forest", subzone = "Goldshire", level = 3 }, 5040))
-			local reaction, outcome = ns.Reactions.Consider(char, quest, 5040)
+			local reaction, outcome = ns.Reactions.Consider(char, quest, 5040, 5040)
 			expect.equal(outcome, "queued")
 			expect.equal(#char.story.reactions, 1, "the task, not the town")
 			expect.equal(char.story.reactions[1], reaction)
@@ -479,7 +485,7 @@ return function(t, expect)
 			char.story.prefs.approval = approval or "ask"
 			local record = assert(ns.GameEvents.Record(char, "quest", { questId = 7, title = "A Task", zone = "Elwynn Forest",
 				level = 2 }, 10))
-			local reaction = assert(ns.Reactions.Consider(char, record, 10))
+			local reaction = assert(ns.Reactions.Consider(char, record, 10, 10))
 			local result = answer(ns, char, reaction, "resolve", 20)
 			return ns, char, result
 		end

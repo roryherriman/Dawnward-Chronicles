@@ -150,7 +150,9 @@ local FrameMT = {
 --- opts: { interface = number, project = number, savedVariables = table, extra = table }
 function Mock.new(opts)
 	opts = opts or {}
+	-- clock: what time() returns (real dates); mono: what GetTime() returns.
 	local mock = { eventFrames = {}, framesByName = {}, chat = {}, clock = 1700000000, popups = {}, timers = {},
+		tickers = {}, mono = 1000,
 		zone = "Elwynn Forest", subzone = "Goldshire" }
 
 	--- Accepts the most recent confirmation dialog, like clicking its first button.
@@ -191,7 +193,15 @@ function Mock.new(opts)
 		IsShiftKeyDown = function() return mock.shift == true end,
 		C_Timer = {
 			After = function(seconds, fn) mock.timers[#mock.timers + 1] = { seconds = seconds, fn = fn } end,
+			NewTicker = function(seconds, fn)
+				local ticker = { seconds = seconds, fn = fn }
+				mock.tickers[#mock.tickers + 1] = ticker
+				return ticker
+			end,
 		},
+		-- GetTime: seconds since the computer started (mock.mono, moved by mock.Play).
+		GetTime = function() return mock.mono end,
+		UnitIsAFK = function() return mock.afk == true end,
 		GameFontNormalLarge = {},
 		GameFontHighlight = {},
 		GameTooltip = mock.newFrame("GameTooltip", "GameTooltip"),
@@ -236,7 +246,7 @@ function Mock.new(opts)
 		C_AddOns = {
 			GetAddOnMetadata = function(name, field)
 				if name == "DawnwardChronicles" and field == "Version" then
-					return opts.version or "0.6.0-dev"
+					return opts.version or "0.7.0-dev"
 				end
 				return nil
 			end,
@@ -250,6 +260,19 @@ function Mock.new(opts)
 		env[k] = v
 	end
 	mock.env = env
+
+	--- Plays for this many seconds: GetTime moves on and the minute tickers
+	-- run as they would (at least once). Real time (time()) is not touched.
+	function mock.Play(seconds)
+		local step = 60
+		local left = seconds
+		while left > 0 do
+			local d = math.min(step, left)
+			mock.mono = mock.mono + d
+			left = left - d
+			for _, ticker in ipairs(mock.tickers) do ticker.fn() end
+		end
+	end
 
 	--- Runs the timers queued so far (not ones they queue in turn).
 	function mock.RunTimers()

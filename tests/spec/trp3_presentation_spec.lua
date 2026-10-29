@@ -22,10 +22,10 @@ return function(t, expect)
 	-- Runs one quest through the story loop and returns the draft entry.
 	local function storyEntry(w, title)
 		local ns, char = w.ns, w.char
-		char.story.pacing.lastByCategory = {}
+		char.story.pacing.playByCategory = {}
 		local record = ns.GameEvents.Record(char, "quest", { questId = #char.story.events + 1, title = title,
 			zone = "Ashenvale", level = 25 }, 10)
-		local reaction = ns.Reactions.Consider(char, record, 10)
+		local reaction = ns.Reactions.Consider(char, record, 10, 10)
 		return ns.Decisions.Decide(char, reaction.id, { optionId = "nothing" }, 11).entry
 	end
 

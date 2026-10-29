@@ -70,7 +70,7 @@ return function(t, expect)
 			turnIn(mock, 11, "One")
 			mock.zone = "Duskwood"
 			mock.Slash("story set frequency frequent")
-			env.DawnwardChroniclesDB.characters[CHAR].story.pacing.lastByCategory = {}
+			env.DawnwardChroniclesDB.characters[CHAR].story.pacing.playByCategory = {}
 			turnIn(mock, 12, "Two")
 			ns.MainWindow.Refresh()
 			expect.truthy(section.position:GetText():find("of 2", 1, true))

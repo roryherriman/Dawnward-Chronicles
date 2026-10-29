@@ -13,12 +13,12 @@ return function(t, expect)
 
 	-- One quest through the loop; returns the decision result.
 	local function answer(ns, char, fx, id, optionId, overrides, now)
-		char.story.pacing.lastByCategory = {}
+		char.story.pacing.playByCategory = {}
 		char.story.pacing.recentTemplates = {}
 		local data = Fixtures.Context(fx, overrides)
 		data.questId, data.title = id, data.title or ("Quest " .. id)
 		local record = assert(ns.GameEvents.Record(char, "quest", data, now or id))
-		local reaction = assert(ns.Reactions.Consider(char, record, now or id))
+		local reaction = assert(ns.Reactions.Consider(char, record, now or id, now or id))
 		return assert(ns.Decisions.Decide(char, reaction.id, optionId, now or id))
 	end
 
@@ -165,7 +165,7 @@ return function(t, expect)
 					ns.Arcs.Add(char, { title = "The long road home" }, "player", 1)
 				end
 				local record = ns.GameEvents.Record(char, "quest", Fixtures.Context(fx, { questId = 1, title = "Same" }), 2)
-				views[i] = ns.Reactions.Present(char, ns.Reactions.Consider(char, record, 2), 2)
+				views[i] = ns.Reactions.Present(char, ns.Reactions.Consider(char, record, 2, 2), 2)
 			end
 			expect.equal(views[1].question, views[2].question, "the universal question is the same")
 			expect.equal(#views[2].options, #views[1].options + 2)
@@ -179,7 +179,7 @@ return function(t, expect)
 			local proposed = ns.Arcs.Add(char, { title = "Suggested arc" }, "suggested", 1)
 			local goal = ns.Goals.Add(char, { title = "Temporary goal" }, 1)
 			local record = ns.GameEvents.Record(char, "quest", Fixtures.Context(fx, { questId = 1, title = "Q" }), 2)
-			local reaction = ns.Reactions.Consider(char, record, 2)
+			local reaction = ns.Reactions.Consider(char, record, 2, 2)
 			local view = ns.Reactions.Present(char, reaction, 2)
 			for _, o in ipairs(view.options) do
 				expect.falsy(o.arcId == proposed.id, "a proposed arc has no influence")
@@ -204,7 +204,7 @@ return function(t, expect)
 			ns.Memories.Add(char, { title = "The burning farm", zone = "Westfall", importance = 3 }, "player", 1)
 			local record = ns.GameEvents.Record(char, "quest", Fixtures.Context(fx, { questId = 1, title = "Q",
 				questLevel = 23 }), 2)
-			local view = ns.Reactions.Present(char, ns.Reactions.Consider(char, record, 2), 2)
+			local view = ns.Reactions.Present(char, ns.Reactions.Consider(char, record, 2, 2), 2)
 			expect.equal(view.recall, "Remembering: The burning farm")
 			expect.truthy(view.why[1]:find("level 23", 1, true))
 		end)

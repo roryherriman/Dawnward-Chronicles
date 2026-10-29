@@ -32,8 +32,12 @@ local Reactions = {}
 ns.Reactions = Reactions
 
 -- Seconds between reactions of one category, and between two notices.
+-- Story pacing runs on the narrative clock (seconds of play, never offline
+-- time; Core/NarrativeClock.lua): cooldowns in seconds of play, expiry in
+-- narrative days. Notice spacing and the short location window below stay
+-- in real time: they are about not interrupting a play session.
 Reactions.COOLDOWN = { rare = 7200, normal = 2700, frequent = 900 }
-Reactions.EXPIRY = 7 * 24 * 3600
+Reactions.EXPIRY_DAYS = 7
 Reactions.FREQUENCIES = { "off", "rare", "normal", "frequent" }
 Reactions.LOCATION = { zone = true, place = true }
 Reactions.LOCATION_WINDOW = 120
@@ -106,12 +110,20 @@ function Reactions.ChooseTemplate(char, record)
 	return candidates[1]
 end
 
---- Removes reactions older than the expiry; their events stay recorded.
-function Reactions.Expire(char, now)
+--- Removes reactions waiting longer than EXPIRY_DAYS of play; their events
+-- stay recorded. play is the narrative clock (default: the saved total); the
+-- second argument (the real date) is kept for callers but not used. A
+-- reaction from before the clock existed starts its wait now.
+function Reactions.Expire(char, _, play)
+	play = play or ns.NarrativeClock.Peek(char)
+	local expiry = Reactions.EXPIRY_DAYS * ns.NarrativeClock.DayLength(char)
 	local list = char.story.reactions
 	local i = 1
 	while i <= #list do
-		if now and now - list[i].createdAt > Reactions.EXPIRY then
+		if not list[i].createdPlay or list[i].createdPlay > play then
+			list[i].createdPlay = play
+			i = i + 1
+		elseif play - list[i].createdPlay > expiry then
 			setEventStatus(char, list[i].eventKeys, "recorded")
 			table.remove(list, i)
 		else
@@ -144,7 +156,7 @@ local function recentLocation(char, record, now)
 end
 
 local function lastLocation(pacing)
-	local a, b = pacing.lastByCategory.zone, pacing.lastByCategory.place
+	local a, b = pacing.playByCategory.zone, pacing.playByCategory.place
 	if a and b then return math.max(a, b) end
 	return a or b
 end
@@ -182,10 +194,12 @@ end
 --- Considers a freshly recorded event. Returns reaction, outcome where
 -- outcome is "queued", "coalesced", or why it stays a plain record
 -- ("prompts off", "below threshold", "cooldown", "queue full", "no template").
-function Reactions.Consider(char, record, now)
+-- now is the real date; play is the narrative clock (default: the saved total).
+function Reactions.Consider(char, record, now, play)
 	local story = char.story
 	local prefs, pacing = story.prefs, story.pacing
-	Reactions.Expire(char, now)
+	play = play or ns.NarrativeClock.Peek(char)
+	Reactions.Expire(char, now, play)
 	local function stay(why)
 		record.status = "recorded"
 		return nil, why
@@ -237,9 +251,9 @@ function Reactions.Consider(char, record, now)
 			end
 		end
 	end
-	local last = location and lastLocation(pacing) or pacing.lastByCategory[record.category]
+	local last = location and lastLocation(pacing) or pacing.playByCategory[record.category]
 	local cooldown = Reactions.COOLDOWN[prefs.frequency]
-	if last and record.significance < 3 and not urgent and now - last < cooldown then
+	if last and record.significance < 3 and not urgent and last <= play and play - last < cooldown then
 		return stay("cooldown")
 	end
 	if not makeRoom(char, record.significance) then
@@ -251,7 +265,8 @@ function Reactions.Consider(char, record, now)
 	end
 	local reaction = {
 		id = newId(story), category = record.category, eventKeys = { record.key }, templateId = template.id,
-		significance = record.significance, status = "pending", createdAt = now or 0, zone = record.zone,
+		significance = record.significance, status = "pending", createdAt = now or 0, createdPlay = play,
+		zone = record.zone,
 	}
 	if record.category == "quest" then
 		questOverArrival(char, record, now)
@@ -259,8 +274,10 @@ function Reactions.Consider(char, record, now)
 	story.reactions[#story.reactions + 1] = reaction
 	if location then
 		pacing.lastByCategory.zone, pacing.lastByCategory.place = now or 0, now or 0
+		pacing.playByCategory.zone, pacing.playByCategory.place = play, play
 	else
 		pacing.lastByCategory[record.category] = now or 0
+		pacing.playByCategory[record.category] = play
 	end
 	remember(pacing, template.id)
 	record.status = "queued"
@@ -268,8 +285,8 @@ function Reactions.Consider(char, record, now)
 end
 
 --- Waiting reactions: pending before postponed, then most significant, then oldest.
-function Reactions.List(char, now)
-	Reactions.Expire(char, now)
+function Reactions.List(char, now, play)
+	Reactions.Expire(char, now, play)
 	local out = {}
 	for _, r in ipairs(char.story.reactions) do
 		out[#out + 1] = r

@@ -6,7 +6,7 @@ local Boot = require("support.boot")
 
 return function(t, expect)
 	local KEY = "Kyssarra-Test"
-	local DAY = 24 * 3600
+	local DAY = 24 * 3600 -- a real day (long enough for any narrative return)
 
 	local GOLDSHIRE = { "Elwynn Forest", "Goldshire", 1429, 87 }
 	local NORTHSHIRE = { "Elwynn Forest", "Northshire Valley", 1429, 9 }
@@ -30,13 +30,17 @@ return function(t, expect)
 		char.fields.pronouns = { value = "she/her", visibility = "public" }
 		local clock = { now = 100, place = NORTHSHIRE }
 		local ctx = { store = { real = { characters = { [KEY] = char } }, realReadOnly = false }, characterKey = KEY,
-			now = function() return clock.now end, version = "0.6.0-dev",
+			now = function() return clock.now end, version = "0.7.0-dev",
 			location = function() return where(clock.place) end }
 		return ns, char, ctx, clock
 	end
 
+	-- The character plays the whole time between observations: the narrative
+	-- clock keeps pace with the real clock here (offline time: narrative_clock_spec).
 	local function observe(ns, ctx, clock, at, place)
 		clock.now, clock.place = at, place
+		local char = ctx.store.real.characters[KEY]
+		if char.story.clock.played < at then char.story.clock.played = at end
 		return ns.Actions.ObserveLocation(ctx, where(place))
 	end
 
@@ -59,7 +63,7 @@ return function(t, expect)
 	end
 
 	t:describe("returns to a meaningful place (M16)", function()
-		t:it("a same-session return to the Homeland records nothing: two days away are required", function()
+		t:it("a return after less than a narrative day of play away records nothing", function()
 			local ns, char, ctx, clock = m16()
 			local events = #char.story.events
 			local made = observe(ns, ctx, clock, 9000 + 1800, GOLDSHIRE)
@@ -68,24 +72,25 @@ return function(t, expect)
 			expect.equal(ctx.lastLocation.diag.why, "away")
 			expect.equal(ctx.lastLocation.diag.target, "Goldshire, Elwynn Forest")
 			local status = joined(ns.StoryDiagnostics.StatusLines(ctx))
-			expect.truthy(status:find("Return to Goldshire, Elwynn Forest: not recorded: last recorded here", 1, true),
-				status)
-			expect.truthy(status:find("a return counts only after 2 days away", 1, true), status)
+			expect.truthy(status:find("Return to Goldshire, Elwynn Forest: not recorded: away 1 h 36 min of play; "
+				.. "a return counts after 2 h of play away (23 min more)", 1, true), status)
 		end)
 
-		t:it("after two days away the Homeland return asks, even right after another place moment", function()
+		t:it("after a narrative day of play away the Homeland return asks, even right after another place moment",
+			function()
 			local ns, char, ctx, clock = m16()
+			local ND = ns.NarrativeClock.DayLength(char)
 			-- A new place moment just now starts the shared location cooldown.
-			char.story.pacing.lastByCategory.place = 3 * DAY - 60
-			local made = observe(ns, ctx, clock, 3 * DAY, GOLDSHIRE)
+			char.story.pacing.playByCategory.place = 9000 + ND - 60
+			local made = observe(ns, ctx, clock, 9000 + ND, GOLDSHIRE)
 			expect.equal(made[1].record.meta.visit, "return")
 			expect.equal(made[1].record.significance, 2)
 			expect.equal(made[1].outcome, "queued", "urgent: Homeland and marked skip the cooldown")
 			local view = assert(ns.Reactions.Present(char, made[1].reaction))
 			expect.truthy(view.question:find("returned to Goldshire", 1, true), view.question)
-			-- Another return within the week: none.
-			observe(ns, ctx, clock, 3 * DAY + 600, STORMWIND)
-			expect.equal(#observe(ns, ctx, clock, 6 * DAY, GOLDSHIRE), 0)
+			-- Another return within the narrative week: none.
+			observe(ns, ctx, clock, 9000 + ND + 600, STORMWIND)
+			expect.equal(#observe(ns, ctx, clock, 9000 + 4 * ND, GOLDSHIRE), 0)
 			expect.equal(ctx.lastLocation.diag.why, "weekly")
 		end)
 
@@ -144,8 +149,9 @@ return function(t, expect)
 				"Location cooldown:",
 				"Waiting moments: 0.",
 				"Last arrival this session: Goldshire, Elwynn Forest",
-				"Return to Goldshire, Elwynn Forest: not recorded: last recorded here",
-				"Return to Goldshire, Elwynn Forest, if it happened now: not eligible: last recorded here",
+				"Narrative clock: 2 h 40 min of play · narrative day 2 (pace Standard: a narrative day is 2 h of play).",
+				"Return to Goldshire, Elwynn Forest: not recorded: away 1 h 16 min of play",
+				"Return to Goldshire, Elwynn Forest, if it happened now: not eligible: away 0 s of play",
 			}) do
 				expect.truthy(status:find(want, 1, true), "missing: " .. want .. "\n" .. status)
 			end
@@ -161,10 +167,10 @@ return function(t, expect)
 		end)
 
 		t:it("shows the cooldown left after a place moment", function()
-			local ns, char, ctx, clock = m16()
-			char.story.pacing.lastByCategory.place = clock.now - 600
+			local ns, char, ctx = m16()
+			char.story.pacing.playByCategory.place = char.story.clock.played - 600
 			local status = joined(ns.StoryDiagnostics.StatusLines(ctx))
-			expect.truthy(status:find("Location cooldown: 35 min left of 45 min", 1, true), status)
+			expect.truthy(status:find("Location cooldown: 35 min of play left of 45 min", 1, true), status)
 		end)
 	end)
 
@@ -172,10 +178,11 @@ return function(t, expect)
 		t:it("runs a Homeland return on a copy: shows the question and changes nothing", function()
 			local ns, char, ctx, clock = m16()
 			clock.now = 9000 + 60
-			char.story.pacing.lastByCategory.place = clock.now - 30 -- a cooldown in force
+			char.story.pacing.playByCategory.place = char.story.clock.played - 30 -- a cooldown in force
 			local before = ns.Util.DeepCopy(char)
 			local text = joined(ns.StoryDiagnostics.SimulateLines(ctx, "Goldshire"))
-			expect.truthy(text:find("Simulating a return to Goldshire, Elwynn Forest after 2 days", 1, true), text)
+			expect.truthy(text:find("Simulating a return to Goldshire, Elwynn Forest after 2 h 1 min of play away",
+				1, true), text)
 			expect.truthy(text:find("Result: a moment was queued.", 1, true), text)
 			expect.truthy(text:find("Question: Kyssarra has returned to Goldshire", 1, true), text)
 			expect.truthy(text:find("Nothing was saved", 1, true), text)
@@ -190,6 +197,20 @@ return function(t, expect)
 			local text = joined(ns.StoryDiagnostics.SimulateLines(ctx))
 			expect.truthy(text:find("Result: suppressed: the Director gave it no weight", 1, true), text)
 			expect.deepEqual(char, before)
+		end)
+
+		t:it("simulates playing on: a return qualifies only once enough play has passed", function()
+			local ns, char, ctx, clock = m16()
+			observe(ns, ctx, clock, 9000 + 60, GOLDSHIRE)
+			local before = ns.Util.DeepCopy(char)
+			local short = joined(ns.StoryDiagnostics.SimulateTimeLines(ctx, "90m Goldshire"))
+			expect.truthy(short:find("Simulating 1 h 30 min more play", 1, true), short)
+			expect.truthy(short:find("Result: no event: away 1 h 30 min of play", 1, true), short)
+			local long = joined(ns.StoryDiagnostics.SimulateTimeLines(ctx, "1d Goldshire"))
+			expect.truthy(long:find("After: Narrative clock:", 1, true), long)
+			expect.truthy(long:find("Result: a moment was queued.", 1, true), long)
+			expect.truthy(joined(ns.StoryDiagnostics.SimulateTimeLines(ctx, "soon")):find("Usage:", 1, true))
+			expect.deepEqual(char, before, "simulating time changes nothing")
 		end)
 
 		t:it("refuses a place never visited", function()

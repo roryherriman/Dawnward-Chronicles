@@ -16,7 +16,7 @@ return function(t, expect)
 			for i = 1, 2000 do
 				local data = Fixtures.Context(fx, { questId = i, title = "Q" .. i, zone = "Zone" .. (i % 400) })
 				local record = ns.GameEvents.Record(char, "quest", data, i * 1000)
-				if record then ns.Reactions.Consider(char, record, i * 1000) end
+				if record then ns.Reactions.Consider(char, record, i * 1000, i * 1000) end
 				local reaction = char.story.reactions[1]
 				if reaction and i % 3 == 0 then
 					ns.Decisions.Decide(char, reaction.id, { optionId = "nothing" }, i * 1000 + 1)

@@ -35,6 +35,9 @@ SettingsPanel.STORY_SETTINGS = {
 	{ key = "places", label = "Places", values = { "on", "fewer", "off" },
 		help = "Moments about places: beginnings, settlements, returns. Fewer: notable places only. "
 			.. "Off: places are still recorded, never asked about." },
+	{ key = "pace", label = "Story pace", values = { "standard", "brisk", "slow" },
+		help = "How much play makes a narrative day: Brisk 1 hour, Standard 2 hours, Slow 4 hours. Returns to a "
+			.. "place and story cooldowns count only time you play, never time offline." },
 	{ tracking = "quest", label = "Quests", values = { true, false },
 		help = "Record completed quests as story events." },
 }

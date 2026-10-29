@@ -429,7 +429,7 @@ Build: schema 5, unchanged. Everything below has passed mocked tests (L2) only. 
 | M13 | Places tab: **Mark** Goldshire; **Homeland** → confirm; **Memory** | "meaningful to you", then "homeland" appear. Character → Homeland reads Goldshire, with its visibility unchanged. The memory is saved with the place |
 | M14 | Character → Family: **Add**, Edit, the visibility button, then Remove (confirm). The same for History | Each works without chat commands; Remove asks first |
 | M15 | Visit a new farm, then a new town (for example in Westfall). Over several sessions, note which places ask | Farms and roads never ask. A new town asks only sometimes. `/dawnward story events` shows each visit as recorded |
-| M16 | `/dawnward set homeland <a town you have never visited>` (for example Lakeshire), then visit it for the first time | It asks, even shortly after another place moment; the notice waits for a calm moment. **Clarified in v0.6:** a place you have already visited (marked, or set as Homeland from the Places tab) asks only on a *return*, which needs 2 days away; going back the same session records nothing. Use `/dawnward dev story simulate <place>` (part P) to check a return without waiting |
+| M16 | `/dawnward set homeland <a town you have never visited>` (for example Lakeshire), then visit it for the first time | It asks, even shortly after another place moment; the notice waits for a calm moment. **Clarified in v0.6:** a place you have already visited (marked, or set as Homeland from the Places tab) asks only on a *return*. Since v0.7-dev that needs one narrative day of **play** away (2 hours at Standard pace), never real days; going back sooner records nothing. Use `/dawnward dev story simulate <place>` (part P) to check a return without waiting |
 | M17 | `/dawnward atlas` in Goldshire and in Lion's Pride Inn; `/dawnward atlas verify`; `/dawnward atlas export` | Goldshire: area 87, settlement, in-game evidence. Lion's Pride Inn: no verified area ID. Verify: count of matches. **Paste the export into #48** |
 | M18 | `/dawnward atlas scan 1 5000` | A copy window with named areas. **Paste it into #48** (it lets coverage grow from the client's own data) |
 
@@ -549,14 +549,32 @@ Automated: `tests/spec/story_diagnostics_spec.lua` (L1/L2). The rules being chec
 
 | # | Steps | Pass when |
 |---|---|---|
-| P1 | Repeat the v0.5 M16 report: visit Goldshire, Places → **Mark meaningful** and **Set as homeland**, go to Stormwind, come back to Goldshire. Then `/dawnward dev story status` | No prompt, and no new line in `story events` (expected). Status shows the location as "Goldshire, Elwynn Forest (map 1429, area 87): settlement" and "Homeland: yes. Marked meaningful: yes". It says the return was not recorded because it was last recorded there minutes ago and a return counts only after 2 days away. It also shows the Director weight (urgent) and the cooldown |
-| P2 | `/dawnward dev story simulate` in Goldshire | It says it is simulating a return after 2 days, with the event, weight and roll. The result is "a moment was queued", followed by the question ("… has returned to Goldshire …") and the answers. The last line says nothing was saved |
+| P1 | Repeat the v0.5 M16 report: visit Goldshire, Places → **Mark meaningful** and **Set as homeland**, go to Stormwind, come back to Goldshire. Then `/dawnward dev story status` | No prompt, and no new line in `story events` (expected). Status shows the location as "Goldshire, Elwynn Forest (map 1429, area 87): settlement" and "Homeland: yes. Marked meaningful: yes". It shows the narrative clock and day. It says the return was not recorded because you were away only minutes of play, and a return counts after 2 h of play away (with the play still needed). It also shows the Director weight (urgent) and the cooldown in play time |
+| P2 | `/dawnward dev story simulate` in Goldshire | It says it is simulating a return after about 2 h of play away, with the event, weight and roll. The result is "a moment was queued", followed by the question ("… has returned to Goldshire …") and the answers. The last line says nothing was saved |
 | P3 | After P2: `/dawnward story events`, Story tab, Journal, `/dawnward places`, then `dev story status` | Nothing changed: no new event, 0 waiting moments, no journal entry, the same visit count, and the same cooldown as before P2 |
 | P4 | `/dawnward dev story simulate The Stonefield Farm` (unmarked) | "Result: no event", saying returns count only for settlements and for places tied to your story |
 | P5 | `/dawnward dev story simulate Lakeshire` before ever visiting it | "Not simulated: no visited place called 'Lakeshire'" |
 | P6 | Enter a new zone, then `dev story status` | "Last arrival this session" names the new zone and says what was recorded and why it did or did not ask (for example "suppressed: the shared location cooldown") |
-| P7 | Two or more real days later, return to Goldshire | It asks, even shortly after another place moment, and `story events` lists "returned to Goldshire". Record the date |
+| P7 | Play elsewhere for at least 2 hours (Standard pace), then return to Goldshire | It asks, even shortly after another place moment, and `story events` lists "returned to Goldshire". Record how long you played |
 | P8 | On a release package (version without `-dev`): `/dawnward dev story status` | "Developer commands are only available in development builds." `help all` doesn't list them |
+
+#### Part Q: gameplay time (the narrative clock, v0.7-dev)
+
+Automated: `tests/spec/narrative_clock_spec.lua` (L1/L2). The model is in [ARCHITECTURE.md](ARCHITECTURE.md#gameplay-time-the-narrative-clock). Use `/dawnward dev story status` to read the clock.
+
+| # | Steps | Pass when |
+|---|---|---|
+| Q1 | Upgrade from v0.6, log in, `/dawnward dev story status` | "Narrative clock: … of play · narrative day 1". No error. Places, marks, Homeland and memories are all still there (Chronicle → Places, Memories) |
+| Q2 | Stand in a place you already had logged before the upgrade, then `dev story status` | The last arrival says it was logged before gameplay time was tracked, and that time away starts counting from this visit. **No** burst of return moments after the upgrade |
+| Q3 | Play for 10 minutes, then `dev story status` | The clock went up by about 10 minutes |
+| Q4 | Note the clock, type `/afk`, run `dev story status`, wait 5 minutes, clear AFK, run it again | While AFK it says "The clock is paused: you are AFK." Afterwards the clock has not gained the AFK minutes |
+| Q5 | Note the clock, `/reload`, then `dev story status` | The same value (plus seconds), not reset |
+| Q6 | Note the clock, log out for at least an hour, log back in, then `dev story status` | The clock did **not** jump by the hour offline |
+| Q7 | Log in on another character, then `dev story status` | Its own clock, not the first character's |
+| Q8 | Cross between two zones every few minutes for 20 minutes | No return moments and no "returned to" lines in `story events` |
+| Q9 | `/dawnward dev story simulate time 90m Goldshire`, then `… time 1d Goldshire` | 90 minutes: "no event", with the play still needed. 1 narrative day: a return, and for a marked place a moment is queued. Afterwards `dev story status` shows the clock unchanged |
+| Q10 | Settings → Story → **Story pace**: Brisk, then `dev story status`; set it back to Standard | The narrative day becomes 1 h of play, and returns need less play accordingly |
+| Q11 | Change the computer's date or time forward a day, `/reload`, then `dev story status`; set it back | The narrative clock is unaffected |
 
 **Report:**
 - Which steps passed, with your game version, UI scale and resolution.
