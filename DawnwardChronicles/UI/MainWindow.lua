@@ -163,7 +163,7 @@ end
 --- The heading over a section: the journal is titled with the character's
 -- name; the others with their own heading. Simulation is always flagged.
 function MainWindow.HeadingFor(def, char, simulation)
-	if not def or def.id == "journal" then
+	if not def or (def.id == "journal" and not def.heading) then
 		return MainWindow.TitleFor(char, simulation)
 	end
 	local heading = def.heading or def.label
