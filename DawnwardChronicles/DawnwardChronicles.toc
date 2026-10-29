@@ -80,6 +80,7 @@ UI\JournalView.lua
 UI\CharacterView.lua
 UI\StoryView.lua
 UI\ReactionCard.lua
+UI\ChroniclePlaces.lua
 UI\ChronicleView.lua
 UI\TRP3Page.lua
 UI\SettingsPanel.lua
