@@ -232,7 +232,8 @@ function Mock.new(opts)
 		StaticPopup_Show = function(name, textArg, _, data)
 			mock.popups[#mock.popups + 1] = { name = name, text = textArg, data = data }
 		end,
-		date = function(fmt, t) return "date(" .. tostring(fmt) .. "," .. tostring(t) .. ")" end,
+		-- UTC, so the output is the same on every machine.
+		date = function(fmt, t) return os.date("!" .. tostring(fmt):gsub("^!", ""), t) end,
 		GetRealZoneText = function() return mock.zone end,
 		GetSubZoneText = function() return mock.subzone end,
 		UnitName = function() return "Testchar" end,
