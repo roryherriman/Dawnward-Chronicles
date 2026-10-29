@@ -9,7 +9,7 @@
 
 **Total RP 3 tells the world who your character is.<br>Dawnward Chronicles helps you discover who they become.**
 
-[How it works](#how-it-works) · [Features](#features) · [Install](#installation) · [Getting started](#getting-started) · [Status](#development-status) · [Docs](#documentation)
+[Features](#features) · [Previews](#visual-previews-ui-concepts) · [How it works](#how-it-works) · [Install](#installation) · [Getting started](#getting-started) · [Status](#development-status) · [Docs](#documentation)
 
 [![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange)](#development-status)
 [![Client: Classic Era 1.15.9](https://img.shields.io/badge/client-Classic%20Era%201.15.9-blue)](docs/COMPATIBILITY.md)
@@ -20,54 +20,114 @@
 
 ---
 
-Dawnward Chronicles is a standalone roleplaying companion for World of Warcraft Classic Era. It keeps a living journal of your character: who they are, where they have been, what they remember and what they want. A quiet Story Director notices what your character actually does in the game and, now and then, asks how it affected them. Your answers, never the addon, shape your character over time.
+Dawnward Chronicles is a roleplaying companion for World of Warcraft Classic Era. It keeps a living journal of your character: who they are, where they have been, what they remember and what they want. A quiet Story Director notices what your character actually does in the game and, now and then, asks how it affected them. Your answers, never the addon, shape your character over time.
 
-**The problem it solves:** a roleplay profile describes a character at one moment, but characters change through what they live through. Dawnward connects your real adventures (quests, places, levels, close calls) to your character's story, and keeps that story private until you choose to share it. [Total RP 3](https://github.com/Total-RP/Total-RP-3) remains the public face of your character; Dawnward is where they grow.
+**The problem it solves:** a roleplay profile describes a character at one moment, but characters change through what they live through. Dawnward connects your real adventures (quests, places, levels, close calls) to your character's story, and keeps that story private until you choose to share it.
 
 It works for **every class, race and faction**. Class never decides personality, and nothing assumes your character is heroic, religious or loyal to anyone.
 
-> **Status: pre-alpha, no public release.** See [Development status](#development-status) for what is designed, what is implemented, what is still in development and what has been verified in game.
+> **Status: pre-alpha, no public release.** The v0.7 interface below is implemented and passes the automated suite, but has **not yet been checked in game**. See [Development status](#development-status).
 
-![Journal dashboard (design concept)](docs/design/mockups/journal-dashboard.png)
+![Journal dashboard (UI concept)](docs/design/mockups/journal-dashboard.png)
 
-<sub>**Design concept, not an in-game screenshot.** This is the approved visual direction for the redesigned interface, and the in-game interface is being built towards it in stages. The character, entries and places shown are invented sample data for the mockup, not game lore.</sub>
+<sub>**UI concept, not an in-game screenshot.** This is the approved design the in-game interface is built to. The character, entries and places shown are invented sample data for the mockup, not game lore and not anyone's real character. Real screenshots will be added once the interface has been checked in game.</sub>
+
+## Philosophy
+
+**Total RP 3 tells the world who your character is. Dawnward Chronicles helps you discover who they become.**
+
+- **The player is the author.** Nothing changes your character without your approval. You can always postpone, dismiss, edit, reject or reverse.
+- **Verified, not invented.** Events record only what the game reports. Dawnward never invents quest plots, places, people, gear or outcomes.
+- **Private by default.** Everything you add starts private. Only what you approve and make public can ever leave Dawnward.
+- **Time you play, not time away.** Story pacing counts gameplay only. Nothing in your history changes just because time passes.
 
 ## Features
 
-- **Living character journal:** a journal of what your character did and felt. Level-ups and other verified events are recorded automatically. Story drafts come from your answers, and you can write your own entries, edit them, approve them and mark defining moments.
-- **Character profiles:** name, title, pronouns, homeland, faith, appearance, summary, motivation and more. Every field is **Private**, **Public** or **Secret**, and only what you make public can ever leave Dawnward.
-- **Story Director:** optional, paced questions at calm moments, never in combat. You can answer, write your own words, keep a moment for later or dismiss it. Pacing follows **gameplay time** (time you actually play), so the story moves with your play and not with the calendar.
-- **Memories and meaningful moments:** memories linked to what happened and where, suggested memories you accept or reject, and defining moments.
-- **Goals and personal development:** six personality axes that change only when you approve, one step at a time and always reversible. Also long-term arcs, and personal goals with verified progress such as level targets and reputation.
-- **Places and travel history:** where your character has been, with starting areas, settlements and capitals recognised from the game's own data. Mark the places that matter or set your Homeland; returning after real time away (in play) can become a moment.
-- **Family and relationships:** family members, people your character knows (NPCs and other players' characters), with private feelings, and a public persona kept apart from private convictions.
-- **First-time setup:** a six-step guided setup for a new character (Welcome, Character, Story, Privacy, Appearance, Finish), which you can resume, skip or rerun at any time.
-- **Optional Total RP 3 integration:** Dawnward works fully without Total RP 3. With it, an experimental, opt-in sync keeps a Dawnward-owned part of your TRP3 profile up to date from **public** information only. It previews every change, backs up before writing, can roll back, and never overwrites what you wrote yourself.
+### Your own character profile
+Dawnward Chronicles includes its own comprehensive character profile and storytelling tools, but it is not intended to replace Total RP 3's established public social roleplaying profile system. Dawnward helps players develop their characters through gameplay, while optional TRP3 integration lets them share approved public information with the broader roleplaying community.
 
-## Visual previews (design concepts)
+- **Profile:** name, title, pronouns, race, class, age, homeland, faith, occupation, appearance, summary and motivation, grouped into Identity, Background and Summary panels.
+- **Every field is Public, Private or Secret.** A public preview shows exactly what others could ever see.
+- **Personality:** six axes (Courage, Compassion, Discipline, Faith, Honour, Sociability) that change one step at a time, only when you approve.
+- **Family and relationships:** family members, history, and people your character knows (NPCs and other players' characters), with private feelings.
 
-These are the approved designs that the in-game interface is being built towards. **They are concepts, not screenshots.** Real in-game screenshots will replace them once the interface has been implemented and checked in game.
+### Character Showcase
+Your character's **live 3D model**, in the gear you are actually wearing, rendered by the game itself.
+- Turn it with buttons or by dragging, and zoom with the mouse wheel.
+- Prefer the portrait? Choose it, and the choice is remembered for that character. The portrait is also used automatically if the model cannot load.
+- **What the game says** (level, race, class, guild, realm) is read live and kept apart from **what you wrote** (name, title, pronouns, summary).
+- Nothing is rendered while the journal is closed.
 
-| Character | Story |
+### Living journal
+- Level-ups, quests and other verified events are recorded with time, place and level.
+- Story drafts come from your answers. You can also write your own entries, then edit, approve and mark defining moments.
+- Search and filters (All, Defining, Story, Events).
+- The dashboard also shows the next moment waiting for you, your active goals and your recent places.
+
+### Story Director
+Optional, paced questions at calm moments, never in combat.
+- Each moment shows **what happened**, **why it matters** to your character (homeland, a marked place, a memory, an arc, a goal, a person) and the **memories it recalls**.
+- **Answering:** choose a response, write your own, keep it for **Later**, say **Not now**, or **Dismiss** it.
+- **Personality changes:** proposed changes show why they were suggested. Approve, reject, or reverse them later.
+
+### Gameplay-time progression
+Story pacing follows a per-character **narrative clock** that only advances while you play. Logging out, being AFK and changing the computer's clock don't count.
+- A **narrative day** is 2 hours of play by default. Choose Brisk (1 hour) or Slow (4 hours) in Settings → Story.
+- Returning to a place that matters can become a moment after **one narrative day away**, at most once per place every **seven narrative days**. Crossing a zone border back and forth earns nothing.
+
+### Memories, goals and arcs
+- Memories linked to what happened and where. Suggested memories wait for you to accept or reject them.
+- Long-term arcs with turning points, suggested when your answers share a theme.
+- Personal goals with milestones and verified progress, such as a level target or a reputation standing.
+- Stances (public persona vs private conviction) and a continuity review that flags contradictions for you to settle.
+
+### Places and travel history
+- Starting areas, settlements and capitals are recognised from the game's own map data.
+- Mark the places that matter, set your Homeland, and write memories tied to a place.
+- Places has a list-and-detail view with visits, your last visit, and when a return could next become a moment.
+
+### First-time setup
+A six-step guided setup for a new character: Welcome, Character, Story, Privacy, Appearance, Finish.
+- It opens by itself only for a genuinely new character.
+- Your progress is kept if you close it, and you can rerun it any time from Settings.
+- It never publishes anything to Total RP 3.
+
+### Optional Total RP 3 integration
+Dawnward works fully without [Total RP 3](https://github.com/Total-RP/Total-RP-3). With it, a **Total RP 3 page** (Settings → Total RP 3, or the status line in the side rail) shows:
+- whether TRP3 is installed, its version, and your linked profile;
+- the sync status for each feature;
+- exactly what would be shared (public only) and the proposed changes;
+- conflicts, backups and rollback;
+- which TRP3 fields Dawnward never writes.
+
+Sync is **experimental and off by default**:
+- **Approval:** opt-in per character and per TRP3 profile, and it writes only after you approve.
+- **What it writes:** only into a section Dawnward owns.
+- **Safety:** a backup before every write, and a read-back that undoes the write at once if anything differs.
+- **Conflicts:** it stops when you have edited something in TRP3, and never overwrites what you wrote yourself.
+
+### Privacy guarantees
+- **Private and Secret never leave Dawnward.** They never reach Total RP 3 or a share export.
+- **Secret** is left out of your personal backups too, unless you ask for it.
+- **Simulation mode** keeps test data apart from your real character.
+- **Each character's story is its own.** Story moments start only for a character that has a Dawnward profile.
+- **Dawnward never speaks for you.** It never sends chat, emotes or whispers.
+
+## Visual previews (UI concepts)
+
+These are the approved designs the in-game interface is built to. **They are concepts, not screenshots**, and the characters and stories in them are sample data. Approved in-game screenshots will be added alongside or instead of them once the interface has been checked in game.
+
+| Character profile | Character Showcase |
 |---|---|
-| ![Character (concept)](docs/design/mockups/character-profile.png) | ![Story Director (concept)](docs/design/mockups/story-director.png) |
-| **Chronicle** | **First-time setup** |
-| ![Chronicle: Memories (concept)](docs/design/mockups/chronicle-memories.png) | ![First-time setup (concept)](docs/design/mockups/first-time-setup.png) |
+| ![Character profile (concept)](docs/design/mockups/character-profile.png) | ![Character Showcase (concept)](docs/design/mockups/proposed-character-showcase.png) |
+| **Story Director** | **Total RP 3 sync** |
+| ![Story Director (concept)](docs/design/mockups/story-director.png) | ![Total RP 3 sync page (concept)](docs/design/mockups/proposed-trp3-sync.png) |
+| **Chronicle: Memories** | **Chronicle: Places** |
+| ![Chronicle Memories (concept)](docs/design/mockups/chronicle-memories.png) | ![Chronicle Places (concept)](docs/design/mockups/chronicle-places.png) |
+| **First-time setup** | **Design system** |
+| ![First-time setup (concept)](docs/design/mockups/first-time-setup.png) | ![Design system (concept)](docs/design/mockups/design-system.png) |
 
-The complete gallery, with Places, the design system, two proposals still awaiting approval (Total RP 3 sync and the Character Showcase) and the sources the images were rendered from, is in [`docs/design/mockups`](docs/design/mockups/README.md).
-
-## Built to complement Total RP 3, not replace it
-
-We believe [Total RP 3](https://github.com/Total-RP/Total-RP-3) is an essential part of the WoW roleplaying community. Dawnward is not here to compete with it: TRP3 presents your character to the world, and Dawnward helps you discover who that character becomes.
-
-- **TRP3 remains your public profile.** Dawnward focuses on development, memories and storytelling. It is not a profile system.
-- **Fully usable without TRP3.** Nothing in Dawnward requires it.
-- **Sync is optional and yours to control.** It is opt-in per character and per TRP3 profile, and only writes after you approve a preview.
-  - **What it writes:** only public information, and only into a section Dawnward owns.
-  - **Before and after each write:** it backs up first, reads the result back, and undoes the write at once if anything differs.
-  - **Conflicts:** it stops and asks when you have edited something in TRP3.
-  - **Never shared:** private and secret information.
-- **An independent companion project,** not an official TRP3 extension, and not affiliated with or endorsed by the Total RP 3 authors, to whom we are grateful.
+The full gallery, with the sources the images were rendered from, is in [`docs/design/mockups`](docs/design/mockups/README.md). The design specification is [`docs/design/UI_DESIGN_V07.md`](docs/design/UI_DESIGN_V07.md).
 
 ## How it works
 
@@ -92,32 +152,98 @@ Two players completing identical content will develop different characters, beca
 
 ## Development status
 
-Four separate things, never mixed up:
+| Marker | Meaning |
+|---|---|
+| ✅ **Verified in game** | Passed a recorded in-game check on Classic Era 1.15.9, by the developer |
+| 🧪 **Implemented, automated tests** | Code exists and passes the automated suite; not yet checked in game |
+| 🚧 **In development** | Being built, or built in part |
+| 🗺️ **Planned** | An open issue; not started |
+| ⛔ **Blocked** | Waiting on something outside this project, or on a release gate |
 
-| | What it covers | Where |
+Approved designs are listed separately: an approved mockup is a design, not a feature. Automated tests are not in-game verification.
+
+### Feature roadmap
+
+| Feature | What it does | Status |
 |---|---|---|
-| 🎨 **Approved designs** | The visual direction for the next interface: journal, character, story, chronicle memories and places, first-time setup, design system (approved 2026-10-29) | [`docs/design/mockups`](docs/design/mockups/README.md) |
-| 🧪 **Implemented, automated tests only** | Everything in the table below marked 🧪: code exists and passes the automated suite, but is not yet checked in game | `python tools/check.py` |
-| 🚧 **In development** | Rebuilding each section to match the approved designs (the new window shell, character rail and Character Showcase are in place; section layouts are next), the Total RP 3 sync screen, the redesigned setup wizard | [`docs/design/UI_DESIGN_V07.md`](docs/design/UI_DESIGN_V07.md) |
-| ✅ **Verified in game** | Only what has passed a recorded in-game check on Classic Era | [`docs/TESTING.md`](docs/TESTING.md) |
+| **Journal window** | `/dawnward` opens the journal: Journal, Character, Story and Chronicle sections | ✅ v0.2 (window); v0.7 layout 🧪 |
+| **Character profile** | Name, title, race, class, faith, motivation and more; family and history; every item public, private or secret | ✅ v0.2; v0.7 grouped profile and public preview 🧪 |
+| **Automatic milestones** | Level-ups recorded with time and place | ✅ v0.2 |
+| **Backups and sharing** | Personal backups (private data, secrets on request) and share exports (public only), with an import undo | ✅ v0.2 |
+| **Simulation mode** | Experiment on separate test data; real data is untouched | ✅ v0.2 |
+| **Character canon** | Facts and six personality axes (Faith means any belief or worldview, not one religion) | 🧪 v0.3 |
+| **Gameplay events** | Quest turn-ins, deaths and level-ups as verified records, never recorded twice | 🧪 v0.4 ([#11](https://github.com/roryherriman/Dawnward-Chronicles/issues/11)) |
+| **Story moments** | Universal questions with answers in different directions, your own words, Later / Not now / Dismiss; never in combat | 🧪 v0.4; v0.7 Story Director screen 🧪 ([#14](https://github.com/roryherriman/Dawnward-Chronicles/issues/14), [#25](https://github.com/roryherriman/Dawnward-Chronicles/issues/25)) |
+| **Personality evolution** | Answers propose one-step changes that you approve, reject or reverse | ✅ v0.4 (approved changes, owner-tested 2026-10-26) |
+| **Living journal** | Story drafts, your own entries, approval, defining moments, search | ✅ v0.4 (journal and memories, owner-tested); v0.7 dashboard 🧪 |
+| **TRP3 Chronicle sync** | Dawnward-owned About section and traits from public information only; backup, rollback, conflict and editor protection | 🚧 experimental; opt-in sync, editor protection, backup and rollback ✅ owner-tested on TRP3 3.4.1 ([#4](https://github.com/roryherriman/Dawnward-Chronicles/issues/4), [#5](https://github.com/roryherriman/Dawnward-Chronicles/issues/5), [#6](https://github.com/roryherriman/Dawnward-Chronicles/issues/6)) |
+| **TRP3 presentation styles** | Neutral, Silver Hand and Arcane formatting for Dawnward's section | 🧪 v0.4 ([#10](https://github.com/roryherriman/Dawnward-Chronicles/issues/10)) |
+| **World events** | First zone visits, dungeon entries, reputation tier changes (observed only), guild membership | 🧪 v0.4 ([#11](https://github.com/roryherriman/Dawnward-Chronicles/issues/11), [#18](https://github.com/roryherriman/Dawnward-Chronicles/issues/18), [#36](https://github.com/roryherriman/Dawnward-Chronicles/issues/36)) |
+| **Memories, arcs and goals** | Memories, long-term arcs, personal goals with verified progress, continuity review | ✅ v0.4 (owner-tested 2026-10-26); v0.7 cards 🧪 ([#19](https://github.com/roryherriman/Dawnward-Chronicles/issues/19), [#20](https://github.com/roryherriman/Dawnward-Chronicles/issues/20), [#27](https://github.com/roryherriman/Dawnward-Chronicles/issues/27), [#42](https://github.com/roryherriman/Dawnward-Chronicles/issues/42)) |
+| **Identity and people** | Public persona vs private convictions; people your character knows, with private feelings | ✅ v0.4 (owner-tested 2026-10-26) ([#18](https://github.com/roryherriman/Dawnward-Chronicles/issues/18), [#28](https://github.com/roryherriman/Dawnward-Chronicles/issues/28), [#37](https://github.com/roryherriman/Dawnward-Chronicles/issues/37)) |
+| **Roleplay moments, timeline, reflection** | Record your own moments, browse a timeline, sit down to reflect | 🚧 v0.4, in part ([#40](https://github.com/roryherriman/Dawnward-Chronicles/issues/40), [#26](https://github.com/roryherriman/Dawnward-Chronicles/issues/26), [#29](https://github.com/roryherriman/Dawnward-Chronicles/issues/29)) |
+| **Places and homeland** | Places logged as you travel, meaningful places, Homeland, returns as moments | ✅ v0.4 (Elwynn Forest, Northshire, Goldshire); v0.7 list and detail 🧪 ([#35](https://github.com/roryherriman/Dawnward-Chronicles/issues/35)) |
+| **Edit everything in the window** | New and Edit forms for every record; keyboard navigation and inline validation | 🧪 v0.5–v0.6 ([#46](https://github.com/roryherriman/Dawnward-Chronicles/issues/46)) |
+| **Guide, help and minimap button** | First-run guide, searchable help, minimap button | 🧪 v0.5 ([#45](https://github.com/roryherriman/Dawnward-Chronicles/issues/45)) |
+| **Weighted story moments** | Places ask by how much they matter: homeland, marked places, memories, arcs, goals and people weigh most | 🧪 v0.5 |
+| **Zone Atlas** | Each place ID labelled with how it was verified; `/dawnward atlas` checks them | 🚧 the export and scan checks (M17, M18) ✅ in game; coverage in progress ([#48](https://github.com/roryherriman/Dawnward-Chronicles/issues/48)) |
+| **Gameplay-time narrative clock** *(new)* | Per-character play time for story pacing; offline and AFK time never count; Brisk, Standard and Slow paces | 🧪 v0.7 |
+| **Live 3D Character Showcase** *(new)* | The game's own model of your character in your current gear, with turning, zoom and a portrait choice | 🧪 v0.7 |
+| **Modern interface and accessibility** *(new)* | The approved v0.7 design: character rail, cards, chips, bundled fonts, six themes, keyboard navigation, inline validation, scale to fit | 🧪 v0.6–v0.7 ([#17](https://github.com/roryherriman/Dawnward-Chronicles/issues/17)) |
+| **First-time setup wizard** *(new)* | Six guided steps for a new character, with drafts you can resume | 🧪 v0.6–v0.7 ([#51](https://github.com/roryherriman/Dawnward-Chronicles/issues/51), [#16](https://github.com/roryherriman/Dawnward-Chronicles/issues/16)) |
+| **TRP3 sync management screen** *(new)* | Status, linked profile, public preview, proposed changes, conflicts, backups and rollback on one page; uses the existing guarded sync | 🧪 v0.7 |
+| **Dungeon bosses, relationship graph, scrapbook, letters** | Boss detection, family-tree views, scrapbook and alternate journal formats | 🗺️ [#11](https://github.com/roryherriman/Dawnward-Chronicles/issues/11), [#37](https://github.com/roryherriman/Dawnward-Chronicles/issues/37), [#41](https://github.com/roryherriman/Dawnward-Chronicles/issues/41), [#31](https://github.com/roryherriman/Dawnward-Chronicles/issues/31) |
+| **Immersive journal redesign** | The customisable fantasy journal | 🚧 v0.7 design implemented, in-game check pending ([#17](https://github.com/roryherriman/Dawnward-Chronicles/issues/17)) |
+
+### Future work
+
+1. **Current interface and testing:**
+   - the in-game checklist for the v0.7 build ([`docs/TESTING.md`](docs/TESTING.md) parts Q to S);
+   - in-game screenshots to replace the concepts;
+   - [#17](https://github.com/roryherriman/Dawnward-Chronicles/issues/17), [#45](https://github.com/roryherriman/Dawnward-Chronicles/issues/45), [#46](https://github.com/roryherriman/Dawnward-Chronicles/issues/46), [#51](https://github.com/roryherriman/Dawnward-Chronicles/issues/51), [#14](https://github.com/roryherriman/Dawnward-Chronicles/issues/14).
+2. **TRP3 integration:**
+   - in-game checks of the new Total RP 3 page;
+   - presentation themes and import: [#10](https://github.com/roryherriman/Dawnward-Chronicles/issues/10), [#4](https://github.com/roryherriman/Dawnward-Chronicles/issues/4), [#5](https://github.com/roryherriman/Dawnward-Chronicles/issues/5), [#6](https://github.com/roryherriman/Dawnward-Chronicles/issues/6), [#16](https://github.com/roryherriman/Dawnward-Chronicles/issues/16), [#23](https://github.com/roryherriman/Dawnward-Chronicles/issues/23);
+   - ⛔ multiplayer propagation and upstream setters: [#7](https://github.com/roryherriman/Dawnward-Chronicles/issues/7), [#8](https://github.com/roryherriman/Dawnward-Chronicles/issues/8).
+3. **Story Director and narrative systems:**
+   - richer context: reputation and stances in prompts;
+   - boss and encounter events;
+   - [#11](https://github.com/roryherriman/Dawnward-Chronicles/issues/11), [#20](https://github.com/roryherriman/Dawnward-Chronicles/issues/20), [#25](https://github.com/roryherriman/Dawnward-Chronicles/issues/25), [#19](https://github.com/roryherriman/Dawnward-Chronicles/issues/19), [#27](https://github.com/roryherriman/Dawnward-Chronicles/issues/27), [#42](https://github.com/roryherriman/Dawnward-Chronicles/issues/42), [#26](https://github.com/roryherriman/Dawnward-Chronicles/issues/26), [#29](https://github.com/roryherriman/Dawnward-Chronicles/issues/29), [#13](https://github.com/roryherriman/Dawnward-Chronicles/issues/13).
+4. **Character development and relationships:**
+   - reputation and NPC relationships, player relationships, guilds and family trees;
+   - player-defined rules, identity and titles;
+   - [#18](https://github.com/roryherriman/Dawnward-Chronicles/issues/18), [#28](https://github.com/roryherriman/Dawnward-Chronicles/issues/28), [#36](https://github.com/roryherriman/Dawnward-Chronicles/issues/36), [#37](https://github.com/roryherriman/Dawnward-Chronicles/issues/37), [#21](https://github.com/roryherriman/Dawnward-Chronicles/issues/21), [#33](https://github.com/roryherriman/Dawnward-Chronicles/issues/33), [#35](https://github.com/roryherriman/Dawnward-Chronicles/issues/35), [#40](https://github.com/roryherriman/Dawnward-Chronicles/issues/40).
+5. **Advanced future features:**
+   - letters and alternate formats, keepsakes, habits and rituals, mannerisms, scrapbook;
+   - legacy export, Zone Atlas coverage, branding and site;
+   - [#31](https://github.com/roryherriman/Dawnward-Chronicles/issues/31), [#34](https://github.com/roryherriman/Dawnward-Chronicles/issues/34), [#38](https://github.com/roryherriman/Dawnward-Chronicles/issues/38), [#39](https://github.com/roryherriman/Dawnward-Chronicles/issues/39), [#41](https://github.com/roryherriman/Dawnward-Chronicles/issues/41), [#32](https://github.com/roryherriman/Dawnward-Chronicles/issues/32), [#48](https://github.com/roryherriman/Dawnward-Chronicles/issues/48), [#49](https://github.com/roryherriman/Dawnward-Chronicles/issues/49), [#50](https://github.com/roryherriman/Dawnward-Chronicles/issues/50).
+6. **Compatibility and release blockers:** ⛔
+   - WoW Forever compatibility and launch readiness, [#24](https://github.com/roryherriman/Dawnward-Chronicles/issues/24);
+   - multiplayer TRP3 propagation, [#15](https://github.com/roryherriman/Dawnward-Chronicles/issues/15);
+   - the WoW Forever CurseForge listing, [#44](https://github.com/roryherriman/Dawnward-Chronicles/issues/44).
+
+### Version history
 
 | Version | Scope | Verification |
 |---|---|---|
 | **0.1** | Saved data and migrations, profile and family history, export and import, simulation mode, read-only TRP3 detection | ✅ in game, Classic Era 1.15.9 |
 | **0.2** | Journal window, level-up milestones, themes | ✅ in-game acceptance checklist, Classic Era |
-| **0.3 to 0.5** (merged) | Facts and personality axes, the living chronicle (events, story moments, decisions, personality evolution, story journal), memories, arcs, goals, persona and convictions, people, world events, places and origins, forms, minimap button, guide, Zone Atlas | 🧪 automated; in-game checklists partly reported. The Zone Atlas checks (66 of 66 IDs matching the 1.15.9 client) passed in game |
-| **0.6** (draft PR [#54](https://github.com/roryherriman/Dawnward-Chronicles/pull/54)) | First design system and themes (Classic Dawnward, Lightbound, Shadowbound), first-time setup wizard, keyboard navigation, inline validation, entry rows, developer diagnostics | 🧪 automated; [in-game checklist](docs/TESTING.md) not yet run |
-| **0.7-dev** (this development branch) | Gameplay-time Story Director (returns and cooldowns count play, never time offline), the approved mockups, the new window shell with a permanent character rail, the Character Showcase (live 3D model), bundled fonts | 🧪 automated; [in-game checklist](docs/TESTING.md) parts Q and R pending |
-| **Release gate** | WoW Forever compatibility and launch readiness | 🗺️ [#24](https://github.com/roryherriman/Dawnward-Chronicles/issues/24), not started |
+| **0.3** (PR [#9](https://github.com/roryherriman/Dawnward-Chronicles/pull/9)) | Facts, personality axes, biography sources, experimental TRP3 sync | ✅ TRP3 sync parts C, D and part of E owner-tested; the rest 🧪 |
+| **0.4** (PR [#43](https://github.com/roryherriman/Dawnward-Chronicles/pull/43), [#47](https://github.com/roryherriman/Dawnward-Chronicles/pull/47)) | The living chronicle: events, moments, decisions, personality evolution, story journal, TRP3 presentation, memories, arcs, goals, persona and convictions, people, world events, origins and places | ✅ core features owner-tested in game on 2026-10-26 ([results](docs/COMPATIBILITY.md)); some checklist parts still open |
+| **0.5** (PR [#52](https://github.com/roryherriman/Dawnward-Chronicles/pull/52)) | Forms for every record, Chronicle layout fix, Places tab, minimap button, guide, weighted place moments, Zone Atlas | 🧪 automated; atlas export and scan ✅ in game |
+| **0.6** (PR [#54](https://github.com/roryherriman/Dawnward-Chronicles/pull/54)) | Design system and themes, first-time setup wizard, keyboard navigation, inline validation, entry rows, developer diagnostics | 🧪 automated; in-game checklist parts N to P not yet run |
+| **0.7-dev** | Gameplay-time Story Director, the approved v0.7 interface (rail, Journal dashboard, Character profile and Showcase, Story Director, Chronicle cards and Places, setup wizard), the Total RP 3 page, bundled fonts | 🧪 automated; in-game checklist parts Q to S pending |
+| **Release gate** | WoW Forever compatibility and launch readiness | ⛔ [#24](https://github.com/roryherriman/Dawnward-Chronicles/issues/24) |
 
 ### Compatibility
 
 | Target | Status |
 |---|---|
-| WoW Classic Era 1.15.9 | Primary development client. v0.2 verified in game. Later APIs are checked against Blizzard's 1.15.9 interface source and await in-game verification. |
+| WoW Classic Era 1.15.9 | Primary development client. Client APIs are checked against Blizzard's 1.15.9 interface source; the v0.7 interface awaits in-game verification. |
 | WoW Forever | **Pending verification.** Nothing has been tested on a Forever client, and no compatibility is claimed. |
-| Total RP 3 3.4.1 | Read-only status verified in game. The experimental sync is source-audited and tested against a mock only. |
-| Total RP 3, other versions | Read-only status only; sync refuses versions not on its list. |
+| Total RP 3 3.4.1 | Read-only status verified in game. Opt-in sync, editor protection, backup and rollback owner-tested in game; the new management page is tested against a mock only. |
+| Total RP 3, other versions | Read-only status only; sync refuses versions not on its allowlist. |
+| Languages | The bundled fonts cover Latin-script clients; other clients use the game's own fonts. Only English text is provided. |
 
 Live details: [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) and [`docs/TESTING.md`](docs/TESTING.md).
 
@@ -153,7 +279,7 @@ Dawnward is not yet published on an addon site. To try a development build:
 
 ### Total RP 3 sync (experimental, opt-in)
 
-Use a **spare, non-default TRP3 profile** first. `/dawnward trp3 help` lists the commands:
+Use a **spare, non-default TRP3 profile** first. Everything below is also on the **Total RP 3 page** (Settings → Total RP 3, or click the Total RP 3 line in the side rail), which previews and asks before every write. `/dawnward trp3 help` lists the commands:
 - `trp3 preview` shows exactly what would change, without writing;
 - `trp3 enable about confirm` turns biography sync on;
 - `trp3 rollback confirm` undoes the last write.

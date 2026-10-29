@@ -24,9 +24,9 @@ These are **design concepts, not in-game screenshots.** They are the visual sour
 | ![Chronicle: Memories](chronicle-memories.png) | ![Chronicle: Places](chronicle-places.png) |
 | ![First-time setup](first-time-setup.png) | ![Design system](design-system.png) |
 
-## Proposed, awaiting approval
+## Approved later (owner approval, 2026-10-29)
 
-These were added after approval, at the owner's request, to cover the Total RP 3 workflow and the Character Showcase. They are **not approved yet**.
+These were added after the first approval, at the owner's request, to cover the Total RP 3 workflow and the Character Showcase, and have since been approved. They keep their original `proposed-` file names so links stay stable.
 
 | Screen | Image |
 |---|---|

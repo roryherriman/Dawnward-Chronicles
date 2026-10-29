@@ -216,7 +216,25 @@ Automatic entries can change visibility, but they can't be edited or deleted, so
 
 ## UI
 
-See [UI_DIRECTION.md](UI_DIRECTION.md).
+See [UI_DIRECTION.md](UI_DIRECTION.md) for principles and [design/UI_DESIGN_V07.md](design/UI_DESIGN_V07.md) for the current design.
+
+- **v0.7 interface** (built to the [approved mockups](design/mockups/README.md); automated tests only):
+  - `UI/MainWindow.lua`: a 1100 × 720 window that scales down to fit the screen by width and height. A permanent character rail on the left holds the portrait, name, title, identity line, level, navigation (with a waiting-moments badge on Story), Guide, Settings and a Total RP 3 status line that opens the Total RP 3 page. Sections fill the content area on the right.
+  - `UI/JournalView.lua`: the dashboard (counts, New entry, search, filters, the waiting-moment callout, entry cards, Active goals, Recent places).
+  - `UI/CharacterView.lua`: grouped profile tiles, personality, family and relationships, and the public preview built from `Projection.GetPublic`.
+  - `UI/Showcase.lua`: the portrait and the Character Showcase.
+  - `UI/StoryView.lua` and `UI/ReactionCard.lua`: the Story Director screen and the pop-up card.
+  - `UI/ChronicleView.lua` and `UI/ChroniclePlaces.lua`: Chronicle cards for every tab, and Places as list and detail.
+  - `UI/SetupWizard.lua`: the setup wizard with its step rail.
+  - `UI/TRP3Page.lua`: the Total RP 3 page inside Settings. It reads through `TRP3Commands.Overview` and writes only through the same guarded functions as the `/dawnward trp3` commands.
+  - Shared components in `UI/Widgets.lua`: chips, panels, callouts, date blocks, progress bars and search boxes, alongside the v0.6 kit.
+  - Fonts: Cinzel and Alegreya Sans (OFL) in `Media/Fonts`, mapped onto game font templates by `Style.Font`. Non-Latin clients keep the game's fonts.
+  - **Character Showcase:**
+    - A `PlayerModel` with `SetUnit("player")`, turned with `SetRotation` and zoomed with `SetPortraitZoom` (0–0.7, as Blizzard's own model frames).
+    - The model is set only while shown and cleared on hide, and its events are registered only while shown.
+    - The portrait choice is stored additively in `DawnwardChroniclesDB.ui.showcase[characterKey]` and cleaned by `Schema.NormalizeUi`.
+    - Game identity (level, race, class, guild, realm) is read live and never stored.
+- The notes below describe v0.5–v0.6 and still apply where not replaced above. Sizes and rows per page in them are from v0.6.
 
 - **One window, four sections** (Journal, Character, Story, Chronicle), plus a settings panel behind a gear button and a guide behind a **?** button (#51). Neither panel is a section.
 - **Design system (v0.6):**
