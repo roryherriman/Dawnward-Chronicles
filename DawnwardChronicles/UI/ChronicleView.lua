@@ -1,64 +1,92 @@
--- Chronicle section: the character's narrative records in the window.
+-- Chronicle section: the character's narrative records in the window
+-- (v0.7, docs/design/mockups/chronicle-memories.png and chronicle-places.png).
 --
---   Memories, Arcs, Goals, Stances, People   records with their provenance,
---       canon status and visibility; New and Edit open a form, so nothing
---       here needs a slash command
---   Places                                   places Dawnward logged; mark
---       one as meaningful, link it as the homeland, or write a memory there
---   Review                                   continuity findings, answered
---       as growth / unreliable / secret / correction / ignore
+--   Memories, Arcs, Goals, Stances, People   records as cards in a two-column
+--       grid: a status chip and the date on top, the title, a meta line, the
+--       wrapped text, chips (where it came from, canon status, visibility;
+--       the visibility chip is a button that cycles it), a goal's progress
+--       from its real milestones or verified objective, and the record's
+--       actions in a row at the bottom (Remove on the right). New and Edit
+--       open a form, so nothing here needs a slash command. A search box
+--       filters the current tab.
+--   Places                                   list and detail
+--       (UI/ChroniclePlaces.lua): mark a place as meaningful, link it as the
+--       homeland, or write a memory there
+--   Review                                   continuity findings as cards,
+--       answered as growth / unreliable / secret / correction / ignore
 --
--- Each record takes two lines: its text has the full width on the first,
--- its status and buttons share the second, so they can never overlap (#46).
--- Long lists are paged. Every button calls the same core functions as the
--- chat commands, through Actions.WithCharacter (read-only data refused).
+-- Every button calls the same core functions as the chat commands, through
+-- Actions.WithCharacter (read-only data refused). Cards come from a fixed
+-- pool and long lists are paged, so a refresh creates no frames.
 local _, ns = ...
-local Widgets, MainWindow, Actions, Records, Forms = ns.Widgets, ns.MainWindow, ns.Actions, ns.Records, ns.Forms
+local Widgets, MainWindow, Actions, Forms, Style = ns.Widgets, ns.MainWindow, ns.Actions, ns.Forms, ns.Style
 
 local ChronicleView = {}
 ns.ChronicleView = ChronicleView
 
 ChronicleView.TABS = {
-	{ id = "memories", label = "Memories", module = "Memories", new = "New memory" },
-	{ id = "arcs", label = "Arcs", module = "Arcs", new = "New arc" },
-	{ id = "goals", label = "Goals", module = "Goals", new = "New goal" },
-	{ id = "identity", label = "Stances", module = "Identity", new = "New stance" },
-	{ id = "people", label = "People", module = "People", new = "New person" },
-	{ id = "places", label = "Places" },
-	{ id = "review", label = "Review" },
+	{ id = "memories", label = "Memories", module = "Memories", new = "New memory", noun = { "memory", "memories" },
+		search = "Search memories", width = 112 },
+	{ id = "arcs", label = "Arcs", module = "Arcs", new = "New arc", noun = { "arc", "arcs" },
+		search = "Search arcs", width = 74 },
+	{ id = "goals", label = "Goals", module = "Goals", new = "New goal", noun = { "goal", "goals" },
+		search = "Search goals", width = 78 },
+	{ id = "identity", label = "Stances", module = "Identity", new = "New stance", noun = { "stance", "stances" },
+		search = "Search stances", width = 92 },
+	{ id = "people", label = "People", module = "People", new = "New person", noun = { "person", "people" },
+		search = "Search people", width = 86 },
+	{ id = "places", label = "Places", width = 86 },
+	{ id = "review", label = "Review", noun = { "finding", "findings" }, search = "Search findings", width = 86 },
 }
 ChronicleView.REVIEW_CHOICES = { "growth", "unreliable", "secret", "correction", "ignore" }
 
--- Layout in section units (the v0.7 content area is 772 x 588). Each row is a
--- card; rowPad is its inner margin, and rowHeight includes the gap below it.
+-- Layout in section units (the v0.7 content area is 772 x 588, the mockup's
+-- main column). Tabs on top, a toolbar (New, search, count, pager) below
+-- them, then a 2 x 2 grid of cards.
 ChronicleView.LAYOUT = {
-	inset = 8, width = 756,    -- the v0.7 content column (MainWindow.ContentWidth) less the insets
-	tabWidth = 104, tabGap = 2, tabHeight = 30,
-	rowsTop = 46, rows = 6, rowHeight = 74, rowGap = 8, rowPad = 10,
-	statusWidth = 200,         -- a record's status, top right (Places: Homeland, Meaningful)
-	textHeight = 34,           -- line 1: the record, two lines of small text
-	lineTwo = 36,              -- line 2 starts this far below the row's top
-	metaWidth = 210,
-	buttons = 5, buttonWidth = 84, buttonHeight = 28, buttonGap = 6,
+	inset = 0, width = 772,
+	tabHeight = 34, tabGap = 4, tabPad = 3,
+	toolbarTop = 50, toolbarHeight = 30, searchWidth = 240, newWidth = 150,
+	gridTop = 96, cols = 2, gridRows = 2, colGap = 14, rowGap = 12,
+	cardWidth = 379, cardHeight = 240, cardPad = 14, dateWidth = 90, chips = 4,
+	buttons = 5, buttonHeight = 26, buttonGap = 6,
 }
-ChronicleView.ROWS = ChronicleView.LAYOUT.rows
+ChronicleView.ROWS = ChronicleView.LAYOUT.cols * ChronicleView.LAYOUT.gridRows
 
---- Rectangles of one row's parts, relative to the row's top-left corner
--- (y grows downwards): { text, meta, buttons = { ... } } with x, y, w, h.
--- Pure: the frames are placed from it, and tests check nothing overlaps.
-function ChronicleView.RowRects(L)
+-- Button widths by label (the rest: 64). Long enough for each label.
+ChronicleView.BUTTON_WIDTHS = { Accept = 68, Edit = 56, Dispute = 68, Remove = 72, Turn = 58, Steps = 60,
+	growth = 58, unreliable = 72, secret = 58, correction = 76, ignore = 56 }
+
+--- Rectangles of one card's parts, relative to its top-left corner (y grows
+-- downwards), with x, y, w, h. opts: { title, meta, progress } say which
+-- optional parts the card shows. Pure: the frames are placed from it, and
+-- tests check nothing overlaps.
+function ChronicleView.CardRects(opts, L)
 	L = L or ChronicleView.LAYOUT
-	local pad = L.rowPad or 0
-	local out = {
-		text = { x = pad, y = 4, w = L.width - 2 * pad, h = L.textHeight - 4 },
-		meta = { x = pad, y = L.lineTwo + 3, w = L.metaWidth, h = 14 },
-		buttons = {},
+	opts = opts or {}
+	local pad, w = L.cardPad, L.cardWidth
+	local inner = w - 2 * pad
+	local r = {
+		chip = { x = pad, y = 12, w = inner - L.dateWidth - 8, h = 20 },
+		date = { x = w - pad - L.dateWidth, y = 15, w = L.dateWidth, h = 14 },
 	}
-	for b = 1, L.buttons do
-		local right = L.width - pad + 2 - (b - 1) * (L.buttonWidth + L.buttonGap)
-		out.buttons[b] = { x = right - L.buttonWidth, y = L.lineTwo, w = L.buttonWidth, h = L.buttonHeight }
-	end
-	return out
+	local y = 40
+	if opts.title then r.title = { x = pad, y = y, w = inner, h = 20 }; y = y + 24 end
+	if opts.meta then r.meta = { x = pad, y = y, w = inner, h = 14 }; y = y + 18 end
+	local textBottom = opts.progress and 152 or 160
+	r.text = { x = pad, y = y, w = inner, h = textBottom - y }
+	if opts.progress then r.progress = { x = pad, y = 156, w = inner, h = 4 } end
+	r.chips = { x = pad, y = 166, w = inner, h = 20 }
+	r.divider = { x = pad, y = 195, w = inner, h = 1 }
+	r.buttons = { x = pad, y = 202, w = inner, h = L.buttonHeight }
+	return r
+end
+
+--- Top-left corner of card i (1-based) in the section. Pure.
+function ChronicleView.CardOrigin(i, L)
+	L = L or ChronicleView.LAYOUT
+	local col, row = (i - 1) % L.cols, math.floor((i - 1) / L.cols)
+	return L.inset + col * (L.cardWidth + L.colGap), L.gridTop + row * (L.cardHeight + L.rowGap)
 end
 
 --- Number of pages for n items, and the clamped page. Pure.
@@ -68,39 +96,129 @@ function ChronicleView.Pages(n, page)
 	return pages, page
 end
 
-local KIND_LABELS = { start = "starting area", town = "town", inn = "inn", farm = "farmstead", road = "road",
-	ruins = "ruins", capital = "capital", wilderness = "wilds", danger = "dangerous ground" }
+local IMPORTANCE_CHIPS = { { "Ordinary", "muted" }, { "Notable", "muted" }, { "Defining", "accent" } }
+local PROVENANCE = { player = "Your words", observed = "From an event", suggested = "Suggested by Dawnward" }
+local STATUS = { established = "Established", proposed = "Suggested", disputed = "Disputed",
+	superseded = "Superseded" }
+local STATE = { active = "Active", paused = "Paused", concluded = "Concluded", abandoned = "Abandoned",
+	achieved = "Achieved", unresolved = "Unresolved" }
+local ARC_KIND = { growth = "Growth", goal = "Goal", conflict = "Conflict", conviction = "Conviction",
+	relationship = "Relationship", other = "Other" }
+local PERSON = { npc = "Someone in the world", player = "Player character", family = "Family", other = "Other" }
+local FINDING = { persona = "Stance", personality = "Personality", disputed = "Disputed record", goal = "Goal",
+	duplicate = "Possible duplicate", privacy = "Privacy" }
 
---- Text and status line for a record. Pure: used by tests.
-function ChronicleView.RecordText(listId, r, char)
-	local body
-	if listId == "memories" then
-		body = (r.title and (r.title .. ": ") or "") .. (r.text or "")
-	elseif listId == "arcs" then
-		body = string.format("%s (%s, %s%s)", r.title, r.kind, r.state,
-			#r.turningPoints > 0 and string.format(", %d turning point%s", #r.turningPoints,
-				#r.turningPoints == 1 and "" or "s") or "")
-	elseif listId == "goals" then
-		local p = ns.Goals.Progress(char, r)
-		local objective = ns.Goals.ObjectiveText(p)
-		body = string.format("%s (%s, %d/%d milestones%s)", r.title, r.state, p.milestonesDone, p.milestonesTotal,
-			objective and (", " .. objective) or "")
-	elseif listId == "identity" then
-		body = string.format("%s - in public: %s / privately (%s): %s", r.subject, r.persona or "-",
-			r.convictionVisibility, r.conviction or "-")
-	elseif listId == "people" then
-		body = string.format("%s%s (%s)%s", r.name, r.realm and ("-" .. r.realm) or "", r.kind,
-			r.relation and (": " .. r.relation) or "")
-	elseif listId == "places" then
-		-- Status is shown apart from the actions that change it (third value).
-		local flags = {}
-		if ns.Places.IsHomeland(char, r) then flags[#flags + 1] = "HOMELAND" end
-		if r.meaningful then flags[#flags + 1] = "MEANINGFUL" end
-		return ns.Places.Label(r), string.format("%s%d visit%s", r.kind and (KIND_LABELS[r.kind] .. ", ") or "",
-			r.visits, r.visits == 1 and "" or "s"), table.concat(flags, "  -  ")
-	end
-	return body or "", Records.Label(r), ""
+--- Short date for a card: "Today", "28 Oct", or with the year when it is
+-- not this year; nil when unknown. Pure.
+function ChronicleView.ShortDate(timestamp, now)
+	return ns.ChroniclePlaces.ShortDate(timestamp, now)
 end
+
+--- What a card shows for a record (or a Review finding). Pure.
+-- Returns { chip = { text, tone } or nil, date, title, meta, text,
+-- chips = { { text, tone } }, progress = 0..1 or nil, highlight }.
+function ChronicleView.CardContent(listId, r, char, now)
+	local c = { chips = {} }
+	if listId == "review" then
+		c.chip = { FINDING[r.kind] or "Continuity", r.kind == "privacy" and "secret" or "accent" }
+		c.text = r.message
+		c.meta = "What is it? Choose how your story reads it; canon is not changed."
+		return c
+	end
+	c.date = ChronicleView.ShortDate(r.at, now)
+	if r.status == "proposed" then
+		c.chip, c.highlight = { "Suggested · needs your call", "accent" }, true
+	elseif r.status == "disputed" then
+		c.chip, c.highlight = { "Disputed · needs your call", "danger" }, true
+	elseif r.status == "superseded" then
+		c.chip = { "Superseded", "muted" }
+	end
+	local function add(text, tone) c.chips[#c.chips + 1] = { text, tone or "muted" } end
+	if listId == "memories" then
+		c.chip = c.chip or IMPORTANCE_CHIPS[r.importance or 1] or IMPORTANCE_CHIPS[1]
+		c.title, c.text = r.title, r.text
+		if r.zone then add(r.zone) end
+	elseif listId == "arcs" then
+		c.chip = c.chip or { STATE[r.state] or r.state, r.state == "active" and "accent" or "muted" }
+		c.title, c.text = r.title, r.summary
+		local n = #(r.turningPoints or {})
+		c.meta = string.format("%s arc · %s", ARC_KIND[r.kind] or r.kind,
+			n == 0 and "no turning points yet" or string.format("%d turning point%s", n, n == 1 and "" or "s"))
+		local last = r.turningPoints and r.turningPoints[n]
+		if not c.text and last then c.text = "Last turning point: " .. last.note end
+	elseif listId == "goals" then
+		c.chip = c.chip or { STATE[r.state] or r.state,
+			(r.state == "active" or r.state == "achieved") and "accent" or "muted" }
+		c.title, c.text = r.title, r.text
+		local p = ns.Goals.Progress(char, r)
+		local parts = {}
+		local objective = ns.Goals.ObjectiveText(p)
+		if objective then parts[#parts + 1] = objective .. (p.objective.met and " (reached)" or "") end
+		parts[#parts + 1] = p.milestonesTotal == 0 and "no milestones yet"
+			or string.format("%d/%d milestones", p.milestonesDone, p.milestonesTotal)
+		c.meta = table.concat(parts, " · ")
+		-- Progress only from what is real: ticked milestones, else the verified objective.
+		local o = p.objective
+		if p.milestonesTotal > 0 then
+			c.progress = p.milestonesDone / p.milestonesTotal
+		elseif o and o.current and o.target and o.target > 0 then
+			c.progress = o.met and 1 or o.current / o.target
+		end
+	elseif listId == "identity" then
+		if r.deliberate then
+			c.chip = c.chip or { "Deliberate contradiction", "accent" }
+		elseif ns.Identity.Contradicts(r) then
+			c.chip = c.chip or { "Public and private differ", "muted" }
+		end
+		c.title = r.subject
+		c.text = string.format("In public: %s\nPrivately (%s): %s", r.persona or "-",
+			ns.Themes.VISIBILITY_LABELS[r.convictionVisibility] or r.convictionVisibility, r.conviction or "-")
+	elseif listId == "people" then
+		c.chip = c.chip or { PERSON[r.kind] or r.kind, r.kind == "family" and "accent" or "muted" }
+		c.title = r.name .. (r.realm and ("-" .. r.realm) or "")
+		c.text = r.relation
+		if not r.relation then c.meta = "No relation noted yet" end
+	end
+	if r.status ~= "proposed" and r.status ~= "disputed" then
+		add(PROVENANCE[r.provenance] or r.provenance)
+		if r.status == "established" then add(STATUS.established) end
+	end
+	return c
+end
+
+--- Whether a record (or finding) matches a search, ignoring case. Private
+-- feelings are not searched (they are not shown on the card). Pure.
+function ChronicleView.Matches(listId, r, query)
+	if not query or query == "" then return true end
+	local fields
+	if listId == "memories" then fields = { r.title, r.text, r.zone }
+	elseif listId == "arcs" then fields = { r.title, r.summary }
+	elseif listId == "goals" then fields = { r.title, r.text }
+	elseif listId == "identity" then fields = { r.subject, r.persona, r.conviction }
+	elseif listId == "people" then fields = { r.name, r.realm, r.relation }
+	elseif listId == "review" then fields = { r.message }
+	else fields = {} end
+	local needle = query:lower()
+	for _, v in pairs(fields) do
+		if type(v) == "string" and v:lower():find(needle, 1, true) then return true end
+	end
+	return false
+end
+
+ChronicleView.EMPTY = {
+	memories = { "No memories yet", "Write one with New memory. Dawnward also suggests memories from the moments "
+		.. "you answer in Story; a suggestion waits here until you accept, edit or remove it." },
+	arcs = { "No arcs yet", "An arc is a thread of your character's story: a conflict, a conviction, a "
+		.. "relationship. Start one with New arc; you decide when it turns, pauses or ends." },
+	goals = { "No goals yet", "Add what your character wants with New goal. A target level, or a standing with a "
+		.. "faction Dawnward has seen, shows verified progress; only you decide when it is achieved." },
+	identity = { "No stances yet", "A stance records how your character presents themselves about something, "
+		.. "and what they privately believe. The private side stays private unless you change it." },
+	people = { "No people yet", "Add someone your character knows with New person. Only you write this; nothing "
+		.. "is read from other players' profiles." },
+	review = { "Nothing to review", "Nothing to review: your story is consistent as far as Dawnward can tell. "
+		.. "Contradictions, duplicates and privacy risks appear here for you to answer." },
+}
 
 local CYCLE = { private = "public", public = "secret", secret = "private" }
 
@@ -305,29 +423,30 @@ local function turningPointForm(arc)
 	}
 end
 
-local function placeMemoryForm(place)
-	local name = place.subzone or place.zone
-	return {
-		title = "A memory of " .. ns.Places.Label(place),
-		hint = "Write what this place means to your character. The memory is linked to the place.",
-		fields = {
-			{ key = "title", label = "Title", kind = "line" },
-			{ key = "text", label = "Memory", kind = "area" },
-		},
-		values = { title = name },
-		save = function(char, v, now)
-			-- Linked by the place's own key, so returning there recalls it (Places.Linked).
-			v.zone = place.zone
-			v.links = { events = { "place:" .. ns.Places.Key(place.zone, place.subzone) } }
-			return ns.Memories.Add(char, v, "player", now)
-		end,
-	}
+ChronicleView.FORMS = FORMS
+ChronicleView.CYCLE = CYCLE
+ChronicleView.MilestoneForm = milestoneForm
+ChronicleView.TurningPointForm = turningPointForm
+
+local SECTION_DEF -- the registered section, whose heading follows the tab
+
+local function place(region, rect)
+	region:ClearAllPoints()
+	region:SetPoint("TOPLEFT", rect.x, -rect.y)
+	region:SetWidth(rect.w)
+	if rect.h then region:SetHeight(rect.h) end
+end
+
+local function tabSpec(id)
+	for _, tab in ipairs(ChronicleView.TABS) do
+		if tab.id == id then return tab end
+	end
 end
 
 local function create(parent)
 	local L = ChronicleView.LAYOUT
 	local section = { frame = CreateFrame("Frame", nil, parent), tab = "memories", page = 1, rows = {},
-		tabButtons = {} }
+		tabButtons = {}, query = "" }
 	local f = section.frame
 	section.form = Forms.Create(f, L.width + 2 * L.inset)
 
@@ -351,61 +470,113 @@ local function create(parent)
 		self.form:Open(spec)
 	end
 
-	-- Secondary navigation: a segmented control.
+	-- Secondary navigation: a segmented control on a panel bar, each tab
+	-- sized to its label and count.
 	local tabItems = {}
 	for i, tab in ipairs(ChronicleView.TABS) do tabItems[i] = { id = tab.id, label = tab.label } end
-	section.tabs = Widgets.Segmented(f, tabItems, L.width + L.tabGap * #tabItems, L.tabHeight, function(id)
-		section.tab, section.page = id, 1
-		section.form:Close()
+	section.tabBar = CreateFrame("Frame", nil, f)
+	section.tabBar.bg = Style.Solid(section.tabBar, "BACKGROUND", -2)
+	section.tabBar.bg:SetAllPoints(section.tabBar)
+	section.tabBar.edges = Style.Edge(section.tabBar, "BORDER")
+	Style.Register(section.tabBar, function(bar, theme)
+		Style.Color(bar.bg, theme.panel)
+		bar.edges:Paint(theme.edge, 1)
 	end)
-	section.tabs.buttons[1]:SetPoint("TOPLEFT", L.inset, -6)
+	section.tabs = Widgets.Segmented(f, tabItems, L.width, L.tabHeight - 2 * L.tabPad, function(id)
+		if id ~= section.tab then
+			section.tab, section.page, section.query = id, 1, ""
+			section.search:SetText("")
+			section.search:ClearFocus()
+		end
+		section.form:Close()
+		-- Before the refresh, which draws the heading first.
+		if SECTION_DEF then SECTION_DEF.heading = tabSpec(id).label end
+		MainWindow.Refresh()
+	end)
+	local barWidth = L.tabPad
 	for i, b in ipairs(section.tabs.buttons) do
-		b.tabId = ChronicleView.TABS[i].id
+		local tab = ChronicleView.TABS[i]
+		b.tabId = tab.id
+		b:SetWidth(tab.width)
+		b:ClearAllPoints()
+		b:SetPoint("TOPLEFT", L.inset + barWidth, -L.tabPad)
+		barWidth = barWidth + tab.width + L.tabGap
 		section.tabButtons[i] = b
 	end
+	section.tabBar:SetPoint("TOPLEFT", L.inset, 0)
+	section.tabBar:SetSize(barWidth - L.tabGap + L.tabPad, L.tabHeight)
 
-	section.empty = Widgets.Label(f, "GameFontHighlight", true, "muted")
-	section.empty:SetPoint("TOPLEFT", L.inset, -(L.rowsTop + 8))
-	section.empty:SetWidth(L.width)
+	-- Toolbar: New, search, count and pager.
+	local barY = -L.toolbarTop
+	section.new = Widgets.Button(f, "New", L.newWidth, L.toolbarHeight, "primary")
+	section.new:SetPoint("TOPLEFT", L.inset, barY)
+	section.new:SetScript("OnClick", function() section:OpenForm(ChronicleView.FORMS[section.tab]()) end)
+	section.search = Widgets.SearchBox(f, L.searchWidth, "Search", function(text)
+		if text ~= section.query then
+			section.query, section.page = text, 1
+			MainWindow.Refresh()
+		end
+	end)
+	section.search:SetHeight(L.toolbarHeight)
+	section.next = Widgets.Button(f, ">", 26, 24, "ghost")
+	section.next:SetPoint("TOPRIGHT", -L.inset, barY - 3)
+	section.next:SetScript("OnClick", function() section.page = section.page + 1; MainWindow.Refresh() end)
+	Widgets.Tooltip(section.next, "Next page")
+	section.pageLabel = Widgets.Label(f, "GameFontHighlightSmall", false, "muted")
+	section.pageLabel:SetJustifyH("CENTER")
+	section.pageLabel:SetWidth(84)
+	section.pageLabel:SetPoint("RIGHT", section.next, "LEFT", -4, 0)
+	section.prev = Widgets.Button(f, "<", 26, 24, "ghost")
+	section.prev:SetPoint("RIGHT", section.pageLabel, "LEFT", -4, 0)
+	section.prev:SetScript("OnClick", function() section.page = section.page - 1; MainWindow.Refresh() end)
+	Widgets.Tooltip(section.prev, "Previous page")
+	section.count = Widgets.Label(f, "GameFontHighlightSmall", false, "muted")
+	section.count:SetJustifyH("RIGHT")
+	section.count:SetWidth(200)
+	section.toolbar = { section.new, section.search, section.prev, section.pageLabel, section.next, section.count }
 
-	local rects = ChronicleView.RowRects(L)
-	for i = 1, L.rows do
+	-- Empty state: what the tab holds and how to fill it.
+	section.emptyPanel = Widgets.Panel(f, "Nothing here yet")
+	section.emptyPanel:SetPoint("TOPLEFT", L.inset, -L.gridTop)
+	section.emptyPanel:SetSize(L.width, 110)
+	section.empty = Widgets.Label(section.emptyPanel.inner, "GameFontHighlight", true, "body")
+	section.empty:SetPoint("TOPLEFT", 0, 0)
+	section.empty:SetWidth(L.width - 2 * Widgets.PANEL_PAD)
+
+	-- The card pool.
+	for i = 1, ChronicleView.ROWS do
 		local row = Widgets.Card(f)
-		row:SetSize(L.width, L.rowHeight - L.rowGap)
-		row:SetPoint("TOPLEFT", L.inset, -L.rowsTop - (i - 1) * L.rowHeight)
-		row.text = Widgets.Label(row, "GameFontHighlightSmall", true)
-		row.text:SetPoint("TOPLEFT", rects.text.x, -rects.text.y)
-		row.text:SetSize(rects.text.w, rects.text.h)
-		row.status = Widgets.Label(row, "GameFontNormalSmall", false, "accent")
-		row.status:SetJustifyH("RIGHT")
-		row.status:SetPoint("TOPRIGHT", -L.rowPad, -6)
-		row.status:SetWidth(L.statusWidth)
-		row.meta = Widgets.Label(row, "GameFontDisableSmall")
-		row.meta:SetPoint("TOPLEFT", rects.meta.x, -rects.meta.y)
-		row.meta:SetWidth(rects.meta.w)
+		row:SetSize(L.cardWidth, L.cardHeight)
+		local x, y = ChronicleView.CardOrigin(i)
+		row:SetPoint("TOPLEFT", x, -y)
+		row.chip = Widgets.Chip(row, "", "muted")
+		row.date = Widgets.Label(row, "GameFontHighlightSmall", false, "muted")
+		row.date:SetJustifyH("RIGHT")
+		row.title = Widgets.Label(row, "GameFontHighlightLarge", false, "body")
+		row.meta = Widgets.Label(row, "GameFontHighlightSmall", false, "muted")
+		row.text = Widgets.Label(row, "GameFontHighlight", true, "body")
+		row.progress = Widgets.ProgressBar(row, L.cardWidth - 2 * L.cardPad, 4)
+		row.chips = {}
+		for c = 1, L.chips do row.chips[c] = Widgets.Chip(row, "", "muted") end
+		row.vis = Widgets.VisibilityButton(row, function(level)
+			if row.onVisibility then row.onVisibility(level) end
+		end)
+		row.divider = Widgets.Divider(row)
+		row.actions = {}
 		row.buttons = {}
-		for b, rect in ipairs(rects.buttons) do
-			local button = Widgets.Button(row, "", rect.w, rect.h, "ghost")
-			button:SetPoint("TOPLEFT", rect.x, -rect.y)
+		for b = 1, L.buttons do
+			local button = Widgets.Button(row, "", 64, L.buttonHeight, "ghost")
+			row.actions[b] = button
 			row.buttons[b] = button
 		end
+		-- The visibility chip is one of the record's buttons too.
+		row.buttons[#row.buttons + 1] = row.vis
 		section.rows[i] = row
 	end
 
-	section.prev = Widgets.Button(f, "< Prev", 70, 22, "ghost")
-	section.prev:SetPoint("BOTTOMLEFT", L.inset, 8)
-	section.prev:SetScript("OnClick", function() section.page = section.page - 1; MainWindow.Refresh() end)
-	section.pageLabel = Widgets.Label(f, "GameFontHighlightSmall", false, "muted")
-	section.pageLabel:SetPoint("BOTTOMLEFT", L.inset + 78, 13)
-	section.next = Widgets.Button(f, "Next >", 70, 22, "ghost")
-	section.next:SetPoint("BOTTOMLEFT", L.inset + 150, 8)
-	section.next:SetScript("OnClick", function() section.page = section.page + 1; MainWindow.Refresh() end)
-	section.new = Widgets.Button(f, "New", 120, 22, "primary")
-	section.new:SetPoint("BOTTOMRIGHT", -L.inset, 8)
-	section.new:SetScript("OnClick", function() section:OpenForm(FORMS[section.tab]()) end)
-
-	-- Row actions: Remove is destructive, Accept is the one primary action.
-	local VARIANTS = { Remove = "danger", Accept = "primary" }
+	-- Row actions: Remove is destructive, Accept the one primary action,
+	-- Edit the usual one; the rest are quiet.
+	local VARIANTS = { Remove = "danger", Accept = "primary", Edit = "default" }
 
 	local function setButton(button, label, fn)
 		button:SetShown(label ~= nil)
@@ -413,28 +584,34 @@ local function create(parent)
 			button:SetText(label)
 			button:SetVariant(VARIANTS[label] or "ghost")
 			button:SetScript("OnClick", fn)
+			button:SetWidth(ChronicleView.BUTTON_WIDTHS[label] or (label:sub(1, 6) == "Inner:" and 84) or 64)
 		end
 	end
 
-	-- Buttons, filled from the right: { label, fn } or false to skip.
-	-- An entry may give its own width ({ label, fn, width }) for a longer,
-	-- clearer label; buttons are laid out from the record's right edge.
-	local function fill(row, list)
-		local n = 0
-		local right = L.width - L.rowPad + 2
+	-- Buttons left to right, { label, fn } or false to skip; right = { label,
+	-- fn } sits alone at the card's right edge (Remove).
+	local function fill(row, list, right)
+		local rect = ChronicleView.CardRects().buttons
+		local n, x = 0, rect.x
 		for _, entry in ipairs(list) do
 			if entry then
 				n = n + 1
-				local button, w = row.buttons[n], entry[3] or L.buttonWidth
+				local button = row.actions[n]
 				setButton(button, entry[1], entry[2])
-				button:SetWidth(w)
 				button:ClearAllPoints()
-				button:SetPoint("TOPLEFT", right - w, -L.lineTwo)
-				right = right - w - L.buttonGap
+				button:SetPoint("TOPLEFT", x, -rect.y)
+				x = x + button:GetWidth() + L.buttonGap
 			end
 		end
-		for b = n + 1, #row.buttons do
-			setButton(row.buttons[b], nil)
+		if right then
+			n = n + 1
+			local button = row.actions[n]
+			setButton(button, right[1], right[2])
+			button:ClearAllPoints()
+			button:SetPoint("TOPLEFT", rect.x + rect.w - button:GetWidth(), -rect.y)
+		end
+		for b = n + 1, #row.actions do
+			setButton(row.actions[b], nil)
 		end
 	end
 
@@ -442,136 +619,192 @@ local function create(parent)
 		local m = ns[mod]
 		local removable = r.provenance == "player" or r.status == "proposed"
 		local list = {
-			removable and { "Remove", function()
-				Widgets.Confirm("Remove this record?", "Remove", function()
-					act(function(char) return m.Remove(char, r.id) end)
-				end)
-			end },
-			{ ns.Themes.VISIBILITY_LABELS[r.visibility] or r.visibility, function()
-				act(function(char, now) return m.SetVisibility(char, r.id, CYCLE[r.visibility], now) end)
-			end },
 			(r.status == "proposed" or r.status == "disputed") and m.Accept and { "Accept", function()
 				act(function(char, now) return m.Accept(char, r.id, now) end)
-			end } or r.status == "established" and m.Dispute and { "Dispute", function()
+			end } or false,
+			{ "Edit", function() section:OpenForm(ChronicleView.FORMS[listId](r)) end },
+			r.status == "established" and m.Dispute and { "Dispute", function()
 				act(function(char, now) return m.Dispute(char, r.id, now) end)
 			end } or false,
-			{ "Edit", function() section:OpenForm(FORMS[listId](r)) end },
 		}
 		if listId == "arcs" then
-			list[#list + 1] = { "Turn", function() section:OpenForm(turningPointForm(r)) end }
+			list[#list + 1] = { "Turn", function() section:OpenForm(ChronicleView.TurningPointForm(r)) end }
 		elseif listId == "goals" then
-			list[#list + 1] = { "Steps", function() section:OpenForm(milestoneForm(r)) end }
+			list[#list + 1] = { "Steps", function() section:OpenForm(ChronicleView.MilestoneForm(r)) end }
 		elseif listId == "identity" then
 			list[#list + 1] = { "Inner: " .. r.convictionVisibility:sub(1, 3), function()
 				act(function(char, now) return ns.Identity.SetConvictionVisibility(char, r.id,
-					CYCLE[r.convictionVisibility], now) end)
+					ChronicleView.CYCLE[r.convictionVisibility], now) end)
 			end }
 		end
-		fill(row, list)
+		fill(row, list, removable and { "Remove", function()
+			Widgets.Confirm("Remove this record?", "Remove", function()
+				act(function(char) return m.Remove(char, r.id) end)
+			end)
+		end } or nil)
+		row.onVisibility = function(level)
+			act(function(char, now) return m.SetVisibility(char, r.id, level, now) end)
+		end
 	end
 
-	local function placeButtons(row, entry, char)
-		local name = entry.subzone or entry.zone
-		-- Act on this row's place, looked up by its exact key, never by name.
-		local function this(c)
-			local place = ns.Places.Entry(c, entry.zone, entry.subzone)
-			if not place then return nil, "that place is no longer logged" end
-			return place
+	-- Chips left to right; one that would not fit (with the visibility
+	-- chip after it) is left out rather than overlapping.
+	local function layoutChips(row, list, withVis)
+		local rect = ChronicleView.CardRects().chips
+		local x, limit = rect.x, rect.x + rect.w - (withVis and (row.vis:GetWidth() + 6) or 0)
+		for c, chip in ipairs(row.chips) do
+			local spec = list[c]
+			local shown = false
+			if spec then
+				chip:SetChip(spec[1], spec[2])
+				if x + chip:GetWidth() <= limit then
+					chip:ClearAllPoints()
+					chip:SetPoint("TOPLEFT", x, -rect.y)
+					x = x + chip:GetWidth() + 6
+					shown = true
+				end
+			end
+			chip:SetShown(shown)
 		end
-		fill(row, {
-			{ "Write memory", function() section:OpenForm(placeMemoryForm(entry)) end, 112 },
-			not ns.Places.IsHomeland(char, entry) and { "Set as homeland", function()
-				Widgets.Confirm(string.format("Set your Homeland to %s? This replaces the Homeland on your "
-					.. "profile; its visibility stays as it is.", name), "Set", function()
-					act(function(c, now)
-						local place, err = this(c)
-						if not place then return nil, err end
-						return ns.Places.SetHomeland(c, place, now)
-					end)
-				end)
-			end, 132 } or false,
-			{ entry.meaningful and "Unmark meaningful" or "Mark meaningful", function()
-				act(function(c)
-					local place, err = this(c)
-					if not place then return nil, err end
-					place.meaningful = (not place.meaningful) or nil
-					return place
-				end)
-			end, 144 },
-		})
+		row.vis:SetShown(withVis)
+		if withVis then
+			row.vis:ClearAllPoints()
+			row.vis:SetPoint("TOPLEFT", x, -rect.y)
+		end
+	end
+
+	local function fillCard(row, content)
+		local rects = ChronicleView.CardRects({ title = content.title ~= nil, meta = content.meta ~= nil,
+			progress = content.progress ~= nil })
+		row.chip:SetShown(content.chip ~= nil)
+		if content.chip then
+			row.chip:SetChip(content.chip[1], content.chip[2])
+			row.chip:ClearAllPoints()
+			row.chip:SetPoint("TOPLEFT", rects.chip.x, -rects.chip.y)
+		end
+		place(row.date, rects.date)
+		row.date:SetText(content.date or "")
+		row.title:SetShown(content.title ~= nil)
+		if content.title then place(row.title, rects.title); row.title:SetText(content.title) end
+		row.meta:SetShown(content.meta ~= nil)
+		if content.meta then place(row.meta, rects.meta); row.meta:SetText(content.meta) end
+		place(row.text, rects.text)
+		row.text:SetText(content.text or "")
+		row.progress:SetShown(content.progress ~= nil)
+		if content.progress then
+			place(row.progress, rects.progress)
+			row.progress:SetValue(content.progress)
+		end
+		place(row.divider, rects.divider)
+		row.highlight = content.highlight or nil
+		Style.Repaint(row)
 	end
 
 	function section:ApplyTheme(theme)
 		self.theme = theme
 		self.form:ApplyTheme(theme)
-		for _, row in ipairs(self.rows) do
-			Widgets.TextColor(row.text, theme.text)
-			Widgets.TextColor(row.meta, theme.muted)
-		end
 	end
 
-	local EMPTY = {
-		review = "Nothing to review: your story is consistent as far as Dawnward can tell.",
-		places = "No places logged yet. Dawnward notes towns, inns and other places as you travel.",
-	}
-
-	function section:Items(char)
+	--- Every item of a tab, newest first.
+	function section:Items(char, tabId)
+		tabId = tabId or self.tab
 		local items = {}
 		if not char then return items end
-		if self.tab == "review" then return ns.Continuity.Findings(char) end
-		if self.tab == "places" then return ns.Places.List(char) end
-		local list = char.story[self.tab] or {}
+		if tabId == "review" then return ns.Continuity.Findings(char) end
+		if tabId == "places" then return ns.Places.List(char) end
+		local list = char.story[tabId] or {}
 		for i = #list, 1, -1 do items[#items + 1] = list[i] end
 		return items
 	end
 
 	function section:Refresh(view)
 		local char = view.char
+		local spec = tabSpec(self.tab)
+		local now = ns.ctx and ns.ctx.now and ns.ctx.now() or nil
+		-- The heading over the section names the tab, as in the mockup.
+		if SECTION_DEF then SECTION_DEF.heading = spec.label end
 		self.tabs:Select(self.tab)
-		local spec
-		for _, tab in ipairs(ChronicleView.TABS) do
-			if tab.id == self.tab then spec = tab end
+		for i, b in ipairs(self.tabButtons) do
+			local tab = ChronicleView.TABS[i]
+			local n = char and #self:Items(char, tab.id) or 0
+			b:SetText(n > 0 and string.format("%s  %d", tab.label, n) or tab.label)
 		end
+
+		local places = self.tab == "places"
+		if places then
+			self.places = self.places or ns.ChroniclePlaces.Create(f, L.width, {
+				act = act, openForm = function(s) section:OpenForm(s) end })
+		end
+		if self.places then self.places.frame:SetShown(places) end
+		for _, region in ipairs(self.toolbar) do region:SetShown(not places) end
+		if places then
+			self.emptyPanel:Hide()
+			self.empty:Hide()
+			for _, row in ipairs(self.rows) do row:Hide() end
+			self.places:Refresh(char, self:Items(char))
+			return
+		end
+
+		-- Toolbar.
 		self.new:SetShown(spec.new ~= nil)
-		if spec.new then self.new:SetText(spec.new) end
-		local items = self:Items(char)
+		if spec.new then self.new:SetText("+  " .. spec.new) end
+		self.search:ClearAllPoints()
+		self.search:SetPoint("TOPLEFT", L.inset + (spec.new and (L.newWidth + 10) or 0), -L.toolbarTop)
+		self.search.placeholder:SetText(spec.search or "Search")
+		local all = self:Items(char)
+		local items = {}
+		for _, item in ipairs(all) do
+			if ChronicleView.Matches(self.tab, item, self.query) then items[#items + 1] = item end
+		end
 		local pages
 		pages, self.page = ChronicleView.Pages(#items, self.page)
 		self.prev:SetEnabled(self.page > 1)
 		self.next:SetEnabled(self.page < pages)
 		self.pageLabel:SetText(string.format("Page %d of %d", self.page, pages))
+		local noun = spec.noun[#all == 1 and 1 or 2]
+		self.count:ClearAllPoints()
+		self.count:SetPoint("RIGHT", self.prev, "LEFT", -10, 0)
+		if self.query ~= "" then
+			self.count:SetText(string.format("%d of %d %s", #items, #all, spec.noun[2]))
+		else
+			self.count:SetText(string.format("%s%d %s", self.tab == "review" and "" or "Newest first · ", #all, noun))
+		end
+
+		-- Empty state.
+		local empty = ChronicleView.EMPTY[self.tab]
+		self.emptyPanel:SetShown(#items == 0)
 		self.empty:SetShown(#items == 0)
-		self.empty:SetText(EMPTY[self.tab] or "Nothing here yet. Use the button below to add the first one.")
-		local offset = (self.page - 1) * L.rows
+		if #all > 0 and #items == 0 then
+			self.emptyPanel:SetTitle("No match")
+			self.empty:SetText(string.format("Nothing matches \"%s\". Clear the search to see all %d %s.",
+				self.query, #all, spec.noun[#all == 1 and 1 or 2]))
+		else
+			self.emptyPanel:SetTitle(empty[1])
+			self.empty:SetText(empty[2])
+		end
+
+		local offset = (self.page - 1) * ChronicleView.ROWS
 		for i, row in ipairs(self.rows) do
 			local item = items[offset + i]
 			row:SetShown(item ~= nil)
-			if item and self.tab == "review" then
-				row.status:SetText("")
-				row.text:SetWidth(rects.text.w)
-				row.text:SetText(item.message)
-				row.meta:SetText("What is it?")
-				local list = {}
-				for b = #ChronicleView.REVIEW_CHOICES, 1, -1 do
-					-- Filled from the right, so the choices read in order.
-					local choice = ChronicleView.REVIEW_CHOICES[b]
-					list[#list + 1] = { choice, function()
-						act(function(c, now) return ns.Continuity.Review(c, item.key, choice, nil, now) end)
-					end }
-				end
-				fill(row, list)
-			elseif item then
-				local text, meta, status = ChronicleView.RecordText(self.tab, item, char)
-				-- The status (Places: Homeland, Meaningful) sits top right, apart
-				-- from the buttons below that change it; the text makes room for it.
-				row.status:SetText(status or "")
-				row.text:SetWidth(status and status ~= "" and rects.text.w - L.statusWidth - 8 or rects.text.w)
-				row.text:SetText(text)
-				row.meta:SetText(meta)
-				if self.tab == "places" then
-					placeButtons(row, item, char)
+			row.record = item
+			if item then
+				local content = ChronicleView.CardContent(self.tab, item, char, now)
+				fillCard(row, content)
+				if self.tab == "review" then
+					local list = {}
+					for _, choice in ipairs(ChronicleView.REVIEW_CHOICES) do
+						list[#list + 1] = { choice, function()
+							act(function(c, now2) return ns.Continuity.Review(c, item.key, choice, nil, now2) end)
+						end }
+					end
+					fill(row, list)
+					row.onVisibility = nil
+					layoutChips(row, content.chips, false)
 				else
 					recordButtons(row, self.tab, spec.module, item)
+					row.vis:SetLevel(item.visibility)
+					layoutChips(row, content.chips, true)
 				end
 			end
 		end
@@ -581,5 +814,6 @@ local function create(parent)
 	return section
 end
 
-MainWindow.RegisterSection({ id = "chronicle", label = "Chronicle", order = 4, heading = "Chronicle",
-	icon = "Interface\\Icons\\INV_Misc_Map_01", create = create })
+SECTION_DEF = { id = "chronicle", label = "Chronicle", order = 4, heading = "Memories",
+	icon = "Interface\\Icons\\INV_Misc_Map_01", create = create }
+MainWindow.RegisterSection(SECTION_DEF)
