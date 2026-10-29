@@ -81,6 +81,7 @@ UI\CharacterView.lua
 UI\StoryView.lua
 UI\ReactionCard.lua
 UI\ChronicleView.lua
+UI\TRP3Page.lua
 UI\SettingsPanel.lua
 UI\GuidePanel.lua
 UI\SetupWizard.lua
