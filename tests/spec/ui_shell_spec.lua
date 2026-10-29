@@ -65,6 +65,8 @@ return function(t, expect)
 			expect.equal(ns.MainWindow.TRP3Line({ installed = true, loaded = true, profile = { name = "Aelin RP" } }),
 				'Total RP 3 · profile "Aelin RP"')
 			expect.equal(ns.MainWindow.GetFrame().trp3:GetText(), "Total RP 3 · not installed (optional)")
+			click(ns.MainWindow.GetFrame().trp3Link)
+			expect.equal(ns.MainWindow.CurrentSection(), "settings", "the status line opens the Total RP 3 page")
 		end)
 
 		t:it("keeps Guide and Settings in the rail", function()

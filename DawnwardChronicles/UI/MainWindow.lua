@@ -418,6 +418,14 @@ local function buildRail(r)
 
 	frame.trp3 = Widgets.Label(frame, "GameFontHighlightSmall", false, "muted")
 	Widgets.Place(frame.trp3, frame, r.trp3)
+	-- The status line opens the Total RP 3 page (Settings → Total RP 3).
+	frame.trp3Link = CreateFrame("Button", nil, frame)
+	Widgets.Place(frame.trp3Link, frame, r.trp3)
+	frame.trp3Link:SetScript("OnClick", function()
+		if ns.SettingsPanel and ns.SettingsPanel.OpenPage then ns.SettingsPanel.OpenPage("trp3") end
+	end)
+	Widgets.Tooltip(frame.trp3Link, "Total RP 3", "Optional. Open the Total RP 3 page to see its status, "
+		.. "preview what would be shared and manage sync.")
 	frame.help = Widgets.Button(frame, "Guide", r.help.right - r.help.left, layout.railButtonHeight, "ghost")
 	Widgets.Place(frame.help, frame, r.help)
 	frame.help:SetScript("OnClick", function()
