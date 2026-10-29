@@ -25,10 +25,13 @@ return function(t, expect)
 		local L = MainWindow.LAYOUT
 		local r = MainWindow.ComputeLayout(L)
 
-		t:it("fits the smallest screen area the game's UI scale allows", function()
-			-- At the maximum UI scale UIParent is about 668 units tall and 890 wide.
-			expect.truthy(L.height <= 640, "height " .. L.height)
-			expect.truthy(L.width <= 860, "width " .. L.width)
+		t:it("scales itself to fit the smallest screen area the game's UI scale allows, and stays readable", function()
+			-- The approved design is 1100 x 720. At the maximum UI scale UIParent is
+			-- about 668 units tall and 890 wide: the window scales down to fit both.
+			local scale = ns.Style.FitScale(L.height, 668, nil, L.width, 890)
+			expect.truthy(L.width * scale <= 890 - 40 and L.height * scale <= 668 - 40, "fits")
+			expect.truthy(scale >= 0.75, "not shrunk below three quarters: " .. scale)
+			expect.equal(ns.Style.FitScale(L.height, 1080, nil, L.width, 1920), 1, "full size where there is room")
 		end)
 
 		t:it("keeps tabs, gear, title, content and status apart and inside the background", function()
@@ -41,9 +44,13 @@ return function(t, expect)
 			end
 		end)
 
-		t:it("leaves room for the close button beside the gear", function()
-			expect.truthy(L.width - r.gear.right >= 16)
-			expect.truthy(r.title.right <= r.gear.left)
+		t:it("keeps the close button in the header, and the rail apart from the content", function()
+			expect.truthy(r.title.right <= r.close.left)
+			expect.truthy(inside(r.close, r.background))
+			for _, rail in ipairs({ r.tabs[1], r.tabs[4], r.help, r.gear, r.trp3, r.portrait, r.name }) do
+				expect.truthy(rail.right <= L.railWidth, "rail part inside the rail")
+				expect.falsy(overlaps(rail, r.content))
+			end
 		end)
 
 		t:it("gives the content area a usable reading size", function()

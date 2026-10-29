@@ -1,13 +1,16 @@
--- The journal window: one shared layout with four sections (Journal,
--- Character, Story, Chronicle), a header with the guide (?) and settings
--- buttons, and a status footer. See docs/design/UI_DESIGN_V06.md.
+-- The journal window (v0.7 shell, docs/design/UI_DESIGN_V07.md): a
+-- permanent character rail on the left (portrait, name, title, identity,
+-- the four sections, Total RP 3 status, Guide and Settings) and the content
+-- column on the right (section eyebrow and heading, close button, content,
+-- status line). The approved mockups in docs/design/mockups are the target.
 --
 -- Layering: MEDIUM strata and toplevel, like the game's own panels, so game
 -- dialogs (DIALOG) and tooltips stay above it. The export/import window uses
 -- FULLSCREEN_DIALOG and therefore opens on top of this one.
 --
 -- Sections register themselves (MainWindow.RegisterSection) and receive a
--- "view" on every refresh: { ctx, char, theme, setStatus(text), refresh() }.
+-- "view" on every refresh: { ctx, char, theme, contentWidth, setStatus(text),
+-- refresh() }.
 local _, ns = ...
 local Widgets, Themes, Actions, Style = ns.Widgets, ns.Themes, ns.Actions, ns.Style
 
@@ -17,24 +20,30 @@ ns.MainWindow = MainWindow
 local FRAME_NAME = "DawnwardChroniclesJournal"
 MainWindow.STRATA = "MEDIUM"
 
--- Sizes in UI units. 640 x 540 fits the smallest UIParent the game allows
--- (about 668 units tall at the maximum UI scale); on smaller screens the
--- window scales itself down (Style.FitScale).
+-- Sizes in UI units: the approved 1100 x 720 design. On screens with less
+-- room (a large UI scale or a small resolution) the window scales itself
+-- down to fit both ways (Style.FitScale).
 MainWindow.LAYOUT = {
-	width = 640,
-	height = 540,
+	width = 1100,
+	height = 720,
 	borderInset = 4,
-	pad = 20,
-	emblemSize = 34,
-	headerTop = 14,       -- emblem and title block top, below the top edge
-	tabTop = 58,          -- navigation row top, below the top edge
-	tabHeight = 28,
-	tabWidth = 112,
+	railWidth = 272,
+	railPad = 18,
+	wordmarkTop = 20,
+	portraitTop = 52,
+	portraitSize = 112,
+	nameTop = 182,        -- name block top (name, title, identity line)
+	navTop = 292,         -- first navigation button top
+	navHeight = 44,
+	navGap = 4,
 	tabCount = 4,
-	tabGap = 4,
-	iconSize = 22,
-	iconGap = 6,
-	contentTop = 92,      -- content area top, below the top edge
+	trp3Bottom = 58,      -- Total RP 3 status line, above the bottom edge
+	railButtonHeight = 30,
+	railButtonBottom = 16,
+	pad = 28,             -- content column side padding
+	headerTop = 22,       -- eyebrow top, below the top edge
+	iconSize = 36,
+	contentTop = 96,      -- content area top, below the top edge
 	contentBottom = 36,   -- content area bottom, above the bottom edge
 	statusBottom = 10,
 	statusHeight = 20,
@@ -45,31 +54,41 @@ function MainWindow.ComputeLayout(L)
 	local r = {}
 	r.background = { left = L.borderInset, right = L.width - L.borderInset,
 		bottom = L.borderInset, top = L.height - L.borderInset }
-	local top = L.height - L.headerTop
-	r.emblem = { left = L.pad, right = L.pad + L.emblemSize, bottom = top - L.emblemSize, top = top }
-	r.close = { left = L.width - L.pad - L.iconSize, right = L.width - L.pad, bottom = top - L.iconSize, top = top }
-	r.gear = { left = r.close.left - L.iconGap - L.iconSize, right = r.close.left - L.iconGap,
-		bottom = r.close.bottom, top = top }
-	r.help = { left = r.gear.left - L.iconGap - L.iconSize, right = r.gear.left - L.iconGap,
-		bottom = r.close.bottom, top = top }
-	r.eyebrow = { left = r.emblem.right + 12, right = r.help.left - 12, bottom = top - 12, top = top }
-	r.title = { left = r.emblem.right + 12, right = r.help.left - 12, bottom = top - 34, top = top - 14 }
+	-- The rail.
+	r.rail = { left = L.borderInset, right = L.railWidth, bottom = L.borderInset, top = L.height - L.borderInset }
+	local railLeft, railRight = L.railPad, L.railWidth - L.railPad
+	local centre = L.railWidth / 2
+	r.wordmark = { left = railLeft, right = railRight, bottom = L.height - L.wordmarkTop - 18,
+		top = L.height - L.wordmarkTop }
+	r.portrait = { left = centre - L.portraitSize / 2, right = centre + L.portraitSize / 2,
+		bottom = L.height - L.portraitTop - L.portraitSize, top = L.height - L.portraitTop }
+	r.name = { left = railLeft, right = railRight, bottom = L.height - L.navTop + 12, top = L.height - L.nameTop }
 	r.tabs = {}
 	for i = 1, L.tabCount do
-		local left = L.pad + (i - 1) * (L.tabWidth + L.tabGap)
-		r.tabs[i] = { left = left, right = left + L.tabWidth,
-			bottom = L.height - L.tabTop - L.tabHeight, top = L.height - L.tabTop }
+		local top = L.height - L.navTop - (i - 1) * (L.navHeight + L.navGap)
+		r.tabs[i] = { left = railLeft - 4, right = railRight + 4, bottom = top - L.navHeight, top = top }
 	end
-	r.content = { left = L.pad, right = L.width - L.pad, bottom = L.contentBottom, top = L.height - L.contentTop }
-	r.status = { left = L.pad, right = L.width - L.pad,
-		bottom = L.statusBottom, top = L.statusBottom + L.statusHeight }
+	local half = (railRight - railLeft - 8) / 2
+	r.help = { left = railLeft, right = railLeft + half, bottom = L.railButtonBottom,
+		top = L.railButtonBottom + L.railButtonHeight }
+	r.gear = { left = railRight - half, right = railRight, bottom = L.railButtonBottom,
+		top = L.railButtonBottom + L.railButtonHeight }
+	r.trp3 = { left = railLeft, right = railRight, bottom = L.trp3Bottom, top = L.trp3Bottom + 18 }
+	-- The content column.
+	local left, right = L.railWidth + L.pad, L.width - L.pad
+	local top = L.height - L.headerTop
+	r.close = { left = right - L.iconSize, right = right, bottom = top - L.iconSize, top = top }
+	r.eyebrow = { left = left, right = r.close.left - 12, bottom = top - 14, top = top }
+	r.title = { left = left, right = r.close.left - 12, bottom = top - 50, top = top - 18 }
+	r.content = { left = left, right = right, bottom = L.contentBottom, top = L.height - L.contentTop }
+	r.status = { left = left, right = right, bottom = L.statusBottom, top = L.statusBottom + L.statusHeight }
 	return r
 end
 
 local sections = {}
 local frame, layout, currentSection, settingsOpen, appliedTheme
 
---- def = { id, label, order, create(parent) -> section }
+--- def = { id, label, order, heading?, icon?, create(parent) -> section }
 -- section: { frame, Refresh(self, view), ApplyTheme(self, theme), OnHide(self)? }
 function MainWindow.RegisterSection(def)
 	sections[#sections + 1] = def
@@ -90,11 +109,20 @@ local function setStatus(text)
 	end
 end
 
+-- Rail navigation buttons: icon, label, optional count badge.
 local function paintTab(tab, theme)
-	local selected = tab.selected
-	Style.TextColor(tab.label, (selected or tab.hover) and theme.accent or theme.muted)
-	tab.underline:SetShown(selected and true or false)
+	local on = tab.selected
+	Style.Color(tab.bg, theme.surfaceHover, on and 1 or (tab.hover and 0.6 or 0))
+	tab.edges:Paint(theme.border or theme.ornament, on and 1 or 0)
+	tab.underline:SetShown(on and true or false)
 	Style.Color(tab.underline, theme.accent)
+	Style.TextColor(tab.label, (on or tab.hover) and theme.accent or theme.text)
+	if tab.icon then
+		local tint = (on or tab.hover) and theme.accent or theme.muted
+		tab.icon:SetVertexColor(tint[1], tint[2], tint[3])
+	end
+	Style.Color(tab.badgeBg, theme.accent)
+	Style.TextColor(tab.badge, theme.accentText)
 end
 
 local function tabColors()
@@ -124,19 +152,35 @@ local SIM_COLOR = Themes.VISIBILITY_COLORS.secret
 local SIM_SUFFIX = string.format("  |cff%02x%02x%02x(simulation - test data)|r",
 	math.floor(SIM_COLOR[1] * 255), math.floor(SIM_COLOR[2] * 255), math.floor(SIM_COLOR[3] * 255))
 
---- Window title. Stored names never contain "|" (Util.CleanText), so adding
--- our own colour code for the simulation marker is safe.
+--- The journal heading. Stored names never contain "|" (Util.CleanText), so
+-- adding our own colour code for the simulation marker is safe.
 function MainWindow.TitleFor(char, simulation)
 	local name = char and char.fields.name and char.fields.name.value
 	local title = name and (name .. "'s Journal") or "Dawnward Chronicles"
 	return simulation and (title .. SIM_SUFFIX) or title
 end
 
+--- The heading over a section: the journal is titled with the character's
+-- name; the others with their own heading. Simulation is always flagged.
+function MainWindow.HeadingFor(def, char, simulation)
+	if not def or def.id == "journal" then
+		return MainWindow.TitleFor(char, simulation)
+	end
+	local heading = def.heading or def.label
+	return simulation and (heading .. SIM_SUFFIX) or heading
+end
+
 --- Width of the content area. Sections size their text from this rather than
 -- GetWidth(), which the client may report as 0 before the first layout pass.
 function MainWindow.ContentWidth()
 	local L = MainWindow.LAYOUT
-	return L.width - 2 * L.pad
+	return L.width - L.railWidth - 2 * L.pad
+end
+
+--- Height of the content area.
+function MainWindow.ContentHeight()
+	local L = MainWindow.LAYOUT
+	return L.height - L.contentTop - L.contentBottom
 end
 
 local function makeView(theme, char)
@@ -148,6 +192,46 @@ local function makeView(theme, char)
 		setStatus = setStatus,
 		refresh = MainWindow.Refresh,
 	}
+end
+
+--- The Total RP 3 line in the rail: availability only (read-only). Pure.
+function MainWindow.TRP3Line(status)
+	if type(status) ~= "table" or not status.installed then
+		return "Total RP 3 · not installed (optional)"
+	end
+	if not status.loaded then
+		return "Total RP 3 · installed, not loaded"
+	end
+	local profile = status.profile and status.profile.name
+	return profile and ("Total RP 3 · profile \"" .. profile .. "\"") or ("Total RP 3 " .. (status.version or ""))
+end
+
+-- The rail's character block, from the profile and the game's own data.
+local function refreshIdentity(char)
+	local game = ns.Showcase.GameIdentity()
+	local name = char and char.fields.name and char.fields.name.value
+	if not name then
+		local ok, unitName = pcall(UnitName, "player")
+		name = ok and unitName or "Your character"
+	end
+	frame.charName:SetText(name)
+	local title = char and char.fields.title and char.fields.title.value
+	frame.charTitle:SetText(title or "")
+	frame.charLine:SetText(ns.Showcase.IdentityLine(game, char))
+	frame.level:SetText(game.level and tostring(game.level) or "")
+	frame.levelBadge:SetShown(game.level ~= nil)
+end
+
+local function refreshRail(char)
+	refreshIdentity(char)
+	local waiting = char and ns.Reactions and #ns.Reactions.List(char, ctx().now()) or 0
+	for _, tab in ipairs(frame.tabs) do
+		local count = tab.id == "story" and waiting or 0
+		tab.badge:SetText(count > 0 and tostring(count) or "")
+		tab.badgeBg:SetShown(count > 0)
+	end
+	local status = ctx().trp3Status and ctx().trp3Status() or nil
+	frame.trp3:SetText(MainWindow.TRP3Line(status))
 end
 
 --- Re-reads data and redraws the visible parts. Cheap when hidden.
@@ -162,16 +246,21 @@ function MainWindow.Refresh()
 	if theme ~= appliedTheme or (Style.Current() ~= theme and not previewing) then
 		applyTheme(theme)
 	end
-	frame.title:SetText(MainWindow.TitleFor(char, ctx().store:IsSimulation()))
+	local def
+	for _, d in ipairs(sections) do
+		if d.id == currentSection then def = d end
+	end
+	frame.eyebrow:SetText(settingsOpen and "SETTINGS" or (def and def.label:upper() or ""))
+	frame.title:SetText(settingsOpen and "Settings"
+		or MainWindow.HeadingFor(def, char, ctx().store:IsSimulation()))
+	refreshRail(char)
 	local view = makeView(theme, char)
 	if settingsOpen and MainWindow.settings then
 		MainWindow.settings:Refresh(view)
 		return
 	end
-	for _, def in ipairs(sections) do
-		if def.id == currentSection and def.instance then
-			def.instance:Refresh(view)
-		end
+	if def and def.instance then
+		def.instance:Refresh(view)
 	end
 end
 
@@ -255,52 +344,95 @@ local function buildTab(index, def, r)
 	local tab = CreateFrame("Button", nil, frame)
 	Widgets.Place(tab, frame, r.tabs[index])
 	tab.id = def.id
-	tab.label = tab:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	tab.label:SetPoint("CENTER", 0, 1)
-	tab.label:SetText(def.label)
+	tab.bg = Widgets.Solid(tab, "BACKGROUND")
+	tab.bg:SetAllPoints(tab)
+	tab.edges = Style.Edge(tab, "BORDER")
+	-- Selection marker (kept under its v0.6 name for callers and tests).
 	tab.underline = Widgets.Solid(tab, "ARTWORK")
-	tab.underline:SetHeight(2)
-	tab.underline:SetPoint("BOTTOMLEFT", 10, 0)
-	tab.underline:SetPoint("BOTTOMRIGHT", -10, 0)
+	tab.underline:SetWidth(3)
+	tab.underline:SetPoint("TOPLEFT", 1, -8)
+	tab.underline:SetPoint("BOTTOMLEFT", 1, 8)
+	if def.icon then
+		tab.icon = tab:CreateTexture(nil, "ARTWORK")
+		tab.icon:SetSize(22, 22)
+		tab.icon:SetPoint("LEFT", 14, 0)
+		tab.icon:SetTexture(def.icon)
+		tab.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+		if tab.icon.SetDesaturated then tab.icon:SetDesaturated(true) end
+	end
+	tab.label = tab:CreateFontString(nil, "OVERLAY", Style.Font("GameFontHighlight"))
+	tab.label:SetPoint("LEFT", def.icon and 46 or 16, 0)
+	tab.label:SetText(def.label)
+	tab.badgeBg = Widgets.Solid(tab, "ARTWORK")
+	tab.badgeBg:SetSize(24, 20)
+	tab.badgeBg:SetPoint("RIGHT", -12, 0)
+	tab.badge = tab:CreateFontString(nil, "OVERLAY", Style.Font("GameFontHighlightSmall"))
+	tab.badge:SetPoint("CENTER", tab.badgeBg, "CENTER", 0, 0)
+	tab.badgeBg:Hide()
 	tab:SetScript("OnClick", function() showSection(def.id) end)
 	tab:SetScript("OnEnter", function(self) self.hover = true; Style.Repaint(self) end)
 	tab:SetScript("OnLeave", function(self) self.hover = nil; Style.Repaint(self) end)
 	return Style.Register(tab, paintTab)
 end
 
--- A square header button holding a desaturated game icon, tinted by the theme.
-local function iconButton(rect, icon, title, text, onClick)
-	local b = CreateFrame("Button", nil, frame)
-	Widgets.Place(b, frame, rect)
-	b.bg = Widgets.Solid(b, "BACKGROUND")
-	b.bg:SetAllPoints(b)
-	b.edges = Style.Edge(b, "BORDER")
-	b.icon = b:CreateTexture(nil, "ARTWORK")
-	b.icon:SetPoint("TOPLEFT", 3, -3)
-	b.icon:SetPoint("BOTTOMRIGHT", -3, 3)
-	if icon then
-		b.icon:SetTexture(icon)
-		b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-		if b.icon.SetDesaturated then b.icon:SetDesaturated(true) end
-	else
-		b.glyph = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-		b.glyph:SetPoint("CENTER", 0, 0)
-		b.glyph:SetText("X")
-	end
-	b:SetScript("OnClick", onClick)
-	b:SetScript("OnEnter", function(self) self.hover = true; Style.Repaint(self) end)
-	b:SetScript("OnLeave", function(self) self.hover = nil; Style.Repaint(self) end)
-	Widgets.Tooltip(b, title, text)
-	return Style.Register(b, function(self, theme)
-		local tint = self.hover and theme.accent or theme.muted
-		Style.Color(self.bg, theme.surfaceHover, self.hover and 1 or 0)
-		self.edges:Paint(self.hover and theme.accent or theme.edge, 1)
-		if self.glyph then
-			Style.TextColor(self.glyph, tint)
-		else
-			self.icon:SetVertexColor(tint[1], tint[2], tint[3])
+-- The rail: wordmark, portrait and level, name block, Total RP 3 line,
+-- Guide and Settings.
+local function buildRail(r)
+	frame.railFill = Style.Fill(frame, "panel", "BACKGROUND", -7)
+	Widgets.Place(frame.railFill, frame, r.rail)
+	frame.railLine = Widgets.Solid(frame, "BORDER")
+	frame.railLine:SetWidth(1)
+	frame.railLine:SetPoint("TOPLEFT", layout.railWidth, -layout.borderInset)
+	frame.railLine:SetPoint("BOTTOMLEFT", layout.railWidth, layout.borderInset)
+	Style.Register(frame.railLine, function(t, theme) Style.Color(t, theme.edge) end)
+
+	frame.wordmark = Widgets.Label(frame, nil, false, "eyebrow")
+	Widgets.Place(frame.wordmark, frame, r.wordmark)
+	frame.wordmark:SetText("DAWNWARD")
+	frame.portrait = ns.Showcase.Portrait(frame, layout.portraitSize)
+	Widgets.Place(frame.portrait, frame, r.portrait)
+	frame.levelBadge = CreateFrame("Frame", nil, frame)
+	frame.levelBadge:SetSize(34, 20)
+	frame.levelBadge:SetPoint("TOP", frame.portrait, "BOTTOM", 0, 8)
+	frame.levelBadge.bg = Style.Fill(frame.levelBadge, "background", "BACKGROUND")
+	frame.levelBadge.bg:SetAllPoints(frame.levelBadge)
+	frame.levelBadge.edges = Style.Edge(frame.levelBadge, "BORDER")
+	Style.Register(frame.levelBadge.edges, function(e, theme) e:Paint(theme.border or theme.ornament, 1) end)
+	frame.level = Widgets.Label(frame.levelBadge, "GameFontHighlightSmall", false, "accent")
+	frame.level:SetPoint("CENTER", 0, 0)
+	frame.level:SetJustifyH("CENTER")
+
+	local width = layout.railWidth - 2 * layout.railPad
+	frame.charName = Widgets.Label(frame, "GameFontHighlightLarge", true, "body")
+	frame.charName:SetPoint("TOP", frame, "TOPLEFT", layout.railWidth / 2, -layout.nameTop)
+	frame.charName:SetWidth(width)
+	frame.charName:SetJustifyH("CENTER")
+	frame.charTitle = Widgets.Label(frame, "GameFontHighlight", true, "accent")
+	frame.charTitle:SetPoint("TOP", frame.charName, "BOTTOM", 0, -4)
+	frame.charTitle:SetWidth(width)
+	frame.charTitle:SetJustifyH("CENTER")
+	frame.charLine = Widgets.Label(frame, "GameFontHighlightSmall", true, "muted")
+	frame.charLine:SetPoint("TOP", frame.charTitle, "BOTTOM", 0, -4)
+	frame.charLine:SetWidth(width)
+	frame.charLine:SetJustifyH("CENTER")
+
+	frame.trp3 = Widgets.Label(frame, "GameFontHighlightSmall", false, "muted")
+	Widgets.Place(frame.trp3, frame, r.trp3)
+	frame.help = Widgets.Button(frame, "Guide", r.help.right - r.help.left, layout.railButtonHeight, "ghost")
+	Widgets.Place(frame.help, frame, r.help)
+	frame.help:SetScript("OnClick", function()
+		if MainWindow.guide and MainWindow.guide:IsOpen() then
+			MainWindow.guide:Close()
+		elseif MainWindow.guide then
+			MainWindow.guide:Show(1)
 		end
 	end)
+	Widgets.Tooltip(frame.help, "Guide and help", "A short tour of Dawnward, and a search for any feature or command.")
+	frame.gear = Widgets.Button(frame, "Settings", r.gear.right - r.gear.left, layout.railButtonHeight, "ghost")
+	Widgets.Place(frame.gear, frame, r.gear)
+	frame.gear:SetScript("OnClick", function() MainWindow.ToggleSettings() end)
+	Widgets.Tooltip(frame.gear, "Settings",
+		"Theme, story moments and pace, backup and import, simulation mode, Total RP 3 status.")
 end
 
 local function build()
@@ -318,48 +450,19 @@ local function build()
 	frame:SetScript("OnDragStop", savePosition)
 	Style.Chrome(frame, "background")
 	frame.background = frame.chrome.fill
-	frame.contentWell = Style.Fill(frame, "panel", "BACKGROUND", -7)
+	-- The content column reads on the window ground; the rail on the panel colour.
+	frame.contentWell = Style.Fill(frame, "background", "BACKGROUND", -7)
 	Widgets.Place(frame.contentWell, frame, r.content)
-	-- Dividers under the navigation and above the status line.
-	frame.navLine = Widgets.Divider(frame)
-	frame.navLine:SetPoint("TOPLEFT", layout.pad, -(layout.contentTop - 1))
-	frame.navLine:SetPoint("TOPRIGHT", -layout.pad, -(layout.contentTop - 1))
-	frame.footLine = Widgets.Divider(frame)
-	frame.footLine:SetPoint("BOTTOMLEFT", layout.pad, layout.contentBottom)
-	frame.footLine:SetPoint("BOTTOMRIGHT", -layout.pad, layout.contentBottom)
+	buildRail(r)
 
-	-- Header: emblem, eyebrow, title, then ?, settings and close.
-	frame.emblem = frame:CreateTexture(nil, "ARTWORK")
-	Widgets.Place(frame.emblem, frame, r.emblem)
-	frame.emblem:SetTexture("Interface\\Icons\\INV_Misc_Book_09")
-	frame.emblem:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-	frame.emblemFrame = CreateFrame("Frame", nil, frame)
-	Widgets.Place(frame.emblemFrame, frame, { left = r.emblem.left - 2, right = r.emblem.right + 2,
-		bottom = r.emblem.bottom - 2, top = r.emblem.top + 2 })
-	frame.emblemEdge = Style.Edge(frame.emblemFrame, "OVERLAY")
-	Style.Register(frame.emblemEdge, function(e, theme) e:Paint(theme.ornament, 1) end)
-
+	-- Content column header: eyebrow, heading, close.
 	frame.eyebrow = Widgets.Label(frame, nil, false, "eyebrow")
 	Widgets.Place(frame.eyebrow, frame, r.eyebrow)
-	frame.eyebrow:SetText("DAWNWARD CHRONICLES")
-	frame.title = Widgets.Label(frame, "GameFontNormalLarge", false, "title")
+	frame.title = Widgets.Label(frame, "GameFontNormalHuge", false, "title")
 	Widgets.Place(frame.title, frame, r.title)
-
-	frame.close = iconButton(r.close, nil, "Close", "Close the journal (Escape also works).", function()
-		MainWindow.Hide()
-	end)
-	frame.gear = iconButton(r.gear, "Interface\\Icons\\INV_Misc_Gear_01", "Settings",
-		"Theme, story moments, backup and import, simulation mode, Total RP 3 status.", function()
-			MainWindow.ToggleSettings()
-		end)
-	frame.help = iconButton(r.help, "Interface\\Icons\\INV_Misc_QuestionMark", "Guide and help",
-		"A short tour of Dawnward, and a search for any feature or command.", function()
-			if MainWindow.guide and MainWindow.guide:IsOpen() then
-				MainWindow.guide:Close()
-			elseif MainWindow.guide then
-				MainWindow.guide:Show(1)
-			end
-		end)
+	frame.close = Widgets.IconButton(frame, "X", "Close", "Close the journal (Escape also works).")
+	Widgets.Place(frame.close, frame, r.close)
+	frame.close:SetScript("OnClick", function() MainWindow.Hide() end)
 
 	frame.content = CreateFrame("Frame", nil, frame)
 	Widgets.Place(frame.content, frame, r.content)
@@ -410,7 +513,8 @@ function MainWindow.Show(force)
 		build()
 	end
 	restorePosition()
-	frame:SetScale(Style.FitScale(layout.height, UIParent.GetHeight and UIParent:GetHeight()))
+	frame:SetScale(Style.FitScale(layout.height, UIParent.GetHeight and UIParent:GetHeight(), nil,
+		layout.width, UIParent.GetWidth and UIParent:GetWidth()))
 	frame:Show()
 	frame:Raise()
 	showSection(currentSection)

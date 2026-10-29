@@ -27,6 +27,72 @@ Style.TEXT = {
 	danger = { font = "GameFontHighlightSmall", color = "danger" },
 }
 
+--- Fonts (v0.7, docs/design/UI_DESIGN_V07.md) ------------------------------------
+-- Dawnward ships two OFL fonts (Media/Fonts/FONTS.txt): Cinzel for display
+-- text and Alegreya Sans for reading text and labels. Each Dawnward font
+-- object stands in for one game font template; Style.Font(template) returns
+-- the Dawnward one, or the template itself when the bundled fonts are not
+-- used (a non-Latin client, or a font file that failed to load).
+Style.FONT_DIR = "Interface\\AddOns\\DawnwardChronicles\\Media\\Fonts\\"
+Style.FONT_FILES = { display = "Cinzel-SemiBold.ttf", body = "AlegreyaSans-Regular.ttf",
+	bold = "AlegreyaSans-Bold.ttf" }
+-- Clients whose script the bundled fonts cover.
+Style.LATIN_LOCALES = { enUS = true, enGB = true, deDE = true, frFR = true, esES = true, esMX = true, itIT = true,
+	ptBR = true, ptPT = true }
+Style.FONTS = {
+	{ name = "DawnwardFontScreen", file = "display", size = 26, template = "GameFontNormalHuge" },
+	{ name = "DawnwardFontTitle", file = "display", size = 19, template = "GameFontNormalLarge" },
+	{ name = "DawnwardFontName", file = "display", size = 18, template = "GameFontHighlightLarge" },
+	{ name = "DawnwardFontEyebrow", file = "display", size = 11, template = "GameFontNormalSmall" },
+	{ name = "DawnwardFontLabel", file = "bold", size = 14, template = "GameFontNormal" },
+	{ name = "DawnwardFontBody", file = "body", size = 15, template = "GameFontHighlight" },
+	{ name = "DawnwardFontSmall", file = "body", size = 13, template = "GameFontHighlightSmall" },
+	{ name = "DawnwardFontDisabled", file = "body", size = 13, template = "GameFontDisableSmall" },
+	{ name = "DawnwardFontInput", file = "body", size = 15, template = "ChatFontNormal" },
+}
+local fontFor = {}
+Style.fontObjects = {}
+
+--- Creates the font objects. Safe to call again; returns the number loaded.
+function Style.InitFonts()
+	fontFor = {}
+	if type(CreateFont) ~= "function" then
+		return 0
+	end
+	local locale = type(GetLocale) == "function" and GetLocale() or "enUS"
+	if not Style.LATIN_LOCALES[locale] then
+		return 0
+	end
+	local loaded = 0
+	for _, f in ipairs(Style.FONTS) do
+		local ok, set = pcall(function()
+			local object = Style.fontObjects[f.name] or CreateFont(f.name)
+			Style.fontObjects[f.name] = object
+			local success = object:SetFont(Style.FONT_DIR .. Style.FONT_FILES[f.file], f.size, "")
+			if success then
+				object:SetShadowOffset(1, -1)
+				object:SetShadowColor(0, 0, 0, 0.75)
+			end
+			return success
+		end)
+		if ok and set then
+			fontFor[f.template] = f.name
+			loaded = loaded + 1
+		end
+	end
+	return loaded
+end
+
+--- The font object name to use in place of a game font template.
+function Style.Font(template)
+	return fontFor[template] or template
+end
+
+--- The Dawnward font object standing in for template, or nil.
+function Style.FontObject(template)
+	return fontFor[template] and Style.fontObjects[fontFor[template]] or nil
+end
+
 -- Weak keys: objects that disappear are forgotten.
 local registry = setmetatable({}, { __mode = "k" })
 
@@ -160,11 +226,19 @@ function Style.Fill(parent, role, layer, sublevel, alpha)
 	return tex
 end
 
---- Window scale that fits a frame of height h (UI units) inside a parent of
--- parentHeight with margin to spare; never above 1. Pure.
-function Style.FitScale(h, parentHeight, margin)
-	if type(parentHeight) ~= "number" or parentHeight <= 0 then
-		return 1
+--- Window scale that fits a frame of height h (and width w, when given)
+-- inside a parent of parentHeight (and parentWidth) with margin to spare;
+-- never above 1. Pure.
+function Style.FitScale(h, parentHeight, margin, w, parentWidth)
+	margin = margin or 40
+	local scale = 1
+	if type(parentHeight) == "number" and parentHeight > 0 then
+		scale = math.min(scale, (parentHeight - margin) / h)
 	end
-	return math.min(1, (parentHeight - (margin or 40)) / h)
+	if w and type(parentWidth) == "number" and parentWidth > 0 then
+		scale = math.min(scale, (parentWidth - margin) / w)
+	end
+	return scale
 end
+
+Style.InitFonts()

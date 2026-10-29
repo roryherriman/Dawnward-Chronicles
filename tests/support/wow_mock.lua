@@ -77,11 +77,28 @@ function Methods:Enable() self.__enabled = true end
 function Methods:Disable() self.__enabled = false end
 function Methods:IsEnabled() return self.__enabled end
 function Methods:GetName() return self.__name end
-function Methods:CreateFontString(name, layer)
+function Methods:CreateFontString(name, layer, template)
 	local fs = self.__mock.newFrame("FontString", name, self)
-	fs.__layer = layer
+	fs.__layer, fs.__template = layer, template
 	return fs
 end
+-- Fonts: SetFont succeeds unless mock.fontFails names the file (a missing font).
+function Methods:SetFont(file, height, flags)
+	if self.__mock.fontFails and tostring(file):find(self.__mock.fontFails, 1, true) then return false end
+	self.__font = { file = file, height = height, flags = flags }
+	return true
+end
+function Methods:GetFont() return self.__font and self.__font.file, self.__font and self.__font.height end
+function Methods:SetFontObject(font) self.__fontObject = font end
+-- Models: SetUnit succeeds unless mock.modelFails is set.
+function Methods:SetUnit(unit)
+	if self.__mock.modelFails then return false end
+	self.__unit = unit
+	return true
+end
+function Methods:ClearModel() self.__unit = nil end
+function Methods:SetRotation(r) self.__rotation = r end
+function Methods:GetRotation() return self.__rotation or 0 end
 function Methods:CreateTexture(name, layer, _, sublevel)
 	local tex = self.__mock.newFrame("Texture", name, self)
 	tex.__layer, tex.__sublevel = layer, sublevel
@@ -182,6 +199,10 @@ function Mock.new(opts)
 			return "1.15.x", "00000", "mock", opts.interface or 11509
 		end,
 		CreateFrame = function(kind, name, parent) return mock.newFrame(kind, name, parent) end,
+		CreateFont = function(name) return mock.newFrame("Font", name) end,
+		GetLocale = function() return mock.locale or "enUS" end,
+		SetPortraitTexture = function(texture, unit) texture.__portrait = unit end,
+		STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF",
 		UIParent = mock.newFrame("Frame", "UIParent"),
 		UISpecialFrames = {},
 		tinsert = table.insert,

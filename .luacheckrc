@@ -39,7 +39,7 @@ local WOW_READ = {
 	-- v0.5 minimap button
 	"Minimap", "GetCursorPosition",
 	-- v0.6 keyboard navigation (Shift+Tab)
-	"IsShiftKeyDown", "GetTime", "UnitIsAFK",
+	"IsShiftKeyDown", "GetTime", "UnitIsAFK", "RAID_CLASS_COLORS", "SetPortraitTexture", "CreateFont", "GetLocale",
 }
 
 files["DawnwardChronicles/Platform/"] = {

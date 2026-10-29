@@ -395,4 +395,5 @@ function JournalView.AttachEditing(section)
 	editor.cancel:SetScript("OnClick", function() section:CloseEditor() end)
 end
 
-MainWindow.RegisterSection({ id = "journal", label = "Journal", order = 1, create = create })
+MainWindow.RegisterSection({ id = "journal", label = "Journal", order = 1, icon = "Interface\\Icons\\INV_Misc_Book_09",
+	create = create })

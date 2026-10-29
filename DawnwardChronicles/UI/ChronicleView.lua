@@ -29,17 +29,17 @@ ChronicleView.TABS = {
 }
 ChronicleView.REVIEW_CHOICES = { "growth", "unreliable", "secret", "correction", "ignore" }
 
--- Layout in section units (the content area is 600 x 412). Each row is a
+-- Layout in section units (the v0.7 content area is 772 x 588). Each row is a
 -- card; rowPad is its inner margin, and rowHeight includes the gap below it.
 ChronicleView.LAYOUT = {
-	inset = 8, width = 584,
-	tabWidth = 81, tabGap = 2, tabHeight = 22,
-	rowsTop = 38, rows = 6, rowHeight = 56, rowGap = 6, rowPad = 8,
+	inset = 8, width = 756,    -- the v0.7 content column (MainWindow.ContentWidth) less the insets
+	tabWidth = 104, tabGap = 2, tabHeight = 30,
+	rowsTop = 46, rows = 6, rowHeight = 74, rowGap = 8, rowPad = 10,
 	statusWidth = 200,         -- a record's status, top right (Places: Homeland, Meaningful)
-	textHeight = 26,           -- line 1: the record, two lines of small text
-	lineTwo = 26,              -- line 2 starts this far below the row's top
+	textHeight = 34,           -- line 1: the record, two lines of small text
+	lineTwo = 36,              -- line 2 starts this far below the row's top
 	metaWidth = 210,
-	buttons = 5, buttonWidth = 64, buttonHeight = 20, buttonGap = 4,
+	buttons = 5, buttonWidth = 84, buttonHeight = 28, buttonGap = 6,
 }
 ChronicleView.ROWS = ChronicleView.LAYOUT.rows
 
@@ -479,7 +479,7 @@ local function create(parent)
 			return place
 		end
 		fill(row, {
-			{ "Write memory", function() section:OpenForm(placeMemoryForm(entry)) end, 96 },
+			{ "Write memory", function() section:OpenForm(placeMemoryForm(entry)) end, 112 },
 			not ns.Places.IsHomeland(char, entry) and { "Set as homeland", function()
 				Widgets.Confirm(string.format("Set your Homeland to %s? This replaces the Homeland on your "
 					.. "profile; its visibility stays as it is.", name), "Set", function()
@@ -489,7 +489,7 @@ local function create(parent)
 						return ns.Places.SetHomeland(c, place, now)
 					end)
 				end)
-			end, 108 } or false,
+			end, 132 } or false,
 			{ entry.meaningful and "Unmark meaningful" or "Mark meaningful", function()
 				act(function(c)
 					local place, err = this(c)
@@ -497,7 +497,7 @@ local function create(parent)
 					place.meaningful = (not place.meaningful) or nil
 					return place
 				end)
-			end, 120 },
+			end, 144 },
 		})
 	end
 
@@ -581,4 +581,5 @@ local function create(parent)
 	return section
 end
 
-MainWindow.RegisterSection({ id = "chronicle", label = "Chronicle", order = 4, create = create })
+MainWindow.RegisterSection({ id = "chronicle", label = "Chronicle", order = 4, heading = "Chronicle",
+	icon = "Interface\\Icons\\INV_Misc_Map_01", create = create })

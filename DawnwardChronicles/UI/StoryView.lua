@@ -23,9 +23,9 @@ StoryView.MAX_OPTIONS = 7
 StoryView.MAX_CHANGES = 2
 
 local INSET = 8
-local WIDTH = 540
-local OPTION_HEIGHT = 22
-local OPTION_STEP = 24
+local WIDTH = MainWindow.ContentWidth() - 2 * INSET -- the v0.7 content column
+local OPTION_HEIGHT = 30
+local OPTION_STEP = 34
 local OPTIONS_TOP = -108
 
 --- One-line summary of what is waiting. Pure: used by tests.
@@ -247,4 +247,5 @@ local function create(parent)
 	return section
 end
 
-MainWindow.RegisterSection({ id = "story", label = "Story", order = 3, create = create })
+MainWindow.RegisterSection({ id = "story", label = "Story", order = 3, heading = "Moments for your story",
+	icon = "Interface\\Icons\\INV_Misc_Note_01", create = create })

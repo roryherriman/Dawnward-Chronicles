@@ -27,13 +27,28 @@ function CharacterView.HistoryText(item)
 	return (item.when and (item.when .. ": ") or "") .. (item.text or "")
 end
 
+-- The Character Showcase beside the profile list (UI/Showcase.lua).
+CharacterView.SHOWCASE_WIDTH = 280
+CharacterView.SHOWCASE_GAP = 16
+
+--- Width of the profile list for a content width (the showcase takes the rest).
+function CharacterView.ListWidth(contentWidth)
+	return contentWidth - 2 * INSET - 22 - CharacterView.SHOWCASE_WIDTH - CharacterView.SHOWCASE_GAP
+end
+
 local function create(parent)
 	local section = { frame = CreateFrame("Frame", nil, parent), rows = {} }
 	local f = section.frame
 
 	local scroll = CreateFrame("ScrollFrame", Widgets.NextName("CharacterScroll"), f, "UIPanelScrollFrameTemplate")
 	scroll:SetPoint("TOPLEFT", INSET, -INSET)
-	scroll:SetPoint("BOTTOMRIGHT", -(INSET + 22), INSET)
+	scroll:SetPoint("BOTTOMRIGHT", -(INSET + 22 + CharacterView.SHOWCASE_WIDTH + CharacterView.SHOWCASE_GAP), INSET)
+
+	-- Character Showcase: the player's live model (portrait if unavailable),
+	-- beside the profile. It renders only while this section is shown.
+	section.showcase = ns.Showcase.Model(f, CharacterView.SHOWCASE_WIDTH,
+		MainWindow.ContentHeight() - 2 * INSET)
+	section.showcase:SetPoint("TOPRIGHT", -INSET, -INSET)
 	local child = CreateFrame("Frame", nil, scroll)
 	child:SetSize(100, 100)
 	scroll:SetScrollChild(child)
@@ -182,7 +197,7 @@ local function create(parent)
 
 	function section:RenderList(view)
 		local specs = section.BuildSpecs(view.char)
-		local width = view.contentWidth - 2 * INSET - 22 -- scroll bar sits inside the right inset
+		local width = CharacterView.ListWidth(view.contentWidth) -- scroll bar sits inside the right inset
 		self.child:SetWidth(width)
 		local y = 0
 		for i, spec in ipairs(specs) do
@@ -389,6 +404,7 @@ function CharacterView.AttachEditing(section)
 		Widgets.SetFieldError(editor.area.edit, nil)
 		input():SetText(entry and entry.value or "")
 		section.scroll:Hide()
+		section.showcase:Hide()
 		editor:Show()
 		if self.theme then
 			self.ThemeEditor(self.theme)
@@ -403,6 +419,7 @@ function CharacterView.AttachEditing(section)
 		editor.line:ClearFocus()
 		editor.area.edit:ClearFocus()
 		section.scroll:Show()
+		section.showcase:Show()
 		MainWindow.Refresh()
 	end
 
@@ -432,4 +449,5 @@ function CharacterView.AttachEditing(section)
 	editor.clear:SetScript("OnClick", section.ConfirmClear)
 end
 
-MainWindow.RegisterSection({ id = "character", label = "Character", order = 2, create = create })
+MainWindow.RegisterSection({ id = "character", label = "Character", order = 2, heading = "Profile",
+	icon = "Interface\\Icons\\INV_Misc_Head_Human_01", create = create })
