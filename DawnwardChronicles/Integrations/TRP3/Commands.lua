@@ -23,6 +23,7 @@ local STATE_LABEL = {
 	off = "off", blocked = "blocked", deferred = "waiting", conflict = "CONFLICT", noop = "up to date",
 	ready = "has changes to write",
 }
+TRP3Commands.STATE_LABEL = STATE_LABEL
 
 local function out(ctx, line)
 	ctx.print(line)
@@ -142,6 +143,17 @@ function TRP3Commands.StatusLines(ctx)
 	return lines
 end
 
+--- One line for a Sync.RunFeature result (chat and the settings page).
+function TRP3Commands.ResultText(r)
+	local label = Sync.FEATURES[r.feature].label
+	if r.state == "noop" then
+		return "Total RP 3 " .. label .. ": already up to date (nothing written)."
+	elseif r.state == "written" or r.state == "failed" or r.state == "conflict" then
+		return r.message
+	end
+	return "Total RP 3 " .. label .. ": not written - " .. tostring(r.message)
+end
+
 local function runSync(ctx, deps)
 	local results = Sync.Run(deps)
 	if #results == 0 then
@@ -149,15 +161,91 @@ local function runSync(ctx, deps)
 		return
 	end
 	for _, r in ipairs(results) do
-		local label = Sync.FEATURES[r.feature].label
-		if r.state == "noop" then
-			out(ctx, "Total RP 3 " .. label .. ": already up to date (nothing written).")
-		elseif r.state == "written" or r.state == "failed" or r.state == "conflict" then
-			out(ctx, r.message)
-		else
-			out(ctx, "Total RP 3 " .. label .. ": not written - " .. tostring(r.message))
+		out(ctx, TRP3Commands.ResultText(r))
+	end
+end
+
+--- The explicit write for ONE opted-in feature: the same guarded
+-- Sync.RunFeature that "trp3 sync" runs (through Sync.Run) for every
+-- opted-in feature. Writes nothing for a feature that is not opted in.
+-- Returns the RunFeature result, or nil plus a reason.
+function TRP3Commands.Approve(deps, feature)
+	if not Sync.FEATURES[feature] then
+		return nil, "unknown feature"
+	end
+	local entry = deps.ledger.optIn[deps.characterKey]
+	if not entry or not entry[feature] then
+		return nil, "Automatic " .. Sync.FEATURES[feature].label .. " sync is off for this character. "
+			.. "Nothing was written."
+	end
+	return Sync.RunFeature(deps, feature)
+end
+
+--- Warning shown before a feature is switched on (chat adds how to confirm).
+function TRP3Commands.EnableWarning(feature)
+	return "EXPERIMENTAL: this lets Dawnward change your Total RP 3 " .. Sync.FEATURES[feature].label
+		.. " automatically, using Total RP 3 internals with no official support. Only Dawnward's own "
+		.. "section is changed and a backup is taken first. Try it on a spare (non-default) TRP3 profile "
+		.. "first."
+end
+
+TRP3Commands.ROLLBACK_WARNING = "This restores a Total RP 3 section from Dawnward's newest backup "
+	.. "(see /dawnward trp3 backups)."
+
+--- Switches a feature on or off: Sync.SetOptIn, then (when turning on) the
+-- same debounced automatic run request the command makes. Returns ok, message.
+function TRP3Commands.SetFeature(ctx, deps, feature, on)
+	local ok, message = Sync.SetOptIn(deps, feature, on)
+	if on and ctx.trp3RequestSync then
+		ctx.trp3RequestSync()
+	end
+	return ok, message
+end
+
+--- One backup as a display line.
+function TRP3Commands.BackupLine(b, formatTime)
+	return string.format("#%d %s, profile %s, %s%s", b.id, b.section, b.profileId,
+		b.reason or "", formatTime and (" (" .. formatTime(b.at) .. ")") or "")
+end
+
+--- Exactly what Dawnward would write, from the PUBLIC projection only (the
+-- same Compose/Desired inputs Sync.Check plans with, including the chosen
+-- presentation style). Returns { about = string, traits = { {axis,LT,RT,V2} } }.
+function TRP3Commands.PublicPreview(char)
+	local public = char and Projection.GetPublic(char) or { facts = {}, personality = {} }
+	public.trp3Style = char and char.story and char.story.prefs.trp3Style or nil
+	local traits = {}
+	local desired = TraitPlan.Desired(public)
+	for _, axisId in ipairs({ "courage", "compassion", "discipline", "faith", "honour", "sociability" }) do
+		local d = desired[axisId]
+		if d then
+			traits[#traits + 1] = { axis = axisId, LT = d.LT, RT = d.RT, V2 = d.V2 }
 		end
 	end
+	return { about = AboutBlock.Compose(public), traits = traits }
+end
+
+--- Read-only snapshot for the settings page: the adapter probe, the opt-in
+-- entry, a Sync.Check per feature (the same check "trp3 preview" prints),
+-- the public preview and the backups of the active profile. Writes nothing
+-- to Total RP 3.
+function TRP3Commands.Overview(deps)
+	local probe = ns.TRP3Adapter.Probe(deps.env)
+	local view = { probe = probe, entry = deps.ledger.optIn[deps.characterKey], checks = {}, backups = {},
+		ledgerReadOnly = deps.ledgerReadOnly }
+	for _, feature in ipairs(Sync.ORDER) do
+		view.checks[feature] = Sync.Check(deps, feature)
+	end
+	local profileId = probe.profile and probe.profile.id
+	for i = #deps.ledger.backups, 1, -1 do
+		local b = deps.ledger.backups[i]
+		if b.profileId == profileId then
+			view.backups[#view.backups + 1] = b
+		end
+	end
+	local char = deps.store.real.characters[deps.characterKey]
+	view.preview = TRP3Commands.PublicPreview(char)
+	return view
 end
 
 local function command(ctx, rest)
@@ -197,17 +285,11 @@ local function command(ctx, rest)
 			return
 		end
 		if sub == "enable" and not confirmed then
-			out(ctx, "EXPERIMENTAL: this lets Dawnward change your Total RP 3 " .. Sync.FEATURES[feature].label
-				.. " automatically, using Total RP 3 internals with no official support. Only Dawnward's own "
-				.. "section is changed and a backup is taken first. Try it on a spare (non-default) TRP3 profile "
-				.. "first. Type: /dawnward trp3 enable " .. feature .. " confirm")
+			out(ctx, TRP3Commands.EnableWarning(feature) .. " Type: /dawnward trp3 enable " .. feature .. " confirm")
 			return
 		end
-		local _, message = Sync.SetOptIn(deps, feature, sub == "enable")
+		local _, message = TRP3Commands.SetFeature(ctx, deps, feature, sub == "enable")
 		out(ctx, message or "Not changed.")
-		if sub == "enable" and ctx.trp3RequestSync then
-			ctx.trp3RequestSync()
-		end
 	elseif sub == "release" then
 		local feature = featureArg(word1)
 		if not feature or not confirmed then
@@ -220,8 +302,7 @@ local function command(ctx, rest)
 	elseif sub == "rollback" then
 		local id = tonumber(word1)
 		if not confirmed then
-			out(ctx, "This restores a Total RP 3 section from Dawnward's newest backup (see /dawnward trp3 backups). "
-				.. "Type: /dawnward trp3 rollback [#] confirm")
+			out(ctx, TRP3Commands.ROLLBACK_WARNING .. " Type: /dawnward trp3 rollback [#] confirm")
 			return
 		end
 		local _, message = Sync.Rollback(deps, Util.IsPositiveInteger(id) and id or nil)
@@ -233,8 +314,7 @@ local function command(ctx, rest)
 		end
 		out(ctx, "Dawnward backups of Total RP 3 sections (newest last):")
 		for _, b in ipairs(deps.ledger.backups) do
-			out(ctx, string.format("  #%d %s, profile %s, %s%s", b.id, b.section, b.profileId,
-				b.reason or "", ctx.formatTime and (" (" .. ctx.formatTime(b.at) .. ")") or ""))
+			out(ctx, "  " .. TRP3Commands.BackupLine(b, ctx.formatTime))
 		end
 	elseif sub == "resolve" then
 		local feature = featureArg(word1)
