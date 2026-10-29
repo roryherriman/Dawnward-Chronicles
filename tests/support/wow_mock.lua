@@ -12,14 +12,57 @@ local function noop() end
 local Methods = {}
 
 function Methods:SetScript(script, fn) self.__scripts[script] = fn end
+-- Keyboard focus, like the client: one EditBox at a time, with its focus scripts.
+function Methods:SetFocus()
+	local mock = self.__mock
+	if mock.focus == self then return end
+	if mock.focus then mock.focus:ClearFocus() end
+	mock.focus = self
+	if self.__scripts.OnEditFocusGained then self.__scripts.OnEditFocusGained(self) end
+end
+function Methods:ClearFocus()
+	local mock = self.__mock
+	if mock.focus ~= self then return end
+	mock.focus = nil
+	if self.__scripts.OnEditFocusLost then self.__scripts.OnEditFocusLost(self) end
+end
+function Methods:HasFocus() return self.__mock.focus == self end
+function Methods:GetParent() return self.__parent end
+-- Shown, and every parent shown too.
+function Methods:IsVisible()
+	if not self.__shown then return false end
+	local parent = self.__parent
+	return parent == nil or parent:IsVisible()
+end
 function Methods:GetScript(script) return self.__scripts[script] end
+-- Like the client: a hook runs after the existing handler.
+function Methods:HookScript(script, fn)
+	local old = self.__scripts[script]
+	if not old then
+		self.__scripts[script] = fn
+		return
+	end
+	self.__scripts[script] = function(...)
+		old(...)
+		fn(...)
+	end
+end
 function Methods:RegisterEvent(event)
 	self.__events[event] = true
 	self.__mock.eventFrames[self] = true
 end
 function Methods:UnregisterEvent(event) self.__events[event] = nil end
-function Methods:Show() self.__shown = true end
-function Methods:Hide() self.__shown = false end
+-- Like the client, hiding a shown frame fires its OnHide (showing: OnShow).
+function Methods:Show()
+	local was = self.__shown
+	self.__shown = true
+	if not was and self.__scripts.OnShow then self.__scripts.OnShow(self) end
+end
+function Methods:Hide()
+	local was = self.__shown
+	self.__shown = false
+	if was and self.__scripts.OnHide then self.__scripts.OnHide(self) end
+end
 function Methods:IsShown() return self.__shown end
 -- Like the client, an EditBox keeps at most maxBytes - 1 bytes of text.
 function Methods:SetText(text)
@@ -68,13 +111,16 @@ end
 function Methods:SetVerticalScroll(v) self.__vscroll = v end
 function Methods:GetVerticalScroll() return self.__vscroll or 0 end
 function Methods:SetWordWrap(on) self.__wordWrap = on end
-function Methods:SetShown(on) self.__shown = on and true or false end
+function Methods:SetShown(on)
+	if on then self:Show() else self:Hide() end
+end
 function Methods:SetEnabled(on) self.__enabled = on and true or false end
 function Methods:GetLeft() return self.__left or 100 end
 function Methods:GetTop() return self.__top or 600 end
 function Methods:GetCenter() return self.__cx or 500, self.__cy or 400 end
 function Methods:GetEffectiveScale() return 1 end
 function Methods:SetTextColor(r, g, b) self.__textColor = { r, g, b } end
+function Methods:SetFontString(fs) self.__fontString = fs end
 function Methods:GetFontString()
 	self.__fontString = self.__fontString or self.__mock.newFrame("FontString", nil, self)
 	return self.__fontString
@@ -142,6 +188,7 @@ function Mock.new(opts)
 		GameFontNormal = {},
 		GameFontHighlightSmall = {},
 		InCombatLockdown = function() return mock.inCombat == true end,
+		IsShiftKeyDown = function() return mock.shift == true end,
 		C_Timer = {
 			After = function(seconds, fn) mock.timers[#mock.timers + 1] = { seconds = seconds, fn = fn } end,
 		},
@@ -189,7 +236,7 @@ function Mock.new(opts)
 		C_AddOns = {
 			GetAddOnMetadata = function(name, field)
 				if name == "DawnwardChronicles" and field == "Version" then
-					return "0.1.0"
+					return opts.version or "0.6.0-dev"
 				end
 				return nil
 			end,

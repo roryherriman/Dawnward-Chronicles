@@ -54,12 +54,17 @@ local function buildContext()
 		now = time,
 		print = chatPrint,
 		version = addonMetadata("Version") or "?",
+		formatDate = ns.Widgets.FormatDate,
 		client = Detect.Client(_G),
 		trp3Status = function()
 			return TRP3Status.Read(_G)
 		end,
 		zone = function()
 			return (Events.Location())
+		end,
+		-- Full location (zone, subzone, map, area, client), for diagnostics.
+		location = function()
+			return ns.Observers.Location()
 		end,
 	}
 	ctx.ui = {
@@ -76,6 +81,7 @@ local function buildContext()
 		end,
 		ToggleJournal = MainWindow.Toggle,
 		ShowGuide = function() ns.GuidePanel.Open(1) end,
+		ShowSetup = function(opts) ns.SetupWizard.Open(opts) end,
 		ShowStory = function()
 			if not MainWindow.IsShown() then MainWindow.Show() end
 			MainWindow.Select("story")

@@ -1,6 +1,7 @@
--- The small settings panel behind the gear button. Everything technical lives
--- here rather than in a fourth section: theme, backup/import/export,
--- simulation mode and the read-only Total RP 3 status.
+-- The settings panel behind the gear button, in four pages (General, Story,
+-- Data, Total RP 3) rather than a fourth section: theme gallery, minimap,
+-- guide and setup; story moment settings; backup, import and simulation
+-- mode; the read-only Total RP 3 status.
 -- Actions reuse the slash command code, so behaviour is identical.
 local _, ns = ...
 local Widgets, MainWindow, Themes, Actions, Commands =
@@ -63,40 +64,72 @@ function SettingsPanel.ButtonText(setting, prefs)
 	return setting.label .. ": " .. tostring(value)
 end
 
+SettingsPanel.PAGES = {
+	{ id = "general", label = "General" },
+	{ id = "story", label = "Story" },
+	{ id = "data", label = "Data" },
+	{ id = "trp3", label = "Total RP 3" },
+}
+
+local WIDTH = 600 - 2 * INSET
+
 local function create(parent)
-	local panel = { frame = CreateFrame("Frame", nil, parent), labels = {} }
+	local panel = { frame = CreateFrame("Frame", nil, parent), labels = {}, pages = {}, page = "general" }
 	local f = panel.frame
-
-	local function heading(text, y)
-		local fs = Widgets.Label(f, "GameFontNormal")
-		fs:SetPoint("TOPLEFT", INSET, y)
-		fs:SetText(text)
-		panel.labels[#panel.labels + 1] = fs
-		return fs
-	end
-
-	local function note(y, width)
-		local fs = Widgets.Label(f, "GameFontHighlightSmall", true)
-		fs:SetPoint("TOPLEFT", INSET, y)
-		fs:SetWidth(width or 560)
-		return fs
-	end
+	panel.background = ns.Style.Fill(f, "panel", "BACKGROUND")
+	panel.background:SetAllPoints(f)
 
 	local function run(command)
 		Commands.Execute(ns.ctx, command)
 		MainWindow.Refresh()
 	end
 
-	-- Appearance
-	heading("Appearance (changes only how this character's journal looks)", -10)
+	-- Secondary navigation: one page at a time.
+	panel.nav = Widgets.Segmented(f, SettingsPanel.PAGES, 420, 22, function(id)
+		panel.page = id
+		MainWindow.Refresh()
+	end)
+	panel.nav.buttons[1]:SetPoint("TOPLEFT", INSET, -8)
+	for _, page in ipairs(SettingsPanel.PAGES) do
+		local p = CreateFrame("Frame", nil, f)
+		p:SetPoint("TOPLEFT", 0, -38)
+		p:SetPoint("BOTTOMRIGHT", 0, 40)
+		panel.pages[page.id] = p
+	end
+
+	local function heading(page, text, y)
+		local fs = Widgets.Label(panel.pages[page], "GameFontNormal", false, "heading")
+		fs:SetPoint("TOPLEFT", INSET, y)
+		fs:SetText(text)
+		panel.labels[#panel.labels + 1] = fs
+		return fs
+	end
+
+	local function note(page, y, width)
+		local fs = Widgets.Label(panel.pages[page], "GameFontHighlightSmall", true, "muted")
+		fs:SetPoint("TOPLEFT", INSET, y)
+		fs:SetWidth(width or WIDTH)
+		return fs
+	end
+
+	-- General: appearance --------------------------------------------------------
+	heading("general", "Appearance", -4)
+	note("general", -22):SetText("Changes only how this character's journal looks. Themes never depend on class, "
+		.. "race or faction.")
 	panel.themeButtons = {}
-	local previous
-	for _, theme in ipairs(Themes.LIST) do
-		local button = Widgets.Button(f, theme.name, 150, 22)
-		if previous then
-			button:SetPoint("LEFT", previous, "RIGHT", 6, 0)
-		else
-			button:SetPoint("TOPLEFT", INSET, -30)
+	local tileWidth = math.floor((WIDTH - 16) / 3)
+	for i, theme in ipairs(Themes.LIST) do
+		local button = Widgets.Button(panel.pages.general, theme.name, tileWidth, 36, "choice")
+		local col, row = (i - 1) % 3, math.floor((i - 1) / 3)
+		button:SetPoint("TOPLEFT", INSET + col * (tileWidth + 8), -44 - row * 42)
+		-- Three swatches: background, surface and accent of that theme.
+		button.swatches = {}
+		for k, role in ipairs({ "background", "surface", "accent" }) do
+			local sw = Widgets.Solid(button, "ARTWORK")
+			sw:SetSize(14, 14)
+			sw:SetPoint("RIGHT", -10 - (3 - k) * 16, 0)
+			Widgets.SetColor(sw, theme[role])
+			button.swatches[k] = sw
 		end
 		button.themeId = theme.id
 		button:SetScript("OnClick", function()
@@ -104,59 +137,36 @@ local function create(parent)
 			MainWindow.SetStatus(message)
 			MainWindow.Refresh()
 		end)
+		Widgets.Tooltip(button, theme.name, theme.description)
 		panel.themeButtons[#panel.themeButtons + 1] = button
-		previous = button
 	end
-	panel.themeDescription = note(-58)
+	panel.themeDescription = note("general", -134)
 
-	-- Backup and sharing
-	heading("Backup and sharing", -90)
-	panel.exportBackup = Widgets.Button(f, "Export backup", 130, 22)
-	panel.exportBackup:SetPoint("TOPLEFT", INSET, -110)
-	panel.exportBackup:SetScript("OnClick", function() run("export backup") end)
-	panel.exportShare = Widgets.Button(f, "Export for sharing", 150, 22)
-	panel.exportShare:SetPoint("LEFT", panel.exportBackup, "RIGHT", 6, 0)
-	panel.exportShare:SetScript("OnClick", function() run("export share") end)
-	panel.import = Widgets.Button(f, "Import backup", 130, 22)
-	panel.import:SetPoint("LEFT", panel.exportShare, "RIGHT", 6, 0)
-	panel.import:SetScript("OnClick", function() run("import") end)
-	panel.backupHint = note(-138)
-	panel.backupHint:SetText(SettingsPanel.BACKUP_HINT)
-
-	-- Simulation
-	heading("Simulation mode", -176)
-	panel.simState = note(-196)
-	panel.simToggle = Widgets.Button(f, "Turn on", 110, 22)
-	panel.simToggle:SetPoint("TOPLEFT", INSET, -214)
-	panel.simToggle:SetScript("OnClick", function()
-		run(ns.ctx.store:IsSimulation() and "sim off" or "sim on")
-	end)
-	panel.simReset = Widgets.Button(f, "Reset test data", 130, 22)
-	panel.simReset:SetPoint("LEFT", panel.simToggle, "RIGHT", 6, 0)
-	panel.simReset:SetScript("OnClick", function()
-		Widgets.Confirm("Delete ALL simulation test data for every character?\n\nYour real data is not affected.",
-			"Reset", function() run("sim reset confirm") end)
-	end)
-
-	-- Minimap button (#45), beside the simulation buttons.
-	panel.minimap = Widgets.Button(f, "Minimap button: shown", 180, 22)
-	panel.minimap:SetPoint("TOPLEFT", INSET + 380, -214)
+	-- General: interface ------------------------------------------------------------
+	heading("general", "Interface and help", -170)
+	panel.minimap = Widgets.Button(panel.pages.general, "Minimap button: shown", 190, 22)
+	panel.minimap:SetPoint("TOPLEFT", INSET, -192)
 	panel.minimap:SetScript("OnClick", function() run("minimap") end)
 	Widgets.Tooltip(panel.minimap, "Minimap button", "Show or hide the Dawnward button on the minimap. "
 		.. "Drag the button to move it.")
-
-	panel.guide = Widgets.Button(f, "Open the guide", 180, 22)
-	panel.guide:SetPoint("TOPLEFT", INSET + 380, -178)
+	panel.guide = Widgets.Button(panel.pages.general, "Open the guide", 150, 22)
+	panel.guide:SetPoint("LEFT", panel.minimap, "RIGHT", 8, 0)
 	panel.guide:SetScript("OnClick", function() run("guide") end)
+	panel.setup = Widgets.Button(panel.pages.general, "Run setup", 150, 22)
+	panel.setup:SetPoint("LEFT", panel.guide, "RIGHT", 8, 0)
+	panel.setup:SetScript("OnClick", function() run("setup") end)
+	Widgets.Tooltip(panel.setup, "First-time setup", "Walk through the setup steps again: name, story moments, "
+		.. "privacy and appearance. Nothing is saved until you choose Finish.")
 
-	-- Story prompts (v0.4). Each button cycles one setting.
-	heading("Story moments", -252)
+	-- Story ---------------------------------------------------------------------------
+	heading("story", "Story moments", -4)
+	note("story", -22):SetText("Each button cycles one setting for this character. Hover for details.")
 	panel.storyButtons = {}
-	local SETTINGS = SettingsPanel.STORY_SETTINGS
-	for i, setting in ipairs(SETTINGS) do
-		local button = Widgets.Button(f, setting.label, 136, 22)
-		local col, rowIndex = (i - 1) % 4, math.floor((i - 1) / 4)
-		button:SetPoint("TOPLEFT", INSET + col * 140, -272 - rowIndex * 26)
+	local storyWidth = math.floor((WIDTH - 16) / 3)
+	for i, setting in ipairs(SettingsPanel.STORY_SETTINGS) do
+		local button = Widgets.Button(panel.pages.story, setting.label, storyWidth, 22, "choice")
+		local col, rowIndex = (i - 1) % 3, math.floor((i - 1) / 3)
+		button:SetPoint("TOPLEFT", INSET + col * (storyWidth + 8), -44 - rowIndex * 28)
 		button.setting = setting
 		button:SetScript("OnClick", function(self)
 			local char = Actions.Character(ns.ctx)
@@ -175,27 +185,56 @@ local function create(parent)
 		panel.storyButtons[i] = button
 	end
 
-	-- Total RP 3
-	heading("Total RP 3 (status; sync is experimental: /dawnward trp3 help)", -358)
-	panel.trp3 = note(-378)
+	-- Data ------------------------------------------------------------------------------
+	heading("data", "Backup and sharing", -4)
+	panel.exportBackup = Widgets.Button(panel.pages.data, "Export backup", 140, 22)
+	panel.exportBackup:SetPoint("TOPLEFT", INSET, -26)
+	panel.exportBackup:SetScript("OnClick", function() run("export backup") end)
+	panel.exportShare = Widgets.Button(panel.pages.data, "Export for sharing", 160, 22)
+	panel.exportShare:SetPoint("LEFT", panel.exportBackup, "RIGHT", 8, 0)
+	panel.exportShare:SetScript("OnClick", function() run("export share") end)
+	panel.import = Widgets.Button(panel.pages.data, "Import backup", 140, 22)
+	panel.import:SetPoint("LEFT", panel.exportShare, "RIGHT", 8, 0)
+	panel.import:SetScript("OnClick", function() run("import") end)
+	panel.backupHint = note("data", -56)
+	panel.backupHint:SetText(SettingsPanel.BACKUP_HINT)
 
-	panel.done = Widgets.Button(f, "Done", 90, 22)
+	heading("data", "Simulation mode", -110)
+	panel.simState = note("data", -128)
+	panel.simToggle = Widgets.Button(panel.pages.data, "Turn on", 120, 22)
+	panel.simToggle:SetPoint("TOPLEFT", INSET, -150)
+	panel.simToggle:SetScript("OnClick", function()
+		run(ns.ctx.store:IsSimulation() and "sim off" or "sim on")
+	end)
+	panel.simReset = Widgets.Button(panel.pages.data, "Reset test data", 140, 22, "danger")
+	panel.simReset:SetPoint("LEFT", panel.simToggle, "RIGHT", 8, 0)
+	panel.simReset:SetScript("OnClick", function()
+		Widgets.Confirm("Delete ALL simulation test data for every character?\n\nYour real data is not affected.",
+			"Reset", function() run("sim reset confirm") end)
+	end)
+
+	-- Total RP 3 ------------------------------------------------------------------------
+	heading("trp3", "Total RP 3", -4)
+	note("trp3", -22):SetText("Dawnward works without Total RP 3. Sync is experimental and off unless you turn it on "
+		.. "with /dawnward trp3 help. It shares only what you made public, backs up first and can be rolled back.")
+	heading("trp3", "Status", -70)
+	panel.trp3 = note("trp3", -90)
+
+	panel.done = Widgets.Button(f, "Done", 90, 22, "primary")
 	panel.done:SetPoint("BOTTOMRIGHT", -INSET, 10)
 	panel.done:SetScript("OnClick", MainWindow.ToggleSettings)
 
-	function panel:ApplyTheme(theme)
-		for _, fs in ipairs(self.labels) do
-			Widgets.TextColor(fs, theme.accent)
-		end
-		for _, fs in ipairs({ self.themeDescription, self.backupHint, self.simState, self.trp3 }) do
-			Widgets.TextColor(fs, theme.text)
-		end
-	end
+	-- Every part paints itself (UI/Style.lua).
+	function panel.ApplyTheme() end
 
 	function panel:Refresh(view)
+		self.nav:Select(self.page)
+		for id, p in pairs(self.pages) do
+			p:SetShown(id == self.page)
+		end
 		local current = Actions.ThemeOf(view.char)
 		for _, button in ipairs(self.themeButtons) do
-			button:SetEnabled(button.themeId ~= current.id)
+			button:SetSelected(button.themeId == current.id)
 		end
 		self.themeDescription:SetText(current.name .. " (current): " .. current.description)
 

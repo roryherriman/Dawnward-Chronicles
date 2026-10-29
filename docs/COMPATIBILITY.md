@@ -213,6 +213,18 @@ Checked against Blizzard's Classic Era interface source for **1.15.9 (70003)** (
 | `ZONE_CHANGED_NEW_AREA`, `IsInInstance`, `GetInstanceInfo` | First recorded zone visit; first recorded party/raid instance entry | `MapDocumentation.lua`, `InstanceDocumentation.lua`; Classic UI code | S, not L3 | — |
 | `PLAYER_GUILD_UPDATE`, `GetGuildInfo("player")`, `IsInGuild` | Joining or leaving a guild (rank changes only update the snapshot); inconclusive readings at login are ignored | `GuildInfoDocumentation.lua`; `Vanilla/PaperDollFrame.lua`, `Classic/MainMenuBarMicroButtons.lua` | S, not L3 | — |
 
+## Widget APIs for the v0.6 design system and setup wizard
+
+Checked on 2026-10-27 against `Gethe/wow-ui-source`, branch `classic_era` (commit `4192ac6`), `Blizzard_APIDocumentationGenerated`. The v0.6 controls use plain frames, font strings and solid textures, with no FrameXML button or input templates. Nothing below has been verified in game yet.
+
+| API | Used for | Source evidence | Classic Era | Forever |
+|---|---|---|---|---|
+| `Button:SetFontString`, `SetText`, `Enable`, `Disable`, `SetEnabled`, `IsEnabled` | Template-free buttons (`Widgets.Button`) | `SimpleButtonAPIDocumentation.lua` | S, not L3 | — |
+| `ScriptRegion:HookScript`, `SetScript`, `SetShown` | Hover and pressed styles added without replacing click handlers or tooltips | `SimpleScriptRegionAPIDocumentation.lua` | S, not L3 | — |
+| `EditBox:SetFontObject`, `SetTextInsets`, `SetMaxBytes` (no `InputBoxTemplate`) | Styled one-line inputs | `SimpleEditBoxAPIDocumentation.lua` | S, not L3 | — |
+| `Texture:SetColorTexture`, `SetVertexColor`, `SetDesaturated`, `SetTexCoord` | Chrome, fills, and the tinted header icons | `SimpleTextureBaseAPIDocumentation.lua`; Classic UI code | S, not L3 | — |
+| Frame strata `HIGH` (setup wizard) and `DIALOG` (confirmations); `UISpecialFrames` | The wizard sits above the journal (MEDIUM), confirmations above both. Escape closes each | Classic UI code (`EquipmentFlyout.lua` uses `HIGH`) | S, not L3 | — |
+
 ## Client APIs for the Zone Atlas verifier (#48, v0.5)
 
 Checked on 2026-10-27 against `Gethe/wow-ui-source`, branch `classic_era`, `Blizzard_APIDocumentationGenerated/MapDocumentation.lua`. `/dawnward atlas` only reads; it never saves anything. Nothing below has been run in game yet.

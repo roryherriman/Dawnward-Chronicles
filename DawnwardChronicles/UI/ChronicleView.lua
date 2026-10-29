@@ -29,14 +29,16 @@ ChronicleView.TABS = {
 }
 ChronicleView.REVIEW_CHOICES = { "growth", "unreliable", "secret", "correction", "ignore" }
 
--- Layout in section units (the content area is 580 x 400).
+-- Layout in section units (the content area is 600 x 412). Each row is a
+-- card; rowPad is its inner margin, and rowHeight includes the gap below it.
 ChronicleView.LAYOUT = {
-	inset = 8, width = 560,
-	tabWidth = 76, tabGap = 4, tabHeight = 22,
-	rowsTop = 36, rows = 6, rowHeight = 52,
+	inset = 8, width = 584,
+	tabWidth = 81, tabGap = 2, tabHeight = 22,
+	rowsTop = 38, rows = 6, rowHeight = 56, rowGap = 6, rowPad = 8,
+	statusWidth = 200,         -- a record's status, top right (Places: Homeland, Meaningful)
 	textHeight = 26,           -- line 1: the record, two lines of small text
-	lineTwo = 28,              -- line 2 starts this far below the row's top
-	metaWidth = 200,
+	lineTwo = 26,              -- line 2 starts this far below the row's top
+	metaWidth = 210,
 	buttons = 5, buttonWidth = 64, buttonHeight = 20, buttonGap = 4,
 }
 ChronicleView.ROWS = ChronicleView.LAYOUT.rows
@@ -46,13 +48,14 @@ ChronicleView.ROWS = ChronicleView.LAYOUT.rows
 -- Pure: the frames are placed from it, and tests check nothing overlaps.
 function ChronicleView.RowRects(L)
 	L = L or ChronicleView.LAYOUT
+	local pad = L.rowPad or 0
 	local out = {
-		text = { x = 0, y = 2, w = L.width, h = L.textHeight },
-		meta = { x = 0, y = L.lineTwo + 3, w = L.metaWidth, h = 14 },
+		text = { x = pad, y = 4, w = L.width - 2 * pad, h = L.textHeight - 4 },
+		meta = { x = pad, y = L.lineTwo + 3, w = L.metaWidth, h = 14 },
 		buttons = {},
 	}
 	for b = 1, L.buttons do
-		local right = L.width - (b - 1) * (L.buttonWidth + L.buttonGap)
+		local right = L.width - pad + 2 - (b - 1) * (L.buttonWidth + L.buttonGap)
 		out.buttons[b] = { x = right - L.buttonWidth, y = L.lineTwo, w = L.buttonWidth, h = L.buttonHeight }
 	end
 	return out
@@ -89,14 +92,14 @@ function ChronicleView.RecordText(listId, r, char)
 		body = string.format("%s%s (%s)%s", r.name, r.realm and ("-" .. r.realm) or "", r.kind,
 			r.relation and (": " .. r.relation) or "")
 	elseif listId == "places" then
+		-- Status is shown apart from the actions that change it (third value).
 		local flags = {}
-		if ns.Places.IsHomeland(char, r) then flags[#flags + 1] = "homeland" end
-		if r.meaningful then flags[#flags + 1] = "meaningful to you" end
-		body = string.format("%s%s", ns.Places.Label(r), #flags > 0 and (" - " .. table.concat(flags, ", ")) or "")
-		return body, string.format("%s%d visit%s", r.kind and (KIND_LABELS[r.kind] .. ", ") or "", r.visits,
-			r.visits == 1 and "" or "s")
+		if ns.Places.IsHomeland(char, r) then flags[#flags + 1] = "HOMELAND" end
+		if r.meaningful then flags[#flags + 1] = "MEANINGFUL" end
+		return ns.Places.Label(r), string.format("%s%d visit%s", r.kind and (KIND_LABELS[r.kind] .. ", ") or "",
+			r.visits, r.visits == 1 and "" or "s"), table.concat(flags, "  -  ")
 	end
-	return body or "", Records.Label(r)
+	return body or "", Records.Label(r), ""
 end
 
 local CYCLE = { private = "public", public = "secret", secret = "private" }
@@ -122,7 +125,7 @@ FORMS.memories = function(r)
 		title = r and "Edit memory" or "New memory",
 		hint = "A memory in your own words. Editing a suggested memory makes it yours.",
 		fields = {
-			{ key = "title", label = "Title", kind = "line" },
+			{ key = "title", label = "Title", kind = "line", errors = { "memory needs" } },
 			{ key = "text", label = "What happened", kind = "area" },
 			{ key = "importance", label = "Importance", kind = "cycle", values = IMPORTANCE },
 			not r and { key = "visibility", label = "Visibility", kind = "cycle", values = VISIBILITY } or nil,
@@ -145,7 +148,7 @@ FORMS.arcs = function(r)
 		title = r and "Edit arc" or "New arc",
 		hint = "A thread of your character's story. You decide when it turns, pauses or ends.",
 		fields = {
-			{ key = "title", label = "Title", kind = "line" },
+			{ key = "title", label = "Title", kind = "line", errors = { "needs a title" } },
 			{ key = "summary", label = "Summary", kind = "area" },
 			{ key = "kind", label = "Kind", kind = "cycle", values = ARC_KINDS },
 			r and { key = "state", label = "State", kind = "cycle", values = ARC_STATES }
@@ -182,10 +185,11 @@ FORMS.goals = function(r)
 		hint = "What your character wants. A target level, or a standing with a faction Dawnward has seen, is "
 			.. "shown as verified progress; only you decide when the goal is achieved.",
 		fields = {
-			{ key = "title", label = "Goal", kind = "line" },
+			{ key = "title", label = "Goal", kind = "line", errors = { "needs a title" } },
 			{ key = "text", label = "Why it matters", kind = "area" },
-			{ key = "target", label = "Target level", kind = "number" },
-			{ key = "faction", label = "Or a faction", kind = "line" },
+			{ key = "target", label = "Target level", kind = "number", errors = { "whole number from 2" } },
+			{ key = "faction", label = "Or a faction", kind = "line",
+				errors = { "not both", "has not seen", "name a faction", "the standing must" } },
 			{ key = "standing", label = "Standing", kind = "cycle", values = STANDINGS },
 			r and { key = "state", label = "State", kind = "cycle", values = GOAL_STATES }
 				or { key = "visibility", label = "Visibility", kind = "cycle", values = VISIBILITY },
@@ -221,11 +225,16 @@ FORMS.identity = function(r)
 		hint = "How your character presents themselves about something, and what they privately believe. "
 			.. "The private side stays private unless you change it.",
 		fields = {
-			{ key = "subject", label = "About", kind = "line" },
-			{ key = "persona", label = "In public", kind = "line" },
+			{ key = "subject", label = "About", kind = "line", errors = { "needs a subject" } },
+			{ key = "persona", label = "In public", kind = "line", errors = { "public stance or a private conviction" } },
 			{ key = "conviction", label = "Privately", kind = "line" },
 			{ key = "deliberate", label = "Contradiction", kind = "cycle", values = YES_NO },
 		},
+		-- Adding with neither side gives one message for two causes: point at the empty one.
+		locate = function(v)
+			if not (v.subject or ""):match("%S") then return "subject" end
+			return "persona"
+		end,
 		values = r and { subject = r.subject, persona = r.persona, conviction = r.conviction,
 			deliberate = r.deliberate == true } or { deliberate = false },
 		save = function(char, v, now)
@@ -241,9 +250,9 @@ FORMS.people = function(r)
 		title = r and "Edit person" or "New person",
 		hint = "Someone your character knows. Only you write this; nothing is read from other players' profiles.",
 		fields = {
-			{ key = "name", label = "Name", kind = "line" },
+			{ key = "name", label = "Name", kind = "line", errors = { "needs a name", "is already" } },
 			{ key = "kind", label = "Who", kind = "cycle", values = PERSON_KINDS },
-			{ key = "realm", label = "Realm (players)", kind = "line" },
+			{ key = "realm", label = "Realm (players)", kind = "line", errors = { "needs a realm" } },
 			{ key = "relation", label = "Relation", kind = "line" },
 			{ key = "feelings", label = "Private feelings", kind = "area" },
 		},
@@ -267,7 +276,7 @@ local function milestoneForm(goal)
 			values = { { false, "Not yet: " .. m.text }, { true, "Done: " .. m.text } } }
 		values[i] = m.done == true
 	end
-	fields[#fields + 1] = { key = "new", label = "New step", kind = "line" }
+	fields[#fields + 1] = { key = "new", label = "New step", kind = "line", errors = { "milestone" } }
 	return {
 		title = "Milestones: " .. goal.title,
 		hint = "Tick the steps your character has taken. Dawnward never ticks them for you.",
@@ -290,7 +299,7 @@ local function turningPointForm(arc)
 	return {
 		title = "Turning point: " .. arc.title,
 		hint = "A moment that changed the course of this arc.",
-		fields = { { key = "note", label = "What changed", kind = "area" } },
+		fields = { { key = "note", label = "What changed", kind = "area", errors = { "turning point" } } },
 		values = {},
 		save = function(char, v, now) return ns.Arcs.AddTurningPoint(char, arc.id, v.note, nil, now) end,
 	}
@@ -342,68 +351,86 @@ local function create(parent)
 		self.form:Open(spec)
 	end
 
-	for i, tab in ipairs(ChronicleView.TABS) do
-		local b = Widgets.Button(f, tab.label, L.tabWidth, L.tabHeight)
-		b:SetPoint("TOPLEFT", L.inset + (i - 1) * (L.tabWidth + L.tabGap), -6)
-		b:SetScript("OnClick", function()
-			section.tab, section.page = tab.id, 1
-			section.form:Close()
-		end)
-		b.tabId = tab.id
+	-- Secondary navigation: a segmented control.
+	local tabItems = {}
+	for i, tab in ipairs(ChronicleView.TABS) do tabItems[i] = { id = tab.id, label = tab.label } end
+	section.tabs = Widgets.Segmented(f, tabItems, L.width + L.tabGap * #tabItems, L.tabHeight, function(id)
+		section.tab, section.page = id, 1
+		section.form:Close()
+	end)
+	section.tabs.buttons[1]:SetPoint("TOPLEFT", L.inset, -6)
+	for i, b in ipairs(section.tabs.buttons) do
+		b.tabId = ChronicleView.TABS[i].id
 		section.tabButtons[i] = b
 	end
 
-	section.empty = Widgets.Label(f, "GameFontHighlight", true)
+	section.empty = Widgets.Label(f, "GameFontHighlight", true, "muted")
 	section.empty:SetPoint("TOPLEFT", L.inset, -(L.rowsTop + 8))
 	section.empty:SetWidth(L.width)
 
 	local rects = ChronicleView.RowRects(L)
 	for i = 1, L.rows do
-		local row = CreateFrame("Frame", nil, f)
-		row:SetSize(L.width, L.rowHeight)
+		local row = Widgets.Card(f)
+		row:SetSize(L.width, L.rowHeight - L.rowGap)
 		row:SetPoint("TOPLEFT", L.inset, -L.rowsTop - (i - 1) * L.rowHeight)
 		row.text = Widgets.Label(row, "GameFontHighlightSmall", true)
 		row.text:SetPoint("TOPLEFT", rects.text.x, -rects.text.y)
 		row.text:SetSize(rects.text.w, rects.text.h)
+		row.status = Widgets.Label(row, "GameFontNormalSmall", false, "accent")
+		row.status:SetJustifyH("RIGHT")
+		row.status:SetPoint("TOPRIGHT", -L.rowPad, -6)
+		row.status:SetWidth(L.statusWidth)
 		row.meta = Widgets.Label(row, "GameFontDisableSmall")
 		row.meta:SetPoint("TOPLEFT", rects.meta.x, -rects.meta.y)
 		row.meta:SetWidth(rects.meta.w)
 		row.buttons = {}
 		for b, rect in ipairs(rects.buttons) do
-			local button = Widgets.Button(row, "", rect.w, rect.h)
+			local button = Widgets.Button(row, "", rect.w, rect.h, "ghost")
 			button:SetPoint("TOPLEFT", rect.x, -rect.y)
 			row.buttons[b] = button
 		end
 		section.rows[i] = row
 	end
 
-	section.prev = Widgets.Button(f, "< Prev", 70, 22)
+	section.prev = Widgets.Button(f, "< Prev", 70, 22, "ghost")
 	section.prev:SetPoint("BOTTOMLEFT", L.inset, 8)
 	section.prev:SetScript("OnClick", function() section.page = section.page - 1; MainWindow.Refresh() end)
-	section.pageLabel = Widgets.Label(f, "GameFontHighlightSmall")
+	section.pageLabel = Widgets.Label(f, "GameFontHighlightSmall", false, "muted")
 	section.pageLabel:SetPoint("BOTTOMLEFT", L.inset + 78, 13)
-	section.next = Widgets.Button(f, "Next >", 70, 22)
+	section.next = Widgets.Button(f, "Next >", 70, 22, "ghost")
 	section.next:SetPoint("BOTTOMLEFT", L.inset + 150, 8)
 	section.next:SetScript("OnClick", function() section.page = section.page + 1; MainWindow.Refresh() end)
-	section.new = Widgets.Button(f, "New", 120, 22)
+	section.new = Widgets.Button(f, "New", 120, 22, "primary")
 	section.new:SetPoint("BOTTOMRIGHT", -L.inset, 8)
 	section.new:SetScript("OnClick", function() section:OpenForm(FORMS[section.tab]()) end)
+
+	-- Row actions: Remove is destructive, Accept is the one primary action.
+	local VARIANTS = { Remove = "danger", Accept = "primary" }
 
 	local function setButton(button, label, fn)
 		button:SetShown(label ~= nil)
 		if label then
 			button:SetText(label)
+			button:SetVariant(VARIANTS[label] or "ghost")
 			button:SetScript("OnClick", fn)
 		end
 	end
 
 	-- Buttons, filled from the right: { label, fn } or false to skip.
+	-- An entry may give its own width ({ label, fn, width }) for a longer,
+	-- clearer label; buttons are laid out from the record's right edge.
 	local function fill(row, list)
 		local n = 0
+		local right = L.width - L.rowPad + 2
 		for _, entry in ipairs(list) do
 			if entry then
 				n = n + 1
-				setButton(row.buttons[n], entry[1], entry[2])
+				local button, w = row.buttons[n], entry[3] or L.buttonWidth
+				setButton(button, entry[1], entry[2])
+				button:SetWidth(w)
+				button:ClearAllPoints()
+				button:SetPoint("TOPLEFT", right - w, -L.lineTwo)
+				right = right - w - L.buttonGap
 			end
 		end
 		for b = n + 1, #row.buttons do
@@ -452,8 +479,8 @@ local function create(parent)
 			return place
 		end
 		fill(row, {
-			{ "Memory", function() section:OpenForm(placeMemoryForm(entry)) end },
-			not ns.Places.IsHomeland(char, entry) and { "Homeland", function()
+			{ "Write memory", function() section:OpenForm(placeMemoryForm(entry)) end, 96 },
+			not ns.Places.IsHomeland(char, entry) and { "Set as homeland", function()
 				Widgets.Confirm(string.format("Set your Homeland to %s? This replaces the Homeland on your "
 					.. "profile; its visibility stays as it is.", name), "Set", function()
 					act(function(c, now)
@@ -462,23 +489,21 @@ local function create(parent)
 						return ns.Places.SetHomeland(c, place, now)
 					end)
 				end)
-			end } or false,
-			{ entry.meaningful and "Unmark" or "Mark", function()
+			end, 108 } or false,
+			{ entry.meaningful and "Unmark meaningful" or "Mark meaningful", function()
 				act(function(c)
 					local place, err = this(c)
 					if not place then return nil, err end
 					place.meaningful = (not place.meaningful) or nil
 					return place
 				end)
-			end },
+			end, 120 },
 		})
 	end
 
 	function section:ApplyTheme(theme)
 		self.theme = theme
 		self.form:ApplyTheme(theme)
-		Widgets.TextColor(self.empty, theme.muted)
-		Widgets.TextColor(self.pageLabel, theme.muted)
 		for _, row in ipairs(self.rows) do
 			Widgets.TextColor(row.text, theme.text)
 			Widgets.TextColor(row.meta, theme.muted)
@@ -502,9 +527,7 @@ local function create(parent)
 
 	function section:Refresh(view)
 		local char = view.char
-		for _, b in ipairs(self.tabButtons) do
-			b:SetEnabled(b.tabId ~= self.tab)
-		end
+		self.tabs:Select(self.tab)
 		local spec
 		for _, tab in ipairs(ChronicleView.TABS) do
 			if tab.id == self.tab then spec = tab end
@@ -524,16 +547,25 @@ local function create(parent)
 			local item = items[offset + i]
 			row:SetShown(item ~= nil)
 			if item and self.tab == "review" then
+				row.status:SetText("")
+				row.text:SetWidth(rects.text.w)
 				row.text:SetText(item.message)
 				row.meta:SetText("What is it?")
-				for b, choice in ipairs(ChronicleView.REVIEW_CHOICES) do
-					-- Right to left, so the choices read in order.
-					setButton(row.buttons[#ChronicleView.REVIEW_CHOICES - b + 1], choice, function()
+				local list = {}
+				for b = #ChronicleView.REVIEW_CHOICES, 1, -1 do
+					-- Filled from the right, so the choices read in order.
+					local choice = ChronicleView.REVIEW_CHOICES[b]
+					list[#list + 1] = { choice, function()
 						act(function(c, now) return ns.Continuity.Review(c, item.key, choice, nil, now) end)
-					end)
+					end }
 				end
+				fill(row, list)
 			elseif item then
-				local text, meta = ChronicleView.RecordText(self.tab, item, char)
+				local text, meta, status = ChronicleView.RecordText(self.tab, item, char)
+				-- The status (Places: Homeland, Meaningful) sits top right, apart
+				-- from the buttons below that change it; the text makes room for it.
+				row.status:SetText(status or "")
+				row.text:SetWidth(status and status ~= "" and rects.text.w - L.statusWidth - 8 or rects.text.w)
 				row.text:SetText(text)
 				row.meta:SetText(meta)
 				if self.tab == "places" then

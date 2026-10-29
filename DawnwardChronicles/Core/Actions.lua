@@ -288,7 +288,8 @@ end
 --- An observed location (Platform/Observers): logs the visit and records
 -- the events it produces (Core/Places.lua). Only the most meaningful one may
 -- become a moment; the rest are records only. Real data only, and only for
--- characters that already use Dawnward. Returns the list created.
+-- characters that already use Dawnward. Returns the list created, and
+-- keeps the decision in ctx.lastLocation for this session.
 function Actions.ObserveLocation(ctx, data)
 	local char = ctx.store.real.characters[ctx.characterKey]
 	if not char or ctx.store.realReadOnly then
@@ -296,7 +297,10 @@ function Actions.ObserveLocation(ctx, data)
 	end
 	local now = ctx.now()
 	local created, considered = {}, false
-	for _, step in ipairs(ns.Places.Observe(char, data, now)) do
+	local steps, diag = ns.Places.Observe(char, data, now)
+	-- The last decision, for /dawnward dev story status. Session only: never saved.
+	ctx.lastLocation = { at = now, zone = data.zone, subzone = data.subzone, diag = diag, created = created }
+	for _, step in ipairs(steps) do
 		local record = GameEvents.Record(char, step.category, step.data, now)
 		if record then
 			local reaction, outcome
@@ -501,6 +505,86 @@ function Actions.FinishGuide(ctx)
 		char.guide.done = true
 		return true, "Guide closed. Reopen it with the ? button or /dawnward guide."
 	end)
+end
+
+--- First-time setup (v0.6) ---------------------------------------------------
+
+local function drafts(ctx, create)
+	local ui = ctx.store.real.ui
+	if not ui and create then
+		ui = {}
+		ctx.store.real.ui = ui
+	end
+	if ui and not ui.wizardDrafts and create then
+		ui.wizardDrafts = {}
+	end
+	return ui and ui.wizardDrafts
+end
+
+--- This character's unfinished setup draft, or nil (never creates anything).
+function Actions.SetupDraft(ctx)
+	local list = drafts(ctx, false)
+	return list and list[ctx.characterKey]
+end
+
+--- Saves an unfinished setup (account-wide, by character key). It does not
+-- create a character record. Refused on read-only data.
+function Actions.SaveSetupDraft(ctx, draft)
+	if ctx.store.realReadOnly then
+		return nil, "Saved data is read-only. The draft was not kept."
+	end
+	local clean = ns.Onboarding.CleanDraft(draft)
+	if not clean then
+		return nil, "Nothing to keep."
+	end
+	drafts(ctx, true)[ctx.characterKey] = clean
+	return true
+end
+
+function Actions.ClearSetupDraft(ctx)
+	local list = drafts(ctx, false)
+	if list and not ctx.store.realReadOnly then
+		list[ctx.characterKey] = nil
+	end
+end
+
+--- Finish: writes the wizard's choices for the active character and marks
+-- setup complete. opts.test (developer preview): the choices are saved,
+-- but completion and the real draft are left exactly as they were.
+-- Never writes to Total RP 3; profile fields are only added or changed,
+-- never cleared. opts.only: the set of keys the player changed (only those
+-- are applied); the minimap setting only when it is in that set.
+function Actions.CompleteSetup(ctx, values, opts)
+	opts = opts or {}
+	local ok, message = withCharacter(ctx, function(char)
+		local changed = ns.Onboarding.Apply(char, values, ctx.now(), { complete = not opts.test, only = opts.only })
+		return changed, opts.test and "Preview choices saved. Setup status was not changed."
+			or "Setup complete. Welcome to your chronicle."
+	end)
+	if not ok then
+		return nil, message
+	end
+	if values.minimap ~= nil and (not opts.only or opts.only.minimap) then
+		Actions.SaveMinimap(ctx, { hidden = values.minimap == false })
+	end
+	if not opts.test then
+		Actions.ClearSetupDraft(ctx)
+	end
+	return ok, message
+end
+
+--- Developer reset: forgets only this character's setup completion and
+-- draft. Nothing else is touched, and no character record is created.
+function Actions.ResetSetup(ctx)
+	if ctx.store.realReadOnly then
+		return nil, "Saved data is read-only. Nothing was changed."
+	end
+	local char = ctx.store.real.characters[ctx.characterKey]
+	if char then
+		char.wizard = {}
+	end
+	Actions.ClearSetupDraft(ctx)
+	return true, "Setup state reset for this character. Its profile, journal and story were not touched."
 end
 
 --- The minimap button's settings: { angle, hidden } (never nil).

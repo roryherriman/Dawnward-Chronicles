@@ -25,6 +25,10 @@ def main():
         print("No ## Version in the TOC", file=sys.stderr)
         return 1
     version = match.group(1)
+    if "-dev" in version:
+        # Developer commands (/dawnward dev ...) are enabled in -dev builds.
+        print(f"NOTE: {version} is a development build: developer commands are enabled. "
+              "Drop '-dev' from the TOC version for a release.", file=sys.stderr)
 
     tracked = subprocess.run(
         ["git", "ls-files", "-z", "--", ADDON], cwd=ROOT, capture_output=True, check=True,
