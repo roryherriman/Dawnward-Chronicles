@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Concept C: compass and quill">
+<title>Concept C: compass and quill</title>
+<rect width="256" height="256" rx="52" fill="#14111C"/>
+<circle cx="128" cy="128" r="100" fill="none" stroke="#4B3B6B" stroke-width="6"/>
+<polygon points="128.0,32.0 137.9,104.0 166.2,89.8 152.0,118.1 224.0,128.0 152.0,137.9 166.2,166.2 137.9,152.0 128.0,224.0 118.1,152.0 89.8,166.2 104.0,137.9 32.0,128.0 104.0,118.1 89.8,89.8 118.1,104.0" fill="#DBBD75"/>
+<path d="M128 22 C146 52 142 86 128 112 C114 86 110 52 128 22 Z" fill="#EDE6D6"/>
+<line x1="128" y1="40" x2="128" y2="104" stroke="#14111C" stroke-width="4"/>
+<circle cx="128" cy="128" r="12" fill="#E08A3C"/>
+</svg>
