@@ -320,7 +320,7 @@ Commands.Register("moment", function(ctx, rest)
 		local data = { title = rest, zone = ctx.zone and ctx.zone() or nil }
 		local record, err = ns.GameEvents.Record(char, "moment", data, ctx.now())
 		if not record then return Actions.Fail(err) end
-		local reaction = ns.Reactions.Consider(char, record, ctx.now())
+		local reaction = ns.Reactions.Consider(char, record, ctx.now(), Actions.Play(ctx, char))
 		return record, "Recorded your moment" .. (reaction and ("; reflect on it: /dawnward story " .. reaction.id)
 			or ".")
 	end)

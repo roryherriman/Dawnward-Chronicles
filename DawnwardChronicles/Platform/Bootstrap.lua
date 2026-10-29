@@ -55,6 +55,9 @@ local function buildContext()
 		print = chatPrint,
 		version = addonMetadata("Version") or "?",
 		formatDate = ns.Widgets.FormatDate,
+		-- The narrative clock (Core/NarrativeClock.lua, Platform/PlayClock.lua).
+		monotonic = ns.PlayClock.Monotonic,
+		narrative = ns.NarrativeClock.NewSession(),
 		client = Detect.Client(_G),
 		trp3Status = function()
 			return TRP3Status.Read(_G)
@@ -122,6 +125,7 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
 			loadSavedVariables()
 		end
 		ns.ctx = buildContext()
+		ns.PlayClock.Init(ns.ctx)
 		Events.Init(ns.ctx, MainWindow.Refresh)
 		Observers.Init(ns.ctx, function()
 			MainWindow.Refresh()

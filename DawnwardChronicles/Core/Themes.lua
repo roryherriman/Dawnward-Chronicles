@@ -16,18 +16,18 @@ local function hex(s)
 	return { tonumber(s:sub(2, 3), 16) / 255, tonumber(s:sub(4, 5), 16) / 255, tonumber(s:sub(6, 7), 16) / 255 }
 end
 
--- Colours are { r, g, b } in 0..1. Roles (docs/design/UI_DESIGN_V06.md):
---   background    window body: header, navigation, footer
---   panel         content area (all reading text sits on this)
+-- Colours are { r, g, b } in 0..1. Roles (docs/design/UI_DESIGN_V07.md):
+--   background    window ground: the content column (reading text sits here)
+--   panel         the character rail, forms and wells
 --   surface       raised elements: cards, rows, buttons, inputs
---   surfaceHover  a hovered surface
+--   surfaceHover  a hovered or selected surface
 --   edge          1 px borders and dividers
---   ornament      frame line and corner accents
+--   ornament      corner accents and eyebrow labels (readable gold)
 --   text          body text          muted   dates, labels, hints
 --   accent        headings, selected navigation, focus
 --   accentText    text on an accent-filled (primary) button
 --   danger        destructive actions
---   border        legacy tint (v0.5 code)
+--   border        the window's gold frame line and outlines of selected items
 -- tests/spec/core_themes_spec.lua checks every text colour for a WCAG
 -- contrast of at least 4.5:1 on background, panel and surfaces.
 Themes.LIST = {
@@ -35,10 +35,11 @@ Themes.LIST = {
 		id = "dawnward",
 		name = "Classic Dawnward",
 		description = "Charcoal and deep navy with antique gold. The default.",
-		background = hex("#141821"), panel = hex("#0D1018"), surface = hex("#1B2130"),
-		surfaceHover = hex("#242C3E"), edge = hex("#2E3749"), ornament = hex("#A88B52"),
-		text = hex("#ECE6D8"), muted = hex("#A8A391"), accent = hex("#D6B66E"), accentText = hex("#15130E"),
-		danger = hex("#E8837A"), border = hex("#A88B52"),
+		-- v0.7 tokens from the approved mockups (docs/design/mockups/design-system.png).
+		background = hex("#0E1219"), panel = hex("#121825"), surface = hex("#151B26"),
+		surfaceHover = hex("#1F2838"), edge = hex("#2C3648"), ornament = hex("#C9A55E"),
+		text = hex("#EFE7D6"), muted = hex("#A6A08F"), accent = hex("#D8B26A"), accentText = hex("#1A1408"),
+		danger = hex("#E8837A"), border = hex("#6B5631"),
 	},
 	{
 		id = "lightbound",

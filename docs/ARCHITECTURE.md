@@ -67,14 +67,72 @@ location event -> Observers.Location -> Actions.ObserveLocation -> Places.Observ
                   cooldown, fold into or replace a moment queued moments ago, places on/fewer/off)
 ```
 
+#### Gameplay time: the narrative clock
+
+Story pacing runs on **gameplay time**, never on real time. A character does not need to be away for 48 real hours to get a return moment. Time offline never counts toward anything.
+
+**What the client offers** (checked against Blizzard's Classic Era 1.15.9.70576 UI source, `Gethe/wow-ui-source` branch `classic_era`, commit `4192ac6`):
+
+| API | What it is | Why it is not the narrative clock |
+|---|---|---|
+| `time()` | The computer's wall clock (Unix seconds) | Runs while offline, and the player can change it |
+| `GetGameTime()` | The realm's time of day, as hours and minutes. Blizzard's clock (`Blizzard_TimeManager`) shows it as server time beside local time | Runs at real speed: there is **no accelerated in-game day** in Classic Era. It is the same for every character and runs offline |
+| `RequestTimePlayed()` → `TIME_PLAYED_MSG(totalTimePlayed, timePlayedThisLevel)` | The server's `/played` totals for the character | Every chat frame prints the reply (`ChatFrameMixin:SystemEventHandler` → `ChatFrameUtil.DisplayTimePlayed`), so asking would spam chat, or would need Dawnward to tamper with Blizzard's chat handling |
+| `GetTime()` | Seconds since the computer started, with millisecond precision | Meaningful only as differences within one session, which is exactly how Dawnward uses it |
+| `UnitIsAFK("player")`, `PLAYER_FLAGS_CHANGED` | AFK state and its change event | Used to pause the clock |
+| SavedVariables | Written at logout and `/reload` (`PLAYER_LOGOUT` fires first), never on a crash | The clock is saved with the character; a crash loses at most the unsaved session, which is the safe direction |
+
+**The model** (`Core/NarrativeClock.lua`, fed by `Platform/PlayClock.lua`):
+
+- **Storage:** each character has `story.clock = { v = 1, played = seconds }`. It is per character, additive, and cleaned on load; schema stays 5.
+- **Counting:** while the character is logged in and not AFK, the time between two `GetTime()` readings is added. Readings happen at least once a minute (`C_Timer.NewTicker`), on every location and story event, and at `PLAYER_LOGOUT`.
+- **Safety caps:** a reading that goes backwards adds nothing. A gap longer than 5 minutes, such as the computer sleeping or the game freezing, counts as 5 minutes at most. Changing the computer's date has no effect.
+- **Narrative day:** a fixed amount of play, set by the **Story pace** setting (`/dawnward story set pace …`, or Settings → Story):
+
+  | Pace | One narrative day |
+  |---|---|
+  | Brisk | 1 hour of play |
+  | **Standard (default)** | **2 hours of play** |
+  | Slow | 4 hours of play |
+
+  Two hours is about one evening's session. "Come back another day" then means another evening of play, not another real day, and a narrative week is roughly a week of regular play.
+- **Not changed by time passing:** the clock only gates *when* the Story Director may ask. Nothing in a character's history changes because time passes.
+
+**What uses it:**
+
+| Rule | Measured in |
+|---|---|
+| A return needs time away | 1 narrative day of play (`Places.RETURN_AFTER_DAYS`) |
+| One return per place | per 7 narrative days of play (`Places.RETURN_REPEAT_DAYS`) |
+| Story cooldowns, including the shared location cooldown | Seconds of play: Rare 2 h, Normal 45 min, Frequent 15 min |
+| Waiting moments expire | After 7 narrative days of play (`Reactions.EXPIRY_DAYS`), counted at the pace in force when the moment was created (its own `expiresPlay` deadline), so changing the pace never removes a moment already waiting; the event itself stays recorded |
+
+**Still real time (interruption control within a session):**
+- notice spacing (when the card may appear);
+- the two-minute window that folds a zone and its subzone into one moment;
+- visit counting, where re-entering within 30 minutes is the same visit;
+- every date shown to the player.
+
+**Migration from v0.6 (additive, nothing is reset):**
+- **Clock:** characters start at `played = 0`.
+- **Old timestamps:** real timestamps (`last`, `returnedAt`, `pacing.lastByCategory`) are kept for display and never read as gameplay time.
+- **Places without a reading:** a logged place with no `lastPlay` reports `"new"` on its next visit. Its absence starts counting from that visit, so an upgrade can never cause a burst of return moments.
+- **Waiting moments:** one saved without `createdPlay` starts its expiry wait from the upgrade; one without `expiresPlay` gets its deadline from `createdPlay` the first time it is read.
+- **Untouched:** places, marks, Homeland links and memories are not changed.
+- **Restored backups:** if a place reading is ahead of the clock (an older backup was restored), it counts as no absence rather than an error.
+
 #### Return visits: exact eligibility
 
 A return to a place is recorded only when all of these hold. They are checked in `Places.ReturnTarget` and `Places.ReturnCheck`, and reported by `/dawnward dev story status`:
 
 1. **Not the first location.** It is not the first location Dawnward ever recorded for the character, which gets the beginning or "first recorded" wording instead.
 2. **A target exists.** It is the named area (subzone) if that is classified by the place mapping or tied to the character's story; otherwise the zone, if it is. A place never logged before is a first visit, not a return.
-3. **A real absence.** At least `Places.RETURN_AFTER` (2 days) since Dawnward last recorded the character there. Passing back through within a session, or within 2 days, records nothing at all: no event, no prompt, and nothing in `/dawnward story events`.
-4. **At most weekly.** No return to the same place was recorded in the last `Places.RETURN_REPEAT` (7 days).
+3. **A real absence, in play.** At least `Places.RETURN_AFTER_DAYS` (1 narrative day: 2 hours of play at Standard pace) since Dawnward last recorded the character there.
+   - Every arrival re-stamps the place, so crossing a zone boundary back and forth never adds up to an absence.
+   - Time offline does not count.
+   - A place logged before the clock existed starts counting at its next visit.
+   - A return too soon records nothing at all: no event, no prompt, and nothing in `/dawnward story events`.
+4. **At most once a narrative week.** No return to the same place was recorded in the last `Places.RETURN_REPEAT_DAYS` (7 narrative days of play).
 5. **It counts.** The place is a settlement, inn, capital or starting area, or it is tied to the character's story (`Places.Tie`):
    - **Homeland:** linked from the Places tab, or named by the Homeland field;
    - **marked meaningful:** `/dawnward place mark`, or the Places tab;
@@ -86,7 +144,7 @@ An eligible return is a `place` event with `visit = "return"`, and it is listed 
 
 - A plain return has weight 0 and is logged quietly.
 - Each tie adds weight: Homeland +4, marked +3, memory +3, an active arc +2, an active goal +2, a person +2. The weight gives a chance of asking (1 = 20%, 2 = 40%, 3 = 60%, 4 = 80%).
-- At weight 5 or more the return is **urgent**. It always asks and skips the shared location cooldown (45 minutes at the Normal frequency). The notice still waits for a calm moment.
+- At weight 5 or more the return is **urgent**. It always asks and skips the shared location cooldown (45 minutes of play at the Normal frequency). The notice still waits for a calm moment.
 - Setting a Homeland from the Places tab also marks the place meaningful, so it weighs 7.
 - The Moments and Places settings (off or fewer) and the waiting-list limit still apply.
 
@@ -158,14 +216,32 @@ Automatic entries can change visibility, but they can't be edited or deleted, so
 
 ## UI
 
-See [UI_DIRECTION.md](UI_DIRECTION.md).
+See [UI_DIRECTION.md](UI_DIRECTION.md) for principles and [design/UI_DESIGN_V07.md](design/UI_DESIGN_V07.md) for the current design.
+
+- **v0.7 interface** (built to the [approved mockups](design/mockups/README.md); automated tests only):
+  - `UI/MainWindow.lua`: a 1100 × 720 window that scales down to fit the screen by width and height. A permanent character rail on the left holds the portrait, name, title, identity line, level, navigation (with a waiting-moments badge on Story), Guide, Settings and a Total RP 3 status line that opens the Total RP 3 page. Sections fill the content area on the right.
+  - `UI/JournalView.lua`: the dashboard (counts, New entry, search, filters, the waiting-moment callout, entry cards, Active goals, Recent places).
+  - `UI/CharacterView.lua`: grouped profile tiles, personality, family and relationships, and the public preview built from `Projection.GetPublic`.
+  - `UI/Showcase.lua`: the portrait and the Character Showcase.
+  - `UI/StoryView.lua` and `UI/ReactionCard.lua`: the Story Director screen and the pop-up card.
+  - `UI/ChronicleView.lua` and `UI/ChroniclePlaces.lua`: Chronicle cards for every tab, and Places as list and detail.
+  - `UI/SetupWizard.lua`: the setup wizard with its step rail.
+  - `UI/TRP3Page.lua`: the Total RP 3 page inside Settings. It reads through `TRP3Commands.Overview` and writes only through the same guarded functions as the `/dawnward trp3` commands.
+  - Shared components in `UI/Widgets.lua`: chips, panels, callouts, date blocks, progress bars and search boxes, alongside the v0.6 kit.
+  - Fonts: Cinzel and Alegreya Sans (OFL) in `Media/Fonts`, mapped onto game font templates by `Style.Font`. Non-Latin clients keep the game's fonts.
+  - **Character Showcase:**
+    - A `PlayerModel` with `SetUnit("player")`, turned with `SetRotation` and zoomed with `SetPortraitZoom` (0–0.7, as Blizzard's own model frames).
+    - The model is set only while shown and cleared on hide, and its events are registered only while shown.
+    - The portrait choice is stored additively in `DawnwardChroniclesDB.ui.showcase[characterKey]` and cleaned by `Schema.NormalizeUi`.
+    - Game identity (level, race, class, guild, realm) is read live and never stored.
+- The notes below describe v0.5–v0.6 and still apply where not replaced above. Sizes and rows per page in them are from v0.6.
 
 - **One window, four sections** (Journal, Character, Story, Chronicle), plus a settings panel behind a gear button and a guide behind a **?** button (#51). Neither panel is a section.
 - **Design system (v0.6):**
   - `UI/Style.lua` holds the tokens, a theme registry (`Style.Register` and `Style.Apply`) and the frame chrome.
   - `UI/Widgets.lua` holds the component kit: buttons with variants and states, icon buttons, segmented controls, cards, dividers, inputs and the confirmation dialog.
   - Components paint themselves, and modules don't hand-colour controls.
-  - Specification: [design/UI_DESIGN_V06.md](design/UI_DESIGN_V06.md).
+  - Specification: [design/UI_DESIGN_V06.md](design/UI_DESIGN_V06.md), superseded visually by [design/UI_DESIGN_V07.md](design/UI_DESIGN_V07.md) and the [approved mockups](design/mockups/README.md).
 - **First-time setup (v0.6):**
   - `Core/Onboarding.lua` holds the rules and saved state: `char.wizard`, plus drafts in `ui.wizardDrafts` keyed by character.
   - `UI/SetupWizard.lua` holds the six pages. It opens through `MainWindow.BeforeShow` for genuinely new characters only.

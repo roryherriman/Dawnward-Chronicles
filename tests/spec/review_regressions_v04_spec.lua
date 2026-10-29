@@ -11,10 +11,10 @@ return function(t, expect)
 		local now = 1000
 		for i = 1, n do
 			now = now + 4 * 3600
-			char.story.pacing.lastByCategory = {}
+			char.story.pacing.playByCategory = {}
 			local record = ns.GameEvents.Record(char, "quest", Fixtures.Context(fx, { questId = i,
 				title = "A fairly ordinary quest title " .. i, zone = "Zone " .. (i % 40) }), now)
-			local reaction = record and ns.Reactions.Consider(char, record, now)
+			local reaction = record and ns.Reactions.Consider(char, record, now, now)
 			if reaction then
 				local view = ns.Reactions.Present(char, reaction)
 				ns.Decisions.Decide(char, reaction.id, { optionId = view.options[optionIndex or 1].id }, now)
@@ -34,7 +34,7 @@ return function(t, expect)
 			ns.Memories.Add(char, { text = "SECRET-MEMORY", visibility = "secret" }, "player", 3)
 			local fx = Fixtures.CHARACTERS[4]
 			local record = ns.GameEvents.Record(char, "quest", Fixtures.Context(fx, { questId = 1, title = "Q" }), 4)
-			local reaction = ns.Reactions.Consider(char, record, 4)
+			local reaction = ns.Reactions.Consider(char, record, 4, 4)
 			local result = ns.Decisions.Decide(char, reaction.id, { custom = "SECRET-WORDS" }, 5)
 			ns.Journal.SetVisibility(char, result.entry.id, "secret", 6)
 
@@ -93,7 +93,7 @@ return function(t, expect)
 			ns.Goals.Add(char, { title = "Old goal" }, 1)
 			ns.Goals.Add(char, { title = "Recent goal" }, 10 ^ 7)
 			local record = ns.GameEvents.Record(char, "quest", Fixtures.Context(fx, { questId = 1, title = "Q" }), 10 ^ 7 + 5)
-			local reaction = ns.Reactions.Consider(char, record, 10 ^ 7 + 5)
+			local reaction = ns.Reactions.Consider(char, record, 10 ^ 7 + 5, 10 ^ 7 + 5)
 			local shown = ns.Reactions.Present(char, reaction)
 			local goalOption
 			for _, o in ipairs(shown.options) do if o.goalId then goalOption = o end end

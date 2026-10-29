@@ -1,0 +1,21 @@
+Fonts bundled with Dawnward Chronicles
+
+Both are licensed under the SIL Open Font License 1.1 (the OFL-*.txt files
+here). They are used for Dawnward's own interface only.
+
+Cinzel-SemiBold.ttf
+  Display and heading font. A static weight-600 instance made with fontTools
+  (fontTools.varLib.instancer, wght=600) from the variable font
+  ofl/cinzel/Cinzel[wght].ttf in github.com/google/fonts, so the client
+  needs no variable-font support. Not modified otherwise.
+  Copyright 2020 The Cinzel Project Authors (https://github.com/NDISCOVER/Cinzel)
+
+AlegreyaSans-Regular.ttf, AlegreyaSans-Bold.ttf
+  Body and label font, unmodified from ofl/alegreyasans in
+  github.com/google/fonts.
+  Copyright 2013 The Alegreya Sans Project Authors
+  (https://github.com/huertatipografica/Alegreya-Sans)
+
+Both fonts cover Latin scripts only. On Russian, Korean and Chinese
+clients, and whenever a font file fails to load, Dawnward uses the game's
+own fonts instead (UI/Style.lua).

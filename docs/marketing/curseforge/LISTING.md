@@ -33,7 +33,7 @@ All feature claims below match the repository at the time of writing. Labels:
 ```markdown
 # Dawnward Chronicles
 
-**Total RP 3 tells the world who your character is. Dawnward Chronicles helps you discover who you become.**
+**Total RP 3 tells the world who your character is. Dawnward Chronicles helps you discover who they become.**
 
 Dawnward Chronicles is a roleplaying companion. It notices what your character actually does in the game (quests turned in, levels reached, falls survived, places reached, standings earned) and, at a calm moment, asks a quiet question: *how did that affect them?* Your answers, never the addon, shape their personality over time, and become entries in a private chronicle you can edit, approve and choose to share.
 
@@ -45,7 +45,7 @@ It works for every class, race and faction. A compassionate warlock, a ruthless 
 
 Dawnward Chronicles was created with one goal: to make roleplaying in World of Warcraft feel more alive. Total RP 3 is an essential part of the WoW roleplaying community, and Dawnward is not here to compete with it or replace what it already does so well.
 
-- **TRP3 stays your public profile.** Dawnward focuses on character development, memories and storytelling.
+- **Its own profile, TRP3's public stage.** Dawnward Chronicles includes its own comprehensive character profile and storytelling tools, but it is not intended to replace Total RP 3's established public social roleplaying profile system. Dawnward helps players develop their characters through gameplay, while optional TRP3 integration lets them share approved public information with the broader roleplaying community.
 - **Independent project.** Dawnward is not an official TRP3 extension and is not affiliated with or endorsed by the Total RP 3 authors. Thank you to the TRP3 team for their work.
 - **Optional, opt-in integration.** Dawnward works without TRP3. If you turn it on, Dawnward keeps only *its own* section of your TRP3 profile up to date from information you approved and made public. It backs up first, can be rolled back, and never edits what you wrote yourself.
 

@@ -1,19 +1,29 @@
 -- Developer diagnostics for the Story Director's place moments
 -- (development builds only, under /dawnward dev story):
 --
---   dev story status            where you are, how the place is tied to the
---                               story, whether a return here can count, the
---                               location cooldown, and why the last arrival
---                               this session did or did not ask
---   dev story simulate [place]  runs a return to the place (default: here)
---                               after a full absence, on a copy of the
---                               character, and shows what would happen
+--   dev story status               the narrative clock, where you are, how
+--                                  the place is tied to the story, whether a
+--                                  return here can count and how much play is
+--                                  still needed, the location cooldown, and why
+--                                  the last arrival this session did or did
+--                                  not ask
+--   dev story simulate [place]     a return to the place (default: here)
+--                                  after enough play away, on a copy of the
+--                                  character: shows what would happen
+--   dev story simulate time <n>[m|h|d] [place]
+--                                  plays n minutes, hours or narrative days
+--                                  on a copy, then shows what a return to the
+--                                  place would do at that point
+--
+-- Everything is measured on the narrative clock: seconds of play, never
+-- offline time (Core/NarrativeClock.lua).
 --
 -- Read-only: status only reads; simulate works on a deep copy that is
--- discarded, so no place, event, cooldown, moment or journal entry changes.
+-- discarded, so no place, event, cooldown, clock, moment or journal entry
+-- changes.
 local _, ns = ...
-local Util, Commands, Places, Reactions, Director, GameEvents =
-	ns.Util, ns.Commands, ns.Places, ns.Reactions, ns.Director, ns.GameEvents
+local Util, Commands, Places, Reactions, Director, GameEvents, NarrativeClock =
+	ns.Util, ns.Commands, ns.Places, ns.Reactions, ns.Director, ns.GameEvents, ns.NarrativeClock
 
 local StoryDiagnostics = {}
 ns.StoryDiagnostics = StoryDiagnostics
@@ -37,6 +47,18 @@ function StoryDiagnostics.Duration(seconds)
 end
 local duration = StoryDiagnostics.Duration
 
+--- Seconds of play from "90m", "2h" or "3d" (narrative days for char).
+-- Returns seconds or nil. Pure.
+function StoryDiagnostics.ParseAmount(char, text)
+	local n, unit = tostring(text or ""):lower():match("^%s*(%d+%.?%d*)%s*([mhd]?)%s*$")
+	n = tonumber(n)
+	if not n or n <= 0 or n > 100000 then
+		return nil
+	end
+	local scale = unit == "m" and 60 or unit == "d" and NarrativeClock.DayLength(char) or 3600
+	return math.floor(n * scale)
+end
+
 local TIES = {
 	homeland = "it is your Homeland",
 	meaningful = "you marked it as meaningful",
@@ -49,11 +71,13 @@ function StoryDiagnostics.ReturnReason(why, info)
 	if why == nil then
 		return "a return here counts"
 	elseif why == "away" then
-		return string.format("last recorded here %s ago; a return counts only after %s away (%s more)",
-			duration(info.away), duration(Places.RETURN_AFTER), duration(info.wait))
+		return string.format("away %s of play; a return counts after %s of play away (%s more)",
+			duration(info.away), duration(info.needed), duration(info.wait))
 	elseif why == "weekly" then
-		return string.format("a return here was already recorded within the week; next possible in %s",
-			duration(info.wait))
+		return string.format("a return here was already recorded this narrative week; next possible after %s more "
+			.. "play", duration(info.wait))
+	elseif why == "new" then
+		return "logged before gameplay time was tracked: time away starts counting from this visit"
 	elseif why == "ordinary" then
 		return "returns count only for settlements, starting areas, capitals and places tied to your story "
 			.. "(Homeland, marked, or a memory), and this place is none of these"
@@ -117,7 +141,7 @@ local function relevanceLine(char, record)
 		#r.reasons > 0 and (": " .. table.concat(r.reasons, "; ")) or ""), r
 end
 
-local function cooldownLine(char, now)
+local function cooldownLine(char, play)
 	local prefs, pacing = char.story.prefs, char.story.pacing
 	if prefs.frequency == "off" then
 		return "Location cooldown: story prompts are off."
@@ -125,15 +149,31 @@ local function cooldownLine(char, now)
 	if prefs.places == "off" then
 		return "Location cooldown: place moments are off."
 	end
-	local a, b = pacing.lastByCategory.zone, pacing.lastByCategory.place
+	local a, b = pacing.playByCategory.zone, pacing.playByCategory.place
 	local last = a and b and math.max(a, b) or a or b
 	local cooldown = Reactions.COOLDOWN[prefs.frequency]
-	if not last or now - last >= cooldown then
-		return string.format("Location cooldown: ready (%s between place moments at '%s').", duration(cooldown),
-			prefs.frequency)
+	if not last or last > play or play - last >= cooldown then
+		return string.format("Location cooldown: ready (%s of play between place moments at '%s').",
+			duration(cooldown), prefs.frequency)
 	end
-	return string.format("Location cooldown: %s left of %s (last place moment %s ago). Urgent places skip it.",
-		duration(cooldown - (now - last)), duration(cooldown), duration(now - last))
+	return string.format("Location cooldown: %s of play left of %s (last place moment %s of play ago). "
+		.. "Urgent places skip it.", duration(cooldown - (play - last)), duration(cooldown), duration(play - last))
+end
+
+--- Lines describing the narrative clock for char at play.
+function StoryDiagnostics.ClockLines(ctx, char, play)
+	local day = NarrativeClock.DayLength(char)
+	local pace = char.story.prefs.pace or NarrativeClock.DEFAULT_PACE
+	local lines = {
+		string.format("Narrative clock: %s of play · narrative day %d (pace %s: a narrative day is %s of play).",
+			duration(play), NarrativeClock.Day(char, play), NarrativeClock.PACE_LABELS[pace] or pace, duration(day)),
+	}
+	local session = ctx.narrative
+	if session then
+		lines[#lines + 1] = session.paused and "The clock is paused: you are AFK."
+			or "The clock is running: only time you play counts, never time offline."
+	end
+	return lines
 end
 
 --- Lines for /dawnward dev story status.
@@ -146,6 +186,8 @@ function StoryDiagnostics.StatusLines(ctx)
 		add("This character has no Dawnward record yet, so places are not logged.")
 		return lines
 	end
+	local play = NarrativeClock.Current(char, ctx)
+	for _, line in ipairs(StoryDiagnostics.ClockLines(ctx, char, play)) do add(line) end
 	local obs = here(ctx)
 	if not obs then
 		add("Location: unknown (no zone from the client).")
@@ -157,8 +199,10 @@ function StoryDiagnostics.StatusLines(ctx)
 			kind and Places.KIND_LABELS[kind] or "not in the place mapping (logged; never asks by itself)"))
 		local entry = obs.subzone and Places.Entry(char, obs.zone, obs.subzone) or Places.Entry(char, obs.zone)
 		if entry then
-			add(string.format("Logged: %d visit%s; last recorded here %s ago.", entry.visits,
-				entry.visits == 1 and "" or "s", duration(now - entry.last)))
+			add(string.format("Logged: %d visit%s; last recorded here %s.", entry.visits,
+				entry.visits == 1 and "" or "s", entry.lastPlay
+					and (duration(math.max(0, play - entry.lastPlay)) .. " of play ago")
+					or "before gameplay time was tracked"))
 			add(string.format("Homeland: %s. Marked meaningful: %s. Memory tie: %s.",
 				Places.IsHomeland(char, entry) and "yes" or (Places.Tie(char, entry) == "homeland"
 					and "yes (named by the Homeland field)" or "no"),
@@ -168,7 +212,7 @@ function StoryDiagnostics.StatusLines(ctx)
 		end
 		local target, kind2 = Places.ReturnTarget(char, obs.zone, obs.subzone, obs.areaKind, obs.zoneKind)
 		if target then
-			local ok, why, info = Places.ReturnCheck(char, target, kind2, now)
+			local ok, why, info = Places.ReturnCheck(char, target, kind2, play)
 			add(string.format("Return to %s, if it happened now: %s.", Places.Label(target),
 				ok and "would be recorded" or ("not eligible: " .. StoryDiagnostics.ReturnReason(why, info))))
 			if info.tie then add("Tied to your story: " .. TIES[info.tie] .. ".") end
@@ -177,8 +221,8 @@ function StoryDiagnostics.StatusLines(ctx)
 			add("Return: " .. StoryDiagnostics.ReturnReason(entry and "ordinary" or "first") .. ".")
 		end
 	end
-	add(cooldownLine(char, now))
-	add(string.format("Waiting moments: %d.", #Reactions.List(char, now)))
+	add(cooldownLine(char, play))
+	add(string.format("Waiting moments: %d.", #Reactions.List(char, now, play)))
 	local last = ctx.lastLocation
 	if not last then
 		add("Last arrival this session: none observed yet.")
@@ -203,46 +247,28 @@ function StoryDiagnostics.StatusLines(ctx)
 	return lines
 end
 
---- Lines for /dawnward dev story simulate [place]: a return to the place
--- after a full absence, run on a copy of the character. Never saves.
-function StoryDiagnostics.SimulateLines(ctx, name)
-	local now = ctx.now()
-	local char = ctx.store.real.characters[ctx.characterKey]
-	if not char then
-		return { "This character has no Dawnward record yet, so there is nothing to simulate." }
-	end
+-- The logged place to simulate: a named one, else the current one.
+local function simTarget(ctx, char, name)
 	local obs = here(ctx) or {}
-	local entry, err
 	if name and Util.Trim(name) ~= "" then
-		entry, err = Places.FindByName(char, name)
-	else
-		entry = obs.zone and (obs.subzone and Places.Entry(char, obs.zone, obs.subzone) or Places.Entry(char, obs.zone))
-		err = obs.zone and "Dawnward has not logged this place yet; visit it first, or name one you have visited "
-			.. "(/dawnward dev story simulate Goldshire)" or "your location is unknown; name a visited place"
+		local entry, err = Places.FindByName(char, name)
+		return entry, err, obs
 	end
-	if not entry then
-		return { "Not simulated: " .. err .. "." }
-	end
+	local entry = obs.zone and (obs.subzone and Places.Entry(char, obs.zone, obs.subzone) or Places.Entry(char, obs.zone))
+	return entry, obs.zone and "Dawnward has not logged this place yet; visit it first, or name one you have "
+		.. "visited (/dawnward dev story simulate Goldshire)" or "your location is unknown; name a visited place", obs
+end
 
-	local copy = Util.DeepCopy(char)
-	local key = Places.Key(entry.zone, entry.subzone)
-	local centry = copy.story.places[key]
-	-- As if the character left right after its last visit and has been away
-	-- long enough; earlier returns no longer count against the weekly limit.
-	centry.last = now - Places.RETURN_AFTER - 60
-	centry.returnedAt = nil
+-- Runs one arrival at entry on copy, at real time now and play. Lines added to lines.
+local function simulateArrival(lines, ctx, copy, entry, obs, now, play)
+	local function add(text) lines[#lines + 1] = text end
+	local centry = copy.story.places[Places.Key(entry.zone, entry.subzone)]
 	local sim = {
 		zone = centry.zone, subzone = centry.subzone, mapId = centry.mapId, areaId = centry.areaId,
 		level = obs.level, class = obs.class, race = obs.race, faction = obs.faction, source = "SIMULATION",
 		client = obs.client or (ctx.client and ctx.client.id),
 	}
-	local lines = { string.format("Simulating a return to %s after %s away, on a copy of your data.",
-		Places.Label(entry), duration(now - centry.last)) }
-	local function add(text) lines[#lines + 1] = text end
-	if entry.subzone and centry.areaId == nil and not Places.Tie(copy, centry) then
-		add("Note: this place has no verified area ID, so only the zone can count as a return.")
-	end
-	local steps, diag = Places.Observe(copy, sim, now)
+	local steps, diag = Places.Observe(copy, sim, now, play)
 	local considered = false
 	for _, step in ipairs(steps) do
 		local record = GameEvents.Record(copy, step.category, step.data, now)
@@ -254,8 +280,8 @@ function StoryDiagnostics.SimulateLines(ctx, name)
 					add((relevanceLine(copy, record)))
 					add(string.format("Director roll: %.2f (asks when below the chance).", Director.Roll(record)))
 				end
-				add(cooldownLine(char, now))
-				local reaction, outcome = Reactions.Consider(copy, record, now)
+				add(cooldownLine(copy, play))
+				local reaction, outcome = Reactions.Consider(copy, record, now, play)
 				add("Result: " .. StoryDiagnostics.OutcomeText(outcome) .. ".")
 				local view = reaction and Reactions.Present(copy, reaction)
 				if view then
@@ -273,12 +299,79 @@ function StoryDiagnostics.SimulateLines(ctx, name)
 		add("Result: no event: " .. StoryDiagnostics.ReturnReason(diag and diag.why or "ordinary", diag and diag.info)
 			.. ".")
 	end
-	add("Nothing was saved: places, events, cooldowns, waiting moments and the journal are unchanged.")
+end
+
+local SAVED_NOTHING = "Nothing was saved: places, events, the clock, cooldowns, waiting moments and the journal "
+	.. "are unchanged."
+
+--- Lines for /dawnward dev story simulate [place]: a return to the place
+-- after enough play away, run on a copy of the character. Never saves.
+function StoryDiagnostics.SimulateLines(ctx, name)
+	local now = ctx.now()
+	local char = ctx.store.real.characters[ctx.characterKey]
+	if not char then
+		return { "This character has no Dawnward record yet, so there is nothing to simulate." }
+	end
+	local entry, err, obs = simTarget(ctx, char, name)
+	if not entry then
+		return { "Not simulated: " .. err .. "." }
+	end
+	local play = NarrativeClock.Current(char, ctx)
+	local copy = Util.DeepCopy(char)
+	local centry = copy.story.places[Places.Key(entry.zone, entry.subzone)]
+	-- As if the character left right after its last visit and has played long
+	-- enough away; earlier returns no longer count against the narrative week.
+	local away = Places.RETURN_AFTER_DAYS * NarrativeClock.DayLength(copy) + 60
+	centry.lastPlay = math.max(0, play - away)
+	centry.returnedPlay = nil
+	local lines = { string.format("Simulating a return to %s after %s of play away, on a copy of your data.",
+		Places.Label(entry), duration(play - centry.lastPlay)) }
+	if play < away then
+		-- Too little play so far to be away that long: the copy plays the difference.
+		play = away
+	end
+	simulateArrival(lines, ctx, copy, entry, obs, now, play)
+	lines[#lines + 1] = SAVED_NOTHING
+	return lines
+end
+
+--- Lines for /dawnward dev story simulate time <amount> [place]: plays the
+-- amount on a copy (as if the character left the place now), then arrives.
+function StoryDiagnostics.SimulateTimeLines(ctx, rest)
+	local now = ctx.now()
+	local char = ctx.store.real.characters[ctx.characterKey]
+	if not char then
+		return { "This character has no Dawnward record yet, so there is nothing to simulate." }
+	end
+	local amountText, name = Util.NextWord(rest or "")
+	local amount = StoryDiagnostics.ParseAmount(char, amountText)
+	if not amount then
+		return { "Usage: /dawnward dev story simulate time <n>m|h|d [place]   (d = narrative days)" }
+	end
+	local entry, err, obs = simTarget(ctx, char, name)
+	if not entry then
+		return { "Not simulated: " .. err .. "." }
+	end
+	local play = NarrativeClock.Current(char, ctx)
+	local copy = Util.DeepCopy(char)
+	local centry = copy.story.places[Places.Key(entry.zone, entry.subzone)]
+	-- Leaving the place now: absence starts here (a place logged before the
+	-- clock existed starts counting now, as it would in play).
+	centry.lastPlay = centry.lastPlay and math.min(centry.lastPlay, play) or play
+	local later = play + amount
+	copy.story.clock.played = later
+	local lines = {
+		string.format("Simulating %s more play, then arriving at %s, on a copy of your data.", duration(amount),
+			Places.Label(entry)),
+	}
+	for _, line in ipairs(StoryDiagnostics.ClockLines({}, copy, later)) do lines[#lines + 1] = "After: " .. line end
+	simulateArrival(lines, ctx, copy, entry, obs, now, later)
+	lines[#lines + 1] = SAVED_NOTHING
 	return lines
 end
 
 ns.SetupCommands.DEV_AREAS.story = {
-	usage = "dev story status | dev story simulate [place]",
+	usage = "dev story status | dev story simulate [place] | dev story simulate time <n>m|h|d [place]",
 	run = function(ctx, rest)
 		local word, tail = Util.NextWord(rest or "")
 		word = word:lower()
@@ -286,9 +379,15 @@ ns.SetupCommands.DEV_AREAS.story = {
 		if word == "status" then
 			lines = StoryDiagnostics.StatusLines(ctx)
 		elseif word == "simulate" then
-			lines = StoryDiagnostics.SimulateLines(ctx, tail)
+			local sub, more = Util.NextWord(tail or "")
+			if sub:lower() == "time" then
+				lines = StoryDiagnostics.SimulateTimeLines(ctx, more)
+			else
+				lines = StoryDiagnostics.SimulateLines(ctx, tail)
+			end
 		else
-			lines = { "Developer commands: /dawnward dev story status | dev story simulate [place]" }
+			lines = { "Developer commands: /dawnward dev story status | dev story simulate [place] | "
+				.. "dev story simulate time <n>m|h|d [place]" }
 		end
 		for _, line in ipairs(lines) do out(ctx, line) end
 	end,

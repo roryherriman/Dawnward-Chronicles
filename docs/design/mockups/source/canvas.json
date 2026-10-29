@@ -1,0 +1,33 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-10-29T09:00:00Z" },
+  "title": "Dawnward Chronicles v0.7 UI mockups",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 1100, "h": 720, "title": "1 · Journal (dashboard)" },
+    "Character.dc.html": { "x": 1180, "y": 0, "w": 1100, "h": 720, "title": "2 · Character" },
+    "Story.dc.html": { "x": 2360, "y": 0, "w": 1100, "h": 720, "title": "3 · Story" },
+    "ChronicleMemories.dc.html": { "x": 0, "y": 840, "w": 1100, "h": 720, "title": "4 · Chronicle: Memories" },
+    "ChroniclePlaces.dc.html": { "x": 1180, "y": 840, "w": 1100, "h": 720, "title": "5 · Chronicle: Places" },
+    "SetupWizard.dc.html": { "x": 2360, "y": 840, "w": 1100, "h": 720, "title": "6 · First-time setup (step 2 of 6)" },
+    "DesignSystem.dc.html": { "x": 0, "y": 1680, "w": 1100, "h": 1000, "title": "7 · Design system" },
+    "TRP3Sync.dc.html": { "x": 1180, "y": 1680, "w": 1100, "h": 720, "title": "Proposed · Total RP 3 sync (pending approval)" },
+    "CharacterShowcase.dc.html": { "x": 2360, "y": 1680, "w": 1100, "h": 720, "title": "Proposed · Character Showcase (pending approval)" }
+  },
+  "order": [
+    "Main.dc.html",
+    "Character.dc.html",
+    "Story.dc.html",
+    "ChronicleMemories.dc.html",
+    "ChroniclePlaces.dc.html",
+    "SetupWizard.dc.html",
+    "DesignSystem.dc.html",
+    "TRP3Sync.dc.html",
+    "CharacterShowcase.dc.html"
+  ],
+  "notes": {
+    "title": { "x": 0, "y": -300, "text": "Dawnward Chronicles · proposed visual direction", "kind": "title1", "maxW": 3460 }
+  },
+  "designSystems": []
+}

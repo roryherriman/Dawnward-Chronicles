@@ -1,7 +1,7 @@
 -- The settings panel behind the gear button, in four pages (General, Story,
 -- Data, Total RP 3) rather than a fourth section: theme gallery, minimap,
 -- guide and setup; story moment settings; backup, import and simulation
--- mode; the read-only Total RP 3 status.
+-- mode; the Total RP 3 sync page (UI/TRP3Page.lua).
 -- Actions reuse the slash command code, so behaviour is identical.
 local _, ns = ...
 local Widgets, MainWindow, Themes, Actions, Commands =
@@ -35,6 +35,9 @@ SettingsPanel.STORY_SETTINGS = {
 	{ key = "places", label = "Places", values = { "on", "fewer", "off" },
 		help = "Moments about places: beginnings, settlements, returns. Fewer: notable places only. "
 			.. "Off: places are still recorded, never asked about." },
+	{ key = "pace", label = "Story pace", values = { "standard", "brisk", "slow" },
+		help = "How much play makes a narrative day: Brisk 1 hour, Standard 2 hours, Slow 4 hours. Returns to a "
+			.. "place and story cooldowns count only time you play, never time offline." },
 	{ tracking = "quest", label = "Quests", values = { true, false },
 		help = "Record completed quests as story events." },
 }
@@ -214,11 +217,10 @@ local function create(parent)
 	end)
 
 	-- Total RP 3 ------------------------------------------------------------------------
-	heading("trp3", "Total RP 3", -4)
-	note("trp3", -22):SetText("Dawnward works without Total RP 3. Sync is experimental and off unless you turn it on "
-		.. "with /dawnward trp3 help. It shares only what you made public, backs up first and can be rolled back.")
-	heading("trp3", "Status", -70)
-	panel.trp3 = note("trp3", -90)
+	-- Built by UI/TRP3Page.lua; it reuses the /dawnward trp3 functions.
+	panel.trp3Page = ns.TRP3Page.Build(panel.pages.trp3, MainWindow.ContentWidth(), MainWindow.ContentHeight() - 78)
+	-- The detected status lines (also shown when Total RP 3 is absent).
+	panel.trp3 = panel.trp3Page.absentStatus
 
 	panel.done = Widgets.Button(f, "Done", 90, 22, "primary")
 	panel.done:SetPoint("BOTTOMRIGHT", -INSET, 10)
@@ -252,8 +254,14 @@ local function create(parent)
 		self.minimap:SetText(Actions.MinimapSettings(view.ctx).hidden and "Minimap button: hidden"
 			or "Minimap button: shown")
 
-		local status = view.ctx.trp3Status and view.ctx.trp3Status()
-		self.trp3:SetText(table.concat(Commands.Trp3Lines(status), "\n"))
+		-- Only while its page is open (it reads Total RP 3); read-only either way.
+		if self.page == "trp3" then
+			self.trp3Page:Refresh()
+			local frame = MainWindow.GetFrame()
+			if frame and frame.title then
+				frame.title:SetText("Total RP 3")
+			end
+		end
 	end
 
 	SettingsPanel.panel = panel
@@ -261,3 +269,29 @@ local function create(parent)
 end
 
 MainWindow.createSettings = create
+
+--- Opens the main window on Settings with the given page selected
+-- ("general", "story", "data" or "trp3"). Returns true when it is shown.
+function SettingsPanel.OpenPage(pageId)
+	local known = false
+	for _, page in ipairs(SettingsPanel.PAGES) do
+		if page.id == pageId then known = true end
+	end
+	if not known then
+		return false
+	end
+	if not MainWindow.IsShown() then
+		MainWindow.Show()
+	end
+	local panel = SettingsPanel.panel
+	if not MainWindow.IsShown() or not panel then
+		return false
+	end
+	panel.page = pageId
+	if MainWindow.CurrentSection() ~= "settings" then
+		MainWindow.ToggleSettings()
+	else
+		MainWindow.Refresh()
+	end
+	return true
+end

@@ -48,3 +48,6 @@ Thumbs.db
 desktop.ini
 *.swp
 *~
+
+# Local agent worktrees
+.claude/worktrees/

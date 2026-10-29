@@ -14,14 +14,21 @@ local function turnIn(mock, id, title)
 	mock.Fire("QUEST_TURNED_IN", id, 100, 10)
 end
 
--- y offset of a widget's TOPLEFT point relative to its parent (negative down).
-local function top(widget)
-	for _, p in ipairs(widget.__points or {}) do
-		if p[1] == "TOPLEFT" then
-			return p[#p]
+-- x, y of a widget's TOPLEFT relative to the section frame, following
+-- TOPLEFT anchors up through its parents (each anchored TOPLEFT to TOPLEFT).
+local function offset(widget, root)
+	local x, y = 0, 0
+	local w = widget
+	while w and w ~= root do
+		local found
+		for _, p in ipairs(w.__points or {}) do
+			if p[1] == "TOPLEFT" then found = p end
 		end
+		if not found then return nil end
+		x, y = x + found[#found - 1], y + found[#found]
+		w = w.__parent
 	end
-	return nil
+	return x, y
 end
 
 return function(t, expect)
@@ -70,7 +77,7 @@ return function(t, expect)
 			turnIn(mock, 11, "One")
 			mock.zone = "Duskwood"
 			mock.Slash("story set frequency frequent")
-			env.DawnwardChroniclesDB.characters[CHAR].story.pacing.lastByCategory = {}
+			env.DawnwardChroniclesDB.characters[CHAR].story.pacing.playByCategory = {}
 			turnIn(mock, 12, "Two")
 			ns.MainWindow.Refresh()
 			expect.truthy(section.position:GetText():find("of 2", 1, true))
@@ -90,15 +97,157 @@ return function(t, expect)
 			local mock, _, ns, section = start()
 			turnIn(mock, 13, "Fit")
 			ns.MainWindow.Refresh()
-			local contentHeight = ns.MainWindow.LAYOUT.height - ns.MainWindow.LAYOUT.contentTop
-				- ns.MainWindow.LAYOUT.contentBottom
-			local widgets = { section.later, section.custom, section.changeRows[#section.changeRows] }
+			local contentHeight = ns.MainWindow.ContentHeight()
+			local contentWidth = ns.MainWindow.ContentWidth()
+			local widgets = { section.later, section.dismiss, section.customArea.frame, section.question,
+				section.changeRows[1], section.waitingPanel, section.growthPanel, section.card }
 			for _, b in ipairs(section.optionButtons) do widgets[#widgets + 1] = b end
 			for _, w in ipairs(widgets) do
-				local y = top(w)
+				local x, y = offset(w, section.frame)
+				if not w:IsShown() then x, y = 0, 0 end
 				expect.truthy(y, "anchored by TOPLEFT")
 				expect.truthy(-y + w:GetHeight() <= contentHeight, "bottom at " .. (-y + w:GetHeight()))
+				expect.truthy(x + w:GetWidth() <= contentWidth, "right at " .. (x + w:GetWidth()))
 			end
+		end)
+
+		t:it("lays the answers out as a two-column grid of numbered choice cards with hints", function()
+			local mock, _, ns, section = start()
+			turnIn(mock, 14, "Grid")
+			ns.MainWindow.Refresh()
+			local a, b, c = section.optionButtons[1], section.optionButtons[2], section.optionButtons[3]
+			local ax, ay = offset(a, section.frame)
+			local bx, by = offset(b, section.frame)
+			local cx, cy = offset(c, section.frame)
+			expect.equal(ay, by, "1 and 2 share a row")
+			expect.truthy(bx > ax, "2 is right of 1")
+			expect.equal(cx, ax, "3 starts the next row")
+			expect.truthy(cy < ay)
+			expect.equal(a.key.label:GetText(), "1")
+			-- The first quest answer proposes Compassion +1: the hint says so, from the library.
+			expect.truthy(a.hint:GetText():find("More Compassionate", 1, true), a.hint:GetText())
+			local last
+			for _, btn in ipairs(section.optionButtons) do
+				if btn:IsShown() then last = btn end
+			end
+			expect.equal(last.hint:GetText(), "No personality change")
+		end)
+
+		t:it("shows where, what and when from the record, and why now from the Director", function()
+			local mock, env, ns, section = start()
+			turnIn(mock, 15, "Context Quest")
+			ns.MainWindow.Refresh()
+			local chips = {}
+			for _, chip in ipairs(section.chips) do
+				if chip:IsShown() then chips[#chips + 1] = chip.label:GetText() end
+			end
+			expect.equal(chips[1], "Goldshire, Elwynn Forest")
+			expect.equal(chips[2], "Quest completed")
+			expect.truthy(chips[3]:find("Level 20", 1, true), chips[3])
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			local reaction = char.story.reactions[1]
+			local view = ns.Reactions.Present(char, reaction)
+			local why = section.context:GetText()
+			expect.truthy(why:find("Why now:", 1, true))
+			expect.truthy(why:find(view.why[1], 1, true), "the Director's own reason")
+			expect.falsy(why:find("remembers", 1, true), "no memories, no memory line")
+			expect.truthy(ns.MainWindow.GetFrame().eyebrow:GetText():find("MOMENT 1 OF 1", 1, true))
+		end)
+
+		t:it("names relevant established memories, and only those", function()
+			local mock, env, ns, section = start()
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			ns.Memories.Add(char, { title = "The night the lanterns went out", zone = "Elwynn Forest",
+				importance = 2 }, "player", 1)
+			ns.Memories.Add(char, { title = "A proposed one", zone = "Elwynn Forest" }, "suggested", 1)
+			turnIn(mock, 16, "Memory Quest")
+			ns.MainWindow.Refresh()
+			local text = section.context:GetText()
+			expect.truthy(text:find("Morrow remembers:", 1, true), text)
+			expect.truthy(text:find("The night the lanterns went out", 1, true))
+			expect.falsy(text:find("A proposed one", 1, true), "proposed memories have no influence")
+		end)
+
+		t:it("lists other waiting moments and selects one", function()
+			local mock, env, ns, section = start()
+			turnIn(mock, 17, "First")
+			mock.zone = "Duskwood"
+			mock.Slash("story set frequency frequent")
+			env.DawnwardChroniclesDB.characters[CHAR].story.pacing.playByCategory = {}
+			turnIn(mock, 18, "Second")
+			ns.MainWindow.Refresh()
+			local row = section.waitingRows[1]
+			expect.truthy(row:IsShown())
+			expect.falsy(section.waitingRows[2]:IsShown())
+			local other = row.text:GetText()
+			expect.truthy(other ~= section.question:GetText())
+			click(row)
+			expect.equal(section.question:GetText(), other)
+			expect.equal(section.index, 2)
+			expect.truthy(section.position:GetText():find("2 of 2", 1, true))
+		end)
+
+		t:it("refuses an empty answer inline and keeps the moment", function()
+			local mock, env, ns, section = start()
+			turnIn(mock, 19, "Empty")
+			ns.MainWindow.Refresh()
+			section.custom:SetText("   ")
+			click(section.save)
+			expect.truthy(section.custom.invalid)
+			expect.truthy(section.customError:IsShown())
+			expect.equal(#env.DawnwardChroniclesDB.characters[CHAR].story.reactions, 1)
+		end)
+
+		t:it("explains a waiting change, rejects it, and reverses an applied one", function()
+			local mock, env, ns, section = start()
+			turnIn(mock, 40, "Growth")
+			ns.MainWindow.Refresh()
+			click(section.optionButtons[1])
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			local row = section.changeRows[1]
+			expect.equal(row.label:GetText(), "More Compassionate")
+			expect.truthy(row.reason:GetText():find("From your answer: Morrow", 1, true), row.reason:GetText())
+			click(row.reject)
+			expect.equal(char.story.changes[1].status, "rejected")
+			expect.falsy(section.appliedRows[1]:IsShown())
+			-- A second moment, approved, can be reversed after a confirmation.
+			mock.Slash("story set frequency frequent")
+			char.story.pacing.playByCategory = {}
+			turnIn(mock, 41, "Growth Again")
+			ns.MainWindow.Refresh()
+			click(section.optionButtons[1])
+			local change = ns.Evolution.Pending(char)[1]
+			local axis = change.axis
+			click(section.changeRows[1].approve)
+			local applied = section.appliedRows[1]
+			expect.truthy(applied:IsShown())
+			local after = char.personality[axis].value
+			click(applied.reverse)
+			expect.equal(char.personality[axis].value, after, "nothing until confirmed")
+			click(ns.Widgets.dialog.accept)
+			expect.equal(char.personality[axis].value, after - change.delta)
+			expect.falsy(section.appliedRows[1]:IsShown())
+		end)
+
+		t:it("with automatic approval, changes apply at once and stay reversible", function()
+			local mock, env, ns, section = start()
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			char.story.prefs.approval = "auto"
+			turnIn(mock, 42, "Auto")
+			ns.MainWindow.Refresh()
+			click(section.optionButtons[1])
+			expect.falsy(section.changeRows[1]:IsShown())
+			expect.truthy(section.appliedRows[1]:IsShown())
+			expect.truthy(section.growthNote:GetText():find("Automatic approval is on", 1, true))
+		end)
+
+		t:it("explains an empty Story section", function()
+			local _, _, ns, section = start()
+			expect.truthy(section.body:IsShown())
+			expect.falsy(section.optionButtons[1]:IsShown())
+			expect.truthy(section.waitingNote:GetText():find("Nothing is waiting", 1, true))
+			expect.truthy(section.growthNote:GetText():find("No personality changes are waiting", 1, true))
+			expect.equal(ns.MainWindow.GetFrame().eyebrow:GetText(), "STORY")
 		end)
 	end)
 
@@ -111,6 +260,8 @@ return function(t, expect)
 			local card = ns.ReactionCard.Frame()
 			expect.truthy(card and card:IsShown())
 			expect.truthy(card.question:GetText():find("Card Quest", 1, true))
+			expect.equal(card.meta:GetText(), "Quest completed · Elwynn Forest")
+			expect.equal(card.dismiss.variant, "danger")
 			click(card.answer)
 			expect.falsy(card:IsShown())
 			expect.truthy(ns.MainWindow.IsShown())

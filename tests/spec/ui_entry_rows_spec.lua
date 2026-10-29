@@ -24,90 +24,138 @@ return function(t, expect)
 			return mock, env, ns, ns.ChronicleView.section
 		end
 
-		t:it("keeps every button inside its own record and nearer it than the next one", function()
-			local _, _, ns = Boot.Start()
-			local L = ns.ChronicleView.LAYOUT
-			local r = ns.ChronicleView.RowRects()
-			local cardHeight = L.rowHeight - L.rowGap
-			for _, b in ipairs(r.buttons) do
-				expect.truthy(b.x >= L.rowPad - 2 and b.x + b.w <= L.width - L.rowPad + 2, "inside the card's sides")
-				expect.truthy(b.y >= 0 and b.y + b.h <= cardHeight, "inside the card's height")
-				local toOwnText = b.y - (r.text.y + r.text.h)
-				local toNextText = (L.rowHeight + r.text.y) - (b.y + b.h)
-				expect.truthy(toOwnText < toNextText, "nearer its own record's text than the next record's")
+		local function tabTo(section, id)
+			for _, b in ipairs(section.tabButtons) do
+				if b.tabId == id then click(b) end
 			end
-			expect.truthy(L.rowGap >= 4, "records are separated by a visible gap")
-		end)
+		end
 
-		t:it("lays out long button labels from the record's right edge without leaving it", function()
-			local _, env, ns, section = start()
-			local char = env.DawnwardChroniclesDB.characters[CHAR]
+		local function goldshire(ns, char)
 			char.story.places[ns.Places.Key("Elwynn Forest", "Goldshire")] = ns.Places.CleanEntry({
 				zone = "Elwynn Forest", subzone = "Goldshire", kind = "town", first = 1, last = 1 })
-			for _, b in ipairs(section.tabButtons) do
-				if b.tabId == "places" then click(b) end
+		end
+
+		t:it("keeps every button inside its own card, apart from the others and from the next card", function()
+			local _, env, ns, section = start()
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			ns.Memories.Add(char, { title = "Suggested", text = "A suggestion" }, "suggested", 1)
+			ns.Memories.Add(char, { title = "Mine", text = "My own" }, "player", 2)
+			ns.MainWindow.Refresh()
+			local L = ns.ChronicleView.LAYOUT
+			local r = ns.ChronicleView.CardRects({ title = true })
+			expect.truthy(L.rowGap >= 4 and L.colGap >= 4, "cards are separated by a visible gap")
+			for i = 1, 2 do
+				local row = section.rows[i]
+				local spans = {}
+				for _, b in ipairs(row.actions) do
+					if b:IsShown() then
+						expect.equal(b:GetParent(), row, "the button belongs to its card")
+						local x, top = b.__points[1][2], -b.__points[1][3]
+						expect.truthy(x >= L.cardPad and x + b:GetWidth() <= L.cardWidth - L.cardPad,
+							"inside the card's sides: " .. b:GetText())
+						expect.truthy(top >= r.divider.y and top + L.buttonHeight <= L.cardHeight, "below the divider")
+						spans[#spans + 1] = { x, x + b:GetWidth() }
+					end
+				end
+				for a2 = 1, #spans do
+					for b2 = a2 + 1, #spans do
+						expect.truthy(spans[a2][2] <= spans[b2][1] or spans[b2][2] <= spans[a2][1], "buttons never overlap")
+					end
+				end
+				expect.equal(row.vis:GetParent(), row, "the visibility chip belongs to its card")
+			end
+		end)
+
+		t:it("marks a suggestion as needing a decision, with Accept first and Remove on the right", function()
+			local _, env, ns, section = start()
+			ns.Memories.Add(env.DawnwardChroniclesDB.characters[CHAR], { text = "Suggested" }, "suggested", 1)
+			ns.MainWindow.Refresh()
+			local row = section.rows[1]
+			expect.truthy(row.highlight, "a suggestion stands out")
+			expect.equal(row.chip.label:GetText(), "Suggested · needs your call")
+			expect.equal(row.actions[1]:GetText(), "Accept")
+			expect.equal(row.actions[1].variant, "primary")
+			local remove
+			for _, b in ipairs(row.actions) do
+				if b:IsShown() and b:GetText() == "Remove" then remove = b end
 			end
 			local L = ns.ChronicleView.LAYOUT
-			local row = section.rows[1]
-			local left = L.width
-			for _, b in ipairs(row.buttons) do
-				if b:IsShown() then
-					local x = b.__points[1][2]
-					expect.equal(b:GetParent(), row, "the button belongs to the record")
-					expect.truthy(x >= L.rowPad - 2, "starts inside the record: " .. b:GetText())
-					expect.truthy(x + b:GetWidth() <= L.width - L.rowPad + 2, "ends inside the record")
-					expect.truthy(x + b:GetWidth() <= left, "buttons never overlap")
-					left = x
-				end
-			end
-			expect.truthy(left >= L.metaWidth + L.rowPad, "buttons stay clear of the record's details")
+			expect.equal(remove.__points[1][2] + remove:GetWidth(), L.cardWidth - L.cardPad, "Remove sits at the right")
+			expect.equal(remove.variant, "danger")
 		end)
 
 		t:it("shows a place's status apart from the actions that change it", function()
 			local mock, env, ns, section = start()
 			local char = env.DawnwardChroniclesDB.characters[CHAR]
-			char.story.places[ns.Places.Key("Elwynn Forest", "Goldshire")] = ns.Places.CleanEntry({
-				zone = "Elwynn Forest", subzone = "Goldshire", kind = "town", first = 1, last = 1 })
-			for _, b in ipairs(section.tabButtons) do
-				if b.tabId == "places" then click(b) end
-			end
-			local row = section.rows[1]
-			expect.equal(row.status:GetText(), "")
-			local function shown(text)
-				for _, b in ipairs(row.buttons) do
-					if b:IsShown() and b:GetText() == text then return b end
+			goldshire(ns, char)
+			tabTo(section, "places")
+			local view = section.places
+			local d = view.detail
+			local function chipTexts()
+				local out = {}
+				for _, chip in ipairs(d.chips) do
+					if chip:IsShown() then out[#out + 1] = chip.label:GetText() end
 				end
+				return out
 			end
-			click(shown("Mark meaningful"))
-			expect.equal(row.status:GetText(), "MEANINGFUL")
-			expect.truthy(shown("Unmark meaningful"), "the action says what it will do")
-			click(shown("Set as homeland"))
+			expect.deepEqual(chipTexts(), { "No memories tied to it" })
+			expect.falsy(view.rows[1].icon:IsShown())
+			click(d.mark)
+			expect.deepEqual(chipTexts(), { "Marked meaningful", "No memories tied to it" })
+			expect.equal(d.mark:GetText(), "Unmark meaningful", "the action says what it will do")
+			expect.truthy(view.rows[1].icon:IsShown(), "the list marks it too")
+			click(d.homeland)
 			mock.AcceptPopup()
-			expect.equal(row.status:GetText(), "HOMELAND  -  MEANINGFUL")
-			expect.falsy(shown("Set as homeland"), "no action offered for what is already so")
-			-- The status sits on line one, the actions on line two.
-			local L = ns.ChronicleView.LAYOUT
-			expect.truthy(6 + 14 <= L.lineTwo, "status ends above the buttons")
-			expect.equal(row.text:GetWidth(), ns.ChronicleView.RowRects().text.w - L.statusWidth - 8,
-				"the title makes room for the status")
+			expect.deepEqual(chipTexts(), { "Homeland", "Marked meaningful", "No memories tied to it" })
+			expect.falsy(d.homeland:IsEnabled(), "no action offered for what is already so")
+			expect.truthy(d.note:GetText():find("stays Private", 1, true), "the note gives the field's real visibility")
+			-- The status sits above the stats; the actions below the divider.
+			local L = ns.ChroniclePlaces.LAYOUT
+			local chipY = -d.chips[1].__points[1][3]
+			expect.truthy(chipY + 20 <= L.height - L.detailPad - L.buttonHeight - 14, "status well above the actions")
+			expect.equal(d.write:GetParent(), d)
 		end)
 
-		t:it("clears the status and restores the text width on other tabs", function()
+		t:it("lists places with their zone, kind and visits, and selects one for the detail", function()
 			local _, env, ns, section = start()
 			local char = env.DawnwardChroniclesDB.characters[CHAR]
-			local place = ns.Places.CleanEntry({ zone = "Elwynn Forest", subzone = "Goldshire", first = 1, last = 1 })
-			place.meaningful = true
-			char.story.places[ns.Places.Key("Elwynn Forest", "Goldshire")] = place
+			goldshire(ns, char)
+			char.story.places["Duskwood / Darkshire"] = ns.Places.CleanEntry({ zone = "Duskwood", subzone = "Darkshire",
+				first = 1700000000, last = 1700000000, visits = 3 })
+			tabTo(section, "places")
+			local view = section.places
+			expect.equal(view.rows[1].name:GetText(), "Darkshire", "most recently visited first")
+			expect.equal(view.rows[1].sub:GetText(), "Duskwood · not yet mapped", "never classified from its name")
+			expect.equal(view.rows[1].visits:GetText(), "3 visits")
+			expect.equal(view.rows[2].sub:GetText(), "Elwynn Forest · settlement")
+			expect.equal(view.rows[2].visits:GetText(), "1 visit")
+			expect.truthy(view.rows[1].selected)
+			expect.equal(view.detail.sub:GetText(), "Duskwood · not yet mapped · first visited today")
+			expect.equal(view.detail.stats[1].value:GetText(), "3")
+			expect.equal(view.detail.stats[2].value:GetText(), "Today")
+			view.rows[2]:GetScript("OnClick")(view.rows[2])
+			expect.equal(view.detail.name:GetText(), "Goldshire")
+			expect.truthy(view.rows[2].selected)
+			expect.falsy(view.rows[1].selected)
+			expect.equal(view.detail.stats[3].value:GetText(), "Counting from your next visit",
+				"read-only: logged before the narrative clock")
+			expect.falsy(view.prev:IsShown(), "no pager for one page")
+		end)
+
+		t:it("hides the places view on other tabs and shows the cards again", function()
+			local _, env, ns, section = start()
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			goldshire(ns, char)
 			ns.Memories.Add(char, { text = string.rep("A long memory that wraps. ", 12) }, "player", 1)
-			for _, b in ipairs(section.tabButtons) do
-				if b.tabId == "places" then click(b) end
-			end
-			expect.equal(section.rows[1].status:GetText(), "MEANINGFUL")
-			for _, b in ipairs(section.tabButtons) do
-				if b.tabId == "memories" then click(b) end
-			end
-			expect.equal(section.rows[1].status:GetText(), "")
-			expect.equal(section.rows[1].text:GetWidth(), ns.ChronicleView.RowRects().text.w)
+			tabTo(section, "places")
+			expect.truthy(section.places.frame:IsShown())
+			expect.falsy(section.rows[1]:IsShown())
+			expect.falsy(section.new:IsShown())
+			tabTo(section, "memories")
+			expect.falsy(section.places.frame:IsShown())
+			expect.truthy(section.rows[1]:IsShown())
+			expect.truthy(section.new:IsShown())
+			expect.equal(section.rows[1].text:GetWidth(), ns.ChronicleView.CardRects().text.w)
 		end)
 
 		t:it("highlights the whole record while pointing at one of its buttons", function()
@@ -158,17 +206,28 @@ return function(t, expect)
 			expect.truthy(checked >= 4, "fields, family and history all checked")
 		end)
 
-		t:it("separates consecutive panels by a gap, even with long wrapped text", function()
+		-- v0.7: fields are tiles in a grid and cards beside the family column,
+		-- so panels are checked in two dimensions: no two overlap, and each
+		-- pair is at least ENTRY.gap apart across or down.
+		t:it("separates panels by a gap, even with long wrapped text", function()
 			local _, _, ns, section = open()
-			local prev
+			local boxes = {}
 			for i, spec in ipairs(section.specs) do
 				local row = section.rows[i]
-				local boxed = spec.kind == "field" or spec.kind == "item"
-				if prev and boxed then
-					local gap = y(row) - (y(prev) + prev:GetHeight())
-					expect.truthy(gap >= ns.Widgets.ENTRY.gap, "a gap of at least ENTRY.gap between panels")
+				if spec.kind == "field" or spec.kind == "item" then
+					local p = row.__points[1]
+					boxes[#boxes + 1] = { x = p[4] or 0, y = y(row), w = row:GetWidth(), h = row:GetHeight() }
 				end
-				prev = boxed and row or nil
+			end
+			expect.truthy(#boxes >= 14, "fields, family and history checked")
+			local gap = ns.Widgets.ENTRY.gap
+			for a = 1, #boxes do
+				for b = a + 1, #boxes do
+					local A, B = boxes[a], boxes[b]
+					local across = math.max(B.x - (A.x + A.w), A.x - (B.x + B.w))
+					local down = math.max(B.y - (A.y + A.h), A.y - (B.y + B.h))
+					expect.truthy(across >= gap or down >= gap, "a gap of at least ENTRY.gap between panels")
+				end
 			end
 		end)
 

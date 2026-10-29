@@ -11,6 +11,7 @@
 --   baselines   axis -> the player's own value before Dawnward first changed it
 --   prefs       tracking, pacing, drafting and approval preferences
 --   pacing      timestamps and memory that keep prompts rare and varied
+--   clock       the narrative clock: seconds of play (Core/NarrativeClock.lua)
 --   memories, arcs, goals, identity
 --               narrative records with provenance, canon status and
 --               visibility (Core/Records.lua, Core/RecordTypes.lua)
@@ -69,6 +70,7 @@ StorySchema.DEFAULT_PREFS = {
 	card = true,         -- show the small reaction card at a safe moment
 	trp3Style = "neutral",
 	places = "on",       -- location moments: on, fewer or off
+	pace = "standard",   -- narrative day length in play (Core/NarrativeClock.lua): brisk, standard, slow
 	tracking = { quest = true, levelup = true, death = true, reputation = true, zone = true, instance = true,
 		guild = true, place = true },
 }
@@ -125,7 +127,8 @@ function StorySchema.New()
 		baselines = {},
 		nextId = 1,
 		prefs = StorySchema.NewPrefs(),
-		pacing = { lastNoticeAt = 0, lastByCategory = {}, recentTemplates = {}, questZones = {} },
+		pacing = { lastNoticeAt = 0, lastByCategory = {}, playByCategory = {}, recentTemplates = {}, questZones = {} },
+		clock = ns.NarrativeClock.Clean(nil),
 		observed = StorySchema.NewObserved(),
 		memories = {},
 		arcs = {},
@@ -276,6 +279,8 @@ function StorySchema.CleanReaction(raw)
 		status = StorySchema.REACTION_STATUS[raw.status] and raw.status or "pending",
 		createdAt = ts(raw.createdAt),
 		notifiedAt = raw.notifiedAt ~= nil and ts(raw.notifiedAt) or nil,
+		createdPlay = raw.createdPlay ~= nil and ts(raw.createdPlay) or nil,
+		expiresPlay = raw.expiresPlay ~= nil and ts(raw.expiresPlay) or nil,
 		zone = text(raw.zone, 100),
 	}
 	if not reaction.id or not reaction.templateId or #reaction.eventKeys == 0 then
@@ -348,6 +353,7 @@ local function cleanPrefs(raw)
 	if StorySchema.APPROVAL[raw.approval] then prefs.approval = raw.approval end
 	if StorySchema.TRP3_STYLES[raw.trp3Style] then prefs.trp3Style = raw.trp3Style end
 	if StorySchema.PLACE_PROMPTS[raw.places] then prefs.places = raw.places end
+	if ns.NarrativeClock.PACES[raw.pace] then prefs.pace = raw.pace end
 	for _, flag in ipairs({ "drafts", "flavor", "card" }) do
 		if type(raw[flag]) == "boolean" then prefs[flag] = raw[flag] end
 	end
@@ -362,15 +368,19 @@ local function cleanPrefs(raw)
 end
 
 local function cleanPacing(raw)
-	local pacing = { lastNoticeAt = 0, lastByCategory = {}, recentTemplates = {}, questZones = {} }
+	local pacing = { lastNoticeAt = 0, lastByCategory = {}, playByCategory = {}, recentTemplates = {}, questZones = {} }
 	if type(raw) ~= "table" then
 		return pacing
 	end
 	pacing.lastNoticeAt = ts(raw.lastNoticeAt)
-	if type(raw.lastByCategory) == "table" then
-		for category in pairs(StorySchema.CATEGORIES) do
-			if raw.lastByCategory[category] ~= nil then
-				pacing.lastByCategory[category] = ts(raw.lastByCategory[category])
+	-- lastByCategory: real dates (kept for reference); playByCategory: the
+	-- narrative clock, which the cooldowns use.
+	for _, field in ipairs({ "lastByCategory", "playByCategory" }) do
+		if type(raw[field]) == "table" then
+			for category in pairs(StorySchema.CATEGORIES) do
+				if raw[field][category] ~= nil then
+					pacing[field][category] = ts(raw[field][category])
+				end
 			end
 		end
 	end
@@ -481,6 +491,7 @@ function StorySchema.Normalize(raw, axes, report)
 	end
 	story.prefs = cleanPrefs(raw.prefs)
 	story.pacing = cleanPacing(raw.pacing)
+	story.clock = ns.NarrativeClock.Clean(raw.clock)
 	story.observed = cleanObserved(raw.observed)
 	story.places = ns.Places.CleanAll(raw.places)
 	for name, spec in pairs(StorySchema.RECORD_LISTS) do

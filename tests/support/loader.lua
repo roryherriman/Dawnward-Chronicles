@@ -17,6 +17,7 @@ Loader.CORE = {
 	"Core/Themes.lua",
 	"Core/Records.lua",
 	"Core/RecordTypes.lua",
+	"Core/NarrativeClock.lua",
 	"Core/Places.lua",
 	"Core/Guide.lua",
 	"Core/Atlas.lua",

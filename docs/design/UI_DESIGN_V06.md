@@ -1,6 +1,6 @@
 # Dawnward Chronicles v0.6: UI design specification
 
-Status: **implemented on `feat/v0.6-ui-overhaul`** (automated tests only; not yet verified in game).
+Status: **implemented on `feat/v0.6-ui-overhaul`** (automated tests only; not yet verified in game). **The visual design is superseded by [UI_DESIGN_V07.md](UI_DESIGN_V07.md) and the [approved mockups](mockups/README.md)**; the component kit, keyboard rules and validation below still apply.
 Baseline: v0.5.0-dev, schema 5, Classic Era 1.15.9 (interface 11509), Lua 5.1.
 
 v0.6 is a visual and onboarding release. No gameplay rules change, and every v0.5 feature stays reachable.

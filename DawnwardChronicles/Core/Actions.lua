@@ -36,6 +36,12 @@ local function withCharacter(ctx, change)
 	if not result and not existed then
 		ctx.store:Root().characters[ctx.characterKey] = nil
 	end
+	-- A change made in the window may change what is public, so ask an
+	-- opted-in Total RP 3 sync to catch up, as slash commands already do
+	-- (debounced; nothing happens unless sync was turned on).
+	if result and ctx.trp3RequestSync then
+		ctx.trp3RequestSync()
+	end
 	return result, message
 end
 
@@ -221,13 +227,19 @@ end
 
 -- Records an event and considers it for a reaction. Returns record, reaction,
 -- outcome; or nil, reason ("duplicate" and "not tracked" are quiet).
-local function recordEvent(char, category, data, now)
+local function recordEvent(char, category, data, now, play)
 	local record, err = GameEvents.Record(char, category, data, now)
 	if not record then
 		return nil, err
 	end
-	local reaction, outcome = Reactions.Consider(char, record, now)
+	local reaction, outcome = Reactions.Consider(char, record, now, play)
 	return record, reaction, outcome
+end
+
+--- Seconds of play on this character's narrative clock, adding the play
+-- since the last reading (Core/NarrativeClock.lua).
+function Actions.Play(ctx, char)
+	return ns.NarrativeClock.Read(char, ctx)
 end
 
 --- A gameplay event observed in the real game always goes to the real
@@ -243,7 +255,7 @@ function Actions.RecordRealEvent(ctx, category, data)
 	if not char then
 		return nil, "no profile"
 	end
-	return recordEvent(char, category, data, ctx.now())
+	return recordEvent(char, category, data, ctx.now(), Actions.Play(ctx, char))
 end
 
 --- Observed reputation standings (from Platform/Observers): records a
@@ -261,7 +273,7 @@ function Actions.ObserveStandings(ctx, factions, context)
 		for k, v in pairs(context or {}) do
 			if change[k] == nil then change[k] = v end
 		end
-		local record, reaction, outcome = recordEvent(char, "reputation", change, ctx.now())
+		local record, reaction, outcome = recordEvent(char, "reputation", change, ctx.now(), Actions.Play(ctx, char))
 		if record then
 			created[#created + 1] = { record = record, reaction = reaction, outcome = outcome }
 		end
@@ -282,7 +294,7 @@ function Actions.ObserveGuild(ctx, guild, context)
 	for k, v in pairs(context or {}) do
 		if change[k] == nil then change[k] = v end
 	end
-	return recordEvent(char, "guild", change, ctx.now())
+	return recordEvent(char, "guild", change, ctx.now(), Actions.Play(ctx, char))
 end
 
 --- An observed location (Platform/Observers): logs the visit and records
@@ -296,10 +308,12 @@ function Actions.ObserveLocation(ctx, data)
 		return {}
 	end
 	local now = ctx.now()
+	local play = Actions.Play(ctx, char)
 	local created, considered = {}, false
-	local steps, diag = ns.Places.Observe(char, data, now)
+	local steps, diag = ns.Places.Observe(char, data, now, play)
 	-- The last decision, for /dawnward dev story status. Session only: never saved.
-	ctx.lastLocation = { at = now, zone = data.zone, subzone = data.subzone, diag = diag, created = created }
+	ctx.lastLocation = { at = now, play = play, zone = data.zone, subzone = data.subzone, diag = diag,
+		created = created }
 	for _, step in ipairs(steps) do
 		local record = GameEvents.Record(char, step.category, step.data, now)
 		if record then
@@ -308,7 +322,7 @@ function Actions.ObserveLocation(ctx, data)
 				record.status = "recorded"
 			else
 				considered = true
-				reaction, outcome = Reactions.Consider(char, record, now)
+				reaction, outcome = Reactions.Consider(char, record, now, play)
 			end
 			created[#created + 1] = { record = record, reaction = reaction, outcome = outcome }
 		end
@@ -336,7 +350,7 @@ function Actions.RecordSimulatedEvent(ctx, category, data)
 	end
 	return withCharacter(ctx, function(char)
 		data.source = "SIMULATION"
-		local record, reaction, outcome = recordEvent(char, category, data, ctx.now())
+		local record, reaction, outcome = recordEvent(char, category, data, ctx.now(), Actions.Play(ctx, char))
 		if not record then
 			if reaction == "duplicate" then
 				return nil, "Not recorded: that event is already in the simulated record (duplicate prevented)."
@@ -441,6 +455,7 @@ local PREFS = {
 	approval = function(v) return ns.StorySchema.APPROVAL[v] and v or nil end,
 	trp3Style = function(v) return ns.StorySchema.TRP3_STYLES[v] and v or nil end,
 	places = function(v) return ns.StorySchema.PLACE_PROMPTS[v] and v or nil end,
+	pace = function(v) return ns.NarrativeClock.PACES[v] and v or nil end,
 	drafts = function(v)
 		if v == "on" or v == true then return true end
 		if v == "off" or v == false then return false end
@@ -609,6 +624,28 @@ function Actions.SaveMinimap(ctx, values)
 	ctx.store.real.ui.minimap = m
 	return true, m.hidden and "Minimap button hidden. Show it again from Settings or with /dawnward minimap."
 		or "Minimap button shown."
+end
+
+--- Character Showcase: show the portrait instead of the live model (v0.7).
+-- A per-character display choice, stored with the other window preferences
+-- (real data only, like the window position): ui.showcase[characterKey].
+function Actions.ShowcasePortrait(ctx)
+	local ui = ctx.store.real.ui
+	local prefs = ui and ui.showcase and ui.showcase[ctx.characterKey]
+	return prefs ~= nil and prefs.portrait == true
+end
+
+function Actions.SetShowcasePortrait(ctx, on)
+	if ctx.store.realReadOnly then
+		return nil, "Saved data is read-only. Nothing was changed."
+	end
+	local ui = ctx.store.real.ui or {}
+	ctx.store.real.ui = ui
+	ui.showcase = ui.showcase or {}
+	-- Only a "yes" is stored; the default (the live model) leaves no trace.
+	ui.showcase[ctx.characterKey] = on and { portrait = true } or nil
+	if next(ui.showcase) == nil then ui.showcase = nil end
+	return true, on and "The showcase shows your portrait." or "The showcase shows your live model."
 end
 
 --- Theme (cosmetic only) -----------------------------------------------------

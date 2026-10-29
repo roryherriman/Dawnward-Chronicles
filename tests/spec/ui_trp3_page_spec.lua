@@ -1,0 +1,311 @@
+-- L2: Settings -> Total RP 3 sync page, under the WoW mock and the TRP3
+-- 3.4.1 fake (mocked client; not in-game evidence). The page must only read
+-- on open, and every write must go through the guarded /dawnward trp3 path.
+local Boot = require("support.boot")
+local Fake = require("fakes.trp3_341")
+
+local CHAR = "Testchar-TestRealm"
+
+-- y offset of a widget's TOPLEFT point relative to its parent (negative down).
+local function top(widget)
+	for _, p in ipairs(widget.__points or {}) do
+		if p[1] == "TOPLEFT" then
+			return p[#p]
+		end
+	end
+	return nil
+end
+
+local function click(button)
+	button:GetScript("OnClick")(button)
+end
+
+local function start(fakeOpts)
+	local fake = Fake.new(fakeOpts or {})
+	local extra = {}
+	for k, v in pairs(fake.env) do
+		if k ~= "C_AddOns" then extra[k] = v end
+	end
+	local mock, env, ns = Boot.Load({ extra = extra })
+	mock.env.C_AddOns.IsAddOnLoaded = fake.env.C_AddOns.IsAddOnLoaded
+	local meta = mock.env.C_AddOns.GetAddOnMetadata
+	mock.env.C_AddOns.GetAddOnMetadata = function(name, field)
+		return fake.env.C_AddOns.GetAddOnMetadata(name, field) or meta(name, field)
+	end
+	Boot.Login(mock)
+	ns.SetupWizard.SkipAutoLaunchThisSession(ns.ctx.characterKey)
+	function mock.AcceptPopup()
+		local d = ns.Widgets.dialog
+		assert(d and d:IsShown(), "no confirmation dialog is open")
+		d.accept:GetScript("OnClick")(d.accept)
+	end
+	return mock, env, ns, fake
+end
+
+local function publicFact(mock)
+	mock.Slash("fact add origin Born in Stormwind")
+	mock.Slash("fact vis 1 public")
+end
+
+local function open(ns)
+	ns.SettingsPanel.OpenPage("trp3")
+	return ns.SettingsPanel.panel.trp3Page
+end
+
+local function status(ns)
+	return ns.MainWindow.GetFrame().status:GetText() or ""
+end
+
+return function(t, expect)
+	t:describe("Total RP 3 page (L2)", function()
+		t:it("OpenPage opens the window on Settings with that page selected", function()
+			local _, _, ns = Boot.Start()
+			expect.falsy(ns.SettingsPanel.OpenPage("nope"))
+			expect.truthy(ns.SettingsPanel.OpenPage("trp3"))
+			local panel = ns.SettingsPanel.panel
+			expect.truthy(ns.MainWindow.IsShown())
+			expect.equal(ns.MainWindow.CurrentSection(), "settings")
+			expect.truthy(panel.pages.trp3:IsShown())
+			expect.falsy(panel.pages.general:IsShown())
+			expect.truthy(panel.nav.buttons[4].selected)
+			expect.equal(ns.MainWindow.GetFrame().title:GetText(), "Total RP 3")
+			-- Calling it again while open keeps Settings open (no toggle back).
+			expect.truthy(ns.SettingsPanel.OpenPage("data"))
+			expect.equal(ns.MainWindow.CurrentSection(), "settings")
+			expect.truthy(panel.pages.data:IsShown())
+		end)
+
+		t:it("explains that Total RP 3 is optional when it is absent", function()
+			local _, _, ns = Boot.Start()
+			local page = open(ns)
+			expect.truthy(page.absent:IsShown())
+			expect.falsy(page.body:IsShown())
+			expect.truthy(page.absentText:GetText():find("optional", 1, true))
+			expect.truthy(page.absentText:GetText():find("Dawnward works fully without it", 1, true))
+			expect.truthy(page.absentStatus:GetText():find("not installed", 1, true))
+			expect.equal(page.columns[1]:GetText(), "Not installed · optional")
+			expect.falsy(page.conflict:IsShown())
+			expect.truthy(page.experimental:IsShown())
+		end)
+
+		t:it("shows version support, the linked profile and per-feature sync state", function()
+			local mock, _, ns = start({ profileName = "Aelin (RP)" })
+			publicFact(mock)
+			local page = open(ns)
+			expect.truthy(page.body:IsShown())
+			expect.equal(page.columns[1]:GetText(), "Installed · 3.4.1 · supported")
+			expect.truthy(page.columns[2]:GetText():find("not linked", 1, true))
+			expect.equal(page.columns[3]:GetText(), "Off for Biography and Traits")
+			expect.equal(page.chip.label:GetText(), "Sync off")
+			expect.truthy(page.unsupported:GetText():find("name, title, pronouns", 1, true))
+			mock.Slash("trp3 enable about confirm")
+			ns.MainWindow.Refresh()
+			expect.truthy(page.columns[2]:GetText():find("\"Aelin (RP)\" · this character only", 1, true))
+			expect.equal(page.columns[3]:GetText(), "On for Biography · off for Traits")
+			expect.equal(page.chip.label:GetText(), "Needs your approval")
+			expect.truthy(page.reasons:GetText():find("Proposed change: insert", 1, true))
+			click(page.nav.buttons[2])
+			expect.equal(page.title:GetText(), "Traits: sync is off")
+		end)
+
+		t:it("writes nothing to Total RP 3 when the page is opened, refreshed or previewed", function()
+			local mock, env, ns, fake = start()
+			publicFact(mock)
+			mock.Slash("trp3 enable about confirm")
+			mock.Slash("personality set courage 14")
+			mock.Slash("personality vis courage public")
+			mock.timers = {}
+			local before = fake.snapshot()
+			local events = #fake.events
+			local page = open(ns)
+			ns.MainWindow.Refresh()
+			click(page.nav.buttons[2])
+			click(page.nav.buttons[1])
+			click(page.notNow)
+			expect.deepEqual(fake.snapshot(), before)
+			expect.equal(#fake.events, events)
+			expect.equal(#env.DawnwardChroniclesTRP3DB.backups, 0)
+			expect.equal(#mock.timers, 0, "opening the page requests no automatic run")
+			expect.equal(#fake.setterCalls, 0)
+			expect.truthy(page.previewText:GetText():find("Origin: Born in Stormwind", 1, true))
+		end)
+
+		t:it("approve needs the opt-in, asks before turning sync on, then runs the guarded write", function()
+			local mock, env, ns, fake = start()
+			publicFact(mock)
+			local page = open(ns)
+			expect.falsy(page.approve:IsEnabled())
+			click(page.approve) -- even if forced, nothing is written without the opt-in
+			expect.equal(fake.profile.player.about.T1.TX, "Private about text")
+			expect.truthy(status(ns):find("sync is off", 1, true))
+
+			click(page.toggle)
+			expect.truthy(ns.Widgets.dialog:IsShown())
+			expect.truthy(ns.Widgets.dialog.text:GetText():find("EXPERIMENTAL", 1, true))
+			expect.equal(env.DawnwardChroniclesTRP3DB.optIn[CHAR], nil, "not on before confirming")
+			mock.AcceptPopup()
+			expect.truthy(env.DawnwardChroniclesTRP3DB.optIn[CHAR].about)
+			mock.timers = {}
+			expect.truthy(page.approve:IsEnabled())
+			click(page.approve)
+			expect.truthy(fake.profile.player.about.T1.TX:find("Origin: Born in Stormwind", 1, true))
+			expect.truthy(fake.profile.player.about.T1.TX:find("^Private about text"))
+			expect.equal(#env.DawnwardChroniclesTRP3DB.backups, 1, "backup taken before the write")
+			expect.truthy(status(ns):find("Updated your Total RP 3 biography", 1, true))
+			expect.equal(page.chip.label:GetText(), "Up to date")
+			expect.truthy(page.keepText:GetText():find("Private about text", 1, true))
+			expect.equal(page.toggle:GetText(), "Stop syncing biography")
+			click(page.toggle)
+			expect.falsy(env.DawnwardChroniclesTRP3DB.optIn[CHAR].about)
+		end)
+
+		t:it("keeps every guard: combat and an open editor hold the write back", function()
+			local mock, env, ns, fake = start()
+			publicFact(mock)
+			mock.Slash("trp3 enable about confirm")
+			mock.timers = {}
+			mock.inCombat = true
+			local page = open(ns)
+			expect.equal(page.chip.label:GetText(), "Waiting")
+			expect.truthy(page.reasons:GetText():find("in combat", 1, true))
+			expect.falsy(page.approve:IsEnabled())
+			click(page.approve)
+			expect.equal(fake.profile.player.about.T1.TX, "Private about text")
+			mock.inCombat = false
+			fake.openEditor("about")
+			ns.MainWindow.Refresh()
+			click(page.approve)
+			expect.equal(fake.profile.player.about.T1.TX, "Private about text")
+			expect.equal(#env.DawnwardChroniclesTRP3DB.backups, 0)
+		end)
+
+		t:it("a conflict blocks approve until the player keeps theirs or lets Dawnward reclaim", function()
+			local mock, env, ns, fake = start()
+			publicFact(mock)
+			mock.Slash("trp3 enable about confirm")
+			mock.RunTimers()
+			fake.profile.player.about.T1.TX = "Rewritten by the player"
+			mock.Slash("fact add belief Protect the weak")
+			mock.Slash("fact vis 2 public")
+			mock.timers = {}
+			local page = open(ns)
+			expect.equal(page.chip.label:GetText(), "Conflict")
+			expect.truthy(page.conflict:IsShown())
+			expect.equal(page.conflict.title:GetText(), "CONFLICT ON BIOGRAPHY")
+			expect.truthy(page.conflictText:GetText():find("Nothing will be overwritten", 1, true))
+			expect.falsy(page.approve:IsEnabled())
+			click(page.approve)
+			expect.equal(fake.profile.player.about.T1.TX, "Rewritten by the player")
+			click(page.keepYours)
+			expect.equal(fake.profile.player.about.T1.TX, "Rewritten by the player")
+			expect.falsy(env.DawnwardChroniclesTRP3DB.optIn[CHAR].about, "keep switches sync off")
+			expect.falsy(page.conflict:IsShown())
+			expect.truthy(status(ns):find("Kept your version", 1, true))
+		end)
+
+		t:it("rolls back only after confirmation", function()
+			local mock, env, ns, fake = start()
+			publicFact(mock)
+			mock.Slash("trp3 enable about confirm")
+			mock.RunTimers()
+			local written = fake.profile.player.about.T1.TX
+			expect.truthy(written:find("Chronicle", 1, true))
+			local page = open(ns)
+			expect.truthy(page.backupRows[1]:IsShown())
+			expect.truthy(page.backupRows[1]:GetText():find("#1 About", 1, true))
+			expect.truthy(page.rollback:IsEnabled())
+			click(page.backupRows[1])
+			click(page.rollback)
+			expect.truthy(ns.Widgets.dialog:IsShown())
+			expect.truthy(ns.Widgets.dialog.text:GetText():find("#1", 1, true))
+			expect.truthy(ns.Widgets.dialog.text:GetText():find("since made Private or Secret", 1, true),
+				"the player is warned that a restore brings back what was public then")
+			expect.equal(fake.profile.player.about.T1.TX, written, "nothing restored before confirming")
+			click(ns.Widgets.dialog.cancel)
+			expect.equal(fake.profile.player.about.T1.TX, written)
+			click(page.rollback)
+			mock.AcceptPopup()
+			expect.equal(fake.profile.player.about.T1.TX, "Private about text")
+			expect.truthy(status(ns):find("Restored", 1, true))
+			expect.equal(#env.DawnwardChroniclesTRP3DB.backups, 2, "the state before the rollback is kept")
+		end)
+
+		t:it("never shows Private or Secret content in the preview, only counts", function()
+			local mock, _, ns = start()
+			publicFact(mock)
+			mock.Slash("fact add belief Hidden lover in Duskwood")
+			mock.Slash("fact add origin Secret heir of Alterac")
+			mock.Slash("fact vis 3 secret")
+			mock.Slash("personality set faith 3")
+			mock.Slash("personality set courage 15")
+			mock.Slash("personality vis courage public")
+			local page = open(ns)
+			local texts = function()
+				local all = {}
+				for _, fs in ipairs({ page.title, page.explain, page.reasons, page.keepText, page.previewText,
+					page.hiddenText, page.unsupported, page.conflictText }) do
+					all[#all + 1] = fs:GetText() or ""
+				end
+				return table.concat(all, "\n")
+			end
+			for _, feature in ipairs({ 1, 2 }) do
+				click(page.nav.buttons[feature])
+				local shown = texts()
+				expect.falsy(shown:find("Duskwood", 1, true), "private fact leaked")
+				expect.falsy(shown:find("Alterac", 1, true), "secret fact leaked")
+				expect.falsy(shown:find("Sceptical", 1, true) or shown:find("Devout", 1, true), "private axis leaked")
+			end
+			click(page.nav.buttons[1])
+			expect.truthy(page.previewText:GetText():find("Born in Stormwind", 1, true))
+			expect.truthy(page.hiddenText:GetText():find("1 fact and 1 personality axis are Private", 1, true),
+				page.hiddenText:GetText())
+			expect.truthy(page.hiddenText:GetText():find("1 fact is Secret", 1, true))
+			click(page.nav.buttons[2])
+			expect.truthy(page.previewText:GetText():find(" 5 / 15 ", 1, true), page.previewText:GetText())
+		end)
+
+		t:it("fits the strip, the feature card and the right column inside the settings page", function()
+			local _, _, ns = start()
+			local page = open(ns)
+			local L = ns.MainWindow.LAYOUT
+			local pageHeight = L.height - L.contentTop - L.contentBottom - 78
+			local cardH = page.card:GetHeight()
+			expect.equal(-top(page.card) + cardH, pageHeight, "card ends at the bottom of the page")
+			for _, w in ipairs({ page.keep, page.preview, page.hidden }) do
+				expect.truthy(-top(w) + w:GetHeight() <= cardH - 46, "above the button row")
+			end
+			expect.truthy(page.conflict:GetHeight() + ns.TRP3Page.GAP + page.backups:GetHeight() <= cardH)
+			expect.truthy(page.card:GetWidth() + ns.TRP3Page.GAP + ns.TRP3Page.RIGHT_WIDTH + 20
+				<= ns.MainWindow.ContentWidth())
+			expect.truthy(page.approve:GetWidth() + page.notNow:GetWidth() + page.toggle:GetWidth() + 8 + 28
+				< page.card:GetWidth(), "the three actions do not overlap")
+		end)
+
+		t:it("the chat commands still behave as before after the refactor", function()
+			local mock, _, _, fake = start()
+			publicFact(mock)
+			expect.truthy(mock.Slash("trp3 enable about"):find("Type: /dawnward trp3 enable about confirm", 1, true))
+			mock.Slash("trp3 enable about confirm")
+			local out = mock.Slash("trp3 sync")
+			expect.truthy(out:find("Updated your Total RP 3 biography", 1, true))
+			expect.truthy(mock.Slash("trp3 sync"):find("already up to date (nothing written)", 1, true))
+			expect.truthy(mock.Slash("trp3 backups"):find("  #1 about, profile " .. fake.profileId, 1, true))
+			local rollback = mock.Slash("trp3 rollback")
+			expect.truthy(rollback:find("newest backup (see /dawnward trp3 backups). Privacy:", 1, true))
+			expect.truthy(rollback:find("Type: /dawnward trp3 rollback [#] confirm", 1, true))
+		end)
+	end)
+
+	t:describe("window edits and Total RP 3", function()
+		t:it("a change made in the window asks an opted-in sync to catch up, like a slash command", function()
+			local mock, _, ns = Boot.Start()
+			mock.Slash("set name Aelin")
+			local requests = 0
+			ns.ctx.trp3RequestSync = function() requests = requests + 1 end
+			assert(ns.Actions.SetFieldVisibility(ns.ctx, "name", "private"))
+			expect.equal(requests, 1)
+			ns.Actions.SetFieldVisibility(ns.ctx, "name", "nonsense")
+			expect.equal(requests, 1, "a refused change asks for nothing")
+		end)
+	end)
+end

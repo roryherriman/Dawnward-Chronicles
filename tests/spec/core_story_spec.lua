@@ -82,34 +82,34 @@ return function(t, expect)
 		t:it("queues a reaction, folds same-zone quests into it, and paces new ones", function()
 			local ns, char, fx = setup()
 			local r1 = quest(ns, char, fx, 1, 1000)
-			local reaction, outcome = ns.Reactions.Consider(char, r1, 1000)
+			local reaction, outcome = ns.Reactions.Consider(char, r1, 1000, 1000)
 			expect.equal(outcome, "queued")
 			expect.equal(r1.status, "queued")
 			local r2 = quest(ns, char, fx, 2, 1100)
-			local same, outcome2 = ns.Reactions.Consider(char, r2, 1100)
+			local same, outcome2 = ns.Reactions.Consider(char, r2, 1100, 1100)
 			expect.equal(outcome2, "coalesced")
 			expect.equal(same.id, reaction.id)
 			expect.equal(#reaction.eventKeys, 2)
 			-- Another zone during the cooldown stays a plain record.
 			local r3 = quest(ns, char, fx, 3, 1200, { zone = "Duskwood", questLevel = 20 })
 			ns.Reactions.Postpone(char, reaction.id)
-			local _, why = ns.Reactions.Consider(char, quest(ns, char, fx, 4, 1300, { zone = "Duskwood" }), 1300)
+			local _, why = ns.Reactions.Consider(char, quest(ns, char, fx, 4, 1300, { zone = "Duskwood" }), 1300, 1300)
 			expect.equal(why, "cooldown")
 			expect.equal(r3.status, "new")
 			-- After the cooldown a new reaction is allowed.
 			local _, later = ns.Reactions.Consider(char, quest(ns, char, fx, 5, 1000 + 2701, { zone = "Redridge" }),
-				1000 + 2701)
+				1000 + 2701, 1000 + 2701)
 			expect.equal(later, "queued")
 		end)
 
 		t:it("honours the threshold and the off switch", function()
 			local ns, char, fx = setup()
 			char.story.prefs.threshold = 3
-			local _, why = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1), 1)
+			local _, why = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1), 1, 1)
 			expect.equal(why, "below threshold")
 			char.story.prefs.threshold = 1
 			char.story.prefs.frequency = "off"
-			local _, off = ns.Reactions.Consider(char, quest(ns, char, fx, 2, 2, { zone = "Elsewhere" }), 2)
+			local _, off = ns.Reactions.Consider(char, quest(ns, char, fx, 2, 2, { zone = "Elsewhere" }), 2, 2)
 			expect.equal(off, "prompts off")
 			expect.equal(#char.story.reactions, 0)
 		end)
@@ -121,14 +121,14 @@ return function(t, expect)
 			for i = 1, 25 do
 				now = now + 1000
 				local r = ns.GameEvents.Record(char, "levelup", Fixtures.Context(fx, { level = i + 1 }), now)
-				ns.Reactions.Consider(char, r, now)
+				ns.Reactions.Consider(char, r, now, now)
 			end
 			expect.truthy(#char.story.reactions <= ns.StorySchema.LIMITS.reactions)
 		end)
 
 		t:it("expires old reactions, and supports later, not now and dismiss", function()
 			local ns, char, fx = setup()
-			local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1000), 1000)
+			local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1000), 1000, 1000)
 			expect.equal(ns.Reactions.NextNotice(char, 1001).id, reaction.id)
 			ns.Reactions.Ignore(char, reaction.id, 1002)
 			expect.equal(ns.Reactions.NextNotice(char, 1003), nil, "not announced twice")
@@ -138,8 +138,12 @@ return function(t, expect)
 			assert(ns.Reactions.Dismiss(char, reaction.id))
 			expect.equal(#char.story.reactions, 0)
 			expect.equal(ns.GameEvents.Find(char, "quest:1").status, "dismissed")
-			local again = ns.Reactions.Consider(char, quest(ns, char, fx, 2, 9000, { zone = "Far" }), 9000)
-			ns.Reactions.Expire(char, 9000 + ns.Reactions.EXPIRY + 1)
+			local again = ns.Reactions.Consider(char, quest(ns, char, fx, 2, 9000, { zone = "Far" }), 9000, 9000)
+			-- Expiry counts narrative days of play, not real time.
+			local expiry = ns.Reactions.EXPIRY_DAYS * ns.NarrativeClock.DayLength(char)
+			ns.Reactions.Expire(char, 9000 + expiry + 1, 9000 + expiry - 1)
+			expect.equal(#char.story.reactions, 1, "not yet: one second of play short")
+			ns.Reactions.Expire(char, 9000 + expiry + 1, 9000 + expiry + 1)
 			expect.equal(#char.story.reactions, 0)
 			expect.equal(ns.GameEvents.Find(char, "quest:2").status, "recorded")
 			expect.truthy(again)
@@ -148,7 +152,7 @@ return function(t, expect)
 		t:it("asks a neutral question when details are uncertain", function()
 			local ns, char, fx = setup()
 			local r = quest(ns, char, fx, 1, 1, { title = false, zone = false })
-			local reaction = ns.Reactions.Consider(char, r, 1)
+			local reaction = ns.Reactions.Consider(char, r, 1, 1)
 			local view = ns.Reactions.Present(char, reaction)
 			expect.falsy(view.question:find("{", 1, true), view.question)
 			expect.falsy(view.question:find("\"\"", 1, true), view.question)
@@ -158,7 +162,7 @@ return function(t, expect)
 		t:it("never lets observed text become a token or markup", function()
 			local ns, char, fx = setup()
 			local r = quest(ns, char, fx, 1, 1, { title = "Evil {name} {h1}" })
-			local view = ns.Reactions.Present(char, ns.Reactions.Consider(char, r, 1))
+			local view = ns.Reactions.Present(char, ns.Reactions.Consider(char, r, 1, 1))
 			expect.falsy(view.question:find("{", 1, true), view.question)
 		end)
 	end)
@@ -169,7 +173,7 @@ return function(t, expect)
 				local ns, char = setup(fx)
 				local before = char.personality.compassion and char.personality.compassion.value
 				local record = quest(ns, char, fx, 500, 1000)
-				local reaction = assert(ns.Reactions.Consider(char, record, 1000))
+				local reaction = assert(ns.Reactions.Consider(char, record, 1000, 1000))
 				local view = ns.Reactions.Present(char, reaction)
 				expect.truthy(ns.Reactions.FindOption(view, "nothing"), fx.archetype)
 				local result = assert(ns.Decisions.Decide(char, reaction.id, { optionId = "resolve" }, 1010))
@@ -199,7 +203,7 @@ return function(t, expect)
 
 		t:it("a custom answer is recorded in the player's words and proposes nothing", function()
 			local ns, char, fx = setup(Fixtures.CHARACTERS[2])
-			local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1), 1)
+			local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1), 1, 1)
 			local result = assert(ns.Decisions.Decide(char, reaction.id, { custom = "She paid the farmer back." }, 2))
 			expect.equal(#result.changes, 0)
 			expect.truthy(result.entry.text:find("own words: She paid the farmer back.", 1, true))
@@ -210,7 +214,7 @@ return function(t, expect)
 
 		t:it("drafts say only what was observed and what the player chose", function()
 			local ns, char, fx = setup(Fixtures.CHARACTERS[4])
-			local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1, { title = false }), 1)
+			local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1, { title = false }), 1, 1)
 			local result = ns.Decisions.Decide(char, reaction.id, { optionId = "nothing" }, 2)
 			expect.equal(result.entry.text, "Completed a quest in The Barrens at level 20.\n\n"
 				.. "Morrow felt it was nothing worth remembering.")
@@ -220,7 +224,7 @@ return function(t, expect)
 		t:it("drafts can be switched off; decisions still count", function()
 			local ns, char, fx = setup()
 			char.story.prefs.drafts = false
-			local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1), 1)
+			local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1), 1, 1)
 			local result = ns.Decisions.Decide(char, reaction.id, { optionId = "craft" }, 2)
 			expect.equal(result.entry, nil)
 			expect.equal(#char.journal, 0)
@@ -232,8 +236,8 @@ return function(t, expect)
 		-- Each case tests evolution, not pacing: start every decision fresh.
 		local function decide(ns, char, fx, id, optionId, now)
 			char.story.pacing.recentTemplates = {}
-			char.story.pacing.lastByCategory = {}
-			local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, id, now, { zone = "Zone" .. id }), now)
+			char.story.pacing.playByCategory = {}
+			local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, id, now, { zone = "Zone" .. id }), now, now)
 			return ns.Decisions.Decide(char, reaction.id, { optionId = optionId }, now)
 		end
 
@@ -360,7 +364,7 @@ return function(t, expect)
 				char.fields.name = { value = "Same", visibility = "private" }
 				char.story.prefs.flavor = false
 				local view = ns.Reactions.Present(char, ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1,
-					{ zone = "Anywhere" }), 1))
+					{ zone = "Anywhere" }), 1, 1))
 				local shape = { question = view.question, template = view.template.id, options = {} }
 				for _, o in ipairs(view.options) do
 					shape.options[#shape.options + 1] = { id = o.id, effects = o.effects }
@@ -375,7 +379,7 @@ return function(t, expect)
 			local seen = {}
 			for _, fx in ipairs(Fixtures.CHARACTERS) do
 				local _, char = setup(fx)
-				local view = ns.Reactions.Present(char, ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1), 1))
+				local view = ns.Reactions.Present(char, ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1), 1, 1))
 				local universal = #ns.ReactionLibrary.BY_ID[view.template.id].options
 				expect.equal(#view.options, universal + 2, fx.archetype .. ": universal + flavour + neutral")
 				local flavor = view.options[universal + 1]
@@ -394,7 +398,7 @@ return function(t, expect)
 			local results = {}
 			for _, fx in ipairs({ Fixtures.CHARACTERS[1], Fixtures.CHARACTERS[2] }) do
 				local ns, char = setup(fx)
-				local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1, { zone = "Anywhere" }), 1)
+				local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1, { zone = "Anywhere" }), 1, 1)
 				local r = ns.Decisions.Decide(char, reaction.id, { optionId = "ambition" }, 2)
 				results[#results + 1] = { axis = r.changes[1].axis, delta = r.changes[1].delta }
 			end
@@ -404,7 +408,7 @@ return function(t, expect)
 
 		t:it("no story data reaches the public projection", function()
 			local ns, char, fx = setup()
-			local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1), 1)
+			local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1), 1, 1)
 			ns.Decisions.Decide(char, reaction.id, { custom = "SECRET-THOUGHT" }, 2)
 			local public = ns.Projection.GetPublic(char)
 			expect.equal(public.story, nil)
@@ -445,7 +449,7 @@ return function(t, expect)
 
 		t:it("normalises story data idempotently and repairs bad records", function()
 			local ns, char, fx = setup()
-			local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1), 1)
+			local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1), 1, 1)
 			ns.Decisions.Decide(char, reaction.id, { optionId = "resolve" }, 2)
 			char.story.reactions[1] = { id = "x" }
 			char.story.prefs.frequency = "constantly"
@@ -487,7 +491,7 @@ return function(t, expect)
 
 		t:it("personal backups carry the story; share exports and older backups never replace it", function()
 			local ns, char, fx = setup()
-			local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1), 1)
+			local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1), 1, 1)
 			ns.Decisions.Decide(char, reaction.id, { custom = "PRIVATE-WORDS" }, 2)
 			local share = assert(ns.Transfer.Export(char, "share", {}))
 			local sharePlan = assert(ns.Transfer.Decode(share))
@@ -507,7 +511,7 @@ return function(t, expect)
 
 		t:it("journal search filters by text, kind, status and importance", function()
 			local ns, char, fx = setup()
-			local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1), 1)
+			local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 1), 1, 1)
 			local entry = ns.Decisions.Decide(char, reaction.id, { optionId = "resolve" }, 2).entry
 			ns.Journal.AddNote(char, { text = "A quiet evening" }, 3)
 			expect.equal(#ns.Journal.Search(char, { text = "LEDGER" }), 1)

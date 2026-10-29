@@ -77,11 +77,36 @@ function Methods:Enable() self.__enabled = true end
 function Methods:Disable() self.__enabled = false end
 function Methods:IsEnabled() return self.__enabled end
 function Methods:GetName() return self.__name end
-function Methods:CreateFontString(name, layer)
+function Methods:CreateFontString(name, layer, template)
 	local fs = self.__mock.newFrame("FontString", name, self)
-	fs.__layer = layer
+	fs.__layer, fs.__template = layer, template
 	return fs
 end
+-- Fonts: SetFont succeeds unless mock.fontFails names the file (a missing font).
+-- As in 1.15.9 (SimpleFontAPIDocumentation), a Font object's SetFont returns
+-- nothing; a FontString's or EditBox's returns success.
+function Methods:SetFont(file, height, flags)
+	local failed = self.__mock.fontFails and tostring(file):find(self.__mock.fontFails, 1, true)
+	if not failed then
+		self.__font = { file = file, height = height, flags = flags }
+	end
+	if self.__kind == "Font" then return end
+	return not failed
+end
+function Methods:GetObjectType() return self.__kind end
+function Methods:EnableMouse(on) self.__mouse = on and true or false end
+function Methods:IsMouseEnabled() return self.__mouse == true end
+function Methods:GetFont() return self.__font and self.__font.file, self.__font and self.__font.height end
+function Methods:SetFontObject(font) self.__fontObject = font end
+-- Models: SetUnit succeeds unless mock.modelFails is set.
+function Methods:SetUnit(unit)
+	if self.__mock.modelFails then return false end
+	self.__unit = unit
+	return true
+end
+function Methods:ClearModel() self.__unit = nil end
+function Methods:SetRotation(r) self.__rotation = r end
+function Methods:GetRotation() return self.__rotation or 0 end
 function Methods:CreateTexture(name, layer, _, sublevel)
 	local tex = self.__mock.newFrame("Texture", name, self)
 	tex.__layer, tex.__sublevel = layer, sublevel
@@ -150,7 +175,9 @@ local FrameMT = {
 --- opts: { interface = number, project = number, savedVariables = table, extra = table }
 function Mock.new(opts)
 	opts = opts or {}
+	-- clock: what time() returns (real dates); mono: what GetTime() returns.
 	local mock = { eventFrames = {}, framesByName = {}, chat = {}, clock = 1700000000, popups = {}, timers = {},
+		tickers = {}, mono = 1000,
 		zone = "Elwynn Forest", subzone = "Goldshire" }
 
 	--- Accepts the most recent confirmation dialog, like clicking its first button.
@@ -180,6 +207,10 @@ function Mock.new(opts)
 			return "1.15.x", "00000", "mock", opts.interface or 11509
 		end,
 		CreateFrame = function(kind, name, parent) return mock.newFrame(kind, name, parent) end,
+		CreateFont = function(name) return mock.newFrame("Font", name) end,
+		GetLocale = function() return mock.locale or "enUS" end,
+		SetPortraitTexture = function(texture, unit) texture.__portrait = unit end,
+		STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF",
 		UIParent = mock.newFrame("Frame", "UIParent"),
 		UISpecialFrames = {},
 		tinsert = table.insert,
@@ -191,7 +222,15 @@ function Mock.new(opts)
 		IsShiftKeyDown = function() return mock.shift == true end,
 		C_Timer = {
 			After = function(seconds, fn) mock.timers[#mock.timers + 1] = { seconds = seconds, fn = fn } end,
+			NewTicker = function(seconds, fn)
+				local ticker = { seconds = seconds, fn = fn }
+				mock.tickers[#mock.tickers + 1] = ticker
+				return ticker
+			end,
 		},
+		-- GetTime: seconds since the computer started (mock.mono, moved by mock.Play).
+		GetTime = function() return mock.mono end,
+		UnitIsAFK = function() return mock.afk == true end,
 		GameFontNormalLarge = {},
 		GameFontHighlight = {},
 		GameTooltip = mock.newFrame("GameTooltip", "GameTooltip"),
@@ -201,7 +240,8 @@ function Mock.new(opts)
 		StaticPopup_Show = function(name, textArg, _, data)
 			mock.popups[#mock.popups + 1] = { name = name, text = textArg, data = data }
 		end,
-		date = function(fmt, t) return "date(" .. tostring(fmt) .. "," .. tostring(t) .. ")" end,
+		-- UTC, so the output is the same on every machine.
+		date = function(fmt, t) return os.date("!" .. tostring(fmt):gsub("^!", ""), t) end,
 		GetRealZoneText = function() return mock.zone end,
 		GetSubZoneText = function() return mock.subzone end,
 		UnitName = function() return "Testchar" end,
@@ -236,7 +276,7 @@ function Mock.new(opts)
 		C_AddOns = {
 			GetAddOnMetadata = function(name, field)
 				if name == "DawnwardChronicles" and field == "Version" then
-					return opts.version or "0.6.0-dev"
+					return opts.version or "0.7.0-dev"
 				end
 				return nil
 			end,
@@ -250,6 +290,19 @@ function Mock.new(opts)
 		env[k] = v
 	end
 	mock.env = env
+
+	--- Plays for this many seconds: GetTime moves on and the minute tickers
+	-- run as they would (at least once). Real time (time()) is not touched.
+	function mock.Play(seconds)
+		local step = 60
+		local left = seconds
+		while left > 0 do
+			local d = math.min(step, left)
+			mock.mono = mock.mono + d
+			left = left - d
+			for _, ticker in ipairs(mock.tickers) do ticker.fn() end
+		end
+	end
 
 	--- Runs the timers queued so far (not ones they queue in turn).
 	function mock.RunTimers()

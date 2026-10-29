@@ -36,7 +36,7 @@ end
 -- caller colours it.
 function Widgets.Label(parent, font, wrap, role)
 	local spec = role and Style.TEXT[role]
-	local fs = parent:CreateFontString(nil, "OVERLAY", font or (spec and spec.font) or "GameFontHighlight")
+	local fs = parent:CreateFontString(nil, "OVERLAY", Style.Font(font or (spec and spec.font) or "GameFontHighlight"))
 	fs:SetJustifyH("LEFT")
 	fs:SetJustifyV("TOP")
 	fs:SetWordWrap(wrap and true or false)
@@ -76,6 +76,11 @@ function Widgets.Tooltip(frame, title, text)
 		return
 	end
 	frame.tooltipHooked = true
+	-- A plain Frame receives OnEnter only when mouse input is on (buttons
+	-- already have it); hover-only areas need it for their tooltip.
+	if frame.EnableMouse and frame.GetObjectType and frame:GetObjectType() == "Frame" then
+		frame:EnableMouse(true)
+	end
 	hook(frame, "OnEnter", function(self) showTooltip(self, self.tooltipTitle, self.tooltipText) end)
 	hook(frame, "OnLeave", function() GameTooltip:Hide() end)
 end
@@ -131,8 +136,8 @@ function Widgets.Button(parent, text, width, height, variant)
 	b.bg = Style.Solid(b, "BACKGROUND")
 	b.bg:SetAllPoints(b)
 	b.edges = Style.Edge(b, "BORDER")
-	b.label = b:CreateFontString(nil, "OVERLAY", height < Style.SIZE.button and "GameFontHighlightSmall"
-		or "GameFontHighlight")
+	b.label = b:CreateFontString(nil, "OVERLAY", Style.Font(height < Style.SIZE.button and "GameFontHighlightSmall"
+		or "GameFontHighlight"))
 	b.label:SetJustifyH(b.variant == "choice" and "LEFT" or "CENTER")
 	b.label:SetWordWrap(false)
 	placeLabel(b, false)
@@ -323,7 +328,7 @@ function Widgets.EditLine(parent, maxBytes)
 	local edit = CreateFrame("EditBox", Widgets.NextName("Line"), parent)
 	edit:SetAutoFocus(false)
 	edit:SetHeight(Style.SIZE.input)
-	edit:SetFontObject(ChatFontNormal)
+	edit:SetFontObject(Style.FontObject("ChatFontNormal") or ChatFontNormal)
 	edit:SetTextInsets(6, 6, 0, 0)
 	edit:SetMaxBytes(maxBytes or 100)
 	edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
@@ -362,7 +367,7 @@ function Widgets.TextArea(parent, maxBytes, width)
 	edit:SetMultiLine(true)
 	edit:SetAutoFocus(false)
 	edit:SetMaxBytes(maxBytes or 2000)
-	edit:SetFontObject(ChatFontNormal)
+	edit:SetFontObject(Style.FontObject("ChatFontNormal") or ChatFontNormal)
 	edit:SetTextInsets(4, 4, 4, 4)
 	edit:SetWidth(math.max(100, (width or 230) - 30)) -- minus scroll bar and padding
 	edit:SetHeight(100)
@@ -598,6 +603,160 @@ function Widgets.Confirm(text, acceptLabel, onAccept)
 	d.onAccept = onAccept
 	if d.Raise then d:Raise() end
 	return d
+end
+
+--- v0.7 components (docs/design/UI_DESIGN_V07.md) ----------------------------------
+-- Shared by every section so the screens stay consistent with the approved
+-- design system: status chips, panels with an eyebrow title, a callout, a
+-- date block, a progress bar and a search box.
+
+-- Chip tones. Visibility tones reuse the fixed visibility colours so a
+-- "Secret" chip always reads as a warning, whatever the theme.
+Widgets.CHIP_HEIGHT = 20
+local function chipColor(tone, theme)
+	if tone == "public" or tone == "private" or tone == "secret" then
+		return Themes.VISIBILITY_COLORS[tone]
+	end
+	if tone == "danger" then return theme.danger end
+	if tone == "muted" then return theme.muted end
+	return theme.accent
+end
+
+--- A small status pill ("Defining", "Homeland", "Waiting for your approval").
+-- tone: accent (default), muted, danger, public, private or secret.
+-- Sizes itself to its text; :SetChip(text, tone) changes it.
+function Widgets.Chip(parent, text, tone)
+	local chip = CreateFrame("Frame", nil, parent)
+	chip:SetHeight(Widgets.CHIP_HEIGHT)
+	chip.bg = Style.Solid(chip, "BACKGROUND")
+	chip.bg:SetAllPoints(chip)
+	chip.edges = Style.Edge(chip, "BORDER")
+	chip.label = chip:CreateFontString(nil, "OVERLAY", Style.Font("GameFontHighlightSmall"))
+	chip.label:SetPoint("CENTER", 0, 0)
+	chip.label:SetWordWrap(false)
+	function chip.SetChip(self, t, newTone)
+		self.tone = newTone or self.tone or "accent"
+		self.label:SetText(t or "")
+		local w = self.label.GetStringWidth and self.label:GetStringWidth() or 0
+		if type(w) ~= "number" or w <= 0 then w = #(t or "") * 6 end
+		self:SetWidth(math.floor(w + 18))
+		Style.Repaint(self)
+	end
+	Style.Register(chip, function(c, theme)
+		local color = chipColor(c.tone, theme)
+		Style.Color(c.bg, color, 0.14)
+		c.edges:Paint(color, 0.55)
+		Style.TextColor(c.label, color)
+	end)
+	chip:SetChip(text, tone)
+	return chip
+end
+
+--- A panel: a surface with an optional eyebrow title (Cinzel, ornament
+-- colour) and an inner content area at panel.inner (pad 14). Used for the
+-- right-hand columns and grouped sections.
+Widgets.PANEL_PAD = 14
+function Widgets.Panel(parent, title)
+	local panel = CreateFrame("Frame", nil, parent)
+	panel.bg = Style.Solid(panel, "BACKGROUND", -3)
+	panel.bg:SetAllPoints(panel)
+	panel.edges = Style.Edge(panel, "BORDER")
+	local top = Widgets.PANEL_PAD
+	if title then
+		panel.title = Widgets.Label(panel, "GameFontNormalSmall", false, "eyebrow")
+		panel.title:SetPoint("TOPLEFT", Widgets.PANEL_PAD, -Widgets.PANEL_PAD)
+		panel.title:SetText(title:upper())
+		top = top + 22
+	end
+	panel.inner = CreateFrame("Frame", nil, panel)
+	panel.inner:SetPoint("TOPLEFT", Widgets.PANEL_PAD, -top)
+	panel.inner:SetPoint("BOTTOMRIGHT", -Widgets.PANEL_PAD, Widgets.PANEL_PAD)
+	function panel.SetTitle(self, t)
+		if self.title then self.title:SetText((t or ""):upper()) end
+	end
+	Style.Register(panel, function(p, theme)
+		Style.Color(p.bg, theme.panel)
+		p.edges:Paint(p.callout and theme.border or theme.edge, 1)
+	end)
+	return panel
+end
+
+--- A callout: a panel with a gold edge and a warm fill, for the one thing
+-- waiting on the player ("A moment awaits", "Needs your approval").
+function Widgets.Callout(parent, title)
+	local panel = Widgets.Panel(parent, title)
+	panel.callout = true
+	panel.glow = Style.Solid(panel, "BACKGROUND", -2)
+	panel.glow:SetAllPoints(panel)
+	Style.Register(panel.glow, function(t, theme) Style.Color(t, theme.accent, 0.06) end)
+	Style.Repaint(panel)
+	return panel
+end
+
+--- A date block: the day large (Cinzel) over a short month, for entry cards.
+-- :SetDate(timestamp) shows "?" when the date is unknown.
+function Widgets.DateBlock(parent)
+	local block = CreateFrame("Frame", nil, parent)
+	block:SetSize(56, 46)
+	block.day = Widgets.Label(block, "GameFontNormalLarge", false, "title")
+	block.day:SetPoint("TOP", 0, 0)
+	block.month = Widgets.Label(block, "GameFontNormalSmall", false, "muted")
+	block.month:SetPoint("TOP", block.day, "BOTTOM", 0, -2)
+	function block.SetDate(self, timestamp)
+		if type(timestamp) == "number" and timestamp > 0 then
+			self.day:SetText(tostring(tonumber(date("%d", timestamp))))
+			self.month:SetText(date("%b", timestamp):upper())
+		else
+			self.day:SetText("?")
+			self.month:SetText("")
+		end
+	end
+	return block
+end
+
+--- A thin progress bar. :SetValue(fraction 0..1).
+function Widgets.ProgressBar(parent, width, height)
+	local bar = CreateFrame("Frame", nil, parent)
+	bar:SetSize(width or 200, height or 4)
+	bar.track = Style.Solid(bar, "BACKGROUND")
+	bar.track:SetAllPoints(bar)
+	bar.fill = Style.Solid(bar, "ARTWORK")
+	bar.fill:SetPoint("TOPLEFT")
+	bar.fill:SetPoint("BOTTOMLEFT")
+	function bar.SetValue(self, fraction)
+		fraction = type(fraction) == "number" and math.max(0, math.min(1, fraction)) or 0
+		self.value = fraction
+		local w = self:GetWidth() or 0
+		self.fill:SetWidth(math.max(1, w * fraction))
+		self.fill:SetShown(fraction > 0)
+	end
+	Style.Register(bar, function(b, theme)
+		Style.Color(b.track, theme.edge)
+		Style.Color(b.fill, theme.accent)
+	end)
+	bar:SetValue(0)
+	return bar
+end
+
+--- A search box: a one-line input with a placeholder. onChange(text) runs
+-- as the player types (text trimmed; "" when cleared).
+function Widgets.SearchBox(parent, width, placeholder, onChange)
+	local box = Widgets.EditLine(parent, 60)
+	box:SetWidth(width or 200)
+	box.placeholder = Widgets.Label(box, "GameFontHighlightSmall", false, "muted")
+	box.placeholder:SetPoint("LEFT", 8, 0)
+	box.placeholder:SetText(placeholder or "Search")
+	local function update(self)
+		local text = (self:GetText() or ""):match("^%s*(.-)%s*$")
+		self.placeholder:SetShown(text == "" and not self.focused)
+		if onChange then onChange(text) end
+	end
+	hook(box, "OnTextChanged", update)
+	hook(box, "OnEditFocusGained", function(self) self.placeholder:Hide() end)
+	hook(box, "OnEditFocusLost", function(self)
+		self.placeholder:SetShown((self:GetText() or "") == "")
+	end)
+	return box
 end
 
 --- Formats a stored timestamp for display (WoW's date(); 0 means unknown).

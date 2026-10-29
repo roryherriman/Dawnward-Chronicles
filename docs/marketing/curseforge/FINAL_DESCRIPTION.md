@@ -12,7 +12,7 @@ Ready to paste into the description field of the existing **unlisted** project (
 ```markdown
 ![Dawnward Chronicles](BANNER_URL_AFTER_UPLOAD)
 
-**TRP3 tells the world who your character is. Dawnward Chronicles helps you discover who you become.**
+**Total RP 3 tells the world who your character is. Dawnward Chronicles helps you discover who they become.**
 
 Dawnward Chronicles is a roleplaying companion. It notices what your character really does in the game: the quests they turn in, the places they reach, the falls they survive. At a calm moment it asks a quiet question: *how did that sit with them?* Your answers, never the addon, shape who they become. They turn into memories, story arcs and a private chronicle that you edit, approve and choose to share.
 
@@ -22,7 +22,7 @@ It works for every class, race and faction. A compassionate warlock, a ruthless 
 
 ## Built to complement Total RP 3, not replace it
 
-Total RP 3 is an essential part of the WoW roleplaying community, and it stays your public profile. Dawnward keeps the story of who your character is becoming.
+Total RP 3 is an essential part of the WoW roleplaying community. Dawnward Chronicles includes its own comprehensive character profile and storytelling tools, but it is not intended to replace Total RP 3's established public social roleplaying profile system. Dawnward helps players develop their characters through gameplay, while optional TRP3 integration lets them share approved public information with the broader roleplaying community.
 
 - **Independent.** Not an official TRP3 extension, and not affiliated with or endorsed by the Total RP 3 authors. Thank you to the TRP3 team.
 - **Optional.** Dawnward works without TRP3. Its TRP3 sync is experimental and off by default. When you turn it on, it shares only what you made public, backs up first, never writes while TRP3's editor is open, and can be rolled back.

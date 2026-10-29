@@ -12,6 +12,86 @@ Every release entry has a **Verified** line naming the highest test level reache
 
 A feature is never called "tested" or "compatible" in this file unless it reached L3 or L4.
 
+## [Unreleased]: 0.7.0-dev (approved visual direction, gameplay time)
+
+**Verified: L2** (mocked). Not tested in game yet; see parts Q, R and S of [`docs/TESTING.md`](docs/TESTING.md). Design: [`docs/design/UI_DESIGN_V07.md`](docs/design/UI_DESIGN_V07.md). Builds on 0.6.0-dev below, which is also unreleased.
+
+### Added
+- **Every screen rebuilt to the approved mockups:**
+  - **Journal dashboard:**
+    - "The road so far", with real counts;
+    - New entry, search, and All / Defining / Story / Events filters;
+    - a "moment awaits" callout with Answer and Later;
+    - entry cards with date block, meta line, status chips, visibility and actions;
+    - Active goals with progress, and Recent places.
+  - **Character profile:**
+    - Identity, Background and Summary panels of tiles, each with its own visibility chip and Edit;
+    - personality values with changes waiting for approval;
+    - family and relationships;
+    - a public profile preview built from the same public projection as exports and Total RP 3.
+  - **Character Showcase:**
+    - turning, and zoom with buttons and the mouse wheel;
+    - a portrait choice remembered per character;
+    - "In game" identity (level, race, class colour, guild, realm), read live, shown apart from what the player wrote.
+  - **Story Director:**
+    - event context, "why now" from the Director's real reasons, and the memories it recalls;
+    - a two-column choice grid, own words with inline validation, and Later / Not now / Dismiss;
+    - other waiting moments;
+    - growth to approve, with reasons, Approve, Reject and Reverse.
+  - **Chronicle:**
+    - cards for Memories, Arcs, Goals, Stances, People and Review, with tab counts and search;
+    - Places as list and detail, including when a return could next become a moment.
+  - **First-time setup:**
+    - a step rail, grouped panels, your portrait on the Character step and privacy chips;
+    - Total RP 3 status only (setup never publishes).
+- **Total RP 3 page** (Settings → Total RP 3, or the rail's Total RP 3 line):
+  - **Status:** installed, version, linked profile, and sync per feature.
+  - **What would be written:** exactly what would be shared (public only), the proposed changes, and what is never shared (as counts). It also lists the fields Dawnward never writes.
+  - **Approve and write**, conflicts with Keep yours / Use Dawnward's, and backups with Roll back.
+  - It writes only through the same guarded functions as `/dawnward trp3`. Opening or previewing writes nothing.
+- **Shared components:** chips, panels, callouts, date blocks, progress bars and search boxes.
+- **Approved mockups** in [`docs/design/mockups`](docs/design/mockups/README.md): seven approved design concepts (Journal, Character, Story Director, Chronicle memories and places, first-time setup, design system) and two proposals awaiting approval (Total RP 3 sync page, Character Showcase). They are design concepts with sample data, not screenshots, and are not part of the addon package.
+- **Window shell (stage A):**
+  - A permanent character rail with the player's portrait, name, title, race, class, pronouns and level, and the section navigation, with a badge counting moments waiting on Story.
+  - Guide and Settings are at the bottom of the rail.
+  - A header with an eyebrow and a title.
+  - A Total RP 3 status line.
+  - The window scales down to fit small screens by width as well as height.
+- **Character Showcase:** the player's live 3D model beside the profile, in the gear being worn. Turn it with buttons or by dragging. The portrait is shown when the model is unavailable, and nothing renders while the journal is closed.
+- **Bundled fonts:** Cinzel and Alegreya Sans (SIL OFL 1.1). Clients in languages the fonts do not cover keep the game's fonts.
+- **Story pace** setting (Settings → Story): Brisk, Standard (default) or Slow narrative days.
+- `/dawnward dev story simulate time <n>m|h|d [place]`: shows what a return would do after that much more play, on a discarded copy (development builds only).
+
+### Changed
+- **Story Director counts gameplay time.**
+  - Return visits and moment cooldowns now use a per-character narrative clock that advances only while you play: not while logged out, and not while AFK.
+  - A narrative day is 2 hours of play by default.
+  - A return needs 1 narrative day away, and a place's weekly return 7.
+  - Unanswered moments expire after 7 narrative days, at the pace in force when they were created, so changing the pace never removes a moment already waiting.
+  - Changing the computer's clock no longer affects any of this.
+  - Details: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#gameplay-time-the-narrative-clock).
+- `/dawnward dev story status` shows the narrative clock and day, time away from the place, play still needed, cooldowns and why a return would or would not happen.
+- The Classic Dawnward theme uses the colours of the approved design system.
+- Setup wizard: an over-long field now shows an inline error instead of being cut silently, and clicking a step in the rail jumps to it.
+- **Total RP 3 rollback** now warns, before confirming, that the restored section comes back exactly as it was, including anything Dawnward wrote then from items since made Private or Secret. Rollback itself is unchanged.
+- Changes made in the window now prompt an opted-in Total RP 3 sync to catch up, as slash commands already did.
+- The README, site and CurseForge drafts describe Dawnward's own full character profile accurately: it is not meant to replace Total RP 3's public social profile, and shares approved public information through the optional integration.
+
+### Fixed (found in review before merge)
+- The bundled fonts never loaded in the real client: a Font object's `SetFont` returns nothing in 1.15.9. Each font file is now checked once on a hidden font string.
+- Tooltips on plain hover areas could not show (mouse input was off).
+
+### Saved data
+- Waiting moments gain `expiresPlay` (their own deadline in play time).
+- One additive key, `DawnwardChroniclesDB.ui.showcase[characterKey]`, holds the Showcase portrait choice only when chosen. It is cleaned on load.
+
+### Migration
+- Additive. The schema number is unchanged.
+- Each character gains a narrative clock starting at zero.
+- Places, marks, Homeland, memories and history are untouched.
+- Places logged before the upgrade start counting time away from their next visit, so the upgrade cannot cause a burst of return moments.
+- Old real-time timestamps are kept, but are never read as play time.
+
 ## [Unreleased]: 0.6.0-dev (visual and onboarding overhaul)
 
 **Verified: L2** (mocked). Not tested in game yet; see part N of [`docs/TESTING.md`](docs/TESTING.md). Design: [`docs/design/UI_DESIGN_V06.md`](docs/design/UI_DESIGN_V06.md).

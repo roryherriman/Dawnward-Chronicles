@@ -44,8 +44,10 @@ Places.KIND_LABELS = { start = "starting area", town = "settlement", inn = "inn"
 	ruins = "ruins", capital = "capital city", wilderness = "wilderness", danger = "dangerous area" }
 
 Places.START_MAX_LEVEL = 5
-Places.RETURN_AFTER = 2 * 24 * 3600   -- away at least this long before a return can be a moment
-Places.RETURN_REPEAT = 7 * 24 * 3600  -- and at most one return moment per place per week
+-- Returns are measured in narrative days: play time, never real time
+-- (Core/NarrativeClock.lua). Offline time does not count.
+Places.RETURN_AFTER_DAYS = 1   -- away at least this much play before a return can be a moment
+Places.RETURN_REPEAT_DAYS = 7  -- and at most one return moment per place per narrative week
 Places.VISIT_GAP = 30 * 60            -- re-entering within this counts as the same visit
 Places.LIMIT = 200                    -- logged places per character
 -- Kinds whose returns may become a moment. Farms, roads and ruins never do
@@ -282,6 +284,9 @@ function Places.CleanEntry(raw)
 		first = int(raw.first, 2 ^ 40) or 0, last = int(raw.last, 2 ^ 40) or 0,
 		visits = int(raw.visits, 2 ^ 31) or 1, level = int(raw.level, 1000),
 		returnedAt = int(raw.returnedAt, 2 ^ 40),
+		-- Narrative clock readings (seconds of play); absent on places logged
+		-- before the clock existed (Places.ReturnCheck treats those as new).
+		lastPlay = int(raw.lastPlay, 2 ^ 40), returnedPlay = int(raw.returnedPlay, 2 ^ 40),
 		meaningful = raw.meaningful == true or nil,
 		homeland = raw.homeland == true or nil,
 	}
@@ -332,7 +337,7 @@ function Places.Prune(places)
 	return removed
 end
 
-local function logVisit(places, zone, subzone, obs, kind, areaId, now)
+local function logVisit(places, zone, subzone, obs, kind, areaId, now, play)
 	local key = Places.Key(zone, subzone)
 	local entry = places[key]
 	if not entry then
@@ -342,6 +347,7 @@ local function logVisit(places, zone, subzone, obs, kind, areaId, now)
 		entry.visits = entry.visits + 1
 	end
 	entry.last = now
+	entry.lastPlay = play
 	entry.mapId = obs.mapId or entry.mapId
 	entry.areaId = areaId or entry.areaId
 	entry.kind = kind or entry.kind
@@ -378,20 +384,35 @@ function Places.Tie(char, entry)
 end
 
 --- Whether a return to this logged place may be recorded now. Pure.
--- Returns ok, reason, info. Reasons when not: "away" (not away long
--- enough: RETURN_AFTER), "weekly" (a return was recorded within
--- RETURN_REPEAT), "ordinary" (a kind whose returns never count by
--- themselves, and nothing ties it to the story). info: { away, tie, wait }
--- where wait is the seconds until it could count (for "away" and "weekly").
-function Places.ReturnCheck(char, entry, kind, now)
-	local info = { away = now - entry.last, tie = Places.Tie(char, entry) }
-	if info.away < Places.RETURN_AFTER then
-		info.wait = Places.RETURN_AFTER - info.away
+-- play is the narrative clock (seconds of play). Returns ok, reason, info.
+-- Reasons when not:
+--   "new"      no clock reading for this place yet: it was logged before
+--              the narrative clock existed, so absence starts counting now
+--   "away"     not away long enough (RETURN_AFTER_DAYS of play)
+--   "weekly"   a return was recorded within RETURN_REPEAT_DAYS of play
+--   "ordinary" a kind whose returns never count by themselves, and nothing
+--              ties it to the story
+-- info: { away, tie, wait, needed } in seconds of play; wait is the play
+-- still needed (for "away" and "weekly").
+function Places.ReturnCheck(char, entry, kind, play)
+	local day = ns.NarrativeClock.DayLength(char)
+	local info = { tie = Places.Tie(char, entry), needed = Places.RETURN_AFTER_DAYS * day }
+	if not entry.lastPlay then
+		return false, "new", info
+	end
+	-- A clock behind the place's reading (restored from an older backup) counts as no absence.
+	info.away = math.max(0, play - entry.lastPlay)
+	if info.away < info.needed then
+		info.wait = info.needed - info.away
 		return false, "away", info
 	end
-	if entry.returnedAt and now - entry.returnedAt < Places.RETURN_REPEAT then
-		info.wait = Places.RETURN_REPEAT - (now - entry.returnedAt)
-		return false, "weekly", info
+	if entry.returnedPlay then
+		local since = math.max(0, play - entry.returnedPlay)
+		local repeatAfter = Places.RETURN_REPEAT_DAYS * day
+		if since < repeatAfter then
+			info.wait = repeatAfter - since
+			return false, "weekly", info
+		end
 	end
 	if not (info.tie or (kind and Places.RETURN_KINDS[kind])) then
 		return false, "ordinary", info
@@ -417,13 +438,14 @@ end
 -- A return may become a moment only after a real absence, at most once a
 -- week per place, and only for a settlement, a starting area, a capital,
 -- or a place the player tied to their story (Places.ReturnCheck).
-local function returnStep(char, entry, kind, obs, subzone, now)
-	local ok, why, info = Places.ReturnCheck(char, entry, kind, now)
+local function returnStep(char, entry, kind, obs, subzone, now, play)
+	local ok, why, info = Places.ReturnCheck(char, entry, kind, play)
 	if not ok then
 		return nil, why, info
 	end
 	local linked = Places.Linked(char.story, entry)
 	entry.returnedAt = now
+	entry.returnedPlay = play
 	return {
 		category = "place", priority = (entry.meaningful or linked or info.tie) and 70 or 35,
 		data = with(context(obs, subzone), { place = entry.subzone or entry.zone, visit = "return", placeKind = kind,
@@ -438,8 +460,11 @@ end
 -- explains the return decision: { origin, target, why, info } (see
 -- Places.ReturnCheck; why "first" means nothing here was logged before).
 -- obs: { zone, subzone, mapId, areaId, level, class, race, faction, client }.
-function Places.Observe(char, obs, now)
+-- now is the real date (for display); play is the narrative clock, which
+-- decides returns (without it, the saved total is used).
+function Places.Observe(char, obs, now, play)
 	local story = char.story
+	play = play or ns.NarrativeClock.Peek(char)
 	local zone = type(obs.zone) == "string" and obs.zone ~= "" and obs.zone or nil
 	if not zone then
 		return {}
@@ -494,7 +519,7 @@ function Places.Observe(char, obs, now)
 	if not origin then
 		local target, kind, targetSub = Places.ReturnTarget(char, zone, subzone, areaKind, zoneKind)
 		if target then
-			local step, why, info = returnStep(char, target, kind, obs, targetSub, now)
+			local step, why, info = returnStep(char, target, kind, obs, targetSub, now, play)
 			diag.target, diag.why, diag.info = Places.Label(target), why, info
 			steps[#steps + 1] = step
 		else
@@ -502,9 +527,9 @@ function Places.Observe(char, obs, now)
 		end
 	end
 
-	logVisit(story.places, zone, nil, obs, zoneKind, nil, now)
+	logVisit(story.places, zone, nil, obs, zoneKind, nil, now, play)
 	if subzone then
-		logVisit(story.places, zone, subzone, obs, areaKind, areaId, now)
+		logVisit(story.places, zone, subzone, obs, areaKind, areaId, now, play)
 	end
 	Places.Prune(story.places)
 

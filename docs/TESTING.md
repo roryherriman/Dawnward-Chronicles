@@ -429,7 +429,7 @@ Build: schema 5, unchanged. Everything below has passed mocked tests (L2) only. 
 | M13 | Places tab: **Mark** Goldshire; **Homeland** → confirm; **Memory** | "meaningful to you", then "homeland" appear. Character → Homeland reads Goldshire, with its visibility unchanged. The memory is saved with the place |
 | M14 | Character → Family: **Add**, Edit, the visibility button, then Remove (confirm). The same for History | Each works without chat commands; Remove asks first |
 | M15 | Visit a new farm, then a new town (for example in Westfall). Over several sessions, note which places ask | Farms and roads never ask. A new town asks only sometimes. `/dawnward story events` shows each visit as recorded |
-| M16 | `/dawnward set homeland <a town you have never visited>` (for example Lakeshire), then visit it for the first time | It asks, even shortly after another place moment; the notice waits for a calm moment. **Clarified in v0.6:** a place you have already visited (marked, or set as Homeland from the Places tab) asks only on a *return*, which needs 2 days away; going back the same session records nothing. Use `/dawnward dev story simulate <place>` (part P) to check a return without waiting |
+| M16 | `/dawnward set homeland <a town you have never visited>` (for example Lakeshire), then visit it for the first time | It asks, even shortly after another place moment; the notice waits for a calm moment. **Clarified in v0.6:** a place you have already visited (marked, or set as Homeland from the Places tab) asks only on a *return*. Since v0.7-dev that needs one narrative day of **play** away (2 hours at Standard pace), never real days; going back sooner records nothing. Use `/dawnward dev story simulate <place>` (part P) to check a return without waiting |
 | M17 | `/dawnward atlas` in Goldshire and in Lion's Pride Inn; `/dawnward atlas verify`; `/dawnward atlas export` | Goldshire: area 87, settlement, in-game evidence. Lion's Pride Inn: no verified area ID. Verify: count of matches. **Paste the export into #48** |
 | M18 | `/dawnward atlas scan 1 5000` | A copy window with named areas. **Paste it into #48** (it lets coverage grow from the client's own data) |
 
@@ -549,14 +549,172 @@ Automated: `tests/spec/story_diagnostics_spec.lua` (L1/L2). The rules being chec
 
 | # | Steps | Pass when |
 |---|---|---|
-| P1 | Repeat the v0.5 M16 report: visit Goldshire, Places → **Mark meaningful** and **Set as homeland**, go to Stormwind, come back to Goldshire. Then `/dawnward dev story status` | No prompt, and no new line in `story events` (expected). Status shows the location as "Goldshire, Elwynn Forest (map 1429, area 87): settlement" and "Homeland: yes. Marked meaningful: yes". It says the return was not recorded because it was last recorded there minutes ago and a return counts only after 2 days away. It also shows the Director weight (urgent) and the cooldown |
-| P2 | `/dawnward dev story simulate` in Goldshire | It says it is simulating a return after 2 days, with the event, weight and roll. The result is "a moment was queued", followed by the question ("… has returned to Goldshire …") and the answers. The last line says nothing was saved |
+| P1 | Repeat the v0.5 M16 report: visit Goldshire, Places → **Mark meaningful** and **Set as homeland**, go to Stormwind, come back to Goldshire. Then `/dawnward dev story status` | No prompt, and no new line in `story events` (expected). Status shows the location as "Goldshire, Elwynn Forest (map 1429, area 87): settlement" and "Homeland: yes. Marked meaningful: yes". It shows the narrative clock and day. It says the return was not recorded because you were away only minutes of play, and a return counts after 2 h of play away (with the play still needed). It also shows the Director weight (urgent) and the cooldown in play time |
+| P2 | `/dawnward dev story simulate` in Goldshire | It says it is simulating a return after about 2 h of play away, with the event, weight and roll. The result is "a moment was queued", followed by the question ("… has returned to Goldshire …") and the answers. The last line says nothing was saved |
 | P3 | After P2: `/dawnward story events`, Story tab, Journal, `/dawnward places`, then `dev story status` | Nothing changed: no new event, 0 waiting moments, no journal entry, the same visit count, and the same cooldown as before P2 |
 | P4 | `/dawnward dev story simulate The Stonefield Farm` (unmarked) | "Result: no event", saying returns count only for settlements and for places tied to your story |
 | P5 | `/dawnward dev story simulate Lakeshire` before ever visiting it | "Not simulated: no visited place called 'Lakeshire'" |
 | P6 | Enter a new zone, then `dev story status` | "Last arrival this session" names the new zone and says what was recorded and why it did or did not ask (for example "suppressed: the shared location cooldown") |
-| P7 | Two or more real days later, return to Goldshire | It asks, even shortly after another place moment, and `story events` lists "returned to Goldshire". Record the date |
+| P7 | Play elsewhere for at least 2 hours (Standard pace), then return to Goldshire | It asks, even shortly after another place moment, and `story events` lists "returned to Goldshire". Record how long you played |
 | P8 | On a release package (version without `-dev`): `/dawnward dev story status` | "Developer commands are only available in development builds." `help all` doesn't list them |
+
+#### Part Q: gameplay time (the narrative clock, v0.7-dev)
+
+Automated: `tests/spec/narrative_clock_spec.lua` (L1/L2). The model is in [ARCHITECTURE.md](ARCHITECTURE.md#gameplay-time-the-narrative-clock). Use `/dawnward dev story status` to read the clock.
+
+| # | Steps | Pass when |
+|---|---|---|
+| Q1 | Upgrade from v0.6, log in, `/dawnward dev story status` | "Narrative clock: … of play · narrative day 1". No error. Places, marks, Homeland and memories are all still there (Chronicle → Places, Memories) |
+| Q2 | Stand in a place you already had logged before the upgrade, then `dev story status` | The last arrival says it was logged before gameplay time was tracked, and that time away starts counting from this visit. **No** burst of return moments after the upgrade |
+| Q3 | Play for 10 minutes, then `dev story status` | The clock went up by about 10 minutes |
+| Q4 | Note the clock, type `/afk`, run `dev story status`, wait 5 minutes, clear AFK, run it again | While AFK it says "The clock is paused: you are AFK." Afterwards the clock has not gained the AFK minutes |
+| Q5 | Note the clock, `/reload`, then `dev story status` | The same value (plus seconds), not reset |
+| Q6 | Note the clock, log out for at least an hour, log back in, then `dev story status` | The clock did **not** jump by the hour offline |
+| Q7 | Log in on another character, then `dev story status` | Its own clock, not the first character's |
+| Q8 | Cross between two zones every few minutes for 20 minutes | No return moments and no "returned to" lines in `story events` |
+| Q9 | `/dawnward dev story simulate time 90m Goldshire`, then `… time 1d Goldshire` | 90 minutes: "no event", with the play still needed. 1 narrative day: a return, and for a marked place a moment is queued. Afterwards `dev story status` shows the clock unchanged |
+| Q10 | Settings → Story → **Story pace**: Brisk, then `dev story status`; set it back to Standard | The narrative day becomes 1 h of play, and returns need less play accordingly |
+| Q11 | Change the computer's date or time forward a day, `/reload`, then `dev story status`; set it back | The narrative clock is unaffected |
+
+#### Part R: v0.7 window shell, Character Showcase and fonts (stage A)
+
+Automated: `tests/spec/ui_shell_spec.lua` (L2) proves the wiring only. Compare each screen with its approved mockup in [design/mockups](design/mockups/README.md); differences that Classic Era cannot avoid are listed in [UI_DESIGN_V07.md](design/UI_DESIGN_V07.md#3-classic-era-limits-and-the-closest-alternatives). Part R checks the shell, rail and fonts; the screens themselves are in part S.
+
+| # | Steps | Pass when |
+|---|---|---|
+| R1 | Upgrade from v0.6, `/dawnward` | The window opens with a rail on the left. No Lua error. Every section, entry and setting from v0.6 is still there |
+| R2 | Look at the rail on a character with a profile name and title | Your profile name and title, then race · class · pronouns, and your real level. With no profile name, your character's name |
+| R3 | Compare the rail with the mockups | Same order: portrait, name, title, identity line, level, navigation, Guide and Settings at the bottom |
+| R4 | Look at the portrait | Your own portrait, round, inside a gold ring that sits centred on it (not cut off or offset) |
+| R5 | Look at the four navigation icons | Each shows an icon (no green square or blank). Click each: the section changes and the selected one is marked |
+| R6 | Leave a moment unanswered, then look at Story in the rail | A badge with the number waiting |
+| R7 | Character → **Showcase** | Your character in the gear you are wearing. ‹ and › turn it; dragging turns it (more in S4) |
+| R8 | Change a piece of gear with the journal open on Character | The model updates |
+| R9 | Character → Profile fields, Edit a field, then cancel | The section's header buttons hide while editing and come back afterwards |
+| R10 | Close the journal | The model is gone; frame rate is the same as with the addon closed |
+| R11 | Read text in every section | Titles in Cinzel, text in Alegreya Sans; nothing clipped or overlapping. (On a non-English client: the game's fonts, and nothing missing) |
+| R12 | Set UI scale to the smallest and largest values, and try a 1366×768 window | The whole window fits on screen in every case |
+| R13 | Switch theme to each of the six themes (Settings → General → Appearance) | Every theme repaints the rail, header and Showcase frame |
+| R14 | With Total RP 3 off, and then on; click the rail line | The rail line says "not installed (optional)" or names your TRP3 profile, and opens the Total RP 3 page. Nothing is written to Total RP 3 |
+
+#### Part S: the integrated v0.7 build (every screen), in priority order
+
+Build: **0.7.0-dev** from `main`. Everything here has passed automated tests (L2) only. Compare each screen with its mockup in [design/mockups](design/mockups/README.md); known, accepted differences are in [UI_DESIGN_V07.md](design/UI_DESIGN_V07.md#4-audit-each-screen-against-its-mockup). Before you start: close the game, back up `WTF\Account\<account>\SavedVariables\DawnwardChronicles*.lua` (and Total RP 3's), then install the package.
+
+**S1. Startup and Lua errors** (do this first; stop and report if it fails)
+
+| # | Check |
+|---|---|
+| S1.1 | Turn on Lua errors (`/console scriptErrors 1`). Log in on a character that used v0.6: no Lua error at login, and `/dawnward status` reports 0.7.0-dev |
+| S1.2 | `/dawnward` opens the window; open every section and every Chronicle tab and Settings page once: no Lua error |
+| S1.3 | `/reload` with the window open: no error, and it opens again cleanly |
+
+**S2. Window scaling and layout:** part R, steps R11 to R13 (fonts, UI scale, 1366×768, themes). No overlapping or clipped text anywhere.
+
+**S3. Character rail:** part R, steps R2 to R6 and R14.
+
+**S4. Character profile and Showcase**
+
+| # | Check |
+|---|---|
+| S4.1 | Character: three left panels (Identity, Background & biography, Summary & motivation), tiles three to a row; Personality and Family & relationships on the right; each set field has a visibility chip and Edit inside its tile. |
+| S4.2 | Click a chip to cycle; Edit a field: Enter saves, Escape cancels, empty value shows its error under the field; Add opens the editor on an empty field. |
+| S4.3 | Answer a moment that proposes a personality change (approval "ask"): "1 change waits…", per-axis note; "Review in Story" opens Story. |
+| S4.4 | Name Public, faith Secret, then "Preview public view": only public data, matching /dawnward show public; "Back to profile" returns. |
+| S4.5 | "Total RP 3…" opens Settings → Total RP 3. |
+| S4.6 | "Showcase": live model in current gear; turn with < >, drag, wheel; zoom - +; equip another item and the model updates. |
+| S4.7 | "In game": level, race, class (class colour), guild (or "No guild"), realm; "Your character": only what you wrote, with visibility chips. |
+| S4.8 | "Show portrait instead", /reload, reopen Showcase: choice kept. Switch back to the live model. |
+| S4.9 | Close the journal with the Showcase open: no frame-rate cost; reopen: model reloads. |
+| S4.10 | Chips and knobs layer correctly over the model; the portrait ring is aligned. |
+
+**S5. Journal dashboard**
+
+| # | Check |
+|---|---|
+| S5.1 | /dawnward on Journal: heading "The road so far"; subline shows real entry count, defining moments, "last entry today". |
+| S5.2 | + New entry, title+text, save: card at top with date block and "Your words". Edit changes it; Delete asks first. |
+| S5.3 | Type your current subzone in search: only entries recorded there remain. Clear it. |
+| S5.4 | Defining / Story / Events / All: only matching entries show. |
+| S5.5 | Raise a moment (complete a quest): "A moment awaits · 1 of 1" with the question. Later hides it (still in Story). Raise another, Answer opens Story on it. |
+| S5.6 | Story draft card: "Waiting for your approval" chip; Approve then Defining update the chips; Public only after approval. |
+| S5.7 | Goal with a level target: shows in Active goals with bar and "Level X of N · verified"; All opens Chronicle → Goals. |
+| S5.8 | New subzone appears at the top of Recent places; Homeland/Meaningful chips after marking in Chronicle → Places. |
+| S5.9 | No overlap/clipping at your UI scale; pager appears beyond 10 entries. |
+
+**S6. Chronicle**
+
+| # | Check |
+|---|---|
+| S6.1 | Chronicle: heading CHRONICLE / Memories; tabs show counts. |
+| S6.2 | Memories → + New memory, save: card with Ordinary, Today, title, text, "Your words", "Established", Private chip; click it to cycle Private → Public → Secret. |
+| S6.3 | Answer a moment that suggests a memory: gold-edged card "Suggested · needs your call"; Accept → Established; Remove asks first. |
+| S6.4 | Search filters cards, count "x of y"; no match → "Nothing matches…"; switching tab clears the search. |
+| S6.5 | Goals: add a goal, Steps → two milestones, tick one: bar half full, "1/2 milestones"; target level shows "level a/b". |
+| S6.6 | Arcs, Stances, People, Review: cards, actions (Turn, Inner, Edit), empty-state text on a fresh character. |
+| S6.7 | Places: list with zone · kind and visits; select one: first visit, Last here, Next return moment. Mark meaningful: star in list, chip in detail. Set as homeland: confirm, hearthstone icon renders, button greys out, note shows the Homeland field's visibility. |
+| S6.8 | Write a memory here: appears under Tied memories and in Memories. |
+| S6.9 | Text fits at UI scale 1.0 and smaller; long text cuts off inside the card; buttons and chips stay inside. |
+
+**S7. Story Director**
+
+| # | Check |
+|---|---|
+| S7.1 | Story with nothing waiting: empty-state text, summary, "Nothing is waiting.", growth note; eyebrow "STORY". |
+| S7.2 | Turn in a quest: card "A MOMENT FOR YOUR STORY" with "Quest completed · <zone>". Answer: Story opens on it, eyebrow "STORY · MOMENT 1 OF 1", chips place / Quest completed / Level N. |
+| S7.3 | "Why now" readable; two columns of numbered choice cards with hints; no overlap at your UI scale. |
+| S7.4 | Save answer with an empty text field: red inline error, moment stays. Type an answer and save: moment gone, status confirms. |
+| S7.5 | Two moments waiting: click an "Also waiting" row and the ‹ › arrows; Later ("kept for later"), Not now, Reflect, Dismiss. |
+| S7.6 | Answer a choice with a personality hint: under "Growth to approve" check the reason, Approve, then Reverse + Confirm (value steps back). Reject another. |
+| S7.7 | Settings approval = automatic, answer a moment: change applies at once and shows under Applied with Reverse. |
+| S7.8 | Return moment at your homeland or a place with an established memory: tie chip and "<Name> remembers: …" appear. |
+| S7.9 | Switch themes: card, chips, labels, buttons repaint. |
+
+**S8. First-time setup**
+
+| # | Check |
+|---|---|
+| S8.1 | Brand-new character, open Dawnward: wizard opens, rail with Welcome current, "STEP 1 OF 6", "Next: Character". |
+| S8.2 | Next: Character stage shows your portrait and "Name · Level N · race · class", Name suggested from the game. |
+| S8.3 | Paste >100 characters into Title and press Next: red error under Title, wizard stays. Shorten: error clears, Next works. |
+| S8.4 | Done stages show a check mark; click "Story" in the rail to jump there. |
+| S8.5 | Privacy: three chips (Public green, Private grey, Secret salmon); TRP3 chip matches installed/loaded state. |
+| S8.6 | Appearance: pick a theme (restyles at once). Escape, /reload, /dawnward setup: resumes on the same stage with answers. |
+| S8.7 | Finish: two review panels; Finish opens the journal; Total RP 3 unchanged. |
+| S8.8 | UI scale 0.64 with a small window: wizard fits on screen. |
+| S8.9 | /dawnward dev setup: rail note and eyebrow say Preview; Save choices / Close preview behave as before. |
+
+**S9. Gameplay-time progression:** part Q (Q1 to Q11). Q2 (no burst of return moments after upgrading) and Q6 (an hour offline adds nothing) matter most.
+
+**S10. Total RP 3 sync and rollback** (a spare, non-default TRP3 profile only)
+
+| # | Check |
+|---|---|
+| S10.1 | Without Total RP 3: Settings → Total RP 3 (or click the TRP3 line in the rail) says it is optional and Dawnward works fully without it. |
+| S10.2 | TRP3 3.4.1, one Public fact: "Installed · 3.4.1 · supported", profile name with "not linked", Biography "Sync off", the public text in the preview. |
+| S10.3 | Make a fact Private and one Secret: neither statement appears anywhere; only counts under Never shared. |
+| S10.4 | Enable syncing biography… then Cancel: nothing changes. Enable + accept: chip "Needs your approval" (unless the automatic run already wrote). Approve and write: TRP3 About has the Chronicle block, your own text unchanged, a backup row appears. |
+| S10.5 | In combat, and with the TRP3 About editor open: chip Waiting, Approve disabled. |
+| S10.6 | Edit the Dawnward block in TRP3 and add a Public fact: Conflict callout, Approve disabled. Keep yours leaves your text and turns sync off. |
+| S10.7 | Select a backup, Roll back…: Cancel does nothing; accept restores and names the safety backup. |
+| S10.8 | Traits: make an axis Public, enable traits, check the preview line and proposed changes. |
+
+**S11. SavedVariables persistence**
+
+| # | Check |
+|---|---|
+| S11.1 | Make a change in each section (an entry, a field, a memory, a goal milestone, a marked place, the story pace, the Showcase portrait choice). Log out fully, log back in: every change is still there |
+| S11.2 | Compare your SavedVariables backup with the new file (optional): nothing from v0.6 is missing |
+
+**S12. Privacy and cross-character isolation**
+
+| # | Check |
+|---|---|
+| S12.1 | Make one field Private and one Secret. They appear in no public preview, no share export (`/dawnward export share`) and nowhere on the Total RP 3 page except as counts |
+| S12.2 | Log in on a second character: its rail, journal, places, narrative clock (`/dawnward dev story status`) and Showcase choice are its own; nothing from the first character shows |
+| S12.3 | `/dawnward sim on`, change something, `/dawnward sim off`: the real character is unchanged |
+
+**Screenshots requested:** Journal, Character (profile and Showcase), Story, Chronicle (Memories and Places), setup and the Total RP 3 page, at your normal UI scale, so they can be compared side by side with the mockups and, once approved, replace the concepts in the README. Crop or blur anything you would rather not share.
 
 **Report:**
 - Which steps passed, with your game version, UI scale and resolution.

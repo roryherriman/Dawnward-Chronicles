@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dawnward Total RP 3 sync</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&amp;family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#07090D}
+a{color:#E6C47E}a:hover{color:#F3DCA6}
+.win{width:1100px;height:720px;box-sizing:border-box;display:flex;position:relative;overflow:hidden;background:#0E1219;border:1px solid #6B5631;border-radius:6px;font-family:'Alegreya Sans',sans-serif;color:#EFE7D6}
+.rail{width:272px;flex:none;box-sizing:border-box;background:#121825;border-right:1px solid #2C3648;display:flex;flex-direction:column;padding:20px 18px 16px}
+.main{flex:1;min-width:0;box-sizing:border-box;padding:22px 28px 20px;display:flex;flex-direction:column;gap:14px}
+.disp{font-family:'Cinzel',serif}
+.eyebrow{font-family:'Cinzel',serif;font-size:12px;letter-spacing:.16em;color:#C9A55E;text-transform:uppercase}
+.navbtn{display:flex;align-items:center;gap:12px;height:44px;padding:0 14px;border-radius:8px;border:1px solid transparent;background:transparent;color:#C9C2B2;font-family:'Alegreya Sans',sans-serif;font-size:17px;font-weight:500;width:100%;cursor:pointer;text-align:left}
+.navbtn svg{width:20px;height:20px;flex:none}
+.badge{margin-left:auto;min-width:22px;height:22px;border-radius:11px;background:#D8B26A;color:#1A1408;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 6px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px;border-radius:6px;font-family:'Alegreya Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer;box-sizing:border-box;white-space:nowrap}
+.btn svg{width:16px;height:16px}
+.primary{background:#D8B26A;border:1px solid #F0D08E;color:#1A1408}
+.secondary{background:#1F2838;border:1px solid #3E4C66;color:#EFE7D6}
+.ghost{background:transparent;border:1px solid #2F3A4E;color:#D9D2C2}
+.danger{background:transparent;border:1px solid #5E3236;color:#F0A39B}
+.sm{height:30px;padding:0 12px;font-size:14px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:12px;font-size:13px;font-weight:500;box-sizing:border-box;white-space:nowrap}
+.chip svg{width:13px;height:13px}
+.public{background:#14302A;color:#93D9BB;border:1px solid #2F5D4F}
+.private{background:#1B2436;color:#B4C6EA;border:1px solid #3A4D73}
+.tag{background:#1A202C;color:#BDB6A6;border:1px solid #2C3648}
+.goldtag{background:#2A2213;color:#F0D08E;border:1px solid #6B5631}
+.amber{background:#2E2410;color:#F2C46B;border:1px solid #6A5122}
+.ok{background:#14302A;color:#93D9BB;border:1px solid #2F5D4F}
+.card{background:#151B26;border:1px solid #2A3345;border-radius:10px;box-sizing:border-box}
+.iconbtn{width:36px;height:36px;border-radius:6px;background:transparent;border:1px solid #2F3A4E;color:#C9C2B2;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.iconbtn svg{width:18px;height:18px}
+.muted{color:#A6A08F}
+.corner{position:absolute;width:18px;height:18px;color:#B8954F}
+.lbl{font-family:'Cinzel',serif;font-size:11px;letter-spacing:.14em;color:#C9A55E;text-transform:uppercase}
+.subtab{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:7px;border:1px solid transparent;background:transparent;color:#BDB6A6;font-family:'Alegreya Sans',sans-serif;font-size:15px;font-weight:500;cursor:pointer}
+.subtab.on{background:#2A3346;border-color:#4A5874;color:#F5EEDD}
+.diff{font-size:14px;line-height:1.45;padding:8px 10px;border-radius:6px}
+.add{background:#132820;border:1px solid #2F5D4F;color:#BFE9D5}
+.keep{background:#11161F;border:1px solid #232C3D;color:#BDB6A6}
+</style>
+</helmet>
+<div class="win">
+  <svg class="corner" style="left:6px;top:6px" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1 12V1h11"></path><path d="M4 8V4h4"></path></svg>
+  <svg class="corner" style="right:6px;bottom:6px;transform:rotate(180deg)" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1 12V1h11"></path><path d="M4 8V4h4"></path></svg>
+
+  <aside class="rail">
+    <div style="display:flex;align-items:center;gap:8px;padding-left:4px">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#D8B26A" stroke-width="1.6" aria-hidden="true"><path d="M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3z"></path></svg>
+      <span class="disp" style="font-size:13px;letter-spacing:.18em;color:#D8B26A;font-weight:600">DAWNWARD</span>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;margin-top:18px;gap:6px">
+      <div style="width:116px;height:116px;border-radius:58px;border:2px solid #D8B26A;padding:4px;box-sizing:border-box;position:relative">
+        <div style="width:104px;height:104px;border-radius:52px;background:#1C2433;overflow:hidden;display:flex;align-items:flex-end;justify-content:center">
+          <svg viewBox="0 0 100 100" width="104" height="104" role="img" aria-label="Live character portrait"><circle cx="50" cy="40" r="17" fill="#3A465E"></circle><path d="M18 100c2-22 15-34 32-34s30 12 32 34z" fill="#3A465E"></path><path d="M33 36c2-12 9-18 17-18s15 6 17 18c-5-4-11-6-17-6s-12 2-17 6z" fill="#8C7344"></path></svg>
+        </div>
+        <span class="chip goldtag" style="position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);height:22px;background:#0E1219;font-weight:700">24</span>
+      </div>
+      <div class="disp" style="font-size:21px;font-weight:600;margin-top:12px;text-align:center;line-height:1.15">Kyssarra Dawnwhisper</div>
+      <div style="font-size:15px;font-style:italic;color:#D8C49A;text-align:center">Keeper of the Lantern Road</div>
+      <div style="font-size:14px;color:#A6A08F">Human · <span style="color:#F58CBA">Paladin</span> · she/her</div>
+    </div>
+    <nav style="display:flex;flex-direction:column;gap:4px;margin-top:22px" aria-label="Sections">
+      <button class="navbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 4h10a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"></path><path d="M8 8h6M8 12h6"></path></svg>Journal</button>
+      <button class="navbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>Character</button>
+      <button class="navbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"></path></svg>Story<span class="badge">2</span></button>
+      <button class="navbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M7 4h11a2 2 0 0 1 2 2v2H9"></path><path d="M7 4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8"></path><path d="M9 12h7M9 16h5"></path></svg>Chronicle</button>
+    </nav>
+    <div style="margin-top:auto;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#93D9BB;padding:0 4px"><span style="width:8px;height:8px;border-radius:4px;background:#5FBF95"></span>Total RP 3 · linked · 1 change waiting</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn ghost sm" style="flex:1;justify-content:center">Guide</button>
+        <button class="btn secondary sm" style="flex:1;justify-content:center;border-color:#6B5631;color:#F3DCA6">Settings</button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header style="display:flex;align-items:flex-start;gap:12px">
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <span class="eyebrow">Settings</span>
+        <h1 class="disp" style="margin:0;font-size:28px;font-weight:600;color:#F5EEDD">Total RP 3</h1>
+      </div>
+      <button class="iconbtn" style="margin-left:auto" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+    </header>
+
+    <nav style="display:flex;gap:4px;padding:3px;border-radius:9px;background:#121825;border:1px solid #2C3648;align-self:flex-start" aria-label="Settings pages">
+      <button class="subtab">General</button>
+      <button class="subtab">Story</button>
+      <button class="subtab">Data</button>
+      <button class="subtab on">Total RP 3</button>
+    </nav>
+
+    <section class="card" style="padding:12px 16px;display:flex;align-items:center;gap:18px">
+      <div style="display:flex;flex-direction:column;gap:2px"><span class="lbl">Total RP 3</span><span style="font-size:15px">Installed · 3.4.1 · supported</span></div>
+      <div style="width:1px;height:34px;background:#2C3648"></div>
+      <div style="display:flex;flex-direction:column;gap:2px"><span class="lbl">Linked profile</span><span style="font-size:15px">“Kyssarra (RP)” · this character only</span></div>
+      <div style="width:1px;height:34px;background:#2C3648"></div>
+      <div style="display:flex;flex-direction:column;gap:2px"><span class="lbl">Sync</span><span style="font-size:15px">On for Biography · off for Traits</span></div>
+      <span class="chip tag" style="margin-left:auto">Experimental</span>
+    </section>
+
+    <div style="display:flex;gap:16px;flex:1;min-height:0">
+      <section class="card" style="flex:1;min-width:0;padding:16px 18px;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <h2 class="disp" style="margin:0;font-size:18px;font-weight:600">Biography: proposed change</h2>
+          <span class="chip amber" style="margin-left:auto">Needs your approval</span>
+        </div>
+        <span class="muted" style="font-size:14px">Dawnward only writes its own block inside your “About” text. Everything you wrote in Total RP 3 yourself stays exactly as it is.</span>
+        <div class="diff keep">Your own text (kept, never edited by Dawnward): “A paladin of the Lantern Road. Ask her about Goldshire.”</div>
+        <div class="diff add"><strong>+ Background:</strong> Grew up above an inn in Goldshire.<br><strong>+ Defining moment:</strong> The night the lanterns went out</div>
+        <div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:8px;background:#11161F;border:1px solid #232C3D">
+          <span class="lbl">Never shared</span>
+          <span style="font-size:14px;color:#C9C2B2;line-height:1.4">Homeland, Summary and 9 memories are <span class="chip private" style="height:20px;font-size:12px">Private</span> and Faith is Secret. Only items marked <span class="chip public" style="height:20px;font-size:12px">Public</span> can be written.</span>
+          <span style="font-size:14px;color:#C9C2B2;line-height:1.4">Not written by Dawnward: Name, Title, Pronouns and the other profile fields. Total RP 3 keeps its own; only Public facts, stances and defining moments go into the biography block.</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:auto;padding-top:12px;border-top:1px solid #232C3D">
+          <button class="btn primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>Approve and write</button>
+          <button class="btn ghost">Not now</button>
+          <button class="btn danger" style="margin-left:auto">Stop syncing biography</button>
+        </div>
+      </section>
+
+      <aside style="width:258px;flex:none;display:flex;flex-direction:column;gap:12px">
+        <section class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px;border-color:#6A5122;background:#18170F">
+          <span class="lbl" style="color:#F2C46B">Conflict on Traits</span>
+          <span style="font-size:14px;line-height:1.4;color:#E4DCCB">“Bold” was edited in Total RP 3 after Dawnward last wrote it. Nothing will be overwritten until you choose.</span>
+          <div style="display:flex;gap:6px"><button class="btn secondary sm" style="flex:1;justify-content:center">Keep yours</button><button class="btn ghost sm" style="flex:1;justify-content:center">Use Dawnward’s</button></div>
+        </section>
+        <section class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+          <span class="lbl">Backups</span>
+          <div style="display:flex;align-items:center;gap:8px"><span style="font-size:14px">About · before last write</span><span class="muted" style="margin-left:auto;font-size:13px">27 Oct</span></div>
+          <div style="display:flex;align-items:center;gap:8px"><span style="font-size:14px">About · first link</span><span class="muted" style="margin-left:auto;font-size:13px">20 Oct</span></div>
+          <button class="btn secondary sm" style="justify-content:center">Roll back…</button>
+          <span class="muted" style="font-size:13px;line-height:1.35">A backup is taken before every write, and each write is read back and undone at once if anything differs.</span>
+        </section>
+      </aside>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1100,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

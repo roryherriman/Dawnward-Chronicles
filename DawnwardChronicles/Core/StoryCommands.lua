@@ -45,6 +45,8 @@ local function settings(ctx, char)
 		p.frequency, p.threshold, p.approval))
 	out(ctx, string.format("  drafts %s, flavor %s, card %s, trp3Style %s, places %s (on|fewer|off)",
 		p.drafts and "on" or "off", p.flavor and "on" or "off", p.card and "on" or "off", p.trp3Style, p.places))
+	out(ctx, string.format("  pace %s (brisk|standard|slow): a narrative day is %d hour%s of play", p.pace,
+		ns.NarrativeClock.PACES[p.pace] / 3600, ns.NarrativeClock.PACES[p.pace] == 3600 and "" or "s"))
 	out(ctx, "  tracking: " .. table.concat(tracked, ", "))
 	out(ctx, "Change: /dawnward story set <setting> <value> | story track <category> on|off")
 end

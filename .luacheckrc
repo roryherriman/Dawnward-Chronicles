@@ -4,6 +4,7 @@ max_line_length = 120
 codes = true
 
 exclude_files = {
+	".claude/**", -- local agent worktrees, not part of the repository
 	".tooling/",
 	"private/",
 	"review/",
@@ -39,7 +40,7 @@ local WOW_READ = {
 	-- v0.5 minimap button
 	"Minimap", "GetCursorPosition",
 	-- v0.6 keyboard navigation (Shift+Tab)
-	"IsShiftKeyDown",
+	"IsShiftKeyDown", "GetTime", "UnitIsAFK", "RAID_CLASS_COLORS", "SetPortraitTexture", "CreateFont", "GetLocale",
 }
 
 files["DawnwardChronicles/Platform/"] = {
