@@ -122,7 +122,7 @@ end
 local ROW_STATE = {
 	write = "will write", clear = "will clear (no longer Public)", noop = "up to date",
 	matches = "Total RP 3 already shows the same text (yours, not managed)", empty = "nothing Public to write",
-	conflict = "PAUSED",
+	conflict = "PAUSED", unwritable = "not writable",
 }
 
 --- One planned field as a line: "Race -> Race: will write 'Half-elf'".
@@ -131,7 +131,7 @@ function TRP3Commands.FieldRowText(row)
 	local text = m.label .. " -> " .. m.trp3 .. ": " .. (ROW_STATE[row.state] or row.state)
 	if row.state == "write" then
 		text = text .. " '" .. tostring(row.desired) .. "'"
-	elseif row.state == "conflict" then
+	elseif row.state == "conflict" or row.state == "unwritable" then
 		text = text .. " - " .. tostring(row.reason)
 	end
 	return text
@@ -316,13 +316,21 @@ function TRP3Commands.Import(ctx, id, level)
 		return nil, "choose private, public or secret"
 	end
 	local deps = ctx.trp3Deps()
-	local section, err = ns.TRP3Adapter.ReadSection(deps.env, "characteristics")
+	local section, err = ns.TRP3Adapter.ReadAudited(deps.env, "characteristics")
 	if not section then
-		return nil, err
+		return nil, "Nothing was imported: " .. tostring(err) .. "."
 	end
 	local value = section[m.key]
 	if type(value) ~= "string" or value == "" then
 		return nil, "Total RP 3 has no " .. m.trp3 .. " to import"
+	end
+	-- Import exactly or not at all: Dawnward's field rules (length, one line)
+	-- must not silently shorten or reshape the player's text.
+	local spec = ns.Schema.FIELD_BY_KEY[m.source]
+	if ns.Schema.CleanValue(spec, value) ~= value then
+		return nil, "Nothing was imported: Total RP 3's " .. m.trp3 .. " is longer than Dawnward's "
+			.. m.label .. " field allows (" .. ns.Schema.LIMITS[spec.kind] .. " bytes) or has formatting it does "
+			.. "not keep. Copy the part you want by hand."
 	end
 	return ns.Actions.WithCharacter(ctx, function(char)
 		local ok, ferr = ns.Character.SetField(char, m.source, value, ctx.now())
@@ -378,7 +386,13 @@ end
 -- the public preview and the backups of the active profile. Writes nothing
 -- to Total RP 3.
 function TRP3Commands.Overview(deps)
-	local probe = ns.TRP3Adapter.Probe(deps.env)
+	-- One probe and one read per section for the whole view (Sync.ProbeOf):
+	-- the page refreshes often and writes nothing.
+	local cached = {}
+	for k, v in pairs(deps) do cached[k] = v end
+	cached.cache = {}
+	deps = cached
+	local probe = Sync.ProbeOf(deps)
 	local view = { probe = probe, entry = deps.ledger.optIn[deps.characterKey], checks = {}, backups = {},
 		ledgerReadOnly = deps.ledgerReadOnly }
 	for _, feature in ipairs(Sync.ORDER) do
@@ -400,8 +414,22 @@ function TRP3Commands.Overview(deps)
 	for _, id in ipairs(Ledger.MAPPINGS) do
 		view.policies[id] = Ledger.Policy(bound and view.entry or nil, id)
 	end
+	-- Conflicts only for fields Dawnward manages now.
 	local record = profileId and deps.ledger.profiles[profileId]
-	view.fieldConflicts = record and record.fieldConflicts or {}
+	view.fieldConflicts = {}
+	for id, reason in pairs(record and record.fieldConflicts or {}) do
+		if view.policies[id] == "dawnward" then
+			view.fieldConflicts[id] = reason
+		end
+	end
+	-- Fields that would still show a value Dawnward wrote but that is no
+	-- longer Public, if they stopped being managed (Sync.FieldRisk).
+	view.risks = {}
+	for _, m in ipairs(FieldPlan.MAPPINGS) do
+		if view.policies[m.id] == "dawnward" then
+			view.risks[m.id] = Sync.FieldRisk(deps, m.id)
+		end
+	end
 	return view
 end
 
@@ -443,6 +471,9 @@ function TRP3Commands.FieldsReport(ctx, deps)
 			out(ctx, string.format("  %s (%s): Total RP 3 '%s' / Dawnward %s%s%s", row.label, row.trp3Label,
 				row.trp3 or "-", row.dawnward and ("'" .. row.dawnward .. "'") or (row.hidden and "(not Public)" or "-"),
 				row.differ and " - differs" or " - same", row.conflict and (" - PAUSED: " .. row.conflict) or ""))
+			if row.unwritable then
+				out(ctx, "    not writable: " .. row.unwritable)
+			end
 		end
 	end
 	out(ctx, "Not synchronised automatically (see /dawnward trp3 paste):")
@@ -507,7 +538,19 @@ local function command(ctx, rest)
 			out(ctx, TRP3Commands.EnableWarning(id) .. " Type: /dawnward trp3 field " .. id .. " dawnward confirm")
 			return
 		end
-		local _, message = Sync.SetPolicy(deps, id, policy)
+		local release, keep = false, false
+		for word in args:lower():gmatch("%S+") do
+			if word == "release" then release = true elseif word == "keep" then keep = true end
+		end
+		local ok, message, risk = Sync.SetPolicy(deps, id, policy,
+			{ release = release and confirmed, keep = keep and confirmed })
+		if not ok and risk then
+			out(ctx, "Warning: " .. risk.reason .. ".")
+			out(ctx, "Type: /dawnward trp3 field " .. id .. " " .. policy .. " release confirm (remove it from Total "
+				.. "RP 3 first; recommended) or /dawnward trp3 field " .. id .. " " .. policy .. " keep confirm "
+				.. "(leave it showing)")
+			return
+		end
 		out(ctx, message or "Not changed.")
 	elseif sub == "import" then
 		local id = fieldArg(word1)

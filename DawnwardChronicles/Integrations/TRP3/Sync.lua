@@ -48,7 +48,8 @@ Sync.FEATURES = {
 		section = "characteristics",
 		label = "profile fields",
 		plan = function(section, record, public, extra)
-			return FieldPlan.Plan(section, record, FieldPlan.Desired(public), extra.policies, extra.paused)
+			local desired, unwritable = FieldPlan.Desired(public)
+			return FieldPlan.Plan(section, record, desired, extra.policies, extra.paused, unwritable)
 		end,
 		planned = "characteristics",
 	},
@@ -94,6 +95,14 @@ local featureOn = Sync.FeatureOn
 -- profile. Biography and traits switch off; managed fields go back to Total
 -- RP 3 (only the given ids, or all of them).
 local function disableForProfile(deps, profileId, feature, fieldIds)
+	local record = deps.ledger.profiles[profileId]
+	if feature == "fields" and record and record.fieldConflicts then
+		for id in pairs(record.fieldConflicts) do
+			if not fieldIds or fieldIds[id] then
+				record.fieldConflicts[id] = nil
+			end
+		end
+	end
 	for _, entry in pairs(deps.ledger.optIn) do
 		if entry.profileId == profileId then
 			if feature == "fields" then
@@ -118,6 +127,38 @@ local function publicOf(deps)
 end
 Sync.PublicOf = publicOf
 
+-- Reads made while building one read-only view (the Total RP 3 page) share
+-- one probe and one read per section: deps.cache is set only by such
+-- callers (TRP3Commands.Overview); a run that writes never has it, so every
+-- write decision re-reads everything.
+local function probeOf(deps)
+	local cache = deps.cache
+	if not cache then
+		return Adapter.Probe(deps.env)
+	end
+	cache.probe = cache.probe or Adapter.Probe(deps.env)
+	return cache.probe
+end
+Sync.ProbeOf = probeOf
+
+local function readSection(deps, section)
+	local cache = deps.cache
+	if not cache then
+		return Adapter.ReadSection(deps.env, section)
+	end
+	cache.sections = cache.sections or {}
+	local hit = cache.sections[section]
+	if not hit then
+		local data, err = Adapter.ReadSection(deps.env, section)
+		hit = { data = data, err = err }
+		cache.sections[section] = hit
+	end
+	if not hit.data then
+		return nil, hit.err
+	end
+	return Util.DeepCopy(hit.data)
+end
+
 --- Guards that do not depend on the feature. Returns probe, reasons, deferred.
 -- deferred is true when the only problem is temporary (combat, open editor).
 local function guards(deps, feature)
@@ -131,7 +172,7 @@ local function guards(deps, feature)
 	if deps.store.realReadOnly then
 		reasons[#reasons + 1] = "saved data is read-only"
 	end
-	local probe = Adapter.Probe(deps.env)
+	local probe = probeOf(deps)
 	for _, r in ipairs(probe.experimental.reasons) do
 		reasons[#reasons + 1] = r
 	end
@@ -169,8 +210,10 @@ end
 -- Returns { feature, state, reasons, plan, section, probe, profileId } where
 -- state is "off", "blocked", "deferred", "conflict", "noop" or "ready".
 -- publicOverride replaces the character's public projection (Release uses
--- an empty one to plan "remove Dawnward's content").
-function Sync.Check(deps, feature, publicOverride)
+-- an empty one to plan "remove Dawnward's content"). fieldScope ({ [id] =
+-- true }) limits a fields plan to those fields (releasing one field).
+-- result.notes lists fields Dawnward cannot write unchanged.
+function Sync.Check(deps, feature, publicOverride, fieldScope)
 	local spec = Sync.FEATURES[feature]
 	local result = { feature = feature, reasons = {} }
 	local probe, reasons, deferred = guards(deps, feature)
@@ -199,20 +242,29 @@ function Sync.Check(deps, feature, publicOverride)
 		local char = realCharacter(deps)
 		public.trp3Style = char and char.story and char.story.prefs.trp3Style or nil
 	end
-	local section, err = Adapter.ReadSection(deps.env, spec.section)
+	local section, err = readSection(deps, spec.section)
 	if not section then
 		result.state = "blocked"
 		result.reasons = { err }
 		return result
 	end
 	result.section = Util.DeepCopy(section)
+	local policies = fieldPolicies(entry)
+	if fieldScope then
+		for id in pairs(policies) do
+			if not fieldScope[id] then policies[id] = "off" end
+		end
+	end
 	local plan = spec.plan(section, record[feature], public,
-		{ policies = fieldPolicies(entry), paused = record.fieldConflicts })
+		{ policies = policies, paused = record.fieldConflicts })
 	result.plan = plan
+	result.notes = {}
 	if feature == "fields" then
 		for _, row in ipairs(plan.rows) do
 			if row.state == "conflict" then
 				result.reasons[#result.reasons + 1] = row.reason
+			elseif row.state == "unwritable" then
+				result.notes[#result.notes + 1] = row.reason
 			end
 		end
 		result.state = plan.action == "write" and "ready" or (#result.reasons > 0 and "conflict" or "noop")
@@ -263,9 +315,9 @@ end
 
 --- Runs one feature. Returns { feature, state, message } where state is one
 -- of the Check states, or "written", "failed" (rolled back).
-function Sync.RunFeature(deps, feature, publicOverride)
+function Sync.RunFeature(deps, feature, publicOverride, fieldScope)
 	local spec = Sync.FEATURES[feature]
-	local check = Sync.Check(deps, feature, publicOverride)
+	local check = Sync.Check(deps, feature, publicOverride, fieldScope)
 	local now = deps.now()
 	local fieldNote = ""
 	if feature == "fields" and check.plan then
@@ -367,7 +419,79 @@ end
 -- for a field forgets Dawnward's ownership of it (Total RP 3 keeps the
 -- value); for the biography and traits, content Dawnward wrote stays until
 -- released. Returns ok, message.
-function Sync.SetPolicy(deps, id, policy)
+--- When a field leaves Dawnward's management: Total RP 3 still shows the
+-- exact value Dawnward wrote, but that value is no longer Dawnward's Public
+-- value (made Private or Secret, cleared, or changed). Forgetting ownership
+-- then would leave it published for good. Returns { value, reason } or nil.
+function Sync.FieldRisk(deps, id)
+	local m = FieldPlan.BY_ID[id]
+	local entry = optIn(deps)
+	if not m or not entry then
+		return nil
+	end
+	local record = deps.ledger.profiles[entry.profileId]
+	local owned = record and record.fields and record.fields[id]
+	if not owned then
+		return nil
+	end
+	local probe = probeOf(deps)
+	if not probe.profile or probe.profile.id ~= entry.profileId then
+		return nil
+	end
+	local section = readSection(deps, "characteristics")
+	if not section or section[m.key] ~= owned.value then
+		return nil
+	end
+	local char = realCharacter(deps)
+	local stored = char and char.fields[m.source]
+	if stored and stored.visibility == "public" and stored.value == owned.value then
+		return nil
+	end
+	return { value = owned.value, reason = "Total RP 3 still shows \"" .. owned.value .. "\" as your " .. m.trp3
+		.. ", which Dawnward wrote but which is no longer your Public " .. m.label }
+end
+
+--- Removes Dawnward's value of one field from Total RP 3 (a guarded,
+-- backed-up write), without changing its policy. Returns ok, message.
+function Sync.ReleaseField(deps, id)
+	local m = FieldPlan.BY_ID[id]
+	if not m then
+		return nil, "unknown field"
+	end
+	local public = publicOf(deps)
+	public.fields = Util.DeepCopy(public.fields or {})
+	public.fields[m.source] = nil
+	local result = Sync.RunFeature(deps, "fields", public, { [id] = true })
+	if result.state == "written" or result.state == "noop" then
+		return true, "Removed Dawnward's " .. m.trp3 .. " from Total RP 3."
+	end
+	return nil, "Dawnward's " .. m.trp3 .. " could not be removed now (" .. tostring(result.message) .. ")"
+end
+
+--- Sets one mapping's policy. opts.release (a field leaving "dawnward"):
+-- remove Dawnward's value from Total RP 3 first. When FieldRisk applies,
+-- the change is refused unless opts.release or opts.keep says what to do
+-- with the value still shown. Returns ok, message (or nil, message, risk).
+function Sync.SetPolicy(deps, id, policy, opts)
+	opts = opts or {}
+	if FieldPlan.BY_ID[id] and policy ~= "dawnward" and Ledger.POLICIES[policy] and not deps.ledgerReadOnly then
+		local risk = Sync.FieldRisk(deps, id)
+		if risk then
+			if opts.release then
+				local ok, err = Sync.ReleaseField(deps, id)
+				if not ok then
+					return nil, err
+				end
+			elseif not opts.keep then
+				return nil, risk.reason .. ". Remove it first (release), or keep it showing.", risk
+			end
+		end
+	end
+	return Sync.ApplyPolicy(deps, id, policy)
+end
+
+--- Saves a policy without the FieldRisk check (see SetPolicy).
+function Sync.ApplyPolicy(deps, id, policy)
 	if not Ledger.MAPPING_SET[id] then
 		return nil, "unknown mapping '" .. tostring(id) .. "'"
 	end
@@ -380,7 +504,7 @@ function Sync.SetPolicy(deps, id, policy)
 	local entry = optIn(deps)
 	local label = Sync.MappingLabel(id)
 	if policy ~= "dawnward" then
-		local probe = Adapter.Probe(deps.env)
+		local probe = probeOf(deps)
 		local activeId = probe.profile and probe.profile.id
 		local offMessage = "Automatic " .. label .. " sync is off. Content Dawnward already wrote "
 			.. "stays until you run /dawnward trp3 release " .. id .. " confirm."
@@ -410,7 +534,7 @@ function Sync.SetPolicy(deps, id, policy)
 		end
 		return true, offMessage
 	end
-	local probe = Adapter.Probe(deps.env)
+	local probe = probeOf(deps)
 	if not probe.experimental.allowed then
 		return nil, table.concat(probe.experimental.reasons, "; ")
 	end
@@ -432,6 +556,12 @@ function Sync.SetPolicy(deps, id, policy)
 	end
 	Ledger.SetPolicy(entry, id, "dawnward")
 	entry.at = deps.now()
+	-- A re-authorised field starts unpaused; if it still conflicts, the next
+	-- plan pauses it again.
+	local record = deps.ledger.profiles[profileId]
+	if record and record.fieldConflicts then
+		record.fieldConflicts[id] = nil
+	end
 	local shared = probe.profile.sharedWith
 	return true, string.format("EXPERIMENTAL automatic %s sync is ON for Total RP 3 profile '%s'.%s "
 		.. "Dawnward backs up the section before every write; undo with /dawnward trp3 rollback confirm.",
@@ -465,30 +595,69 @@ function Sync.Authorize(deps, choices)
 	if #ids == 0 then
 		return nil, "nothing was chosen"
 	end
-	local probe = Adapter.Probe(deps.env)
+	if deps.ledgerReadOnly then
+		return nil, deps.ledgerReadOnly
+	end
+	-- 1. Validate everything before anything is saved.
+	local probe = probeOf(deps)
+	local profileId = probe.profile and probe.profile.id
+	local linkable = Ledger.IsStorableProfileId(profileId) and not probe.profile.isDefault
+	local entry = optIn(deps)
+	local releases = {}
 	for _, id in ipairs(ids) do
-		if choices[id] == "dawnward" then
+		local policy = choices[id]
+		if policy == "dawnward" then
 			if not probe.experimental.allowed then
-				return nil, table.concat(probe.experimental.reasons, "; ")
+				return nil, table.concat(probe.experimental.reasons, "; ") .. "; nothing was changed"
+			end
+			if not linkable then
+				return nil, "the active Total RP 3 profile ID is not one Dawnward can track; nothing was changed"
 			end
 			for key, other in pairs(deps.ledger.optIn) do
-				if key ~= deps.characterKey and other.profileId == probe.profile.id
+				if key ~= deps.characterKey and other.profileId == profileId
 					and Ledger.Policy(other, id) == "dawnward" then
 					return nil, "this Total RP 3 profile is already synced by " .. key .. " ("
 						.. Sync.MappingLabel(id) .. "); nothing was changed"
 				end
 			end
+		elseif not entry and Ledger.Policy(nil, id) ~= policy and not linkable then
+			return nil, "link a non-default Total RP 3 profile first; nothing was changed"
+		elseif Sync.FieldRisk(deps, id) then
+			releases[#releases + 1] = id
 		end
 	end
+	-- 2. Values no longer Public are removed from Total RP 3 first (guarded,
+	-- backed-up writes, which must happen while the field is still
+	-- Dawnward's); if one cannot be removed now, no policy is saved.
+	for _, id in ipairs(releases) do
+		local released, rerr = Sync.ReleaseField(deps, id)
+		if not released then
+			return nil, rerr .. "; no choice was saved"
+		end
+	end
+	-- 3. Apply on a snapshot; any failure puts the ledger back as it was.
+	local key = deps.characterKey
+	local savedEntry = Util.DeepCopy(deps.ledger.optIn[key])
+	local savedRecord = profileId and Util.DeepCopy(deps.ledger.profiles[profileId])
+	local function undo()
+		deps.ledger.optIn[key] = savedEntry
+		if profileId then deps.ledger.profiles[profileId] = savedRecord end
+	end
 	local managed = {}
-	for _, id in ipairs(ids) do
-		local ok, err = Sync.SetPolicy(deps, id, choices[id])
-		if not ok then
-			return nil, err
+	local ok, err = pcall(function()
+		for _, id in ipairs(ids) do
+			local done, why = Sync.ApplyPolicy(deps, id, choices[id])
+			if not done then
+				error(why, 0)
+			end
+			if choices[id] == "dawnward" then
+				managed[#managed + 1] = Sync.MappingLabel(id)
+			end
 		end
-		if choices[id] == "dawnward" then
-			managed[#managed + 1] = Sync.MappingLabel(id)
-		end
+	end)
+	if not ok then
+		undo()
+		return nil, tostring(err) .. "; nothing was changed"
 	end
 	if #managed == 0 then
 		return true, "Saved. Dawnward manages nothing in Total RP 3 for this character."
@@ -524,7 +693,7 @@ end
 -- importable, conflict }.
 function Sync.Differences(deps)
 	local view = { rows = {} }
-	local status = Adapter.Probe(deps.env)
+	local status = probeOf(deps)
 	if not status.status.loaded then
 		view.reason = "Total RP 3 is not loaded"
 		return view
@@ -533,7 +702,7 @@ function Sync.Differences(deps)
 		view.reason = "this Total RP 3 version has not been audited, so Dawnward does not read its profile"
 		return view
 	end
-	local section, err = Adapter.ReadSection(deps.env, "characteristics")
+	local section, err = readSection(deps, "characteristics")
 	if not section then
 		view.reason = err
 		return view
@@ -543,7 +712,7 @@ function Sync.Differences(deps)
 	local bound = entry and entry.profileId == profileId
 	local record = profileId and deps.ledger.profiles[profileId]
 	local char = realCharacter(deps)
-	local public = FieldPlan.Desired(publicOf(deps))
+	local public, unwritable = FieldPlan.Desired(publicOf(deps))
 	for _, m in ipairs(FieldPlan.MAPPINGS) do
 		local policy = Ledger.Policy(bound and entry or nil, m.id)
 		if policy ~= "off" then
@@ -552,7 +721,9 @@ function Sync.Differences(deps)
 			local stored = char and char.fields[m.source]
 			local row = { id = m.id, label = m.label, trp3Label = m.trp3, policy = policy, trp3 = trp3,
 				dawnward = public[m.id], hidden = stored ~= nil and stored.visibility ~= "public",
-				conflict = record and record.fieldConflicts and record.fieldConflicts[m.id] or nil }
+				conflict = policy == "dawnward" and record and record.fieldConflicts
+					and record.fieldConflicts[m.id] or nil,
+				unwritable = unwritable[m.id] }
 			row.differ = row.trp3 ~= row.dawnward
 			-- Importing TRP3's value is useful only when it differs from what
 			-- Dawnward holds (Public or not); the value itself is not shown
@@ -598,7 +769,7 @@ end
 -- and field values. Pure read; writes nothing. Returns { backup, items,
 -- ownPossible, ownReason } or nil plus a reason.
 function Sync.RollbackPreview(deps, backupId)
-	local probe = Adapter.Probe(deps.env)
+	local probe = probeOf(deps)
 	local id = probe.profile and probe.profile.id
 	local backup = backupId and Ledger.FindBackup(deps.ledger, backupId) or Ledger.LatestBackup(deps.ledger, id)
 	if not backup then
@@ -753,7 +924,8 @@ local function ownOnly(deps, inputs)
 		end
 	end
 	if featureOn(entry, "fields") then
-		local plan = FieldPlan.Plan(data, nil, FieldPlan.Desired(public), fieldPolicies(entry), {})
+		local desired, unwritable = FieldPlan.Desired(public)
+		local plan = FieldPlan.Plan(data, nil, desired, fieldPolicies(entry), {}, unwritable)
 		data, newOwners.fields, conflicts = plan.characteristics, plan.record, plan.conflicts
 	end
 	return data, newOwners, conflicts
@@ -875,6 +1047,15 @@ function Sync.Resolve(deps, feature, choice)
 		if current ~= nil and (type(current) ~= "string" or FieldPlan.Clean(current) ~= current) then
 			return nil, "Total RP 3's " .. m.trp3 .. " holds formatting Dawnward cannot track; clear it in Total RP 3 "
 				.. "first"
+		end
+		-- Keep the player's value safe for good (a pinned backup) before
+		-- Dawnward is allowed to replace it.
+		local backup, berr = Ledger.AddBackup(deps.ledger, id, "characteristics", section,
+			{ reason = "your " .. m.trp3 .. " before Use Dawnward's", characterKey = deps.characterKey,
+				ownerFeature = "fields", owner = record.fields, owners = ownersOf(record, "characteristics"),
+				pin = "reclaim" }, deps.now())
+		if not backup then
+			return nil, berr
 		end
 		record.fieldConflicts[feature] = nil
 		record.fields = record.fields or {}

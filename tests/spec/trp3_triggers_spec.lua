@@ -155,6 +155,41 @@ return function(t, expect)
 			expect.equal(fake.profile.player.characteristics.AG, nil, "never written to another profile")
 		end)
 
+		t:it("only Total RP 3 hints about the player's own profile request a run", function()
+			local mock, env, _, fake = start()
+			managedAge(mock)
+			mock.RunTimers()
+			local addon = env.TRP3_Addon
+			-- Other players' and companions' profiles (RegisterMain.lua saveInformation, RegisterMSP.lua,
+			-- RegisterList.lua with no arguments, a companion ID).
+			addon:TriggerEvent("REGISTER_DATA_UPDATED", "Other-Realm", "1600000000OTHER", "characteristics")
+			addon:TriggerEvent("REGISTER_DATA_UPDATED")
+			addon:TriggerEvent("REGISTER_DATA_UPDATED", fake.playerId .. "_Pet", "1600000000PET", "misc")
+			expect.equal(#mock.timers, 0, "no run for someone else's profile")
+			addon:TriggerEvent("REGISTER_DATA_UPDATED", nil, fake.profileId, "characteristics")
+			expect.equal(#mock.timers, 1, "the player's own profile, by profile ID")
+			mock.RunTimers()
+			-- TRP3's own listeners receive the registry owner first; matching is by value.
+			addon:TriggerEvent("REGISTER_DATA_UPDATED", addon, fake.playerId, nil, "about")
+			expect.equal(#mock.timers, 1, "the player's own unit ID, in any position")
+		end)
+
+		t:it("switching a field away while TRP3 still shows a no-longer-Public value warns and offers release",
+			function()
+			local mock, env, _, fake = start()
+			managedAge(mock)
+			mock.RunTimers()
+			mock.Slash("vis age private")
+			mock.timers = {}
+			local out = mock.Slash("trp3 field age trp3")
+			expect.truthy(out:find("no longer your Public Age", 1, true), out)
+			expect.truthy(out:find("field age trp3 release confirm", 1, true))
+			expect.equal(fake.profile.player.characteristics.AG, "31", "nothing done yet")
+			mock.Slash("trp3 field age trp3 release confirm")
+			expect.equal(fake.profile.player.characteristics.AG, nil)
+			expect.equal(env.DawnwardChroniclesTRP3DB.optIn["Testchar-TestRealm"].policy.age, "trp3")
+		end)
+
 		t:it("rollback through the command previews the risk and never runs by itself", function()
 			local mock, _, _, fake = start()
 			managedAge(mock)

@@ -259,6 +259,58 @@ function Adapter.ReadSection(env, section)
 	return result, err
 end
 
+--- Read-only access for anything that only LOOKS at the player's profile
+-- (differences, import, story import): the same validated deep copy as
+-- ReadSection, but only when Total RP 3 is loaded and its version has been
+-- audited (VersionProfiles), so an unaudited layout is never interpreted.
+-- Writing is not required (the default profile is fine). Returns the copy,
+-- or nil plus a reason suitable for the player.
+function Adapter.ReadAudited(env, section)
+	local status = Status.Read(env)
+	if status.error then
+		return nil, "Total RP 3 could not be read safely (" .. tostring(status.error) .. ")"
+	end
+	if not status.loaded then
+		return nil, "Total RP 3 is not loaded"
+	end
+	if not VersionProfiles.Get(status.version).audited then
+		return nil, "Total RP 3 " .. tostring(status.version) .. " has not been audited, so Dawnward does not "
+			.. "read its profile"
+	end
+	return Adapter.ReadSection(env, section)
+end
+
+--- Whether a Total RP 3 hint concerns the player's own active profile.
+-- TRP3 3.4.1 fires REGISTER_DATA_UPDATED as (unitID, profileID, section)
+-- for every profile it touches: other players' profiles on receipt
+-- (RegisterMain.lua saveInformation), MSP senders (RegisterMSP.lua),
+-- register list edits (no arguments), companions; the player's own saves
+-- pass Globals.player_id (RegisterAbout.lua, RegisterCharacteristics.lua)
+-- or nil plus the edited profile ID (RegisterCharacteristics.lua 1150).
+-- Its own listeners receive the registry owner first (function(_, unitID,
+-- _, dataType), RegisterMSP.lua 662), so the arguments are matched by
+-- value, not position: the hint is ours when any of them is our player ID
+-- or the active profile ID. REGISTER_PROFILES_LOADED is always ours.
+function Adapter.IsOwnHint(env, name, ...)
+	if name == "REGISTER_PROFILES_LOADED" then
+		return true
+	end
+	local ok, own = pcall(function(...)
+		local api = env.TRP3_API
+		local playerId = type(api) == "table" and type(api.globals) == "table" and api.globals.player_id or nil
+		local user = currentUser(env)
+		local profileId = user and call(user, "GetProfileID")
+		for i = 1, select("#", ...) do
+			local v = select(i, ...)
+			if type(v) == "string" and (v == playerId or v == profileId) then
+				return true
+			end
+		end
+		return false
+	end, ...)
+	return ok and own == true
+end
+
 --- Which driver would write a section: "public", "experimental" or "manual".
 function Adapter.DriverFor(env, section, probe)
 	local user = currentUser(env)
@@ -335,7 +387,8 @@ function Adapter.WriteSection(env, section, data, expectedProfileId)
 end
 
 --- Asks TRP3 to tell us about profile switches and profile edits. The
--- events are only hints (the callback arguments are never relied on); every
+-- events are only hints: onHint(name, ...) receives TRP3's arguments so the
+-- caller can drop hints about other players' profiles (IsOwnHint); every
 -- sync re-reads everything. Returns true if registered.
 function Adapter.Listen(env, onHint)
 	local ok, registered = pcall(function()
@@ -347,7 +400,7 @@ function Adapter.Listen(env, onHint)
 		local any = false
 		for _, name in ipairs({ "REGISTER_PROFILES_LOADED", "REGISTER_DATA_UPDATED" }) do
 			if type(addon.Events[name]) == "string" then
-				api.RegisterCallback(addon, addon.Events[name], function() onHint(name) end)
+				api.RegisterCallback(addon, addon.Events[name], function(...) onHint(name, ...) end)
 				any = true
 			end
 		end

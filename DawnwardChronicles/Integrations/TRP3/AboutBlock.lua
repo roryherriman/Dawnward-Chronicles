@@ -229,12 +229,19 @@ function AboutBlock.Plan(about, record, block)
 end
 
 --- What the player's own text looks like without Dawnward's content (for
--- previews and checks). Returns a copy.
+-- previews, checks and the story import). Returns a copy, or nil plus a
+-- reason when Dawnward's content cannot be found exactly (edited, missing,
+-- duplicated or template changed): a caller must then refuse or say so,
+-- never treat the whole text (which may contain Dawnward's block) as the
+-- player's own.
 function AboutBlock.WithoutOwned(about, record)
 	local copy = Util.DeepCopy(about)
 	if not record then
 		return copy
 	end
 	local plan = AboutBlock.Plan(copy, record, "")
-	return plan.about or copy
+	if plan.action == "conflict" or plan.action == "unsupported" or not plan.about then
+		return nil, plan.reason or "Dawnward's section could not be separated from your text"
+	end
+	return plan.about
 end

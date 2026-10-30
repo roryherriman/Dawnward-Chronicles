@@ -81,18 +81,47 @@ function FieldPlan.Clean(value)
 	return v
 end
 
+--- Whether a value can be written exactly as it is: returns the value, or
+-- nil plus the reason. Dawnward never writes a rewritten value (Clean is
+-- only used to recognise values that are already clean).
+function FieldPlan.Check(value)
+	if type(value) ~= "string" or value == "" then
+		return nil, "it is empty"
+	end
+	if #value > FieldPlan.MAX_BYTES then
+		return nil, "it is longer than " .. FieldPlan.MAX_BYTES .. " bytes"
+	end
+	if value:find("|", 1, true) then
+		return nil, "it contains \"|\", which Total RP 3 treats as a formatting code"
+	end
+	if value:find("%c") then
+		return nil, "it contains a line break or control character"
+	end
+	if FieldPlan.Clean(value) ~= value then
+		return nil, "it has extra spaces that Total RP 3 would remove"
+	end
+	return value
+end
+
 --- Desired values from a public projection: { [id] = value } for fields
--- whose Dawnward value is Public. Never reads anything else.
+-- whose Dawnward value is Public and writable as it is, plus
+-- { [id] = reason } for Public values that cannot be written unchanged.
+-- Never reads anything else.
 function FieldPlan.Desired(public)
-	local out = {}
+	local out, unwritable = {}, {}
 	local fields = public and public.fields or {}
 	for _, m in ipairs(FieldPlan.MAPPINGS) do
 		local entry = fields[m.source]
 		if type(entry) == "table" and entry.visibility == "public" then
-			out[m.id] = FieldPlan.Clean(entry.value)
+			local value, why = FieldPlan.Check(entry.value)
+			if value then
+				out[m.id] = value
+			else
+				unwritable[m.id] = "your " .. m.label .. " cannot be written to Total RP 3 unchanged: " .. why
+			end
 		end
 	end
-	return out
+	return out, unwritable
 end
 
 --- Plans the update of the Dawnward-managed fields.
@@ -102,12 +131,14 @@ end
 -- policies: { [id] = "dawnward" | "trp3" | "off" }; only "dawnward" fields
 --   are planned.
 -- paused: { [id] = reason } fields already in conflict (left untouched).
+-- unwritable: { [id] = reason } Public values that cannot be written
+--   unchanged (left untouched: never written, never cleared).
 -- Returns { action = "write" | "noop", characteristics, record, rows,
 --   changes, conflicts = { [id] = reason } (new ones) }.
 -- rows[i] = { id, state, current, desired, reason }, state one of
---   "write", "clear", "noop", "matches", "empty", "conflict".
-function FieldPlan.Plan(characteristics, record, desired, policies, paused)
-	record, policies, paused = record or {}, policies or {}, paused or {}
+--   "write", "clear", "noop", "matches", "empty", "conflict", "unwritable".
+function FieldPlan.Plan(characteristics, record, desired, policies, paused, unwritable)
+	record, policies, paused, unwritable = record or {}, policies or {}, paused or {}, unwritable or {}
 	local newRecord, rows, changes, conflicts = {}, {}, {}, {}
 	for id, owned in pairs(record) do
 		newRecord[id] = { value = owned.value }
@@ -121,6 +152,10 @@ function FieldPlan.Plan(characteristics, record, desired, policies, paused)
 			rows[#rows + 1] = row
 			if paused[m.id] then
 				row.state, row.reason = "conflict", paused[m.id]
+			elseif unwritable[m.id] then
+				-- Neither written nor cleared: Dawnward's earlier value (if any)
+				-- stays, and the player is told why.
+				row.state, row.reason = "unwritable", unwritable[m.id]
 			elseif current ~= nil and type(current) ~= "string" then
 				row.state, row.reason = "conflict", m.trp3 .. " has an unexpected value in Total RP 3"
 				conflicts[m.id] = row.reason
