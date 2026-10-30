@@ -206,23 +206,24 @@ return function(t, expect)
 	end)
 
 	t:describe("journal list (L2)", function()
-		t:it("shows entries newest first, ten per page", function()
+		t:it("shows entries newest first in one scrolling list that reaches the oldest", function()
 			local mock, _, ns = Boot.Start()
 			for i = 1, 25 do
 				mock.Slash("journal add Entry number " .. i)
 			end
 			mock.Slash("")
 			local section = ns.JournalView.section
-			expect.equal(section.visibleCount, 10)
+			expect.equal(section.matchCount, 25)
+			expect.truthy(section.visibleCount >= 1 and section.visibleCount < 25, "only the cards in view")
 			expect.equal(section.rows[1].entry.text, "Entry number 25")
-			expect.equal(section.pageLabel:GetText(), "Page 1 of 3")
-			expect.falsy(section.newer:IsEnabled())
-			section.older:GetScript("OnClick")(section.older)
-			section.older:GetScript("OnClick")(section.older)
-			expect.equal(section.pageLabel:GetText(), "Page 3 of 3")
-			expect.equal(section.visibleCount, 5)
-			expect.equal(section.rows[5].entry.text, "Entry number 1")
-			expect.falsy(section.older:IsEnabled())
+			expect.equal(section.offset, 0)
+			section:ScrollTo(math.huge)
+			expect.equal(section.offset, section.maxOffset)
+			expect.equal(section.rows[section.visibleCount].entry.text, "Entry number 1")
+			for i = 2, section.visibleCount do
+				local newer = tonumber(section.rows[i - 1].entry.text:match("%d+"))
+				expect.equal(tonumber(section.rows[i].entry.text:match("%d+")), newer - 1, "in order")
+			end
 		end)
 
 		t:it("changes an entry's visibility from its button", function()
