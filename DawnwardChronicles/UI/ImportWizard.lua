@@ -123,7 +123,8 @@ end
 
 local function buildText()
 	local p = page("text")
-	wizard.area = Widgets.TextArea(p, ImportWizard.LIMIT + ImportWizard.OVERFLOW, BODY)
+	-- An edit box keeps at most maxBytes - 1 bytes.
+	wizard.area = Widgets.TextArea(p, ImportWizard.LIMIT + ImportWizard.OVERFLOW + 1, BODY)
 	wizard.area.frame:SetPoint("TOPLEFT", 0, 0)
 	wizard.area.frame:SetSize(BODY, L.area)
 	wizard.edit = wizard.area.edit
@@ -449,6 +450,7 @@ end
 --- Saves the text verbatim and proposes its pieces, then shows Review.
 function ImportWizard.Save()
 	local text = wizard.edit:GetText() or ""
+	ImportWizard.UpdateCount()
 	local _, over = ImportWizard.CountText(text)
 	if over then
 		setStatus(string.format("Not saved: the story is %d bytes and the limit is %d. Nothing was cut or stored; "
