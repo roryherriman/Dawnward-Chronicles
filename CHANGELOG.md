@@ -16,6 +16,28 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 
 **Verified: L2** (mocked). Nothing in this section has been tested in game yet.
 
+### Character journey (#13, #16, #19, #21, #23, #27, #32)
+- **Import a story you already wrote:**
+  - **How:** paste it, or read your Total RP 3 About text, read-only and without Dawnward's own block.
+  - **Exact text:** it is kept word for word (up to 16 KB, never cut).
+  - **Review:** you approve, edit or skip each sentence or paragraph before it becomes part of your character, as Private by default. Approving as Public shows exactly what becomes public and asks first.
+  - **Re-importing:** it only suggests what is new.
+  - **Where:** Character → Import story, Settings → Data → Your story, the setup wizard's Character step, or `/dawnward biography`.
+- **Your own words for personality:** name each axis's two ends in your own words, write what it means, or lock it so story answers never propose changing it. Click an axis in Character → Personality. Everything is reversible ("Use Dawnward's words").
+- **Rejecting a suggested arc** (`/dawnward arc reject`, or Remove in Chronicle) stops that theme being suggested again. Before, a removed suggestion came back.
+- **Publishing a journal entry:** making it Public shows exactly what becomes shareable and asks first.
+- **Restoring a backup:** the preview lists what changes for each record type ("now → after") and warns if the backup came from another character. Backups now keep your axis meanings.
+- **Privacy fix:** public facts no longer carry the original sentence they were approved from into share exports or Total RP 3.
+- **Tests:**
+  - arcs and goals never reach any public output;
+  - a full backup round trip covers every record type;
+  - a damaged saved character is repaired without losing the rest.
+- **Deferred:**
+  - filling profile fields from an import (it would mean guessing);
+  - a diff view when re-importing;
+  - journal reordering and pinning;
+  - selective export.
+
 ### Gameplay events and locations (#11, #14, #18, #35, #48)
 - **Zone Atlas:**
   - **Evidence:** the owner's in-game export and 1–5000 scan from #48 are kept verbatim, with their SHA-256 checked, and all 17 maps and 49 areas are promoted to in-game evidence.

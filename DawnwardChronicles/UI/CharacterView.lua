@@ -1033,5 +1033,5 @@ function CharacterView.AttachEditing(section)
 	editor.clear:SetScript("OnClick", section.ConfirmClear)
 end
 
-MainWindow.RegisterSection({ id = "character", label = "Character", order = 2, heading = "Profile", titleInset = 420,
+MainWindow.RegisterSection({ id = "character", label = "Character", order = 2, heading = "Profile", titleInset = 540,
 	icon = "Interface\\Icons\\INV_Misc_Head_Human_01", create = create })
