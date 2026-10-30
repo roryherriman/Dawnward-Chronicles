@@ -16,6 +16,62 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 
 **Verified: L2** (mocked). Nothing in this section has been tested in game yet.
 
+### Automatic Total RP 3 sync (#4, #5, #6, #7, #10, #15)
+- **Five profile fields, kept up to date:**
+  - **Which fields:** Title (TRP3 full title), Race, Class, Age and Homeland (shown in TRP3 as Birthplace).
+  - **Source:** your Public Dawnward profile, one field at a time.
+  - **When:** only after you authorise it. Every field starts as "Managed by Total RP 3".
+- **Never overwritten:**
+  - **Your own values:** Dawnward writes a field only while it is empty, or still holds exactly what Dawnward last wrote. A value you wrote in Total RP 3 (even one that happens to match) is never claimed or overwritten: that field pauses until you choose **Keep yours** or **Use Dawnward's**. The other fields keep updating.
+  - **Back to Private:** a field you make Private again is taken back out of Total RP 3, only if it still holds Dawnward's value.
+- **Total RP 3 page, new Mappings tab:** who manages each part, a preview of the first sync (Public values only), a warning when several characters share the profile, and the list of what Dawnward never writes (and why).
+- **Compare and import:** compare Total RP 3 with your Public values, and import a value into Dawnward explicitly (Private by default). Total RP 3 never changes Dawnward by itself.
+- **New commands:** `/dawnward trp3 fields`, `trp3 field <name> dawnward|trp3|off confirm`, `trp3 import <field> confirm`.
+- **Rollback is now visibility-aware:**
+  - **Preview:** it first lists anything in the backup that is no longer Public.
+  - **Default (`rollback confirm`):** it restores your own text and rebuilds Dawnward's part from today's Public data.
+  - **Exact restore (`rollback exact confirm`):** brings the old section back unchanged, after a confirmation naming what would become visible again.
+  - **Never automatic:** rollback never runs by itself.
+- **Reliability:**
+  - a sync that waited for combat runs as soon as combat ends;
+  - retries are bounded per change, and "still waiting" is reported once;
+  - Dawnward's own write no longer triggers a second run;
+  - an exact rollback is read back and undone at once if it does not match.
+- **Not synchronised automatically:**
+  - first and last name;
+  - the short title;
+  - pronouns;
+  - faith, occupation, appearance, summary and motivation;
+  - Currently, OOC and RP status;
+  - eye colour, height, weight, residence and relationship.
+
+  The manual `trp3 paste` text now carries every Public profile field.
+- **Multiplayer:** a two-client test procedure is in `docs/TRP3_INTEGRATION.md`. Multiplayer propagation is **not verified yet**.
+
+### Story Director context and continuity (#20, #25, #42)
+- **Moments draw on your established story:**
+  - **Ranking:** goals, arcs and memories that name the place or faction rank first.
+  - **Stances:** a stance about the event's subject can offer one answer, which never shows the private conviction.
+  - **Why now:** names your homeland, marked places, people, a standing that rose or fell, and your goals and stances about a faction.
+  - **Last time:** recalls your own earlier answer about the same situation.
+- **New authored wording** for a return to your homeland, and for a standing change with a faction you have a stance on.
+- **No repeated questions:**
+  - **Window:** the same question about the same place, faction, zone's quests, instance or guild is not asked again within 3 narrative days of play (`/dawnward story set repeat 0-14`).
+  - **Diagnostics:** `dev story status` explains each suppression.
+  - **Frequency:** this only ever lowers how often you are asked.
+- **Continuity review:**
+  - **Examine:** shows the records side by side with their dates and origin.
+  - **Edit:** opens a record's own form.
+  - **Explain:** keeps your note with your answer.
+  - **Undo answer:** in the Answered list.
+  - **New checks:**
+    - a public stance contradicting a public fact;
+    - a goal marked achieved with open steps, or before its objective is reached;
+    - a memory dated before its event;
+    - a missing replacement record.
+
+  Nothing is ever rewritten for you. Chat: `/dawnward continuity examine|explain|answered|undo <n>`.
+
 ### Character journey (#13, #16, #19, #21, #23, #27, #32)
 - **Import a story you already wrote:**
   - **How:** paste it, or read your Total RP 3 About text, read-only and without Dawnward's own block.
