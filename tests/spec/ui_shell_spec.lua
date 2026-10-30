@@ -462,7 +462,7 @@ return function(t, expect)
 			mock.Slash("set summary Kind to strangers.")
 			local _, section = showcaseOf(ns)
 			local view = section.showcaseView
-			expect.equal(view.game.title:GetText(), "IN GAME")
+			expect.equal(view.game.title:GetText(), "FROM THE GAME", "the mockup's panel title")
 			expect.equal(view.own.title:GetText(), "Keeper of the Road")
 			local values = {}
 			for i, row in ipairs(view.game.rows) do values[i] = row.key:GetText() .. "=" .. row.value:GetText() end
@@ -494,6 +494,85 @@ return function(t, expect)
 			local empty = ns.Showcase.GameRows({})
 			expect.equal(empty[1].value, "Unknown")
 			expect.truthy(empty[3].empty)
+		end)
+
+		t:it("gives the live model the whole stage above the control bar (v0.8 layout)", function()
+			local _, _, ns = open()
+			local showcase = showcaseOf(ns)
+			local S = ns.Showcase
+			local stageHeight = showcase:GetHeight() - S.BAR_HEIGHT - 2
+			expect.truthy(stageHeight / showcase:GetHeight() >= 0.85, "the model takes most of the card")
+			expect.equal(showcase.model.__points[1][1], "TOPLEFT")
+			expect.equal(showcase.model.__points[1][2], showcase.stage, "the model fills the stage")
+			-- The bar: two 36 px turn buttons, the note on at most two lines.
+			expect.equal(showcase.left:GetHeight(), S.CARD.button)
+			expect.equal(showcase.right:GetHeight(), S.CARD.button)
+			local noteWidth = S.MODEL_WIDTH - 2 * S.CARD.pad - 2 * S.CARD.button - S.CARD.gap - 12
+			expect.truthy(ns.Style.TextWidth(S.BAR_NOTE, "small") <= 2 * noteWidth * 0.95, "two lines at 13")
+			-- Zoom sits over the stage while the model shows, clear of the chip.
+			expect.truthy(showcase.zoomIn:IsShown() and showcase.zoomOut:IsShown())
+			expect.truthy(S.CARD.pad + showcase.chip:GetWidth() + S.CARD.gap
+				<= S.MODEL_WIDTH - S.CARD.pad - S.CARD.zoomButton, "the chip never runs under the zoom buttons")
+			for _, label in pairs(S.MODE_LABELS) do
+				showcase.chip:SetChip(label, "muted")
+				expect.falsy(showcase.chip.truncated, label .. " fits beside the zoom buttons")
+			end
+			showcase.chip:SetChip(S.MODE_LABELS.live, "accent")
+		end)
+
+		t:it("shows the portrait fallback as a framed, centred round portrait, never stretched", function()
+			local mock, _, ns = open()
+			mock.modelFails = true
+			local showcase, section = showcaseOf(ns)
+			local S = ns.Showcase
+			local fb = showcase.fallback
+			expect.truthy(fb:IsShown())
+			expect.equal(fb.badge:GetWidth(), S.CARD.portrait, "a fixed size")
+			expect.equal(fb.badge:GetWidth(), fb.badge:GetHeight(), "square, so the round portrait stays round")
+			expect.equal(fb.portrait:GetWidth(), fb.portrait:GetHeight())
+			expect.truthy(fb.portrait:GetWidth() <= 128, "close to the game's own portrait size, so it stays sharp")
+			expect.equal(fb.box.__points[1][1], "CENTER", "centred on the stage")
+			local stageHeight = showcase:GetHeight() - S.BAR_HEIGHT - 2
+			expect.truthy(fb.box:GetHeight() <= stageHeight - 2 * 40, "the frame leaves room for the chip above it")
+			expect.truthy(fb.box:GetWidth() <= S.MODEL_WIDTH - 2 * S.CARD.frameInset)
+			expect.equal(fb.text:GetText(), S.FALLBACK_TEXT.loading)
+			expect.falsy(showcase.zoomIn:IsShown(), "no zoom buttons over the portrait")
+			expect.truthy(showcase.chip:IsShown(), "the mode chip still says what shows")
+			for _ = 1, 20 do
+				if mock.RunTimers() == 0 then break end
+			end
+			expect.equal(fb.text:GetText(), S.FALLBACK_TEXT.unavailable)
+			mock.modelFails = false
+			click(section.showcaseView.note.toggle) -- try again
+			click(section.showcaseView.note.toggle) -- choose the portrait
+			expect.equal(showcase.state, "choice")
+			expect.equal(fb.text:GetText(), S.FALLBACK_TEXT.choice)
+		end)
+
+		t:it("lays the game and own-words panels out as the mockup, inside the content area", function()
+			local mock, _, ns = open()
+			mock.guild = { name = "The Lantern Watch", rank = "Member" }
+			mock.Slash("set name Aelin Brightwater")
+			mock.Slash("set title Keeper of the Lantern Road")
+			mock.Slash("set summary " .. string.rep("She is kind to strangers and sharp with friends. ", 6))
+			local _, section = showcaseOf(ns)
+			local view = section.showcaseView
+			local P = ns.Showcase.PANEL
+			for i, row in ipairs(view.game.rows) do
+				expect.truthy(ns.Style.TextWidth(row.key:GetText(), "eyebrow") <= P.keyWidth,
+					row.key:GetText() .. " fits its column")
+				expect.equal(row.value.__template, ns.Style.FontFor("reading"), "values at 16")
+				expect.truthy(P.rowsTop + i * P.rowHeight <= view.game:GetHeight(), "row inside the panel")
+			end
+			expect.equal(view.game.rows[1].value.textRole, "heading", "values in title white")
+			expect.equal(view.own.title:GetText(), "Keeper of the Lantern Road")
+			expect.equal(view.own.summary.__template, ns.Style.FontFor("reading"))
+			local H = ns.MainWindow.ContentHeight()
+			local total = view.game:GetHeight() + P.gap + view.own:GetHeight() + P.gap + view.note:GetHeight()
+			expect.truthy(total <= H, "the three panels fit the content height with a long summary")
+			expect.equal(view.note.toggle:GetHeight(), ns.Style.CONTROL.compact)
+			expect.truthy(ns.Widgets.LabelFits("Try the live model again", view.note.toggle:GetWidth(),
+				view.note.toggle:GetHeight()))
 		end)
 
 		t:it("listens for guild changes only while the showcase is shown", function()

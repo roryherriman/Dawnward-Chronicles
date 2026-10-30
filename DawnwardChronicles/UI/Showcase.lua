@@ -1,8 +1,10 @@
 -- Character presentation (v0.7): the player's own portrait for the window's
 -- side rail, and the Character Showcase (approved mockup
 -- docs/design/mockups/proposed-character-showcase.png): a live 3D model of
--- the player beside what the game says about them ("In game") and what the
--- player wrote ("Your character"), kept visibly apart.
+-- the player beside what the game says about them ("From the game") and what
+-- the player wrote ("In your own words"), kept visibly apart. v0.8 brings the
+-- card, the panels and the portrait fallback closer to the mockup
+-- (docs/design/audit/character.md); the model's loading is unchanged.
 --
 -- Client APIs (checked against the Classic Era 1.15.9.70576 UI source,
 -- /home/user/gethe/wow-ui-source):
@@ -46,7 +48,8 @@ Showcase.DRAG_SPEED = 0.01 -- radians per pixel of mouse movement
 -- Zoom: Blizzard's own Classic model frame range and step (ModelFrames.lua).
 Showcase.ZOOM_MIN, Showcase.ZOOM_MAX, Showcase.ZOOM_STEP = 0, 0.7, 0.15
 Showcase.RING = "Interface\\Minimap\\MiniMap-TrackingBorder"
-Showcase.BAR_HEIGHT = 56 -- the control bar under the model
+Showcase.BAR_HEIGHT = 56 -- the control bar under the model (mockup: 36 px buttons, 10 px padding)
+Showcase.BAR_NOTE = "Drag to turn, scroll to zoom. Shows the gear you are wearing now."
 Showcase.MODEL_WIDTH = 330 -- the model card in the showcase view
 Showcase.GAP = 18
 
@@ -156,36 +159,130 @@ function Showcase.Portrait(parent, size)
 	return f
 end
 
+-- The model card (CharacterShowcase.dc.html): a darker card with a dark
+-- gold edge, the stage (the model's area) above a control bar with the turn
+-- buttons and a short note; the mode chip at the stage's top left. Zoom
+-- buttons stack at the stage's top right, so the bar keeps the mockup's two
+-- buttons and its note stays on two lines.
+Showcase.CARD = { pad = 12, button = 36, zoomButton = 30, gap = 8, portrait = 132, ringWidth = 2, ringGap = 4,
+	frameInset = 24 }
+
+-- What the portrait fallback says, by state (the chip names the state).
+Showcase.FALLBACK_TEXT = {
+	loading = "Loading your live model. Your portrait is shown until it is ready.",
+	choice = "You chose to show your portrait here instead of the live model.",
+	unavailable = "The live model could not be loaded just now.",
+}
+
+--- The portrait fallback inside the model card: a framed area centred on the
+-- stage with the round portrait at a fixed, sharp size (never stretched to
+-- the stage), a caption and a line saying why it shows. Returns a frame with
+-- .portrait (the texture), .Update() and :SetReason(state).
+function Showcase.Fallback(stage, width)
+	local C = Showcase.CARD
+	local fb = CreateFrame("Frame", nil, stage)
+	fb:SetAllPoints(stage)
+	local boxWidth = width - 2 * C.frameInset
+	fb.box = CreateFrame("Frame", nil, fb)
+	fb.box:SetWidth(boxWidth)
+	fb.box:SetPoint("CENTER", fb, "CENTER", 0, 0)
+	fb.box.bg = Style.Solid(fb.box, "BACKGROUND", 1)
+	fb.box.bg:SetAllPoints(fb.box)
+	fb.box.edges = Style.Edge(fb.box, "BORDER")
+	-- The game's round portrait inside a gold ring with a dark gap, drawn
+	-- as discs where masks exist (as the rail), else with the tinted ring.
+	fb.badge = Showcase.Portrait(fb.box, C.portrait)
+	fb.badge:SetPoint("TOP", fb.box, "TOP", 0, -C.frameInset)
+	local ring = {}
+	ring.outer = Style.Disc(fb.badge, "BACKGROUND", 0, C.portrait)
+	ring.gap = Style.Disc(fb.badge, "BACKGROUND", 1, C.portrait - 2 * C.ringWidth)
+	ring.well = Style.Disc(fb.badge, "BACKGROUND", 2, C.portrait - 2 * (C.ringWidth + C.ringGap))
+	for _, disc in pairs(ring) do disc:SetPoint("CENTER", fb.badge, "CENTER", 0, 0) end
+	ring.round = ring.outer.round and ring.gap.round and ring.well.round
+	for _, key in ipairs({ "outer", "gap", "well" }) do ring[key]:SetShown(ring.round and true or false) end
+	if ring.round and fb.badge.ring then fb.badge.ring:Hide() end
+	fb.ringDiscs = ring
+	fb.portrait = fb.badge.portrait
+	fb.ring = fb.badge.ring
+	fb.Update = fb.badge.Update
+
+	fb.caption = Widgets.Label(fb.box, "GameFontNormalLarge", false, "title")
+	fb.caption:SetPoint("TOP", fb.badge, "BOTTOM", 0, -14)
+	fb.caption:SetWidth(boxWidth - 32)
+	fb.caption:SetJustifyH("CENTER")
+	fb.caption:SetText("Your portrait")
+	fb.text = Widgets.Label(fb.box, "meta", true, "muted")
+	fb.text:SetPoint("TOP", fb.caption, "BOTTOM", 0, -8)
+	fb.text:SetWidth(boxWidth - 32)
+	fb.text:SetJustifyH("CENTER")
+
+	Style.Register(fb.box, function(box, theme)
+		local well = Style.Mix(theme.background, theme.surface, 0.8)
+		Style.Color(box.bg, well)
+		box.edges:Paint(theme.edge, 1)
+		Style.Color(ring.outer, theme.accent)
+		Style.Color(ring.gap, well)
+		Style.Color(ring.well, theme.surfaceHover)
+	end)
+
+	--- Says why the portrait shows; sizes the frame to its content.
+	function fb.SetReason(_, state)
+		fb.reason = state
+		fb.text:SetText(Showcase.FALLBACK_TEXT[state] or "")
+		local textHeight = fb.text:GetStringHeight() or 0
+		fb.box:SetHeight(C.frameInset + C.portrait + 14 + 24 + 8 + textHeight + C.frameInset)
+	end
+	fb:SetReason("loading")
+	return fb
+end
+
 --- A live 3D model of the player with rotate and zoom buttons, drag to
 -- turn and the mouse wheel to zoom, falling back to the portrait. Returns a
 -- frame with :Update(), :Rotate(d), :Zoom(d), :SetPreferPortrait(on).
 function Showcase.Model(parent, width, height)
+	local C = Showcase.CARD
 	local f = CreateFrame("Frame", nil, parent)
 	f:SetSize(width, height)
-	f.bg = Style.Fill(f, "panel", "BACKGROUND")
+	f.bg = Style.Solid(f, "BACKGROUND", -2)
 	f.bg:SetAllPoints(f)
 	f.edges = Style.Edge(f, "BORDER")
-	Style.Register(f.edges, function(e, theme) e:Paint(theme.border or theme.edge, 1) end)
 
 	local bar = Showcase.BAR_HEIGHT
+	-- The stage: the model's area, everything above the control bar.
+	f.stage = CreateFrame("Frame", nil, f)
+	f.stage:SetPoint("TOPLEFT", 1, -1)
+	f.stage:SetPoint("BOTTOMRIGHT", -1, bar)
+	f.stage.bg = Style.Solid(f.stage, "BACKGROUND", -1)
+	f.stage.bg:SetAllPoints(f.stage)
+	Style.Register(f, function(card, theme)
+		-- Mockup: card #10151F with a #4A3E26 edge, stage #121A27.
+		Style.Color(card.bg, Style.Mix(theme.background, theme.surface, 0.3))
+		card.edges:Paint(Style.Mix(theme.background, theme.border or theme.edge, 0.6), 1)
+		Style.Color(card.stage.bg, Style.Mix(theme.background, theme.surface, 0.55))
+	end)
+
+	-- The model fills the whole stage.
 	f.model = CreateFrame("PlayerModel", nil, f)
-	f.model:SetPoint("TOPLEFT", 1, -1)
-	f.model:SetPoint("BOTTOMRIGHT", -1, bar)
+	f.model:SetPoint("TOPLEFT", f.stage, "TOPLEFT", 0, 0)
+	f.model:SetPoint("BOTTOMRIGHT", f.stage, "BOTTOMRIGHT", 0, 0)
 	f.model:EnableMouse(true)
 	if f.model.EnableMouseWheel then f.model:EnableMouseWheel(true) end
 	f.rotation = 0
 	f.zoom = Showcase.ZOOM_MIN
 
-	f.fallback = Showcase.Portrait(f, math.max(60, math.min(width, height - bar) - 60))
-	f.fallback:SetPoint("CENTER", 0, bar / 2)
+	f.fallback = Showcase.Fallback(f.stage, width)
 	f.fallback:Hide()
 
 	-- What is showing: "Live model" or "Portrait".
 	f.chip = Widgets.Chip(f, "Live model", "accent")
-	f.chip:SetPoint("TOPLEFT", 12, -12)
+	f.chip:SetPoint("TOPLEFT", C.pad, -C.pad)
+	f.chip:SetMaxWidth(width - 2 * C.pad - C.zoomButton - C.gap)
 	-- Above the model, which draws over its siblings at the same level.
 	local level = f.model.GetFrameLevel and f.model:GetFrameLevel()
-	if type(level) == "number" and f.chip.SetFrameLevel then f.chip:SetFrameLevel(level + 2) end
+	local function raise(frame)
+		if type(level) == "number" and frame.SetFrameLevel then frame:SetFrameLevel(level + 2) end
+	end
+	raise(f.chip)
 
 	f.rule = Widgets.Divider(f)
 	f.rule:SetPoint("BOTTOMLEFT", 1, bar)
@@ -206,36 +303,49 @@ function Showcase.Model(parent, width, height)
 		f.UpdateControls()
 	end
 
-	local function controlButton(glyph, title, tip)
-		local b = Widgets.Button(f, glyph, 30, 28)
+	-- Icon-style buttons with a large glyph (the design's icon buttons).
+	local function controlButton(glyph, size, variant, title, tip)
+		local b = Widgets.Button(f, glyph, size, size, variant)
+		if Style.UsesBundledFont("glyph") and Style.fontObjects then
+			local font = Style.fontObjects[Style.FontFor("glyph")]
+			if font then b.label:SetFontObject(font) end
+		end
 		Widgets.Tooltip(b, title, tip)
 		return b
 	end
-	f.left = controlButton("<", "Turn left")
-	f.left:SetPoint("BOTTOMLEFT", 10, 14)
+	f.left = controlButton("<", C.button, "ghost", "Turn left", "Dragging the model also turns it.")
+	f.left:SetPoint("BOTTOMLEFT", C.pad, (bar - C.button) / 2)
 	f.left:SetScript("OnClick", function() f:Rotate(-Showcase.ROTATE_STEP) end)
-	f.right = controlButton(">", "Turn right")
-	f.right:SetPoint("LEFT", f.left, "RIGHT", 4, 0)
+	f.right = controlButton(">", C.button, "ghost", "Turn right", "Dragging the model also turns it.")
+	f.right:SetPoint("LEFT", f.left, "RIGHT", C.gap, 0)
 	f.right:SetScript("OnClick", function() f:Rotate(Showcase.ROTATE_STEP) end)
-	f.zoomOut = controlButton("-", "Zoom out", "The mouse wheel over the model also zooms.")
-	f.zoomOut:SetPoint("LEFT", f.right, "RIGHT", 10, 0)
-	f.zoomOut:SetScript("OnClick", function() f:Zoom(-Showcase.ZOOM_STEP) end)
-	f.zoomIn = controlButton("+", "Zoom in", "The mouse wheel over the model also zooms.")
-	f.zoomIn:SetPoint("LEFT", f.zoomOut, "RIGHT", 4, 0)
+	-- Zoom: filled buttons over the stage (readable over the model).
+	f.zoomIn = controlButton("+", C.zoomButton, "default", "Zoom in", "The mouse wheel over the model also zooms.")
+	f.zoomIn:SetPoint("TOPRIGHT", f.stage, "TOPRIGHT", -(C.pad - 1), -(C.pad - 1))
 	f.zoomIn:SetScript("OnClick", function() f:Zoom(Showcase.ZOOM_STEP) end)
+	f.zoomOut = controlButton("-", C.zoomButton, "default", "Zoom out", "The mouse wheel over the model also zooms.")
+	f.zoomOut:SetPoint("TOP", f.zoomIn, "BOTTOM", 0, -4)
+	f.zoomOut:SetScript("OnClick", function() f:Zoom(-Showcase.ZOOM_STEP) end)
+	raise(f.zoomIn)
+	raise(f.zoomOut)
 
+	-- Mockup: muted 13 beside the buttons, two lines at most.
 	f.note = Widgets.Label(f, "GameFontHighlightSmall", true, "muted")
-	f.note:SetPoint("BOTTOMLEFT", 10 + 4 * 34 + 10, 10)
-	f.note:SetPoint("BOTTOMRIGHT", -10, 10)
-	f.note:SetHeight(bar - 18)
+	f.note:SetPoint("BOTTOMLEFT", C.pad + 2 * C.button + C.gap + 12, 8)
+	f.note:SetPoint("BOTTOMRIGHT", -C.pad, 8)
+	f.note:SetHeight(bar - 16)
 	f.note:SetJustifyV("MIDDLE")
-	f.note:SetText("Drag to turn, scroll to zoom. Shows the gear you are wearing now.")
+	f.note:SetText(Showcase.BAR_NOTE)
 
 	function f.UpdateControls()
 		local on = f.modelShown and true or false
 		for _, b in ipairs({ f.left, f.right }) do b:SetEnabled(on) end
 		f.zoomOut:SetEnabled(on and f.zoom > Showcase.ZOOM_MIN)
 		f.zoomIn:SetEnabled(on and f.zoom < Showcase.ZOOM_MAX)
+		-- The zoom buttons sit over the stage: only while the model shows, so
+		-- they never cover the portrait's frame.
+		f.zoomIn:SetShown(on)
+		f.zoomOut:SetShown(on)
 	end
 
 	-- Drag to turn: the model follows the cursor while the button is held.
@@ -295,6 +405,7 @@ function Showcase.Model(parent, width, height)
 			if f.model.SetPortraitZoom then f.model:SetPortraitZoom(f.zoom) end
 		else
 			stopDrag()
+			f.fallback:SetReason(state)
 			f.fallback.Update()
 		end
 		f.chip:SetChip(Showcase.MODE_LABELS[state], live and "accent" or "muted")
@@ -426,12 +537,18 @@ function Showcase.OwnWords(char)
 	return out
 end
 
---- The whole showcase: model card on the left; "In game", "Your character"
--- and the portrait note on the right. onPreferPortrait(on) saves the
+-- The right-hand panels (CharacterShowcase.dc.html): 18 px side padding,
+-- 14 top; game rows 38 high with the key 110 wide (120 here: Cinzel 13 has
+-- no letter spacing to lean on, see Style); panels 12 apart.
+Showcase.PANEL = { padX = 18, padY = 14, rowsTop = 34, rowHeight = 38, keyWidth = 120, gap = 12, ownTop = 44 }
+
+--- The whole showcase: model card on the left; "From the game", "In your own
+-- words" and the portrait note on the right. onPreferPortrait(on) saves the
 -- player's choice; onEditProfile() returns to the profile fields.
 -- Returns a frame with :Refresh(char, preferPortrait), .model (the model card).
 function Showcase.View(parent, width, height, opts)
 	opts = opts or {}
+	local P = Showcase.PANEL
 	local v = CreateFrame("Frame", nil, parent)
 	v:SetSize(width, height)
 	v.model = Showcase.Model(v, Showcase.MODEL_WIDTH, height)
@@ -439,57 +556,68 @@ function Showcase.View(parent, width, height, opts)
 
 	local x = Showcase.MODEL_WIDTH + Showcase.GAP
 	local colWidth = width - x
-	local innerWidth = colWidth - 2 * Widgets.PANEL_PAD
+	local innerWidth = colWidth - 2 * P.padX
 
-	-- In game: read live from the client, never stored.
-	v.game = Widgets.Panel(v, "In game")
+	-- A panel with the mockup's 18 px side padding.
+	local function panel(title)
+		local p = Widgets.Panel(v, title)
+		if p.title then
+			p.title:ClearAllPoints()
+			p.title:SetPoint("TOPLEFT", P.padX, -P.padY)
+		end
+		p:SetWidth(colWidth)
+		return p
+	end
+
+	-- From the game: read live from the client, never stored (mockup: key
+	-- 110 wide in Cinzel capitals, value 16 in title white, rows 38 apart
+	-- with a line between).
+	v.game = panel("From the game")
 	v.game:SetPoint("TOPLEFT", x, 0)
-	v.game:SetWidth(colWidth)
 	v.game.rows = {}
 	for i = 1, 4 do
-		local row = {}
+		local top = P.rowsTop + (i - 1) * P.rowHeight
+		local row = { top = top }
 		row.key = Widgets.Label(v.game, "GameFontNormalSmall", false, "eyebrow")
-		row.key:SetPoint("TOPLEFT", Widgets.PANEL_PAD, -(36 + (i - 1) * 30 + 8))
-		row.key:SetWidth(110)
-		row.value = Widgets.Label(v.game, "GameFontHighlight", false, "body")
-		row.value:SetPoint("TOPLEFT", Widgets.PANEL_PAD + 120, -(36 + (i - 1) * 30 + 6))
-		row.value:SetWidth(innerWidth - 120)
+		row.key:SetPoint("TOPLEFT", P.padX, -(top + 12))
+		row.key:SetWidth(P.keyWidth)
+		row.value = Widgets.Label(v.game, "reading", false, "title")
+		row.value:SetPoint("TOPLEFT", P.padX + P.keyWidth + 10, -(top + 9))
+		row.value:SetWidth(innerWidth - P.keyWidth - 10)
 		if i < 4 then
 			row.rule = Widgets.Divider(v.game)
-			row.rule:SetPoint("TOPLEFT", Widgets.PANEL_PAD, -(36 + i * 30))
-			row.rule:SetPoint("TOPRIGHT", -Widgets.PANEL_PAD, -(36 + i * 30))
+			row.rule:SetPoint("TOPLEFT", P.padX, -(top + P.rowHeight))
+			row.rule:SetPoint("TOPRIGHT", -P.padX, -(top + P.rowHeight))
+			Style.Register(row.rule, function(l, theme) Style.Color(l, Style.Tones(theme).track) end)
 		end
 		v.game.rows[i] = row
 	end
-	v.game:SetHeight(36 + 4 * 30 + 8)
+	v.game:SetHeight(P.rowsTop + 4 * P.rowHeight + P.padY - 6)
 
-	-- Your character: written by the player, with each field's visibility.
-	v.own = Widgets.Panel(v, "Your character")
-	v.own:SetPoint("TOPLEFT", v.game, "BOTTOMLEFT", 0, -12)
-	v.own:SetWidth(colWidth)
+	-- In your own words: written by the player, with each field's visibility.
+	v.own = panel("In your own words")
+	v.own:SetPoint("TOPLEFT", v.game, "BOTTOMLEFT", 0, -P.gap)
 	v.own.name = Widgets.Label(v.own, "GameFontNormalLarge", true, "title")
-	v.own.name:SetPoint("TOPLEFT", Widgets.PANEL_PAD, -36)
 	v.own.name:SetWidth(innerWidth)
-	v.own.title = Widgets.Label(v.own, "GameFontHighlight", true, "accent")
+	v.own.title = Widgets.Label(v.own, "GameFontHighlight", true, "heading")
 	v.own.title:SetWidth(innerWidth)
-	v.own.pronouns = Widgets.Label(v.own, "GameFontHighlightSmall", true, "muted")
+	v.own.pronouns = Widgets.Label(v.own, "meta", true, "muted")
 	v.own.pronouns:SetWidth(innerWidth)
-	v.own.summary = Widgets.Label(v.own, "GameFontHighlight", true, "body")
+	v.own.summary = Widgets.Label(v.own, "reading", true, "reading")
 	v.own.summary:SetWidth(innerWidth)
 	v.own.chips = {}
-	v.own.edit = Widgets.Button(v.own, "Profile fields", 120, 22, "ghost")
-	v.own.edit:SetPoint("TOPRIGHT", -Widgets.PANEL_PAD, -10)
+	v.own.edit = Widgets.Button(v.own, "Edit", 56, Style.CONTROL.compact, "ghost")
+	v.own.edit:SetPoint("TOPRIGHT", -P.padX, -(P.padY - 6))
 	v.own.edit:SetScript("OnClick", function() if opts.onEditProfile then opts.onEditProfile() end end)
 	Widgets.Tooltip(v.own.edit, "Profile fields", "Edit what you wrote, and who may see each part.")
 
 	-- The portrait note and the player's own choice.
-	v.note = Widgets.Panel(v)
-	v.note:SetPoint("TOPLEFT", v.own, "BOTTOMLEFT", 0, -12)
-	v.note:SetWidth(colWidth)
-	v.note.text = Widgets.Label(v.note, "GameFontHighlightSmall", true, "muted")
-	v.note.text:SetPoint("TOPLEFT", Widgets.PANEL_PAD, -12)
+	v.note = panel()
+	v.note:SetPoint("TOPLEFT", v.own, "BOTTOMLEFT", 0, -P.gap)
+	v.note.text = Widgets.Label(v.note, "meta", true, "muted")
+	v.note.text:SetPoint("TOPLEFT", P.padX, -12)
 	v.note.text:SetWidth(innerWidth)
-	v.note.toggle = Widgets.Button(v.note, "Show portrait instead", 190, 22)
+	v.note.toggle = Widgets.Button(v.note, "Show portrait instead", 210, Style.CONTROL.compact)
 	v.note.toggle:SetScript("OnClick", function()
 		local m = v.model
 		if not m.preferPortrait and m.state == "unavailable" then
@@ -522,14 +650,15 @@ function Showcase.View(parent, width, height, opts)
 		v.note.toggle:SetText(button)
 		local h = v.note.text:GetStringHeight()
 		v.note.toggle:ClearAllPoints()
-		v.note.toggle:SetPoint("TOPLEFT", Widgets.PANEL_PAD, -(12 + h + 8))
-		v.note:SetHeight(12 + h + 8 + 22 + 12)
+		v.note.toggle:SetPoint("TOPLEFT", P.padX, -(12 + h + 10))
+		v.note:SetHeight(12 + h + 10 + Style.CONTROL.compact + 12)
 	end
 
 	local function chip(i)
 		local c = v.own.chips[i]
 		if not c then
 			c = Widgets.Chip(v.own, "", "private")
+			c:SetMaxWidth(innerWidth)
 			v.own.chips[i] = c
 		end
 		return c
@@ -542,17 +671,17 @@ function Showcase.View(parent, width, height, opts)
 			local r = v.game.rows[i]
 			r.key:SetText(row.label:upper())
 			r.value:SetText(row.value)
-			r.value.textRole = row.empty and "muted" or "text"
+			r.value.textRole = row.empty and "muted" or "heading"
 			Style.Repaint(r.value)
 		end
 
 		local own = Showcase.OwnWords(char)
-		local y = 36
+		local y = P.ownTop
 		local function place(fs, value, gap)
 			fs:ClearAllPoints()
 			if value then
 				fs:SetText(value)
-				fs:SetPoint("TOPLEFT", Widgets.PANEL_PAD, -y)
+				fs:SetPoint("TOPLEFT", P.padX, -y)
 				fs:Show()
 				y = y + fs:GetStringHeight() + (gap or 6)
 			else
@@ -562,21 +691,21 @@ function Showcase.View(parent, width, height, opts)
 		end
 		if own.empty then
 			place(v.own.summary, "You have not written your character's name, title or summary yet. "
-				.. "Add them under Profile fields; only you decide what is public.", 8)
+				.. "Add them under Profile fields; only you decide what is public.", 10)
 			v.own.name:Hide(); v.own.title:Hide(); v.own.pronouns:Hide()
 		else
 			place(v.own.name, own.name, 4)
 			place(v.own.title, own.title, 4)
-			place(v.own.pronouns, own.pronouns, 8)
-			place(v.own.summary, own.summary, 8)
+			place(v.own.pronouns, own.pronouns, 10)
+			place(v.own.summary, own.summary, 10)
 		end
-		local cx = Widgets.PANEL_PAD
+		local cx = P.padX
 		for i, c in ipairs(own.chips) do
 			local w = chip(i)
 			w:SetChip(c.text, c.tone)
 			local cw = w:GetWidth()
-			if cx > Widgets.PANEL_PAD and cx + cw > colWidth - Widgets.PANEL_PAD then
-				cx = Widgets.PANEL_PAD
+			if cx > P.padX and cx + cw > colWidth - P.padX then
+				cx = P.padX
 				y = y + Widgets.CHIP_HEIGHT + 6
 			end
 			w:ClearAllPoints()
@@ -586,7 +715,7 @@ function Showcase.View(parent, width, height, opts)
 		end
 		for i = #own.chips + 1, #v.own.chips do v.own.chips[i]:Hide() end
 		if #own.chips > 0 then y = y + Widgets.CHIP_HEIGHT end
-		v.own:SetHeight(y + Widgets.PANEL_PAD)
+		v.own:SetHeight(y + P.padY)
 		v.UpdateNote()
 	end
 

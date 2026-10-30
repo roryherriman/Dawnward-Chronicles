@@ -65,8 +65,8 @@ return function(t, expect)
 			local cols = ns.CharacterView.Columns(W)
 			expect.equal(px + tile <= cols.left, true, "tiles stay in the left column")
 			local summary = rowFor(section, "summary")
-			expect.equal(summary:GetWidth(), cols.left - 2 * ns.Widgets.PANEL_PAD)
-			-- Each group panel wraps its fields.
+			expect.equal(summary:GetWidth(), cols.left, "cards span the left column, as the mockup's Summary")
+			-- Each group wraps its fields.
 			local panel = section.groups.identity
 			local _, top = pos(panel)
 			expect.truthy(ny > top and ry + rowFor(section, "race"):GetHeight() <= top + panel:GetHeight())
@@ -81,9 +81,13 @@ return function(t, expect)
 			expect.equal(faith.value:GetText(), "The Light, quietly doubted")
 			expect.equal(faith.vis:GetText(), "Secret")
 			expect.equal(faith.vis:GetParent(), faith)
+			-- The shared visibility chip: its text in the fixed Secret colour on a
+			-- fill tinted with it (Widgets.ChipColors), at the design's chip height.
 			local secret = ns.Themes.VISIBILITY_COLORS.secret
-			expect.truthy(math.abs(faith.vis.bg.__color[1] - secret[1]) < 1e-9, "tinted like a chip")
-			expect.truthy(faith.vis.bg.__color[4] > 0 and faith.vis.bg.__color[4] < 1)
+			expect.equal(faith.vis.label.__textColor[1], secret[1])
+			local fill = ns.Widgets.ChipColors(secret, ns.Style.Current())
+			expect.truthy(math.abs(faith.vis.bg.__color[1] - fill[1]) < 1e-9, "tinted like a chip")
+			expect.equal(faith.vis:GetHeight(), ns.Widgets.CHIP_HEIGHT)
 			expect.equal(faith.edit:GetText(), "Edit")
 			local age = rowFor(section, "age")
 			expect.equal(age.value:GetText(), "Not set")

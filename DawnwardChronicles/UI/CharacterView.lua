@@ -1,10 +1,12 @@
--- Character section (v0.7, approved mockups docs/design/mockups/
--- character-profile.png and proposed-character-showcase.png).
+-- Character section (v0.7, refined in v0.8 towards the approved mockups
+-- docs/design/mockups/character-profile.png and proposed-character-showcase.png;
+-- the remaining differences are in docs/design/audit/character.md).
 --
 -- Three views of the same character, switched from the header:
---   Profile    grouped panels: Identity, Background & biography and Summary &
---              motivation (tiles and cards, each with its own visibility chip
---              and Edit button), and beside them Personality (the six axes,
+--   Profile    field groups: Identity and Background & biography as tiles on
+--              the window ground (three to a row), then Summary & motivation
+--              as cards (each with its own visibility chip and Edit button),
+--              and beside them Personality (the six axes,
 --              real values, changes waiting for approval) and Family &
 --              relationships (family and history).
 --   Preview    exactly what is public: the core's public projection
@@ -34,7 +36,9 @@ CharacterView.NOTHING_PUBLIC = "Nothing is public yet. Use a field's visibility 
 CharacterView.GROUPS = {
 	{ id = "identity", title = "Identity", keys = { "name", "title", "pronouns", "race", "class", "age" } },
 	{ id = "background", title = "Background & biography", keys = { "homeland", "faith", "occupation", "appearance" } },
-	{ id = "words", title = "Summary & motivation", keys = { "summary", "motivation" } },
+	-- The long texts carry their own labels (mockup: SUMMARY, MOTIVATION cards), so
+	-- this group shows no heading of its own.
+	{ id = "words", title = "Summary & motivation", heading = false, keys = { "summary", "motivation" } },
 }
 do
 	local named = {}
@@ -48,23 +52,39 @@ do
 	end
 end
 
--- Layout (UI units, inside the content area).
+-- Layout (UI units, inside the content area), from Character.dc.html: the
+-- intro line under the title (82 from the window top, the content area starts
+-- at 96), tiles from 116; a 268 column on the right, 20 apart; tiles 10 apart
+-- with 10 / 12 padding and a minimum height of 86; cards with 16 / 18 padding.
 local L = {
-	introHeight = 26,   -- the line under the header
+	introTop = 14,      -- the intro line sits this far above the content area
+	scrollTop = 20,     -- the profile starts this far below it (116 from the top)
 	scrollBar = 22,
 	rightWidth = 268,   -- Personality and Family column (mockup: 268)
-	colGap = 16,
+	colGap = 20,        -- mockup: 20
 	panelGap = 12,
+	groupGap = 16,      -- between the field groups
+	groupHead = 26,     -- a group's eyebrow and the space under it
 	pad = Widgets.PANEL_PAD,
 	panelTop = 36,      -- below a panel's eyebrow title
-	tileGap = 8,
+	tileGap = 10,       -- mockup: 10
 	tileMin = 86,       -- mockup tile min-height
 	tileCols = 3,
-	visWidth = 72,
-	editWidth = 44,
-	cardEditWidth = 56,
-	controlHeight = 20,
-	headerOffset = 71,  -- header buttons above the content area, level with the close button
+	tilePadX = 12,
+	tilePadY = 10,
+	tileValueTop = 30,  -- the value under the tile's label
+	cardPadX = 18,
+	cardPadY = 16,
+	cardTextTop = 54,   -- card text under the label row (16 + 30 + 8)
+	editWidth = 48,
+	cardEditWidth = 60,
+	controlHeight = Style.CONTROL.compact, -- 30: buttons inside tiles and cards
+	chipHeight = Style.CONTROL.chip,       -- 24: visibility chips
+	headerHeight = Style.CONTROL.standard, -- 36: header buttons, as the close button
+	headerOffset = 74,  -- header buttons above the content area, level with the close button
+	axisGap = 10,
+	knob = 14,          -- personality knob (mockup: 14 with a 2 px ring in the window colour)
+	track = 6,
 }
 CharacterView.LAYOUT = L
 local EMPTY_VALUE = "Not set"
@@ -87,10 +107,30 @@ function CharacterView.Columns(contentWidth)
 	return { child = child, left = left, right = L.rightWidth, rightX = left + L.colGap }
 end
 
---- Tile width in a group panel of the left column. Pure.
+--- Tile width in the left column (three to a row, as the mockup). Pure.
 function CharacterView.TileWidth(contentWidth)
-	local inner = CharacterView.Columns(contentWidth).left - 2 * L.pad
+	local inner = CharacterView.Columns(contentWidth).left
 	return math.floor((inner - (L.tileCols - 1) * L.tileGap) / L.tileCols)
+end
+
+--- Width of a visibility chip showing level (its text plus the chip's
+-- padding). Pure.
+function CharacterView.ChipWidth(level)
+	local text = Themes.VISIBILITY_LABELS[level] or tostring(level)
+	return math.ceil(Style.TextWidth(text, Widgets.ButtonFontStyle(Style.SIZE.compact, "ghost"))) + 2 * Widgets.CHIP_PAD
+end
+
+--- Display parts of a family member or history entry: a title, a meta line
+-- and notes. Family: the name, "Mother · deceased", the notes. History: what
+-- happened, and when. Pure.
+function CharacterView.ItemParts(list, item)
+	if list == "family" then
+		local relation = item.relation and (item.relation:sub(1, 1):upper() .. item.relation:sub(2)) or "Relative"
+		local meta = relation
+		if item.status and item.status ~= "unknown" then meta = meta .. " · " .. item.status end
+		return item.name or "unnamed", meta, item.notes
+	end
+	return item.text or "", item.when, nil
 end
 
 --- Rows to show, in order (pure; tested). Fields carry their group; family
@@ -231,14 +271,18 @@ function CharacterView.OpenTRP3()
 	end
 end
 
--- Visibility as a chip (approved mockup): tinted fill and edge in the fixed
--- visibility colour; it stays a button that cycles the level.
-local function paintVisibilityChip(b, theme)
-	local color = Themes.VISIBILITY_COLORS[b.level] or Themes.VISIBILITY_COLORS.private
-	Style.Color(b.bg, color, b.hover and 0.26 or 0.14)
-	b.edges:Paint(color, b.hover and 0.9 or 0.55)
-	Style.TextColor(b.label, color)
-	if not b:IsEnabled() then Style.TextColor(b.label, theme.muted) end
+-- Field tiles and cards are entry cards (Widgets.Card) with one extra state:
+-- an empty field (mockup: the dashed "Age" tile) has no fill and only its
+-- edge, so set fields stand out. Same colours as Widgets.Card otherwise.
+local function paintFieldCard(c, theme)
+	local tones = Style.Tones(theme)
+	local boxed = not c.plain
+	local fillAlpha = boxed and not (c.emptyField and not c.hover) and 1 or 0
+	Style.Color(c.bg, c.hover and tones.cardHover or theme.surface, fillAlpha)
+	local edge = c.highlight and theme.accent or (c.hover and tones.selectedEdge or theme.edge)
+	c.edges:Paint(edge, boxed and 1 or 0)
+	c.bar:SetShown(boxed and c.highlight and true or false)
+	Style.Color(c.bar, theme.accent)
 end
 
 local function create(parent)
@@ -248,86 +292,107 @@ local function create(parent)
 	local contentWidth, contentHeight = MainWindow.ContentWidth(), MainWindow.ContentHeight()
 	local cols = CharacterView.Columns(contentWidth)
 
-	-- Header actions, level with the close button above the content area.
+	-- Header actions, level with the close button above the content area
+	-- (mockup: "Preview public view" as a 36 px secondary button).
+	local H = L.headerHeight
 	local header = CreateFrame("Frame", nil, f)
-	header:SetSize(540, 30)
+	header:SetSize(540, H)
 	header:SetPoint("TOPRIGHT", f, "TOPRIGHT", -(36 + 12), L.headerOffset)
 	section.header = header
-	section.previewButton = Widgets.Button(header, "Preview public view", 150, 30)
+	section.previewButton = Widgets.Button(header, "Preview public view", 168, H)
 	section.previewButton:SetPoint("TOPRIGHT", 0, 0)
 	Widgets.Tooltip(section.previewButton, "Public profile preview",
 		"Shows exactly what can be shared: share exports, and Total RP 3 if you turn sync on.")
-	section.showcaseButton = Widgets.Button(header, "Showcase", 120, 30)
-	section.showcaseButton:SetPoint("RIGHT", section.previewButton, "LEFT", -8, 0)
+	section.showcaseButton = Widgets.Button(header, "Showcase", 128, H)
 	Widgets.Tooltip(section.showcaseButton, "Character Showcase",
 		"Your character's live model, what the game says about them, and what you wrote.")
-	section.trp3Button = Widgets.Button(header, "Total RP 3...", 110, 30, "ghost")
+	section.trp3Button = Widgets.Button(header, "Total RP 3...", 112, H, "ghost")
 	section.trp3Button:SetPoint("RIGHT", section.showcaseButton, "LEFT", -8, 0)
 	section.trp3Button:SetScript("OnClick", function() CharacterView.OpenTRP3() end)
 	Widgets.Tooltip(section.trp3Button, "Total RP 3",
 		"Sync status, preview, approval and backups for Total RP 3 (optional).")
 	-- Story import (#23): paste a backstory, or read your Total RP 3 About text.
-	section.importButton = Widgets.Button(header, "Import story", 110, 30, "ghost")
+	section.importButton = Widgets.Button(header, "Import story", 108, H, "ghost")
 	section.importButton:SetPoint("RIGHT", section.trp3Button, "LEFT", -8, 0)
 	section.importButton:SetScript("OnClick", function() ns.ImportWizard.Open({ from = "character" }) end)
 	Widgets.Tooltip(section.importButton, "Import your story",
 		"Paste a backstory you already wrote (or read your Total RP 3 About text). It is kept exactly as written; "
 		.. "you approve each piece before it becomes part of your character.")
 
+	-- The intro line under the title (mockup: muted 15, under "Who she is").
 	section.intro = Widgets.Label(f, "GameFontHighlight", false, "muted")
-	section.intro:SetPoint("TOPLEFT", 0, -2)
-	section.intro:SetWidth(contentWidth)
+	section.intro:SetPoint("TOPLEFT", 0, L.introTop)
+	section.intro:SetWidth(contentWidth - 2)
 	section.intro:SetText(CharacterView.INTRO)
 
 	-- Profile: one scroll frame, two columns.
 	local scroll = CreateFrame("ScrollFrame", Widgets.NextName("CharacterScroll"), f, "UIPanelScrollFrameTemplate")
-	scroll:SetPoint("TOPLEFT", 0, -L.introHeight)
+	scroll:SetPoint("TOPLEFT", 0, -L.scrollTop)
 	scroll:SetPoint("BOTTOMRIGHT", -L.scrollBar, 0)
 	local child = CreateFrame("Frame", nil, scroll)
 	child:SetSize(cols.child, 100)
 	scroll:SetScrollChild(child)
 	section.scroll, section.child = scroll, child
 
-	-- Group panels sit behind their tiles: same level as the scroll child,
-	-- so the entries (one level up) draw over them.
+	-- Field groups: unboxed, so their tiles sit on the window ground as in the
+	-- mockup; a group names itself with an eyebrow (more fields than the
+	-- mockup's six, so they are grouped).
+	for _, group in ipairs(CharacterView.GROUPS) do
+		local g = CreateFrame("Frame", nil, child)
+		g.title = Widgets.Label(g, "GameFontNormalSmall", false, "eyebrow")
+		g.title:SetPoint("TOPLEFT", 0, 0)
+		g.title:SetText(group.title:upper())
+		g.title:SetShown(group.heading ~= false)
+		section.groups[group.id] = g
+	end
+
+	-- Right-hand panels sit behind their entries: same level as the scroll
+	-- child, so the entries (one level up) draw over them.
 	local function backPanel(title)
 		local panel = Widgets.Panel(child, title)
 		local level = child.GetFrameLevel and child:GetFrameLevel()
 		if type(level) == "number" and panel.SetFrameLevel then panel:SetFrameLevel(level) end
 		return panel
 	end
-	for _, group in ipairs(CharacterView.GROUPS) do
-		section.groups[group.id] = backPanel(group.title)
-	end
 	section.familyPanel = backPanel("Family & relationships")
 
-	-- Personality: the six axes with their real values.
+	-- Personality: the six axes with their real values (mockup: poles over a
+	-- 6 px track, a 14 px gold knob ringed in the window colour, the pole the
+	-- character leans to in bright gold).
 	local pers = backPanel("Personality")
 	section.personality = pers
+	local innerRight = cols.right - 2 * L.pad
 	pers.status = Widgets.Label(pers, "GameFontHighlightSmall", true, "muted")
-	pers.status:SetWidth(cols.right - 2 * L.pad)
-	pers.review = Widgets.Button(child, "Review in Story", 130, 22, "primary")
+	pers.status:SetWidth(innerRight)
+	pers.review = Widgets.Button(child, "Review in Story", 140, L.controlHeight, "primary")
 	pers.review:SetScript("OnClick", function() MainWindow.Select("story") end)
 	Widgets.Tooltip(pers.review, "Review in Story", "Approve or reject personality changes from your choices.")
 	pers.review:Hide()
 	pers.axes = {}
 	for i = 1, #Schema.PERSONALITY_AXES do
 		local a = CreateFrame("Frame", nil, child)
-		a:SetSize(cols.right - 2 * L.pad, 34)
+		a:SetSize(innerRight, 30)
 		if a.EnableMouse then a:EnableMouse(true) end
 		a.left = Widgets.Label(a, "GameFontHighlightSmall", false)
 		a.left:SetPoint("TOPLEFT", 0, 0)
+		a.left:SetWidth(innerRight / 2 - 4)
 		a.right = Widgets.Label(a, "GameFontHighlightSmall", false)
 		a.right:SetPoint("TOPRIGHT", 0, 0)
+		a.right:SetWidth(innerRight / 2 - 4)
 		a.right:SetJustifyH("RIGHT")
 		a.track = Style.Solid(a, "ARTWORK")
-		a.track:SetPoint("TOPLEFT", 0, -20)
-		a.track:SetPoint("TOPRIGHT", 0, -20)
-		a.track:SetHeight(4)
-		a.knob = Style.Solid(a, "OVERLAY")
-		a.knob:SetSize(10, 10)
-		a.note = Widgets.Label(a, "GameFontHighlightSmall", false)
-		a.note:SetPoint("TOPLEFT", 0, -30)
+		a.track:SetPoint("TOPLEFT", 0, -21)
+		a.track:SetPoint("TOPRIGHT", 0, -21)
+		a.track:SetHeight(L.track)
+		-- Where a waiting change would move the value (amber, under the knob).
+		a.pendingMark = Style.Disc(a, "ARTWORK", 2, 8)
+		a.pendingMark:Hide()
+		a.knob = Style.Disc(a, "OVERLAY", 0, L.knob)
+		a.knobDot = Style.Disc(a, "OVERLAY", 1, L.knob - 4)
+		a.knobDot:SetPoint("CENTER", a.knob, "CENTER", 0, 0)
+		a.note = Widgets.Label(a, "GameFontHighlightSmall", true)
+		a.note:SetPoint("TOPLEFT", 0, -33)
+		a.note:SetWidth(innerRight)
 		a.axisIndex = i
 		-- Click: the player's own words, meaning and lock for this axis (#21).
 		a:SetScript("OnMouseUp", function(self)
@@ -336,9 +401,10 @@ local function create(parent)
 		pers.axes[i] = a
 	end
 
-	-- Preview: the public projection, read-only.
+	-- Preview: the public projection, read-only, as reading text in a panel
+	-- (lines kept to a readable measure, as the mockup's 62 characters).
 	local preview = CreateFrame("ScrollFrame", Widgets.NextName("CharacterPreview"), f, "UIPanelScrollFrameTemplate")
-	preview:SetPoint("TOPLEFT", 0, -L.introHeight)
+	preview:SetPoint("TOPLEFT", 0, -L.scrollTop)
 	preview:SetPoint("BOTTOMRIGHT", -L.scrollBar, 0)
 	local previewChild = CreateFrame("Frame", nil, preview)
 	previewChild:SetSize(cols.child, 100)
@@ -347,9 +413,10 @@ local function create(parent)
 	section.previewPanel = Widgets.Panel(previewChild, "Public profile preview")
 	section.previewPanel:SetPoint("TOPLEFT", 0, 0)
 	section.previewPanel:SetWidth(cols.child)
-	section.previewText = Widgets.Label(section.previewPanel, "GameFontHighlight", true, "body")
-	section.previewText:SetPoint("TOPLEFT", L.pad, -L.panelTop)
-	section.previewText:SetWidth(cols.child - 2 * L.pad)
+	CharacterView.PREVIEW_MEASURE = math.min(cols.child - 2 * L.cardPadX, 620)
+	section.previewText = Widgets.Label(section.previewPanel, "reading", true, "reading")
+	section.previewText:SetPoint("TOPLEFT", L.cardPadX, -L.panelTop)
+	section.previewText:SetWidth(CharacterView.PREVIEW_MEASURE)
 	preview:Hide()
 
 	-- Showcase: model, game identity and the player's own words.
@@ -370,13 +437,17 @@ local function create(parent)
 		if row then
 			return row
 		end
-		-- Each field, family member and history entry is its own panel, with
+		-- Each field, family member and history entry is its own card, with
 		-- its Edit and visibility controls inside it (Widgets.EntryRow).
 		row = Widgets.EntryRow(child)
-		row.key = Widgets.Label(row, "GameFontNormalSmall", false, "eyebrow")
-		row.label = Widgets.Label(row, "GameFontNormal", true)
-		row.value = Widgets.Label(row, "GameFontHighlight", true)
-		row.detail = Widgets.Label(row, "GameFontHighlightSmall", true)
+		Style.Register(row, paintFieldCard)
+		row.key = Widgets.Label(row, "GameFontNormalSmall", false, "eyebrow") -- field label, Cinzel 13
+		row.label = Widgets.Label(row, "GameFontNormal", true)                -- list headings, bold 14
+		row.value = Widgets.Label(row, "nav", true)                            -- tile value, 17
+		row.reading = Widgets.Label(row, "reading", true, "reading")           -- card text, 16 with leading
+		row.title = Widgets.Label(row, "GameFontHighlight", true)              -- family name, 15
+		row.detail = Widgets.Label(row, "meta", true, "muted")                 -- meta line, 14
+		row.notes = Widgets.Label(row, "meta", true, "muted")                  -- notes and hints, 14
 		row.rule = Widgets.Divider(row)
 		row.rule:SetPoint("BOTTOMLEFT", 0, 2)
 		row.rule:SetPoint("BOTTOMRIGHT", 0, 2)
@@ -398,22 +469,15 @@ local function create(parent)
 
 	local function resetRow(row, spec, theme)
 		row.spec = spec
-		row.key:Hide()
-		row.label:Hide()
-		row.value:Hide()
-		row.detail:Hide()
+		for _, fs in ipairs({ row.key, row.label, row.value, row.reading, row.title, row.detail, row.notes }) do
+			fs:Hide()
+		end
 		row.rule:Hide()
 		row.vis:Hide()
 		row.edit:Hide()
 		row.theme = theme
-	end
-
-	local function setValue(row, spec, width, theme)
-		local entry = spec.entry
-		row.value:Show()
-		row.value:SetWidth(width)
-		row.value:SetText(entry and entry.value or EMPTY_VALUE)
-		Widgets.TextColor(row.value, entry and theme.text or theme.muted)
+		row.emptyField = nil
+		row:SetPlain(false)
 	end
 
 	local function fieldKey(row, spec, x, y)
@@ -423,113 +487,158 @@ local function create(parent)
 		row.key:SetText(spec.field.label:upper())
 	end
 
-	-- A short field: a tile in a three-column grid. Returns its height.
+	-- A short field: a tile in a three-column grid (label, value in title
+	-- white 17, then the visibility chip and Edit along the bottom). Returns
+	-- its height.
 	local function measureTile(row, spec, width, theme)
 		resetRow(row, spec, theme)
-		row:SetPlain(false)
-		fieldKey(row, spec, 10, -10)
+		local entry = spec.entry
+		row.emptyField = entry == nil
+		Style.Repaint(row)
+		fieldKey(row, spec, L.tilePadX, -L.tilePadY)
+		row.key:SetWidth(width - 2 * L.tilePadX)
+		row.value:Show()
 		row.value:ClearAllPoints()
-		row.value:SetPoint("TOPLEFT", 10, -28)
-		setValue(row, spec, width - 20, theme)
+		row.value:SetPoint("TOPLEFT", L.tilePadX, -L.tileValueTop)
+		row.value:SetWidth(width - 2 * L.tilePadX)
+		row.value:SetText(entry and entry.value or EMPTY_VALUE)
+		Widgets.SetTextRole(row.value, entry and "heading" or "muted")
 		section.updateFieldActions(row, spec, "tile")
-		return math.max(L.tileMin, 28 + math.max(row.value:GetStringHeight(), 16) + 10 + L.controlHeight + 8)
+		return math.max(L.tileMin,
+			L.tileValueTop + math.max(row.value:GetStringHeight(), 20) + 8 + L.controlHeight + L.tilePadY)
 	end
 
-	-- A long field: a full-width card. Returns its height.
+	-- A long field: a full-width card (label, chip and Edit on one row, then
+	-- the text in the reading style). Returns its height.
 	local function measureCard(row, spec, width, theme)
 		resetRow(row, spec, theme)
-		row:SetPlain(false)
-		fieldKey(row, spec, 12, -14)
-		row.value:ClearAllPoints()
-		row.value:SetPoint("TOPLEFT", 12, -38)
-		setValue(row, spec, width - 24, theme)
+		local entry = spec.entry
+		row.emptyField = entry == nil
+		Style.Repaint(row)
+		fieldKey(row, spec, L.cardPadX, -(L.cardPadY + 7))
+		row.reading:Show()
+		row.reading:ClearAllPoints()
+		row.reading:SetPoint("TOPLEFT", L.cardPadX, -L.cardTextTop)
+		row.reading:SetWidth(width - 2 * L.cardPadX)
+		row.reading:SetText(entry and entry.value or EMPTY_VALUE)
+		Widgets.SetTextRole(row.reading, entry and "reading" or "muted")
 		section.updateFieldActions(row, spec, "card")
-		return math.max(64, 38 + math.max(row.value:GetStringHeight(), 16) + 12)
+		return math.max(L.tileMin, L.cardTextTop + math.max(row.reading:GetStringHeight(), 20) + L.cardPadY)
 	end
 
-	-- A family member or history entry: text, notes, then its controls.
+	-- A family member or history entry: a card with the name (or what
+	-- happened), a meta line and notes; Edit at the top right and the
+	-- visibility chip under the text.
 	local function measureItem(row, spec, width, theme)
 		resetRow(row, spec, theme)
-		row:SetPlain(false)
-		row.label:Show()
-		row.label:ClearAllPoints()
-		row.label:SetPoint("TOPLEFT", 8, -8)
-		row.label:SetWidth(width - 16)
-		row.label:SetText(spec.text)
-		Widgets.TextColor(row.label, theme.text)
-		local h = 8 + row.label:GetStringHeight()
-		if spec.detail then
-			row.detail:Show()
-			row.detail:ClearAllPoints()
-			row.detail:SetPoint("TOPLEFT", row.label, "BOTTOMLEFT", 0, -2)
-			row.detail:SetWidth(width - 16)
-			row.detail:SetText(spec.detail)
-			Widgets.TextColor(row.detail, theme.muted)
-			h = h + 2 + row.detail:GetStringHeight()
+		local title, meta, notes = CharacterView.ItemParts(spec.list, spec.item)
+		local textWidth = width - 2 * 10 - L.editWidth - 8
+		local y = 10
+		row.title:Show()
+		row.title:ClearAllPoints()
+		row.title:SetPoint("TOPLEFT", 10, -y)
+		row.title:SetWidth(textWidth)
+		row.title:SetText(title)
+		Widgets.SetTextRole(row.title, "text")
+		y = y + row.title:GetStringHeight()
+		for _, part in ipairs({ { row.detail, meta }, { row.notes, notes } }) do
+			local fs, text = part[1], part[2]
+			if text and text ~= "" then
+				fs:Show()
+				fs:ClearAllPoints()
+				fs:SetPoint("TOPLEFT", 10, -(y + 2))
+				fs:SetWidth(textWidth)
+				fs:SetText(text)
+				Widgets.SetTextRole(fs, "muted")
+				y = y + 2 + fs:GetStringHeight()
+			end
 		end
-		section.updateItemActions(row, spec)
-		return math.max(h + 6 + L.controlHeight + 6, 40)
+		section.updateItemActions(row, spec, y + 8)
+		return math.max(y + 8 + L.chipHeight + 10, 10 + L.controlHeight + 10)
 	end
 
 	-- Headings and the Add line inside the Family & relationships panel.
 	local function measurePlain(row, spec, width, theme)
 		resetRow(row, spec, theme)
 		row:SetPlain(true)
-		row.label:Show()
-		row.label:ClearAllPoints()
-		row.label:SetPoint("TOPLEFT", 0, -4)
-		row.label:SetText(spec.text)
 		if spec.kind == "heading" then
+			row.label:Show()
+			row.label:ClearAllPoints()
+			row.label:SetPoint("TOPLEFT", 0, -4)
 			row.label:SetWidth(width)
-			Widgets.TextColor(row.label, theme.accent)
+			row.label:SetText(spec.text)
+			Widgets.SetTextRole(row.label, "label")
 			row.rule:Show()
-			return row.label:GetStringHeight() + 12
+			return row.label:GetStringHeight() + 14
 		end
-		row.label:SetWidth(width - 64)
-		Widgets.TextColor(row.label, theme.muted)
+		row.notes:Show()
+		row.notes:ClearAllPoints()
+		row.notes:SetPoint("TOPLEFT", 0, -4)
+		row.notes:SetWidth(width - 64)
+		row.notes:SetText(spec.text)
+		Widgets.SetTextRole(row.notes, "muted")
 		row.edit:SetText("Add")
-		row.edit:SetVariant("primary")
-		row.edit:SetWidth(56)
+		row.edit:SetVariant("ghost")
+		row.edit:SetSize(56, L.controlHeight)
 		row.edit:ClearAllPoints()
-		row.edit:SetPoint("TOPRIGHT", 0, -2)
+		row.edit:SetPoint("TOPRIGHT", 0, 0)
 		Widgets.Tooltip(row.edit, spec.list == "family" and "Add a family member" or "Add a history entry")
 		row.edit:Show()
-		return math.max(row.label:GetStringHeight() + 10, 28)
+		return math.max(row.notes:GetStringHeight() + 10, L.controlHeight + 4)
 	end
 
 	local function paintAxis(a, row, theme, width)
+		local tones = Style.Tones(theme)
+		local waitingColor = Themes.STATUS_COLORS.waiting
 		-- The player's own words where they wrote any (#21).
 		local axis = { left = row.left or row.axis.left, right = row.right or row.axis.right }
 		a.left:SetText(axis.left)
 		a.right:SetText(axis.right)
 		local lean = row.value and (row.value > 10 and "right" or row.value < 10 and "left") or nil
-		Widgets.TextColor(a.left, lean == "left" and theme.accent or theme.muted)
-		Widgets.TextColor(a.right, lean == "right" and theme.accent or theme.muted)
-		Style.Color(a.track, theme.edge)
-		Style.Color(a.knob, theme.accent)
+		Style.TextColor(a.left, lean == "left" and tones.accentBright or theme.muted)
+		Style.TextColor(a.right, lean == "right" and tones.accentBright or theme.muted)
+		Style.Color(a.track, tones.track)
+		Style.Color(a.knob, theme.background)
+		Style.Color(a.knobDot, theme.accent)
+		Style.Color(a.pendingMark, waitingColor)
+		-- The knob's centre sits at the value along the track (mockup: left %).
+		local function centreAt(value)
+			local x = math.floor(width * value / 20 + 0.5)
+			return math.max(L.knob / 2, math.min(width - L.knob / 2, x))
+		end
 		a.knob:ClearAllPoints()
+		a.pendingMark:ClearAllPoints()
+		a.pendingMark:Hide()
 		if row.value then
-			a.knob:SetPoint("TOPLEFT", math.floor((width - 10) * row.value / 20 + 0.5), -17)
+			a.knob:SetPoint("TOPLEFT", centreAt(row.value) - L.knob / 2, -(21 + L.track / 2 - L.knob / 2))
 			a.knob:Show()
+			a.knobDot:Show()
+			if row.waiting > 0 and row.pending ~= 0 then
+				local target = math.max(0, math.min(20, row.value + row.pending))
+				a.pendingMark:SetPoint("CENTER", a.track, "LEFT", centreAt(target), 0)
+				a.pendingMark:Show()
+			end
 		else
 			a.knob:Hide()
+			a.knobDot:Hide()
 		end
-		local note
+		local note, noteColor
 		if row.waiting > 0 then
 			local toward = row.pending > 0 and axis.right or row.pending < 0 and axis.left or nil
 			note = (row.waiting == 1 and "1 change waiting" or (row.waiting .. " changes waiting"))
 				.. (toward and (": toward " .. toward) or "")
-			Widgets.TextColor(a.note, theme.accent)
+			noteColor = waitingColor
 		elseif not row.value then
 			note = "Not set"
-			Widgets.TextColor(a.note, theme.muted)
+			noteColor = theme.muted
 		end
 		if row.locked then
 			note = (note and (note .. " · ") or "") .. "Locked: story answers never change it"
-			if row.waiting == 0 then Widgets.TextColor(a.note, theme.muted) end
+			noteColor = noteColor or theme.muted
 		end
 		a.note:SetText(note or "")
 		a.note:SetShown(note ~= nil)
+		if noteColor then Style.TextColor(a.note, noteColor) end
 		local value = row.value and (row.value .. "/20 (" .. axis.left .. " " .. (20 - row.value) .. ", "
 			.. axis.right .. " " .. row.value .. ")") or "Not set"
 		local vis = row.visibility and Themes.VISIBILITY_LABELS[row.visibility] or nil
@@ -537,7 +646,10 @@ local function create(parent)
 			.. (row.meaning and ("\n\n" .. row.meaning) or "")
 			.. (row.waiting > 0 and "\nA change from your story choices waits in Story." or "")
 			.. "\n\nClick to name this axis in your own words, say what it means, or lock it.")
-		return note and 46 or 30
+		if note then
+			return 33 + math.max(a.note:GetStringHeight(), 16) + 2
+		end
+		return 21 + L.track + 4
 	end
 
 	-- Personality panel at (x, y); returns its height.
@@ -550,14 +662,14 @@ local function create(parent)
 		pers.status:ClearAllPoints()
 		pers.status:SetPoint("TOPLEFT", L.pad, -L.panelTop)
 		pers.status:SetText(CharacterView.ApprovalText(char, waiting))
-		Widgets.TextColor(pers.status, waiting > 0 and theme.accent or theme.muted)
-		local h = L.panelTop + pers.status:GetStringHeight() + 10
+		Style.TextColor(pers.status, waiting > 0 and Themes.STATUS_COLORS.waiting or theme.muted)
+		local h = L.panelTop + pers.status:GetStringHeight() + 12
 		pers.waiting = waiting
 		if waiting > 0 then
 			pers.review:ClearAllPoints()
 			pers.review:SetPoint("TOPLEFT", child, "TOPLEFT", x + L.pad, -(y + h))
 			pers.review:Show()
-			h = h + 22 + 10
+			h = h + L.controlHeight + 12
 		else
 			pers.review:Hide()
 		end
@@ -568,10 +680,10 @@ local function create(parent)
 			local ah = paintAxis(a, row, theme, width)
 			a:SetHeight(ah)
 			a:Show()
-			h = h + ah + 6
+			h = h + ah + L.axisGap
 		end
 		pers.rows = rows
-		h = h + L.pad - 6
+		h = h + L.pad - L.axisGap
 		pers:SetHeight(h)
 		return h
 	end
@@ -582,21 +694,20 @@ local function create(parent)
 		self.child:SetWidth(cols.child)
 		local rows = {}
 		local tileWidth = CharacterView.TileWidth(contentWidth)
-		local innerLeft = cols.left - 2 * L.pad
 
 		-- Left column: the field groups.
 		local y, i = 0, 1
 		for _, group in ipairs(CharacterView.GROUPS) do
-			local panel = self.groups[group.id]
+			local g = self.groups[group.id]
 			local top = y
-			local inner = L.panelTop
+			local inner = group.heading == false and 0 or L.groupHead
 			local pending = {} -- tiles waiting to be placed in a grid row
 			local function flush()
 				if #pending == 0 then return end
 				local h = 0
 				for _, p in ipairs(pending) do h = math.max(h, p.height) end
 				for col, p in ipairs(pending) do
-					place(p.row, L.pad + (col - 1) * (tileWidth + L.tileGap), top + inner, tileWidth, h)
+					place(p.row, (col - 1) * (tileWidth + L.tileGap), top + inner, tileWidth, h)
 				end
 				inner = inner + h + L.tileGap
 				pending = {}
@@ -606,8 +717,8 @@ local function create(parent)
 				rows[i] = row
 				if spec.field.kind == "long" then
 					flush()
-					local h = measureCard(row, spec, innerLeft, theme)
-					place(row, L.pad, top + inner, innerLeft, h)
+					local h = measureCard(row, spec, cols.left, theme)
+					place(row, 0, top + inner, cols.left, h)
 					inner = inner + h + L.tileGap
 				else
 					pending[#pending + 1] = { row = row, height = measureTile(row, spec, tileWidth, theme) }
@@ -616,13 +727,13 @@ local function create(parent)
 				i = i + 1
 			end
 			flush()
-			local height = inner - L.tileGap + L.pad
-			panel:ClearAllPoints()
-			panel:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -top)
-			panel:SetSize(cols.left, height)
-			y = top + height + L.panelGap
+			local height = math.max(inner - L.tileGap, 1)
+			g:ClearAllPoints()
+			g:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -top)
+			g:SetSize(cols.left, height)
+			y = top + height + L.groupGap
 		end
-		local leftHeight = y
+		local leftHeight = y - L.groupGap
 
 		-- Right column: Personality, then Family & relationships.
 		local x = cols.rightX
@@ -641,9 +752,9 @@ local function create(parent)
 			end
 			place(row, x + L.pad, famTop + famInner, itemWidth, h)
 			local boxed = spec.kind == "item"
-			famInner = famInner + h + (boxed and Widgets.ENTRY.gap or 6)
+			famInner = famInner + h + (boxed and Widgets.ENTRY.gap or 8)
 		end
-		local famHeight = famInner + L.pad - 6
+		local famHeight = famInner + L.pad - 8
 		self.familyPanel:ClearAllPoints()
 		self.familyPanel:SetPoint("TOPLEFT", child, "TOPLEFT", x, -famTop)
 		self.familyPanel:SetSize(cols.right, famHeight)
@@ -660,14 +771,17 @@ local function create(parent)
 		local public = char and ns.Projection.GetPublic(char) or nil
 		local sections, any = CharacterView.PublicPreview(public or {})
 		local theme = self.theme or Style.Current()
-		local accent = "|cff" .. hex(theme.accent)
-		local out = { CharacterView.PREVIEW_INTRO, "" }
+		local tones = Style.Tones(theme)
+		local label = "|cff" .. hex(theme.ornament or theme.accent)
+		local muted = "|cff" .. hex(theme.muted)
+		local text = "|cff" .. hex(tones.reading)
+		local out = { muted .. CharacterView.PREVIEW_INTRO .. "|r", "" }
 		if not any then
 			out[#out + 1] = CharacterView.NOTHING_PUBLIC
 		end
 		for _, s in ipairs(sections) do
-			out[#out + 1] = accent .. s.title:upper() .. "|r"
-			for _, line in ipairs(s.lines) do out[#out + 1] = line end
+			out[#out + 1] = label .. s.title:upper() .. "|r"
+			for _, line in ipairs(s.lines) do out[#out + 1] = text .. line .. "|r" end
 			out[#out + 1] = ""
 		end
 		self.previewText:SetText(table.concat(out, "\n"))
@@ -675,6 +789,16 @@ local function create(parent)
 		local h = L.panelTop + self.previewText:GetStringHeight() + L.pad
 		self.previewPanel:SetHeight(h)
 		previewChild:SetHeight(math.max(h, 1))
+	end
+
+	--- The header's eyebrow names the view (mockup: "CHARACTER · SHOWCASE").
+	CharacterView.EYEBROWS = { profile = "CHARACTER", preview = "CHARACTER · PUBLIC PREVIEW",
+		showcase = "CHARACTER · SHOWCASE" }
+	local function setEyebrow(mode)
+		local window = MainWindow.GetFrame and MainWindow.GetFrame()
+		if window and window.eyebrow and MainWindow.CurrentSection() == "character" then
+			window.eyebrow:SetText(CharacterView.EYEBROWS[mode] or CharacterView.EYEBROWS.profile)
+		end
 	end
 
 	--- profile | preview | showcase. Only the chosen view is shown, so the
@@ -692,6 +816,17 @@ local function create(parent)
 		else
 			self.showcase:Hide()
 			self.showcaseView:Hide()
+		end
+		-- The showcase's header has only the way back (mockup: "Profile fields");
+		-- the other actions are one click away on the profile.
+		for _, b in ipairs({ self.previewButton, self.trp3Button, self.importButton }) do
+			b:SetShown(not showcase)
+		end
+		self.showcaseButton:ClearAllPoints()
+		if showcase then
+			self.showcaseButton:SetPoint("TOPRIGHT", 0, 0)
+		else
+			self.showcaseButton:SetPoint("RIGHT", self.previewButton, "LEFT", -8, 0)
 		end
 		self.previewButton:SetSelected(mode == "preview")
 		self.previewButton:SetText(mode == "preview" and "Back to profile" or "Preview public view")
@@ -720,6 +855,7 @@ local function create(parent)
 			return
 		end
 		self.header:SetShown(not self.form:IsOpen())
+		setEyebrow(self.mode)
 		if self.mode == "preview" then
 			self:RenderPreview(view.char)
 		elseif self.mode == "showcase" then
@@ -757,8 +893,9 @@ function CharacterView.AttachEditing(section)
 			MainWindow.SetStatus(message)
 			MainWindow.Refresh()
 		end)
-		-- Drawn as a chip, like the mockup's privacy badges.
-		Style.Register(row.vis, paintVisibilityChip)
+		-- The shared visibility chip (Widgets.VisibilityButton), at the
+		-- design's chip height.
+		row.vis:SetHeight(L.chipHeight)
 		row.edit = Widgets.Button(row, "Edit", L.editWidth, L.controlHeight, "ghost")
 		row.edit:SetScript("OnClick", function()
 			local spec = row.spec
@@ -884,46 +1021,51 @@ function CharacterView.AttachEditing(section)
 	end
 
 	-- Fields always offer Edit (Add while empty); visibility only once a
-	-- value exists. shape: "tile" (controls along the bottom) or "card"
-	-- (controls top right).
+	-- value exists. shape: "tile" (chip and a quiet Edit along the bottom, as
+	-- the mockup's tiles) or "card" (chip and a secondary Edit on the label
+	-- row, as the mockup's Summary card).
 	function section.updateFieldActions(row, spec, shape)
 		local entry = spec.entry
 		row.edit:SetText(entry and "Edit" or "Add")
-		row.edit:SetVariant("ghost")
 		row.edit:ClearAllPoints()
 		row.vis:ClearAllPoints()
 		if shape == "card" then
-			row.edit:SetWidth(L.cardEditWidth)
-			row.edit:SetPoint("TOPRIGHT", -10, -8)
-			row.vis:SetPoint("RIGHT", row.edit, "LEFT", -6, 0)
+			row.edit:SetVariant(entry and "default" or "ghost")
+			row.edit:SetSize(L.cardEditWidth, L.controlHeight)
+			row.edit:SetPoint("TOPRIGHT", -L.cardPadX, -L.cardPadY)
+			row.vis:SetPoint("RIGHT", row.edit, "LEFT", -8, 0)
 		else
-			row.edit:SetWidth(L.editWidth)
-			row.edit:SetPoint("BOTTOMRIGHT", -8, 8)
-			row.vis:SetPoint("BOTTOMLEFT", 8, 8)
+			row.edit:SetVariant("ghost")
+			row.edit:SetSize(L.editWidth, L.controlHeight)
+			row.edit:SetPoint("BOTTOMRIGHT", -L.tilePadY, L.tilePadY)
+			row.vis:SetPoint("BOTTOMLEFT", L.tilePadX, L.tilePadY + (L.controlHeight - L.chipHeight) / 2)
 		end
 		Widgets.Tooltip(row.edit, (entry and "Edit " or "Add ") .. spec.field.label)
 		row.edit:Show()
 		if entry then
 			row.vis:Show()
 			row.vis:SetLevel(entry.visibility)
+			row.vis:SetWidth(CharacterView.ChipWidth(entry.visibility))
 		else
 			row.vis:Hide()
 		end
 	end
 
-	-- Family members and history entries: visibility and Edit at the bottom right.
-	function section.updateItemActions(row, spec)
+	-- Family members and history entries: Edit at the top right, the
+	-- visibility chip under the text (chipY below the entry's top).
+	function section.updateItemActions(row, spec, chipY)
 		row.edit:SetText("Edit")
 		row.edit:SetVariant("ghost")
-		row.edit:SetWidth(L.editWidth)
+		row.edit:SetSize(L.editWidth, L.controlHeight)
 		row.edit:ClearAllPoints()
-		row.edit:SetPoint("BOTTOMRIGHT", -8, 6)
+		row.edit:SetPoint("TOPRIGHT", -10, -10)
 		Widgets.Tooltip(row.edit, "Edit")
 		row.edit:Show()
 		row.vis:ClearAllPoints()
-		row.vis:SetPoint("RIGHT", row.edit, "LEFT", -6, 0)
+		row.vis:SetPoint("TOPLEFT", 10, -(chipY or 10))
 		row.vis:Show()
 		row.vis:SetLevel(spec.item.visibility)
+		row.vis:SetWidth(CharacterView.ChipWidth(spec.item.visibility))
 	end
 
 	local INSET = 8
@@ -934,16 +1076,16 @@ function CharacterView.AttachEditing(section)
 
 	editor.heading = Widgets.Label(editor, "GameFontNormalLarge", false, "title")
 	editor.heading:SetPoint("TOPLEFT", INSET, -10)
-	editor.hint = Widgets.Label(editor, "GameFontHighlightSmall", true, "muted")
+	editor.hint = Widgets.Label(editor, "meta", true, "muted")
 	editor.hint:SetPoint("TOPLEFT", INSET, -36)
 	editor.hint:SetWidth(540)
 
-	editor.line = Widgets.EditLine(editor, 101)
-	editor.line:SetPoint("TOPLEFT", INSET + 6, -64)
+	editor.line = Widgets.EditLine(editor, 101, Style.CONTROL.input)
+	editor.line:SetPoint("TOPLEFT", INSET, -64)
 	editor.line:SetPoint("TOPRIGHT", -INSET, -64)
 	editor.area = Widgets.TextArea(editor, 2001, MainWindow.ContentWidth() - 2 * INSET)
 	editor.area.frame:SetPoint("TOPLEFT", INSET, -64)
-	editor.area.frame:SetPoint("BOTTOMRIGHT", -INSET, 62) -- leaves room for an error line above the buttons
+	editor.area.frame:SetPoint("BOTTOMRIGHT", -INSET, 76) -- leaves room for an error line above the buttons
 	Widgets.FieldError(editor.line, 540)
 	Widgets.FieldError(editor.area.edit, 540)
 	-- Keyboard: Enter saves a one-line field (refused input stays, with its
@@ -953,11 +1095,12 @@ function CharacterView.AttachEditing(section)
 		onEscape = function(dirty) editor.chain.ConfirmDiscard(dirty, function() section.CloseEditor() end) end,
 	})
 
-	editor.cancel = Widgets.Button(editor, "Cancel", 90, 22)
+	local B = Style.CONTROL.standard
+	editor.cancel = Widgets.Button(editor, "Cancel", 96, B)
 	editor.cancel:SetPoint("BOTTOMRIGHT", -INSET, 12)
-	editor.save = Widgets.Button(editor, "Save", 90, 22, "primary")
-	editor.save:SetPoint("RIGHT", editor.cancel, "LEFT", -6, 0)
-	editor.clear = Widgets.Button(editor, "Clear", 90, 22, "danger")
+	editor.save = Widgets.Button(editor, "Save", 96, B, "primary")
+	editor.save:SetPoint("RIGHT", editor.cancel, "LEFT", -8, 0)
+	editor.clear = Widgets.Button(editor, "Clear", 96, B, "danger")
 	editor.clear:SetPoint("BOTTOMLEFT", INSET, 12)
 
 	-- The editor's controls paint themselves (UI/Style.lua).
