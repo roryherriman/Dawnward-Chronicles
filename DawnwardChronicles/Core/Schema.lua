@@ -855,7 +855,14 @@ function Schema.NormalizeUi(raw)
 	end
 	if type(raw.position) == "table"
 		and finiteCoordinate(raw.position.left) and finiteCoordinate(raw.position.top) then
-		ui.position = { left = raw.position.left, top = raw.position.top }
+		local scale = raw.position.scale
+		ui.position = { left = raw.position.left, top = raw.position.top,
+			scale = type(scale) == "number" and scale == scale and scale > 0.1 and scale < 5 and scale or nil }
+	end
+	-- The window scale chosen with the resize handle (v0.7); nil is the design's size.
+	local ws = raw.windowScale
+	if type(ws) == "number" and ws == ws and ws > 0.1 and ws < 5 then
+		ui.windowScale = ws
 	end
 	-- Unfinished first-time setups, by character key (Core/Onboarding.lua).
 	if type(raw.wizardDrafts) == "table" then

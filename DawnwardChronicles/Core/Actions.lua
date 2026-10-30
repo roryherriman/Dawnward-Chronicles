@@ -496,7 +496,9 @@ function Actions.WindowPosition(ctx)
 	return ui and ui.position
 end
 
-function Actions.SaveWindowPosition(ctx, left, top)
+--- left, top: the window's corner in its own units; scale: the window's
+-- scale then (so the position can be converted at another scale).
+function Actions.SaveWindowPosition(ctx, left, top, scale)
 	if ctx.store.realReadOnly then
 		return nil, "saved data is read-only"
 	end
@@ -504,7 +506,26 @@ function Actions.SaveWindowPosition(ctx, left, top)
 		return nil, "invalid position"
 	end
 	ctx.store.real.ui = ctx.store.real.ui or {}
-	ctx.store.real.ui.position = { left = left, top = top }
+	ctx.store.real.ui.position = { left = left, top = top, scale = type(scale) == "number" and scale or nil }
+	return true
+end
+
+--- The window scale the player chose by resizing (nil: the design's size).
+function Actions.WindowScale(ctx)
+	local ui = ctx.store.real.ui
+	return ui and ui.windowScale
+end
+
+--- Saves the chosen window scale; nil resets it to the design's size.
+function Actions.SaveWindowScale(ctx, scale)
+	if ctx.store.realReadOnly then
+		return nil, "saved data is read-only"
+	end
+	if scale ~= nil and (type(scale) ~= "number" or scale ~= scale or scale <= 0) then
+		return nil, "invalid scale"
+	end
+	ctx.store.real.ui = ctx.store.real.ui or {}
+	ctx.store.real.ui.windowScale = scale
 	return true
 end
 

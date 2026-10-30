@@ -159,6 +159,17 @@ function Methods:GetLeft() return self.__left or 100 end
 function Methods:GetTop() return self.__top or 600 end
 function Methods:GetCenter() return self.__cx or 500, self.__cy or 400 end
 function Methods:GetEffectiveScale() return 1 end
+function Methods:SetScale(scale) self.__scale = scale end
+function Methods:GetScale() return self.__scale or 1 end
+-- Button state textures (resize handle).
+for _, state in ipairs({ "Normal", "Highlight", "Pushed" }) do
+	Methods["Set" .. state .. "Texture"] = function(self, file)
+		local tex = self.__mock.newFrame("Texture", nil, self)
+		tex.__texture = file
+		self["__" .. state] = tex
+	end
+	Methods["Get" .. state .. "Texture"] = function(self) return self["__" .. state] end
+end
 function Methods:SetTextColor(r, g, b) self.__textColor = { r, g, b } end
 function Methods:SetFontString(fs) self.__fontString = fs end
 function Methods:GetFontString()

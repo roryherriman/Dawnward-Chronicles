@@ -160,6 +160,14 @@ local function create(parent)
 	panel.setup:SetScript("OnClick", function() run("setup") end)
 	Widgets.Tooltip(panel.setup, "First-time setup", "Walk through the setup steps again: name, story moments, "
 		.. "privacy and appearance. Nothing is saved until you choose Finish.")
+	panel.resetSize = Widgets.Button(panel.pages.general, "Reset window size", 160, 22)
+	panel.resetSize:SetPoint("TOPLEFT", panel.minimap, "BOTTOMLEFT", 0, -8)
+	panel.resetSize:SetScript("OnClick", function()
+		MainWindow.ResetSize()
+		MainWindow.SetStatus("The window is back to its design size (smaller if your screen needs it).")
+	end)
+	Widgets.Tooltip(panel.resetSize, "Window size", "Drag the gold grip in the bottom-right corner to resize "
+		.. "the window. This returns it to its design size.")
 
 	-- Story ---------------------------------------------------------------------------
 	heading("story", "Story moments", -4)
