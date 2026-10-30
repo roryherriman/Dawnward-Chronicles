@@ -298,8 +298,14 @@ function StoryImport.Approve(char, key, edits, now)
 	if edits.category ~= nil and not Facts.IsRegistered(edits.category) then
 		return nil, "unknown category '" .. tostring(edits.category) .. "'"
 	end
-	if edits.statement ~= nil and not Schema.CleanStatement(edits.statement) then
-		return nil, "the fact would be empty; write something or skip it"
+	if edits.statement ~= nil then
+		if not Schema.CleanStatement(edits.statement) then
+			return nil, "the fact would be empty; write something or skip it"
+		end
+		-- Never shortened silently: a fact holds at most this much.
+		if #Util.Trim(edits.statement) > Schema.FOUNDATION.statement then
+			return nil, "a fact can be at most " .. Schema.FOUNDATION.statement .. " characters"
+		end
 	end
 	return Interpretations.Promote(char, key, { statement = edits.statement, category = edits.category,
 		visibility = visibility }, now)

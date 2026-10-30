@@ -27,7 +27,7 @@ ns.ImportWizard = ImportWizard
 
 ImportWizard.FRAME_NAME = "DawnwardChroniclesStoryImport"
 ImportWizard.STRATA = "HIGH" -- like the setup wizard; raised over it when opened from there
-ImportWizard.LAYOUT = { width = 760, height = 580, pad = 28, top = 22, bodyTop = 100, footer = 64, area = 290 }
+ImportWizard.LAYOUT = { width = 760, height = 580, pad = 28, top = 22, bodyTop = 100, footer = 64, area = 280 }
 -- The paste box accepts a little more than can be saved, so an over-long
 -- paste is shown and named rather than cut off silently by the box.
 ImportWizard.OVERFLOW = 4096
