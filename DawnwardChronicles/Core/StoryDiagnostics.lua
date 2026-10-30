@@ -4,9 +4,11 @@
 --   dev story status               the narrative clock, where you are, how
 --                                  the place is tied to the story, whether a
 --                                  return here can count and how much play is
---                                  still needed, the location cooldown, and why
---                                  the last arrival this session did or did
---                                  not ask
+--                                  still needed, the location cooldown, the
+--                                  repeat window (what was asked about this
+--                                  place, and the last repeat suppressed this
+--                                  session), and why the last arrival this
+--                                  session did or did not ask
 --   dev story simulate [place]     a return to the place (default: here)
 --                                  after enough play away, on a copy of the
 --                                  character: shows what would happen
@@ -99,6 +101,7 @@ local OUTCOMES = {
 	["not this time"] = "suppressed: the Director's weighted chance did not ask this time",
 	["folded into a waiting moment"] = "suppressed: folded into a place moment already waiting",
 	cooldown = "suppressed: the shared location cooldown",
+	["repeat"] = "suppressed: the same question about the same situation was asked within the repeat window",
 	["queue full"] = "suppressed: the waiting list is full",
 	["no template"] = "suppressed: no question fits this event",
 }
@@ -158,6 +161,43 @@ local function cooldownLine(char, play)
 	end
 	return string.format("Location cooldown: %s of play left of %s (last place moment %s of play ago). "
 		.. "Urgent places skip it.", duration(cooldown - (play - last)), duration(cooldown), duration(play - last))
+end
+
+--- Repetition control: the window, what was asked about subject (if
+-- given) and still blocks a repeat, and the last repeat suppressed this
+-- session. Read-only.
+function StoryDiagnostics.RepeatLines(char, play, subject, label)
+	local lines = {}
+	local window = Reactions.RepeatWindow(char)
+	local days = char.story.prefs.repeatDays or Reactions.DEFAULT_REPEAT_DAYS
+	if window <= 0 then
+		lines[1] = "Repeat window: off (story set repeat 0): a question may come back about the same situation."
+	else
+		lines[1] = string.format("Repeat window: %d narrative day%s (%s of play): the same question about the same "
+			.. "situation is not asked again sooner.", days, days == 1 and "" or "s", duration(window))
+	end
+	if subject and window > 0 then
+		local asked = char.story.pacing.asked or {}
+		local found = false
+		for i = #asked, 1, -1 do
+			local a = asked[i]
+			if a.s == subject and a.p <= play and play - a.p < window then
+				found = true
+				lines[#lines + 1] = string.format("  Asked about %s: %s, %s of play ago; not again for %s more play.",
+					label or subject, a.t, duration(play - a.p), duration(window - (play - a.p)))
+			end
+		end
+		if not found then
+			lines[#lines + 1] = string.format("  Nothing asked about %s within the window.", label or subject)
+		end
+	end
+	local last = Reactions.lastRepeat[char]
+	if last then
+		lines[#lines + 1] = string.format("Last repeat suppressed this session: %s: the question %s about %s was "
+			.. "asked %s of play before (window %s).", last.record or "an event", last.templateId,
+			last.label or last.subject or "?", duration(last.ago), duration(last.window))
+	end
+	return lines
 end
 
 --- Lines describing the narrative clock for char at play.
@@ -238,6 +278,12 @@ function StoryDiagnostics.StatusLines(ctx)
 		end
 	end
 	add(cooldownLine(char, play))
+	local subject, label
+	if obs then
+		subject, label = Director.Subject({ category = obs.subzone and "place" or "zone", zone = obs.zone,
+			subzone = obs.subzone })
+	end
+	for _, line in ipairs(StoryDiagnostics.RepeatLines(char, play, subject, label)) do add(line) end
 	add(string.format("Waiting moments: %d.", #Reactions.List(char, now, play)))
 	for _, line in ipairs(StoryDiagnostics.EncounterLines(ctx)) do add(line) end
 	local last = ctx.lastLocation
@@ -300,6 +346,12 @@ local function simulateArrival(lines, ctx, copy, entry, obs, now, play)
 				add(cooldownLine(copy, play))
 				local reaction, outcome = Reactions.Consider(copy, record, now, play)
 				add("Result: " .. StoryDiagnostics.OutcomeText(outcome) .. ".")
+				local blocked = outcome == "repeat" and Reactions.lastRepeat[copy]
+				if blocked then
+					add(string.format("Repeat: the question %s about %s was asked %s of play before (window %s).",
+						blocked.templateId, blocked.label or blocked.subject, duration(blocked.ago),
+						duration(blocked.window)))
+				end
 				local view = reaction and Reactions.Present(copy, reaction)
 				if view then
 					add("Question: " .. tostring(view.question))

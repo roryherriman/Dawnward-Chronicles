@@ -27,6 +27,12 @@ local function showReaction(ctx, char, r)
 	if view.context then
 		out(ctx, "  " .. view.context)
 	end
+	-- The Director's reasons and recollections (verified data and the player's own).
+	if view.why and #view.why > 0 then
+		out(ctx, "  Why now: " .. table.concat(view.why, "; ") .. ".")
+	end
+	if view.recall then out(ctx, "  " .. view.recall) end
+	if view.echo then out(ctx, "  Last time: " .. view.echo .. ".") end
 	for i, option in ipairs(view.options) do
 		out(ctx, string.format("  %d. %s", i, option.text))
 	end
@@ -47,6 +53,8 @@ local function settings(ctx, char)
 		p.drafts and "on" or "off", p.flavor and "on" or "off", p.card and "on" or "off", p.trp3Style, p.places))
 	out(ctx, string.format("  pace %s (brisk|standard|slow): a narrative day is %d hour%s of play", p.pace,
 		ns.NarrativeClock.PACES[p.pace] / 3600, ns.NarrativeClock.PACES[p.pace] == 3600 and "" or "s"))
+	out(ctx, string.format("  repeat %d (0-14): narrative days before the same question about the same place, "
+		.. "faction or zone's quests is asked again (0 off)", p.repeatDays or ns.Reactions.DEFAULT_REPEAT_DAYS))
 	out(ctx, "  tracking: " .. table.concat(tracked, ", "))
 	out(ctx, "Change: /dawnward story set <setting> <value> | story track <category> on|off")
 end
@@ -81,6 +89,8 @@ Commands.Register("story", function(ctx, rest)
 		return
 	elseif word == "set" then
 		local name, value = Util.NextWord(tail)
+		-- "repeat" (any case) is the chat name of the repeat window.
+		if name:lower() == "repeat" or name:lower() == "repeatdays" then name = "repeatDays" end
 		local _, message = Actions.SetStoryPref(ctx, name, value:lower())
 		out(ctx, message)
 		return

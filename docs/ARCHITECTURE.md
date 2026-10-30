@@ -49,7 +49,7 @@ DawnwardChronicles/
 
 ```
 WoW event -> Observers -> Actions.RecordRealEvent -> GameEvents.Record (dedupe, significance)
-          -> Reactions.Consider (threshold, cooldown, coalescing, queue)  -- queued, private
+          -> Reactions.Consider (threshold, cooldown, coalescing, repeat window, queue)  -- queued, private
 SafeTime (calm moment) -> chat line + card -> Story section
 player answer -> Decisions.Decide -> Evolution.Propose (pending) -> player approves -> Personality.Set
                                   -> Narrative.Draft -> Journal.AddStoryDraft (private draft)
@@ -57,7 +57,7 @@ player approves draft, marks it a defining moment, makes it public
           -> Projection.GetPublic -> TRP3 AboutBlock (opt-in experimental sync, all v0.3 guards)
 ```
 
-**Narrative records (v0.4):** `Records` defines one contract for memories, arcs, goals, identity statements and people: provenance (observed / player / suggested), canon status (proposed / established / disputed / superseded) and visibility, kept apart. `RecordTypes` holds their shapes; `Memories`, `Arcs`, `Goals`, `Identity`, `People` their behaviour; `Director` builds context for reactions from established records only; `Continuity` finds contradictions and records the player's answers; `Observed` compares reputation and guild snapshots; `Timeline` is a view, not a store. All of it lives in the character's `story` table. Only established, public identity personas (and approved, public defining moments) can reach the public projection.
+**Narrative records (v0.4):** `Records` defines one contract for memories, arcs, goals, identity statements and people: provenance (observed / player / suggested), canon status (proposed / established / disputed / superseded) and visibility, kept apart. `RecordTypes` holds their shapes; `Memories`, `Arcs`, `Goals`, `Identity`, `People` their behaviour; `Director` builds context for reactions from established records only (see "Story Director: context and repetition" below); `Continuity` finds contradictions, shows the records behind each side by side, and records (and can take back) the player's answers (see "Continuity review" below); `Observed` compares reputation and guild snapshots; `Timeline` is a view, not a store. All of it lives in the character's `story` table. Only established, public identity personas (and approved, public defining moments) can reach the public projection.
 
 **Character journey (v0.7.1, schema 5, additive):**
 - `Core/StoryImport.lua` (#23, #16) is the first caller of `Sources.Capture` and `Interpretations.Propose`. It stores a pasted or Total RP 3 About text verbatim, splits it with `Sources.Paragraphs` and `Sources.Sentences` (rule-based; a piece longer than a fact is cut into parts at word boundaries, never reworded), and proposes each piece privately with its source ID, hash and position (`ref`, e.g. `p2 s1`). Approve is `Interpretations.Promote`, so canon still has only its two creation paths. Re-importing proposes only new pieces: approved and skipped keys are remembered, and pieces equal to an existing fact are not suggested. `StoryImport.AboutText` reads a copy of the About section returned by `TRP3Adapter.ReadSection`, leaving out Dawnward's owned block via `TRP3AboutBlock.WithoutOwned`. `UI/ImportWizard.lua` is the two-page window; `/dawnward biography` opens it.
@@ -112,6 +112,7 @@ Story pacing runs on **gameplay time**, never on real time. A character does not
 | A return needs time away | 1 narrative day of play (`Places.RETURN_AFTER_DAYS`) |
 | One return per place | per 7 narrative days of play (`Places.RETURN_REPEAT_DAYS`) |
 | Story cooldowns, including the shared location cooldown | Seconds of play: Rare 2 h, Normal 45 min, Frequent 15 min |
+| The same question about the same situation | Not again within `prefs.repeatDays` narrative days of play (default 3; `story set repeat 0-14`, 0 off) |
 | Waiting moments expire | After 7 narrative days of play (`Reactions.EXPIRY_DAYS`), counted at the pace in force when the moment was created (its own `expiresPlay` deadline), so changing the pace never removes a moment already waiting; the event itself stays recorded |
 
 **Still real time (interruption control within a session):**
@@ -278,6 +279,60 @@ A zone or place event asks a question by weight, not by rule (`Director.Location
 | `story set places fewer` | −2 (not for beginnings) |
 
 Chance of asking: 1 point 20%, 2 points 40%, 3 points 60%, 4 points 80%, 5 or more always. At 5 or more the place also skips the shared location cooldown: the question is queued and announced at the next calm moment, under the normal notice pacing. Each event's roll is fixed by its key (`Director.Roll`), so a moment is never re-rolled. Zero points: the visit is logged quietly. `prompts off` and `places off` win over any weight. Only established records count, and the "why" text names the kind of tie (for example "one of your memories is tied to it"), never a record's private words.
+
+## Story Director: context and repetition (v0.7.x)
+
+The Director (`Core/Director.lua`) is the one place that reads the character's story for a moment. It is rebuilt on every call (nothing is cached), so a disputed, superseded or removed record stops mattering at once. Only **established** records count: suggestions (proposed memories and arcs) never influence a question and stay visibly separate in the Chronicle until the player accepts them.
+
+**What it reads, and what for:**
+
+| Context | Used for |
+|---|---|
+| Established memories (place, tags, importance, recency, and whether they name the event's zone or place) | Ranking; the "Remembering:" line; the "remembers" titles on the Story screen; a tie for location weight |
+| Active established goals and arcs | Ranking (same zone, shared themes, naming the event's place or faction; a goal whose verified objective is this faction's standing ranks highest); at most two context answers |
+| Established stances whose subject the event names (the faction of a standing change, the zone or place, the instance, the guild) | A stance answer ("It touched on where they stand on X." or, when the public face and the private belief differ, "It tested the gap between what they say about X and what they believe."), never showing the private conviction; the authored question variant "…, a faction they have taken a stance on"; a "why" reason |
+| Homeland (the Homeland field or the place linked as homeland), marked places, places tied to a memory | Location weight (unchanged); "why" reasons for any event that happened there; the authored "…, their homeland" return variant |
+| People whose relation or feelings name the zone | Location weight (unchanged); a "why" reason naming only the kind of tie |
+| Verified standing changes (`meta.previous` → `meta.standing`) | "your standing with X rose/fell from Y" |
+| The player's earlier decisions | Echo: "Last time: <name> <the phrase of the answer they chose>" for the same situation (same template first); answers in the player's own words are not quoted. Themes of recent answers feed Affinity |
+| Approved personality development (applied Dawnward changes, the last 10) | Affinity: a template exploring an axis the story has been moving is preferred among equally due ones. Starting personality values alone never change the question (two characters with the same story are asked the same thing, whatever their class, race, faction or values; tested) |
+
+**Choosing and phrasing (never inventing):**
+
+- `Reactions.ChooseTemplate` keeps its order: a template written for the exact situation (`when`) first; otherwise the general templates take turns, skipping the recently used. Only *among those equally due* does `Director.Affinity` decide (themes of established memories and recent answers +2 each, an axis moved by approved development +1, people in the story +1 for questions about company or loss; library order breaks ties).
+- Question variants are chosen by the tokens they need; context flags (`homeland`, `stance`, `meaningful`, `linked`) only choose between authored variants and are never printed.
+- Every question, answer, reason and recollection is authored text with only verified game data (zone, place, quest title, faction, standings, levels) or the player's own titles and subjects filled in. `tests/spec/director_context_spec.lua` checks each output against the authored forms.
+- "Why now" names kinds of ties ("it happened in your character's homeland", "one of your active goals aims for a standing with Stormwind", "you have a stance about Stormwind"), added only while the list holds fewer than four reasons, never a record's private words.
+- None of this changes *whether* a moment asks: significance, the threshold, cooldowns, location weights and chances, combat and safe-time guards, approval rules and the queue are as before. Context only ranks and words what would be asked anyway.
+
+**Repetition control** (`Reactions.ChooseTemplate`, `Reactions.RepeatOf`):
+
+- `Director.Subject` names the situation: the place (zone or zone / subzone), the faction, quests turned in in a zone (the Classic Era client reports no quest chains), falling in a zone, the instance, the guild. A level-up or a roleplay moment is never "the same situation".
+- When a question is queued, `{ t = template, s = subject, p = play }` is remembered in `story.pacing.asked` (at most 40, oldest dropped).
+- Within `prefs.repeatDays` narrative days of play (default 3; 6 hours of play at the Standard pace), the same template about the same subject is never chosen again. Another authored template that fits is preferred; when every candidate is a repeat, the event stays a plain record with the outcome `"repeat"`. It is checked before a waiting moment would be pushed out of a full queue.
+- The window is on the narrative clock: offline time never ends it, play does. A reading ahead of the clock (an older backup restored) never suppresses anything.
+- It only ever removes prompts. `director_context_spec.lua` replays a long event sequence and checks the number of moments never goes up.
+- Explained in `/dawnward dev story status`: the window, what was asked about the current place and for how much longer it blocks a repeat, and the last repeat suppressed this session (template, subject, how long before). `dev story simulate` prints the same for a simulated arrival.
+
+**Saved data (additive, schema stays 5):** `story.pacing.asked` and `story.prefs.repeatDays`, both cleaned on load (a missing list starts empty, so an upgrade neither asks nor suppresses anything it would not have before).
+
+## Continuity review (#42)
+
+`Core/Continuity.lua` runs cheap, deterministic rules over the player's own records and verified game data. It never guesses what a text means and never rewrites a record.
+
+**Checks:** a stance whose public face differs from the private belief (not marked deliberate); a strong personality lean against a trait fact naming the opposite pole; a public stance said the other way round from a public fact about the same subject (one has a "not", "never", "against" … and the other does not); disputed records; an active goal whose verified objective is met; a goal marked achieved with open steps, or while the game shows its objective not reached; two established memories with the same title; a memory dated before the event it is linked to (only when both dates are known); a record replaced by one that no longer exists; a public record linked to a secret memory.
+
+**What the player can do with a finding** (Chronicle → Review, or `/dawnward continuity`):
+
+| Action | What happens |
+|---|---|
+| **Examine** | `Continuity.Examine`: the records behind the finding as cards side by side, each with its date (and when it was edited), where it came from, canon status and visibility. Read-only |
+| **Correct** | Edit on an examined record opens that record's own edit form (a goal also offers Steps). Dawnward never edits a record for the player; "Correct it" only records that the player will |
+| **Explain** | A form with the player's note and what it is (Explained, or any other answer). "Explained" needs a note; any answer may carry one |
+| **Preserve** | Growth, Unreliable, Secret, Ignore (unchanged). Secret also hides a stance's private side and marks it deliberate, as before |
+| **Undo answer** | `Continuity.Undo` (Answered list, or `continuity undo <n>`): the answer is removed and the finding returns if the records still disagree. What a Secret answer changed is put back, field by field, only where the player has not changed it since |
+
+**Saved data (additive):** a review may hold `message` (the finding as it read when answered, so the Answered list stays readable), `undo` (`{ identity, convictionVisibility, deliberate }` for a Secret answer) and the choice `explained`.
 
 ## Runtime behaviour
 - **Event-driven:** one frame for startup events and one for milestone events. There are no `OnUpdate` loops.

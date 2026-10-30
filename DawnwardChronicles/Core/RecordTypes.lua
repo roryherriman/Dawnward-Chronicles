@@ -134,15 +134,28 @@ function RecordTypes.CleanIdentity(raw)
 end
 
 --- A continuity review the player answered (Core/Continuity.lua).
-RecordTypes.REVIEW_CHOICES = { growth = true, unreliable = true, secret = true, correction = true, ignore = true }
+-- (v0.7.x, additive) "explained": the player's own explanation, kept as the note.
+RecordTypes.REVIEW_CHOICES = { growth = true, unreliable = true, secret = true, correction = true, ignore = true,
+	explained = true }
 
+-- (v0.7.x, additive) message: the finding as it read when answered, so the
+-- list of answers stays readable after the records change; undo: what a
+-- "secret" answer changed on a stance ({ identity, convictionVisibility,
+-- deliberate }), so the answer can be taken back.
 function RecordTypes.CleanReview(raw)
 	if type(raw) ~= "table" or not RecordTypes.REVIEW_CHOICES[raw.choice] then
 		return nil
 	end
 	local key = T(raw.key, 200)
 	if not key or key ~= raw.key then return nil end
-	return { key = key, choice = raw.choice, at = Records.Timestamp(raw.at), note = T(raw.note, 300, true) }
+	local review = { key = key, choice = raw.choice, at = Records.Timestamp(raw.at), note = T(raw.note, 300, true),
+		message = T(raw.message, 300, true) }
+	local u = raw.undo
+	if type(u) == "table" and Util.IsPositiveInteger(u.identity) and ns.Privacy.IsValid(u.convictionVisibility) then
+		review.undo = { identity = u.identity, convictionVisibility = u.convictionVisibility,
+			deliberate = u.deliberate == true }
+	end
+	return review
 end
 
 -- People the character knows (#18 NPCs, #28 other players' characters,

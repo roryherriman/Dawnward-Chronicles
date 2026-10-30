@@ -17,7 +17,11 @@
 --
 -- Questions have variants with the tokens they need ({title}, {zone},
 -- {level}); a variant is used only when every token it needs is verified,
--- so an uncertain event gets a neutral, reusable question instead.
+-- so an uncertain event gets a neutral, reusable question instead. Some
+-- needs are context flags from the character's own established story
+-- (homeland: the place is their Homeland; stance: they have a stance the
+-- event names; meaningful, linked): they choose the wording, never add a
+-- fact, and are never printed themselves.
 --
 -- FLAVOR adds one optional extra answer for some classes. It never removes
 -- or changes the universal answers, carries no personality effect, and can
@@ -153,6 +157,8 @@ ReactionLibrary.TEMPLATES = {
 	{
 		id = "reputation.standing", category = "reputation", minSignificance = 1,
 		questions = {
+			{ text = "{name} is now {standing} with {faction}, a faction they have taken a stance on. What does that "
+				.. "standing mean to them?", needs = { "standing", "faction", "stance" } },
 			{ text = "{name} is now {standing} with {faction}. What does that standing mean to them?",
 				needs = { "standing", "faction" } },
 			{ text = "{name}'s standing with {faction} has changed. What does it mean to them?", needs = { "faction" } },
@@ -368,6 +374,8 @@ ReactionLibrary.TEMPLATES = {
 		-- meant before; the player's own record does.
 		when = function(record) return record.meta and record.meta.visit == "return" end,
 		questions = {
+			{ text = "{name} has returned to {place}, {their} homeland. Does it feel any different now?",
+				needs = { "place", "homeland" } },
 			{ text = "{name} has returned to {place}, a place that matters to {them}. Does it feel any different now?",
 				needs = { "place", "meaningful" } },
 			{ text = "{name} has returned to {place}, a place tied to one of {their} memories. Has {their} view of it changed?",

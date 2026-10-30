@@ -15,6 +15,7 @@ return function(t, expect)
 	local function answer(ns, char, fx, id, optionId, overrides, now)
 		char.story.pacing.playByCategory = {}
 		char.story.pacing.recentTemplates = {}
+		char.story.pacing.asked = {}
 		local data = Fixtures.Context(fx, overrides)
 		data.questId, data.title = id, data.title or ("Quest " .. id)
 		local record = assert(ns.GameEvents.Record(char, "quest", data, now or id))

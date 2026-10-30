@@ -456,6 +456,10 @@ local PREFS = {
 	trp3Style = function(v) return ns.StorySchema.TRP3_STYLES[v] and v or nil end,
 	places = function(v) return ns.StorySchema.PLACE_PROMPTS[v] and v or nil end,
 	pace = function(v) return ns.NarrativeClock.PACES[v] and v or nil end,
+	repeatDays = function(v)
+		local n = tonumber(v)
+		return n and n >= 0 and n <= 14 and n == math.floor(n) and n or nil
+	end,
 	drafts = function(v)
 		if v == "on" or v == true then return true end
 		if v == "off" or v == false then return false end
