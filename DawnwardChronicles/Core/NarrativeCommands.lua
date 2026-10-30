@@ -235,6 +235,30 @@ Commands.Register("stance", function(ctx, rest)
 	end
 end)
 
+local function examineLines(ctx, char, finding)
+	local view = Continuity.Examine(char, finding.key)
+	if not view then return end
+	for i, side in ipairs(view.sides) do
+		local parts = { string.format("  %s. %s%s", i == 1 and "A" or "B", side.label,
+			side.id and type(side.id) == "number" and (" #" .. side.id) or "") }
+		if side.missing then
+			parts[#parts + 1] = "(no longer exists)"
+		else
+			if side.title then parts[#parts + 1] = "\"" .. side.title .. "\"" end
+			if side.text then parts[#parts + 1] = preview(side.text) end
+			local meta = {}
+			if side.at and side.at > 0 then
+				meta[#meta + 1] = ctx.formatTime and ctx.formatTime(side.at) or tostring(side.at)
+			end
+			for _, k in ipairs({ "provenance", "status", "visibility" }) do
+				if side[k] then meta[#meta + 1] = side[k] end
+			end
+			if #meta > 0 then parts[#parts + 1] = "[" .. table.concat(meta, ", ") .. "]" end
+		end
+		out(ctx, table.concat(parts, " "))
+	end
+end
+
 Commands.Register("continuity", function(ctx, rest)
 	local sub, args = Util.NextWord(rest)
 	sub = sub:lower()
@@ -246,21 +270,62 @@ Commands.Register("continuity", function(ctx, rest)
 			out(ctx, string.format("  %d. %s", i, f.message))
 		end
 		if #findings > 0 then
-			out(ctx, "Answer: /dawnward continuity <n> growth|unreliable|secret|correction|ignore   "
+			out(ctx, "Answer: /dawnward continuity <n> growth|unreliable|secret|correction|ignore [note]   "
 				.. "(nothing in your story is changed for you)")
+			out(ctx, "Also: continuity examine <n> | continuity explain <n> <your explanation> | continuity answered")
 		end
+		return
+	elseif sub == "answered" then
+		local answered = char and Continuity.Answered(char) or {}
+		out(ctx, string.format("Answered findings (%d), newest first:", #answered))
+		for i, a in ipairs(answered) do
+			if i > 10 then break end
+			out(ctx, string.format("  %d. %s: %s%s", i, a.review.choice, preview(a.review.message or a.review.key),
+				a.review.note and (" (note: " .. preview(a.review.note) .. ")") or ""))
+		end
+		if #answered > 0 then out(ctx, "Take one back: /dawnward continuity undo <n>") end
+		return
+	elseif sub == "undo" then
+		local n = id((Util.NextWord(args)))
+		local answered = char and Continuity.Answered(char) or {}
+		local a = n and answered[n]
+		if not a then
+			out(ctx, "Usage: /dawnward continuity undo <n>   (numbers from /dawnward continuity answered)")
+			return
+		end
+		run(ctx, function(c) return Continuity.Undo(c, a.review.key) end,
+			"Answer taken back. If the records still disagree, the finding is open again.")
+		return
+	elseif sub == "examine" or sub == "explain" then
+		local word, tail = Util.NextWord(args)
+		local n = id(word)
+		local findings = char and Continuity.Findings(char) or {}
+		local finding = n and findings[n]
+		if not finding then
+			out(ctx, "Usage: /dawnward continuity examine <n> | continuity explain <n> <your explanation>")
+			return
+		end
+		if sub == "examine" then
+			out(ctx, string.format("%d. %s", n, finding.message))
+			examineLines(ctx, char, finding)
+			out(ctx, "Correct either record yourself (Chronicle > Review > Examine, or its own command); nothing is "
+				.. "changed for you.")
+			return
+		end
+		run(ctx, function(c, now) return Continuity.Review(c, finding.key, "explained", tail, now) end,
+			"Your explanation is kept with the finding.")
 		return
 	end
 	local n = id(sub)
 	local findings = char and Continuity.Findings(char) or {}
 	local finding = n and findings[n]
 	if not finding then
-		out(ctx, "Usage: /dawnward continuity | continuity <n> <answer>")
+		out(ctx, "Usage: /dawnward continuity | continuity <n> <answer> [note] | examine|explain <n> | answered | undo <n>")
 		return
 	end
 	local choice, note = Util.NextWord(args)
 	choice = choice:lower()
-	run(ctx, function(c, now) return Continuity.Review(c, finding.key, choice, note, now) end,
+	run(ctx, function(c, now) return Continuity.Review(c, finding.key, choice, note ~= "" and note or nil, now) end,
 		"Noted as " .. choice .. ".")
 end)
 

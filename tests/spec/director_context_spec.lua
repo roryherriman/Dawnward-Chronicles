@@ -5,6 +5,7 @@
 -- checked to be authored text with only verified game data or the player's
 -- own words filled in.
 local Loader = require("support.loader")
+local Boot = require("support.boot")
 
 return function(t, expect)
 	local DAY = 7200 -- one narrative day at the Standard pace, in seconds of play
@@ -381,6 +382,26 @@ return function(t, expect)
 			expect.truthy(lines:find("Asked about falling in Duskwood: death.return, 48 min of play ago", 1, true), lines)
 			expect.truthy(lines:find("Last repeat suppressed this session: Death: the question death.return about "
 				.. "falling in Duskwood was asked 48 min of play before", 1, true), lines)
+		end)
+	end)
+	t:describe("Story Director: showing the context (L2)", function()
+		t:it("chat and the Story screen show why now and the player's own earlier answer", function()
+			local mock, env, ns = Boot.Start()
+			mock.Slash("set name Lirael")
+			local char = env.DawnwardChroniclesDB.characters["Testchar-TestRealm"]
+			local first = ns.Reactions.Consider(char, assert(ns.GameEvents.Record(char, "death",
+				{ at = 100, zone = "Duskwood", level = 25 }, 100)), 100, 100)
+			assert(ns.Decisions.Decide(char, first.id, { optionId = "careful" }, 101))
+			local later = 100 + 4 * DAY
+			local r = assert(ns.Reactions.Consider(char, assert(ns.GameEvents.Record(char, "death",
+				{ at = later, zone = "Duskwood", level = 25 }, later)), later, later))
+			local text = mock.Slash("story " .. r.id)
+			expect.truthy(text:find("Why now: you fell.", 1, true), text)
+			expect.truthy(text:find("Last time: Lirael came back more careful.", 1, true), text)
+			local view = ns.Reactions.Present(char, r)
+			local lines = ns.StoryView.WhyLines(view, {})
+			expect.equal(lines[1].text, "you fell. Last time: Lirael came back more careful.")
+			expect.truthy(ns.StoryView.ContextText(view):find("Last time: Lirael came back more careful", 1, true))
 		end)
 	end)
 end
