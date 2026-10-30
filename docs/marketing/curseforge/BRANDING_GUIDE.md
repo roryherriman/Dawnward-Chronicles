@@ -5,7 +5,8 @@ The brand itself is described in [`docs/BRANDING_GUIDE.md`](../../BRANDING_GUIDE
 | CurseForge slot | File | Size |
 |---|---|---|
 | Project avatar / logo | `assets/branding/png/dawnward-icon-400.png` (or `-512` / `-1024` if a larger size is accepted) | 400 × 400 |
-| Description header image | `assets/branding/png/curseforge-banner-1920x480.png` | 1920 × 480 |
+| Description header image (recommended: sized for the description column) | `assets/branding/png/curseforge-banner-850x213.png` | 850 × 213 |
+| Description header image (large original) | `assets/branding/png/curseforge-banner-1920x480.png` | 1920 × 480 |
 | Alternative header (lockup only) | `assets/branding/png/dawnward-lockup-dark.png` | 989 × 280 |
 | Screenshots | Real in-game captures only, from a disposable character (see the media plan in `LISTING.md`) | native |
 
