@@ -65,6 +65,7 @@ Loader.CORE = {
 Loader.TRP3 = {
 	"Integrations/TRP3/VersionProfiles.lua",
 	"Integrations/TRP3/Status.lua",
+	"Integrations/TRP3/FieldPlan.lua",
 	"Integrations/TRP3/Ledger.lua",
 	"Integrations/TRP3/Presentation.lua",
 	"Integrations/TRP3/AboutBlock.lua",

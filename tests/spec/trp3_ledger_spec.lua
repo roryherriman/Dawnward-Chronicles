@@ -16,7 +16,10 @@ return function(t, expect)
 			assert(Ledger.AddBackup(l, "0123456789", "about", { v = 1, TE = 1, T1 = { TX = "x" } }, { reason = "r" }, 7))
 			Ledger.Log(l, 8, "hello")
 			local again = assert(Ledger.Normalize(Util.DeepCopy(l)))
+			-- A v0.7 opt-in (booleans only) gains its policy on load; nothing else changes.
+			l.optIn["A-R"].policy = { about = "dawnward" }
 			expect.deepEqual(again, l)
+			expect.deepEqual(assert(Ledger.Normalize(Util.DeepCopy(again))), again, "idempotent")
 		end)
 
 		t:it("never stores default profile IDs", function()
