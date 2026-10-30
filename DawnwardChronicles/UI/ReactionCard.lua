@@ -2,6 +2,8 @@
 -- only by Platform/SafeTime (never in combat, while dead, in a cinematic or
 -- loading), hides itself when combat starts, and never answers for the
 -- player: "Answer" opens the Story section on that moment.
+-- Keyboard: Escape hides it like the close button (UISpecialFrames, as the
+-- copy window and the setup wizard do); the moment keeps waiting.
 local _, ns = ...
 local Widgets, MainWindow, Actions, Reactions, Style = ns.Widgets, ns.MainWindow, ns.Actions, ns.Reactions, ns.Style
 
@@ -19,6 +21,9 @@ local function build()
 	card:SetFrameStrata("MEDIUM")
 	card:SetToplevel(true)
 	card:Hide()
+	if type(UISpecialFrames) == "table" then
+		tinsert(UISpecialFrames, card:GetName())
+	end
 	Style.Chrome(card, "background")
 	card.background = card.chrome.fill
 	card.title = Widgets.Label(card, "GameFontNormalSmall", false, "eyebrow")

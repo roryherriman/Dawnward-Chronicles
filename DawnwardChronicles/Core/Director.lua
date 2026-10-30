@@ -25,10 +25,33 @@ ns.Director = Director
 Director.MAX_CONTEXT_OPTIONS = 2
 Director.RECENT = 30 * 24 * 3600
 
+--- Whether a goal's verified objective concerns this event (#18, #27):
+-- a level goal and a level-up, or a reputation goal and a standing change
+-- with the same faction ID. The event only shows progress; the goal stays
+-- the player's to resolve.
+function Director.ObjectiveConcerns(goal, record)
+	local o = goal and goal.objective
+	if not o or not record then
+		return false
+	end
+	if o.kind == "level" then
+		return record.category == "levelup"
+	end
+	if o.kind == "reputation" then
+		return record.category == "reputation" and record.meta ~= nil and record.meta.factionId == o.factionId
+	end
+	return false
+end
+
 -- Recency is measured from the event itself, never from the clock, so the
 -- answers shown and the answers accepted are always the same list.
 local function score(item, record, themes)
 	local s = item.importance or 1
+	-- A goal whose verified objective this event concerns comes first, so
+	-- its answer is the one offered (Director.Options).
+	if Director.ObjectiveConcerns(item, record) then
+		s = s + 5
+	end
 	if record and record.zone and item.zone == record.zone then
 		s = s + 3
 	end
@@ -102,6 +125,15 @@ function Director.Why(char, record)
 		end
 	elseif record.category == "levelup" and record.level then
 		why[#why + 1] = string.format("level %d is a milestone", record.level)
+		Director.GoalReasons(char, record, why)
+	elseif record.category == "reputation" then
+		local m, S = record.meta or {}, ns.GameEvents.STANDINGS
+		if m.factionName and S[m.standing or 0] then
+			why[#why + 1] = string.format("the game shows your standing with %s as %s%s", m.factionName, S[m.standing],
+				S[m.previous or 0] and (" (it was " .. S[m.previous] .. ")") or "")
+		end
+		Director.GoalReasons(char, record, why)
+		Director.StanceReasons(char, record, why)
 	elseif record.category == "death" then
 		why[#why + 1] = record.significance >= 3 and "it was your first recorded fall" or "you fell"
 	elseif record.category == "zone" or record.category == "place" then
@@ -138,6 +170,43 @@ end
 
 local function plain(s)
 	return (s:gsub("[{}]", ""))
+end
+
+--- Reasons from the player's active goals with a verified objective this
+-- event concerns: progress from observed data only. A goal is never
+-- completed or changed here; a met target only says so.
+function Director.GoalReasons(char, record, why)
+	for _, g in ipairs(char.story.goals or {}) do
+		if g.status == "established" and g.state == "active" and Director.ObjectiveConcerns(g, record) then
+			local o = g.objective
+			local current = record.category == "levelup" and record.level or (record.meta and record.meta.standing)
+			local title = plain(g.title or "a goal")
+			if current and current >= o.target then
+				why[#why + 1] = string.format("it reaches the target of your goal \"%s\" (only you decide whether it "
+					.. "is achieved)", title)
+			elseif current then
+				why[#why + 1] = string.format("it is progress toward your goal \"%s\"", title)
+			end
+		end
+	end
+end
+
+--- For a standing change: whether the player recorded a stance of their
+-- own toward that faction (Core/Identity, matched by the observed name).
+-- Only that a stance exists is said, never what it is: the standing is
+-- what the faction thinks, the stance what the character does.
+function Director.StanceReasons(char, record, why)
+	local name = record.meta and record.meta.factionName
+	if type(name) ~= "string" then
+		return
+	end
+	name = name:lower()
+	for _, i in ipairs(char.story.identity or {}) do
+		if i.status == "established" and type(i.subject) == "string" and i.subject:lower() == name then
+			why[#why + 1] = "you have written your character's own stance toward " .. record.meta.factionName
+			return
+		end
+	end
 end
 
 --- Location relevance --------------------------------------------------------

@@ -12,6 +12,26 @@ Every release entry has a **Verified** line naming the highest test level reache
 
 A feature is never called "tested" or "compatible" in this file unless it reached L3 or L4.
 
+## [Unreleased]: 0.8.0-dev (pre-playthrough milestone, in progress)
+
+**Verified: L2** (mocked). Nothing in this section has been tested in game yet.
+
+### Gameplay events and locations (#11, #14, #18, #35, #48)
+- **Zone Atlas:**
+  - **Evidence:** the owner's in-game export and 1–5000 scan from #48 are kept verbatim, with their SHA-256 checked, and all 17 maps and 49 areas are promoted to in-game evidence.
+  - **Candidate settlements:** 49 settlements outside the starting zones are named by `/dawnward atlas`, with the uiMap shown as evidence. They are never classified as places until their parent map is confirmed.
+  - **Quarantine:** a list stops unused, test, open-sea and generic battleground area IDs from ever being classified.
+- **Interiors:** a building the client reports as the zone (for example Lion's Pride Inn) is logged as a place inside its zone. Places logged before keep their names.
+- **Trimmed names:** place names are trimmed, so a name with a trailing space (Bloodvenom Post) is no longer logged again after every reload.
+- **Calmer timing:** story notices also wait while you are AFK or inside a dungeon or raid, and Escape hides the reaction card (the moment keeps waiting).
+- **Goals in context:** reputation and level moments say when they move an active goal forward or reach its target. They never complete the goal; only you decide that. They also note when you have written a stance toward that faction, without quoting it.
+- **Encounter probe:** a development-only probe notes whether `ENCOUNTER_END` or `BOSS_KILL` fire on Classic Era (`/dawnward dev story status`). Nothing is saved or recorded from them.
+- **Deferred:**
+  - boss and dungeon-completion events (not yet shown to fire on Classic Era);
+  - promoting candidate settlements (needs parent-map evidence);
+  - wilderness and danger kinds (no client data);
+  - localised clients and WoW Forever.
+
 ## [Unreleased]: 0.7.1-dev (fixes from the first in-game inspection)
 
 **Verified: L2** (mocked). The fixes below answer the owner's first in-game inspection of v0.7. None is confirmed in game yet; see part T of [`docs/TESTING.md`](docs/TESTING.md).
