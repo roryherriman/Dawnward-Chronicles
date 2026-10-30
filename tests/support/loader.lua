@@ -22,6 +22,7 @@ Loader.CORE = {
 	"Core/Guide.lua",
 	"Core/Atlas.lua",
 	"Core/Onboarding.lua",
+	"Core/AxisMeanings.lua",
 	"Core/StorySchema.lua",
 	"Core/Schema.lua",
 	"Core/Migrations.lua",
@@ -56,6 +57,7 @@ Loader.CORE = {
 	"Core/StoryCommands.lua",
 	"Core/NarrativeCommands.lua",
 	"Core/SetupCommands.lua",
+	"Core/StoryImport.lua",
 	"Core/StoryDiagnostics.lua",
 }
 
@@ -63,6 +65,7 @@ Loader.CORE = {
 Loader.TRP3 = {
 	"Integrations/TRP3/VersionProfiles.lua",
 	"Integrations/TRP3/Status.lua",
+	"Integrations/TRP3/FieldPlan.lua",
 	"Integrations/TRP3/Ledger.lua",
 	"Integrations/TRP3/Presentation.lua",
 	"Integrations/TRP3/AboutBlock.lua",

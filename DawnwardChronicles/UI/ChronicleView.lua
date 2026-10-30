@@ -13,7 +13,12 @@
 --       (UI/ChroniclePlaces.lua): mark a place as meaningful, link it as the
 --       homeland, or write a memory there
 --   Review                                   continuity findings as cards,
---       answered as growth / unreliable / secret / correction / ignore
+--       answered as growth / unreliable / secret / correction / ignore.
+--       Examine (top right of a finding) shows the records behind it side
+--       by side, with their dates, origin, canon status and visibility;
+--       Edit opens a record's own form (Dawnward never corrects it for you);
+--       Explain keeps the player's note with an answer. "Answered" lists
+--       the answers given, each with Undo answer.
 --
 -- Every button calls the same core functions as the chat commands, through
 -- Actions.WithCharacter (read-only data refused). Cards come from a fixed
@@ -48,7 +53,16 @@ ChronicleView.REVIEW_HELP = {
 	secret = "Deliberate: it stays, and its private side stays hidden.",
 	correction = "A mistake you will fix yourself. Nothing is changed for you.",
 	ignore = "Not a problem. The finding is set aside.",
+	explained = "Your own explanation, kept with the answer.",
 }
+-- Answers as they read on an answered card (and in the Explain form).
+ChronicleView.ANSWER_LABELS = { growth = "Growth", unreliable = "Unreliable", secret = "Secret",
+	correction = "Correction", ignore = "Ignored", explained = "Explained" }
+ChronicleView.EXAMINE_HELP = "See the records behind this finding side by side, with their dates and where they came "
+	.. "from, and edit either one yourself."
+ChronicleView.UNDO_HELP = "Takes this answer back. The finding returns if the records still disagree, and anything "
+	.. "the answer changed is put back, except that nothing becomes Public again: a hidden side that was Public "
+	.. "comes back as Private."
 
 -- Layout in section units (the v0.7 content area is 772 x 588, the mockup's
 -- main column). Tabs on top, a toolbar (New, search, count, pager) below
@@ -65,7 +79,10 @@ ChronicleView.ROWS = ChronicleView.LAYOUT.cols * ChronicleView.LAYOUT.gridRows
 
 -- Button widths by label (the rest: 64). Long enough for each label.
 ChronicleView.BUTTON_WIDTHS = { Accept = 68, Edit = 56, Dispute = 68, Remove = 72, Turn = 58, Steps = 60,
-	Growth = 62, Unreliable = 78, Secret = 58, ["Correct it"] = 76, Ignore = 56 }
+	Growth = 62, Unreliable = 78, Secret = 58, ["Correct it"] = 76, Ignore = 56, ["Explain..."] = 80,
+	["Undo answer"] = 96 }
+-- The Examine button at a finding card's top right (where a record's date sits).
+ChronicleView.EXAMINE_RECT = { w = 80, h = 22, y = 9 }
 
 --- Rectangles of one card's parts, relative to its top-left corner (y grows
 -- downwards), with x, y, w, h. opts: { title, meta, progress } say which
@@ -116,7 +133,10 @@ local ARC_KIND = { growth = "Growth", goal = "Goal", conflict = "Conflict", conv
 	relationship = "Relationship", other = "Other" }
 local PERSON = { npc = "Someone in the world", player = "Player character", family = "Family", other = "Other" }
 local FINDING = { persona = "Stance", personality = "Personality", disputed = "Disputed record", goal = "Goal",
-	duplicate = "Possible duplicate", privacy = "Privacy" }
+	duplicate = "Possible duplicate", privacy = "Privacy", publicfact = "Public stance and fact", date = "Dates",
+	replaced = "Replaced record" }
+local SIDE_STATUS = { established = "Established", proposed = "Suggested", disputed = "Disputed",
+	superseded = "Superseded", observed = "Observed", verified = "Verified", partial = "Partial" }
 
 --- Short date for a card: "Today", "28 Oct", or with the year when it is
 -- not this year; nil when unknown. Pure.
@@ -130,10 +150,7 @@ end
 function ChronicleView.CardContent(listId, r, char, now)
 	local c = { chips = {} }
 	if listId == "review" then
-		c.chip = { FINDING[r.kind] or "Continuity", r.kind == "privacy" and "secret" or "accent" }
-		c.text = r.message
-		c.meta = "What is it? Choose how your story reads it; canon is not changed."
-		return c
+		return ChronicleView.ReviewContent(r, now)
 	end
 	c.date = ChronicleView.ShortDate(r.at, now)
 	if r.status == "proposed" then
@@ -196,6 +213,91 @@ function ChronicleView.CardContent(listId, r, char, now)
 	return c
 end
 
+--- What a Review card shows. item is a finding (the list, or the finding
+-- being examined: reviewKind "finding"), one side of an examined finding
+-- (reviewKind "side", from Continuity.Examine), the Explain card
+-- (reviewKind "explain") or an answered finding (reviewKind "answered").
+-- Pure.
+function ChronicleView.ReviewContent(item, now)
+	local c = { chips = {} }
+	local kind = item.reviewKind
+	if kind == "side" then
+		local side = item.side
+		c.chip = { (item.letter and (item.letter .. " · ") or "") .. side.label, "accent" }
+		c.date = ChronicleView.ShortDate(side.at, now)
+		c.title = side.title or (side.missing and "No longer exists") or nil
+		c.text = side.text or (side.missing and "This record no longer exists." or "")
+		local meta = {}
+		for _, v in ipairs({ side.provenance or false, SIDE_STATUS[side.status] or side.status or false }) do
+			if v then meta[#meta + 1] = v end
+		end
+		if side.updatedAt and side.updatedAt > 0 and side.updatedAt ~= side.at then
+			meta[#meta + 1] = "edited " .. (ChronicleView.ShortDate(side.updatedAt, now) or "")
+		end
+		if side.where then meta[#meta + 1] = "edit it in " .. side.where end
+		c.meta = #meta > 0 and table.concat(meta, " · ") or nil
+		if side.visibility then
+			c.chips[#c.chips + 1] = { ns.Themes.VISIBILITY_LABELS[side.visibility] or side.visibility,
+				side.visibility == "secret" and "secret" or "muted" }
+		end
+		return c
+	elseif kind == "explain" then
+		c.chip = { "Explain", "accent" }
+		c.text = "Write why this is fine, in your own words, and choose what it is. Your note is kept with the "
+			.. "answer; nothing in your story is changed."
+		c.meta = "Your explanation"
+		return c
+	elseif kind == "answered" then
+		local review = item.review
+		c.chip = { ChronicleView.ANSWER_LABELS[review.choice] or review.choice, "muted" }
+		c.date = ChronicleView.ShortDate(review.at, now)
+		c.text = review.message or "A finding answered before Dawnward kept its wording."
+		c.meta = review.note and ("Your note: " .. review.note) or "No note"
+		return c
+	end
+	c.chip = { FINDING[item.kind] or "Continuity", item.kind == "privacy" and "secret" or "accent" }
+	c.text = item.message
+	c.meta = kind == "finding" and "Examined: the records are shown side by side above."
+		or "What is it? Choose how your story reads it; canon is not changed."
+	return c
+end
+
+--- The Review tab's items for a mode: "open" (findings), "examine" (the
+-- sides of one finding, the finding, and the Explain card) or "answered".
+-- Returns items, or nil when an examined finding is no longer open. Pure.
+-- findings: the open findings when the caller has them (one run of the
+-- rules per refresh); otherwise they are computed here.
+function ChronicleView.ReviewItems(char, mode, key, findings)
+	if mode == "answered" then
+		local items = {}
+		for _, a in ipairs(ns.Continuity.Answered(char)) do
+			items[#items + 1] = { reviewKind = "answered", review = a.review, key = a.review.key }
+		end
+		return items
+	elseif mode == "examine" then
+		local open
+		for _, f in ipairs(findings or ns.Continuity.Findings(char)) do
+			if f.key == key then open = f end
+		end
+		local view = open and ns.Continuity.Examine(char, key, open)
+		if not view then return nil end
+		local items = {}
+		for i = 1, 2 do
+			local side = view.sides[i]
+			items[#items + 1] = side and { reviewKind = "side", side = side, letter = i == 1 and "A" or "B", key = key }
+				or { reviewKind = "side", side = { label = "Nothing else", text = "This finding is about one record." },
+					key = key, empty = true }
+		end
+		local finding = {}
+		for k, v in pairs(open) do finding[k] = v end
+		finding.reviewKind = "finding"
+		items[#items + 1] = finding
+		items[#items + 1] = { reviewKind = "explain", key = key, finding = open }
+		return items
+	end
+	return findings or ns.Continuity.Findings(char)
+end
+
 --- Whether a record (or finding) matches a search, ignoring case. Private
 -- feelings are not searched (they are not shown on the card). Pure.
 function ChronicleView.Matches(listId, r, query)
@@ -206,7 +308,9 @@ function ChronicleView.Matches(listId, r, query)
 	elseif listId == "goals" then fields = { r.title, r.text }
 	elseif listId == "identity" then fields = { r.subject, r.persona, r.conviction }
 	elseif listId == "people" then fields = { r.name, r.realm, r.relation }
-	elseif listId == "review" then fields = { r.message }
+	elseif listId == "review" then
+		fields = { r.message, r.review and r.review.message, r.review and r.review.note, r.side and r.side.title,
+			r.side and r.side.text }
 	else fields = {} end
 	local needle = query:lower()
 	for _, v in pairs(fields) do
@@ -228,6 +332,8 @@ ChronicleView.EMPTY = {
 		.. "is read from other players' profiles." },
 	review = { "Nothing to review", "Nothing to review: your story is consistent as far as Dawnward can tell. "
 		.. "Contradictions, duplicates and privacy risks appear here for you to answer." },
+	answered = { "No answers yet", "Findings you answer are listed here, with your notes. Any answer can be "
+		.. "taken back with Undo answer." },
 }
 
 local CYCLE = { private = "public", public = "secret", secret = "private" }
@@ -433,6 +539,26 @@ local function turningPointForm(arc)
 	}
 end
 
+-- The Explain form: the player's note, kept with the answer they choose.
+local EXPLAIN_ANSWERS = { { "explained", "Explained: keep my note" }, { "growth", "Growth" },
+	{ "unreliable", "Unreliable" }, { "secret", "Secret" }, { "correction", "Correction" }, { "ignore", "Ignore" } }
+
+function ChronicleView.ExplainForm(finding)
+	return {
+		title = "Explain this finding",
+		hint = finding.message,
+		fields = {
+			{ key = "note", label = "Your note", kind = "area", max = 300, errors = { "explanation" } },
+			{ key = "choice", label = "It is", kind = "cycle", values = EXPLAIN_ANSWERS },
+		},
+		values = { choice = "explained" },
+		save = function(char, v, now)
+			local note = v.note and v.note:match("%S") and v.note or nil
+			return ns.Continuity.Review(char, finding.key, v.choice, note, now)
+		end,
+	}
+end
+
 ChronicleView.FORMS = FORMS
 ChronicleView.CYCLE = CYCLE
 ChronicleView.MilestoneForm = milestoneForm
@@ -456,7 +582,7 @@ end
 local function create(parent)
 	local L = ChronicleView.LAYOUT
 	local section = { frame = CreateFrame("Frame", nil, parent), tab = "memories", page = 1, rows = {},
-		tabButtons = {}, query = "" }
+		tabButtons = {}, query = "", reviewMode = "open" }
 	local f = section.frame
 	section.form = Forms.Create(f, L.width + 2 * L.inset)
 
@@ -495,6 +621,7 @@ local function create(parent)
 	section.tabs = Widgets.Segmented(f, tabItems, L.width, L.tabHeight - 2 * L.tabPad, function(id)
 		if id ~= section.tab then
 			section.tab, section.page, section.query = id, 1, ""
+			section.reviewMode, section.examineKey = "open", nil
 			section.search:SetText("")
 			section.search:ClearFocus()
 		end
@@ -520,7 +647,16 @@ local function create(parent)
 	local barY = -L.toolbarTop
 	section.new = Widgets.Button(f, "New", L.newWidth, L.toolbarHeight, "primary")
 	section.new:SetPoint("TOPLEFT", L.inset, barY)
-	section.new:SetScript("OnClick", function() section:OpenForm(ChronicleView.FORMS[section.tab]()) end)
+	section.new:SetScript("OnClick", function()
+		if section.tab == "review" then
+			-- Review: the toolbar button switches between the findings and the answers.
+			section.reviewMode = section.reviewMode == "open" and "answered" or "open"
+			section.examineKey, section.page = nil, 1
+			MainWindow.Refresh()
+			return
+		end
+		section:OpenForm(ChronicleView.FORMS[section.tab]())
+	end)
 	section.search = Widgets.SearchBox(f, L.searchWidth, "Search", function(text)
 		if text ~= section.query then
 			section.query, section.page = text, 1
@@ -578,6 +714,12 @@ local function create(parent)
 			if row.onVisibility then row.onVisibility(level) end
 		end)
 		row.divider = Widgets.Divider(row)
+		-- Review findings only: Examine, where a record card shows its date.
+		local er = ChronicleView.EXAMINE_RECT
+		row.examine = Widgets.Button(row, "Examine", er.w, er.h, "default")
+		row.examine:SetPoint("TOPLEFT", L.cardWidth - L.cardPad - er.w, -er.y)
+		Widgets.Tooltip(row.examine, "Examine", ChronicleView.EXAMINE_HELP)
+		row.examine:Hide()
 		row.actions = {}
 		row.buttons = {}
 		for b = 1, L.buttons do
@@ -663,6 +805,53 @@ local function create(parent)
 		end
 	end
 
+	-- A Review card's buttons: the five answers on a finding; Edit (and a
+	-- goal's Steps) on an examined record; Explain; Undo answer.
+	local function reviewButtons(row, item)
+		local kind = item.reviewKind
+		if kind == "side" then
+			local side = item.side
+			local list = {}
+			if side.editable and not side.missing and ChronicleView.FORMS[side.list] then
+				list[#list + 1] = { "Edit", function() section:OpenForm(ChronicleView.FORMS[side.list](side.record)) end }
+				if side.list == "goals" then
+					list[#list + 1] = { "Steps", function() section:OpenForm(ChronicleView.MilestoneForm(side.record)) end }
+				end
+			end
+			fill(row, list)
+			if list[1] then Widgets.Tooltip(row.actions[1], "Edit", "Correct this record yourself, in its own form.") end
+			return
+		elseif kind == "explain" then
+			fill(row, { { "Explain...", function() section:OpenForm(ChronicleView.ExplainForm(item.finding)) end } })
+			row.actions[1]:SetVariant("default")
+			Widgets.Tooltip(row.actions[1], "Explain", ChronicleView.REVIEW_HELP.explained)
+			return
+		elseif kind == "answered" then
+			fill(row, { { "Undo answer", function()
+				act(function(c) return ns.Continuity.Undo(c, item.key) end)
+			end } })
+			row.actions[1]:SetVariant("default")
+			Widgets.Tooltip(row.actions[1], "Undo answer", ChronicleView.UNDO_HELP)
+			return
+		end
+		local list = {}
+		for _, choice in ipairs(ChronicleView.REVIEW_CHOICES) do
+			list[#list + 1] = { ChronicleView.REVIEW_LABELS[choice], function()
+				act(function(c, now2) return ns.Continuity.Review(c, item.key, choice, nil, now2) end)
+			end }
+		end
+		fill(row, list)
+		-- Answers are real buttons (filled, with an edge), each explained.
+		for b, choice in ipairs(ChronicleView.REVIEW_CHOICES) do
+			row.actions[b]:SetVariant("default")
+			Widgets.Tooltip(row.actions[b], ChronicleView.REVIEW_LABELS[choice], ChronicleView.REVIEW_HELP[choice])
+		end
+		row.examine:SetScript("OnClick", function()
+			section.reviewMode, section.examineKey, section.page = "examine", item.key, 1
+			MainWindow.Refresh()
+		end)
+	end
+
 	-- Chips left to right; one that would not fit (with the visibility
 	-- chip after it) is left out rather than overlapping.
 	local function layoutChips(row, list, withVis)
@@ -727,19 +916,42 @@ local function create(parent)
 		self.form:ApplyTheme(theme)
 	end
 
-	--- Every item of a tab, newest first.
+	--- Every item of a tab, newest first. Without tabId: the current tab as
+	-- shown (on Review, the current mode: findings, one examined, or answers);
+	-- with one: its records (on Review, the open findings, as the tab counts them).
 	function section:Items(char, tabId)
+		local shown = tabId == nil
 		tabId = tabId or self.tab
 		local items = {}
 		if not char then return items end
-		if tabId == "review" then return ns.Continuity.Findings(char) end
+		if tabId == "review" then
+			-- The rules run once per refresh (Refresh sets reviewFindings);
+			-- tab counts, the list, an examined finding and search reuse them.
+			local findings = self.reviewFindings or ns.Continuity.Findings(char)
+			if shown then
+				local reviewItems = ChronicleView.ReviewItems(char, self.reviewMode, self.examineKey, findings)
+				if reviewItems then return reviewItems end
+				-- The examined finding was answered or resolved: back to the list.
+				self.reviewMode, self.examineKey = "open", nil
+			end
+			return findings
+		end
 		if tabId == "places" then return ns.Places.List(char) end
 		local list = char.story[tabId] or {}
 		for i = #list, 1, -1 do items[#items + 1] = list[i] end
 		return items
 	end
 
+	-- Continuity's rules run once per refresh: the findings are kept for this
+	-- refresh only (records may change between refreshes) and reused for the
+	-- tab counts, the list, an examined finding and the search filter.
 	function section:Refresh(view)
+		self.reviewFindings = view.char and ns.Continuity.Findings(view.char) or nil
+		self:RefreshContent(view)
+		self.reviewFindings = nil
+	end
+
+	function section:RefreshContent(view)
 		local char = view.char
 		local spec = tabSpec(self.tab)
 		local now = ns.ctx and ns.ctx.now and ns.ctx.now() or nil
@@ -768,10 +980,19 @@ local function create(parent)
 		end
 
 		-- Toolbar.
-		self.new:SetShown(spec.new ~= nil)
-		if spec.new then self.new:SetText("+  " .. spec.new) end
+		local review = self.tab == "review"
+		self.new:SetShown(spec.new ~= nil or review)
+		self.new:SetVariant(review and "default" or "primary")
+		if review then
+			local answered = char and #char.story.reviews or 0
+			self.new:SetText(self.reviewMode == "open" and string.format("Answered  %d", answered) or "<  All findings")
+			self.new:SetEnabled(self.reviewMode ~= "open" or answered > 0)
+		elseif spec.new then
+			self.new:SetText("+  " .. spec.new)
+			self.new:SetEnabled(true)
+		end
 		self.search:ClearAllPoints()
-		self.search:SetPoint("TOPLEFT", L.inset + (spec.new and (L.newWidth + 10) or 0), -L.toolbarTop)
+		self.search:SetPoint("TOPLEFT", L.inset + ((spec.new or review) and (L.newWidth + 10) or 0), -L.toolbarTop)
 		self.search.placeholder:SetText(spec.search or "Search")
 		local all = self:Items(char)
 		local items = {}
@@ -784,6 +1005,7 @@ local function create(parent)
 		self.next:SetEnabled(self.page < pages)
 		self.pageLabel:SetText(string.format("Page %d of %d", self.page, pages))
 		local noun = spec.noun[#all == 1 and 1 or 2]
+		if review and self.reviewMode == "answered" then noun = #all == 1 and "answer" or "answers" end
 		self.count:ClearAllPoints()
 		self.count:SetPoint("RIGHT", self.prev, "LEFT", -10, 0)
 		if self.query ~= "" then
@@ -791,9 +1013,15 @@ local function create(parent)
 		else
 			self.count:SetText(string.format("%s%d %s", self.tab == "review" and "" or "Newest first · ", #all, noun))
 		end
+		if review and self.reviewMode == "examine" then
+			self.count:SetText("Examining one finding")
+		elseif review and self.reviewMode == "answered" then
+			self.count:SetText(string.format("Newest first · %d %s", #all, noun))
+		end
 
 		-- Empty state.
 		local empty = ChronicleView.EMPTY[self.tab]
+		if review and self.reviewMode == "answered" then empty = ChronicleView.EMPTY.answered end
 		self.emptyPanel:SetShown(#items == 0)
 		self.empty:SetShown(#items == 0)
 		if #all > 0 and #items == 0 then
@@ -813,19 +1041,9 @@ local function create(parent)
 			if item then
 				local content = ChronicleView.CardContent(self.tab, item, char, now)
 				fillCard(row, content)
+				row.examine:SetShown(self.tab == "review" and item.reviewKind == nil)
 				if self.tab == "review" then
-					local list = {}
-					for _, choice in ipairs(ChronicleView.REVIEW_CHOICES) do
-						list[#list + 1] = { ChronicleView.REVIEW_LABELS[choice], function()
-							act(function(c, now2) return ns.Continuity.Review(c, item.key, choice, nil, now2) end)
-						end }
-					end
-					fill(row, list)
-					-- Answers are real buttons (filled, with an edge), each explained.
-					for b, choice in ipairs(ChronicleView.REVIEW_CHOICES) do
-						row.actions[b]:SetVariant("default")
-						Widgets.Tooltip(row.actions[b], ChronicleView.REVIEW_LABELS[choice], ChronicleView.REVIEW_HELP[choice])
-					end
+					reviewButtons(row, item)
 					row.onVisibility = nil
 					layoutChips(row, content.chips, false)
 				else

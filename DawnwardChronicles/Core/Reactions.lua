@@ -22,11 +22,16 @@
 -- record only. A quest turned in there soon after takes precedence over a
 -- plain arrival, so the question is about the task, not the town.
 --
+-- The same question about the same situation (the same template about the
+-- same place, faction, zone's quests, instance or guild) is not asked again
+-- within the repeat window (prefs.repeatDays narrative days of play); see
+-- "Repetition control" below. It only ever removes prompts, never adds one.
+--
 -- Reactions wait until the player answers, postpones or dismisses them, or
 -- until they expire. Asking happens elsewhere (Platform/SafeTime decides
 -- when); this module never interrupts anything.
 local _, ns = ...
-local StorySchema, ReactionLibrary, GameEvents = ns.StorySchema, ns.ReactionLibrary, ns.GameEvents
+local StorySchema, ReactionLibrary, GameEvents, Places = ns.StorySchema, ns.ReactionLibrary, ns.GameEvents, ns.Places
 
 local Reactions = {}
 ns.Reactions = Reactions
@@ -83,20 +88,97 @@ local function recentlyUsed(pacing, templateId)
 	return false
 end
 
+--- Repetition control ----------------------------------------------------------
+-- The same question (template) about the same situation (Director.Subject:
+-- the place, the faction, quests in a zone, falling in a zone, the instance,
+-- the guild) is not asked twice within prefs.repeatDays narrative days of
+-- play (0: off). Offline time never counts: the window is on the narrative
+-- clock. Each asked question is remembered in pacing.asked
+-- ({ t = template, s = subject, p = play }, newest last, at most
+-- StorySchema.LIMITS.asked). A reading ahead of the clock (an older backup
+-- restored) never suppresses anything.
+Reactions.DEFAULT_REPEAT_DAYS = 3
+Reactions.MAX_REPEAT_DAYS = 14
+
+-- Why the last candidate was suppressed as a repeat, per character, for
+-- /dawnward dev story status. Session only: never saved.
+Reactions.lastRepeat = setmetatable({}, { __mode = "k" })
+
+--- The repeat window in seconds of play (0 when off).
+function Reactions.RepeatWindow(char)
+	local days = char.story.prefs.repeatDays
+	if type(days) ~= "number" then days = Reactions.DEFAULT_REPEAT_DAYS end
+	return days * ns.NarrativeClock.DayLength(char)
+end
+
+--- The newest pacing.asked entry that makes templateId about subject a
+-- repeat at play, or nil. Pure.
+function Reactions.RepeatOf(char, templateId, subject, play)
+	if not subject then return nil end
+	local window = Reactions.RepeatWindow(char)
+	if window <= 0 then return nil end
+	local asked = char.story.pacing.asked or {}
+	for i = #asked, 1, -1 do
+		local a = asked[i]
+		if a.t == templateId and a.s == subject and a.p <= play and play - a.p < window then
+			return a
+		end
+	end
+	return nil
+end
+
+local function rememberAsked(char, templateId, record, play)
+	local subject = ns.Director.Subject(record)
+	if not subject or not play then return end
+	local pacing = char.story.pacing
+	pacing.asked = pacing.asked or {}
+	local asked = pacing.asked
+	asked[#asked + 1] = { t = templateId, s = subject, p = play }
+	while #asked > StorySchema.LIMITS.asked do
+		table.remove(asked, 1)
+	end
+end
+
 --- Picks a template deterministically. A template written for this exact
 -- situation (one with a `when` condition) comes first; otherwise the general
--- templates take turns, skipping the recently used ones.
-function Reactions.ChooseTemplate(char, record)
-	local candidates = ReactionLibrary.For(record.category, record.significance, record)
+-- templates take turns, skipping the recently used ones and, among those
+-- equally due, preferring the one that fits the character's established
+-- story best (Director.Affinity; library order breaks ties). A template
+-- already asked about this situation within the repeat window is never
+-- chosen. Returns template, or nil plus the repeat that blocked every
+-- candidate ({ templateId, subject, label, play }).
+function Reactions.ChooseTemplate(char, record, play)
+	play = play or ns.NarrativeClock.Peek(char)
+	local all = ReactionLibrary.For(record.category, record.significance, record)
+	local subject, label = ns.Director.Subject(record)
+	local candidates, blocked = {}, nil
+	for _, template in ipairs(all) do
+		local hit = Reactions.RepeatOf(char, template.id, subject, play)
+		if hit then
+			blocked = blocked or { templateId = template.id, subject = subject, label = label, play = hit.p }
+		else
+			candidates[#candidates + 1] = template
+		end
+	end
+	if #candidates == 0 then
+		return nil, blocked
+	end
 	for _, template in ipairs(candidates) do
 		if template.when and not recentlyUsed(char.story.pacing, template.id) then
 			return template
 		end
 	end
+	local best, bestScore
 	for _, template in ipairs(candidates) do
 		if not template.when and not recentlyUsed(char.story.pacing, template.id) then
-			return template
+			local score = ns.Director.Affinity(char, template)
+			if not best or score > bestScore then
+				best, bestScore = template, score
+			end
 		end
+	end
+	if best then
+		return best
 	end
 	-- Everything was used recently: the least recently used one.
 	local recent = char.story.pacing.recentTemplates
@@ -203,7 +285,9 @@ end
 
 --- Considers a freshly recorded event. Returns reaction, outcome where
 -- outcome is "queued", "coalesced", or why it stays a plain record
--- ("prompts off", "below threshold", "cooldown", "queue full", "no template").
+-- ("prompts off", "below threshold", "cooldown", "repeat" (the same
+-- question about the same situation within the repeat window; details in
+-- Reactions.lastRepeat), "queue full", "no template").
 -- now is the real date; play is the narrative clock (default: the saved total).
 function Reactions.Consider(char, record, now, play)
 	local story = char.story
@@ -243,6 +327,13 @@ function Reactions.Consider(char, record, now, play)
 		record.status = "queued"
 		return target, "coalesced"
 	end
+	local function repeated(blocked)
+		blocked.at, blocked.ago = now or 0, play - blocked.play
+		blocked.window = Reactions.RepeatWindow(char)
+		blocked.record = GameEvents.RecordLabel(record)
+		Reactions.lastRepeat[char] = blocked
+		return stay("repeat")
+	end
 	if location then
 		local waiting = recentLocation(char, record, now)
 		if waiting then
@@ -250,14 +341,17 @@ function Reactions.Consider(char, record, now, play)
 				return stay("folded into a waiting moment")
 			end
 			-- The more meaningful place takes the moment's place.
-			local template = Reactions.ChooseTemplate(char, record)
+			local template, blocked = Reactions.ChooseTemplate(char, record, play)
 			if template then
 				setEventStatus(char, waiting.eventKeys, "recorded")
 				waiting.category, waiting.eventKeys, waiting.templateId = record.category, { record.key }, template.id
 				waiting.significance = record.significance
 				remember(pacing, template.id)
+				rememberAsked(char, template.id, record, play)
 				record.status = "queued"
 				return waiting, "replaced"
+			elseif blocked then
+				return repeated(blocked)
 			end
 		end
 	end
@@ -266,12 +360,16 @@ function Reactions.Consider(char, record, now, play)
 	if last and record.significance < 3 and not urgent and last <= play and play - last < cooldown then
 		return stay("cooldown")
 	end
+	-- Chosen before making room, so a repeat never pushes a waiting moment out.
+	local template, blocked = Reactions.ChooseTemplate(char, record, play)
+	if not template then
+		if blocked then
+			return repeated(blocked)
+		end
+		return stay("no template")
+	end
 	if not makeRoom(char, record.significance) then
 		return stay("queue full")
-	end
-	local template = Reactions.ChooseTemplate(char, record)
-	if not template then
-		return stay("no template")
 	end
 	local reaction = {
 		id = newId(story), category = record.category, eventKeys = { record.key }, templateId = template.id,
@@ -291,6 +389,7 @@ function Reactions.Consider(char, record, now, play)
 		pacing.playByCategory[record.category] = play
 	end
 	remember(pacing, template.id)
+	rememberAsked(char, template.id, record, play)
 	record.status = "queued"
 	return reaction, "queued"
 end
@@ -346,6 +445,14 @@ local function tokensFor(char, record)
 		tokens.place = meta.placeName
 		tokens.meaningful = meta.meaningful == 1 and "yes" or nil
 		tokens.linked = meta.linked == 1 and "yes" or nil
+		-- Context flags (never shown as text): they only choose between
+		-- authored question variants. The homeland is the player's own
+		-- Homeland field or link; a stance is an established one the event names.
+		if Reactions.LOCATION[record.category] and record.zone then
+			local entry = Places.Entry(char, record.zone, record.category == "place" and record.subzone or nil)
+			tokens.homeland = entry and Places.Tie(char, entry) == "homeland" and "yes" or nil
+		end
+		tokens.stance = #ns.Director.Stances(char, record) > 0 and "yes" or nil
 	end
 	return tokens
 end
@@ -368,10 +475,11 @@ local function hasAll(tokens, needs)
 end
 
 --- What the player sees: { reaction, template, question, context, options,
--- record, recall, why } where options are the universal answers, the
+-- record, recall, why, echo } where options are the universal answers, the
 -- optional flavour answer, answers drawn from the character's own history
--- (goals, arcs) and the neutral one, each { id, text, phrase, effects,
--- meaning }. recall names a relevant memory; why explains the moment.
+-- (goals, arcs, stances) and the neutral one, each { id, text, phrase,
+-- effects, meaning }. recall names a relevant memory; why explains the
+-- moment; echo is the player's own earlier answer about the same situation.
 function Reactions.Present(char, reaction)
 	local template = ReactionLibrary.BY_ID[reaction.templateId]
 	if not template then
@@ -411,7 +519,7 @@ function Reactions.Present(char, reaction)
 	return {
 		reaction = reaction, template = template, question = question, context = contextLine,
 		options = options, record = record, name = tokens.name,
-		recall = ns.Director.Recall(context), why = context.why,
+		recall = ns.Director.Recall(context), why = context.why, echo = context.echo,
 	}
 end
 

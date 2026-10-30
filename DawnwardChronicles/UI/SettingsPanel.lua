@@ -237,6 +237,15 @@ local function create(parent)
 	panel.backupHint = note("data", -56)
 	panel.backupHint:SetText(SettingsPanel.BACKUP_HINT)
 
+	heading("data", "Your story", -200)
+	panel.importStory = Widgets.Button(panel.pages.data, "Import a story...", 160, 22)
+	panel.importStory:SetPoint("TOPLEFT", INSET, -222)
+	panel.importStory:SetScript("OnClick", function() ns.ImportWizard.Open({ from = "settings" }) end)
+	Widgets.Tooltip(panel.importStory, "Import a story", "Paste a backstory you already wrote, or read your Total RP 3 "
+		.. "About text. It is kept exactly as written; you approve each piece before it becomes part of your "
+		.. "character.")
+	panel.storyState = note("data", -252)
+
 	heading("data", "Simulation mode", -110)
 	panel.simState = note("data", -128)
 	panel.simToggle = Widgets.Button(panel.pages.data, "Turn on", 120, 22)
@@ -280,6 +289,8 @@ local function create(parent)
 			and "ON: changes go to separate test data. Your real journal is untouched."
 			or "OFF: you are using your real journal. Turn on to experiment safely.")
 		self.simToggle:SetText(simulation and "Turn off" or "Turn on")
+		local lines = ns.StoryImport.StatusLines(view.char)
+		self.storyState:SetText(table.concat(lines, " "))
 
 		local prefs = view.char and view.char.story.prefs or ns.StorySchema.NewPrefs()
 		for _, button in ipairs(self.storyButtons) do

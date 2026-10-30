@@ -5,7 +5,10 @@
 -- kind is "B" (personal backup) or "S" (shareable, public facts only).
 -- checksum is Adler-32 of the payload, catching truncated or mangled pastes.
 -- payload is Serializer text of { format, kind, schemaVersion, addonVersion,
--- includesSecrets, includesBiography, character }.
+-- includesSecrets, includesBiography, character, owner? }. owner (v0.7.1+,
+-- backups only) is the "Name-Realm" key the backup was made from, so a
+-- restore preview can warn before one character's backup replaces another's.
+-- Older readers ignore it.
 --
 -- Share exports carry the public projection only: no biography sources, no
 -- interpretations and no key memory. Backups carry facts, interpretations
@@ -73,10 +76,16 @@ function Transfer.StoryForBackup(char, includeSecrets)
 			d.custom = Transfer.WITHHELD
 		end
 	end
+	-- A review keeps the finding's text, which can quote a record or a
+	-- conviction that is Secret; it is rebuilt from the records when shown.
+	for _, review in ipairs(story.reviews or {}) do
+		if review.message then review.message = Transfer.WITHHELD end
+	end
 	return story
 end
 
---- opts: { includeSecrets = bool, includeBiography = bool, addonVersion = string }
+--- opts: { includeSecrets = bool, includeBiography = bool, addonVersion = string,
+-- characterKey = string (backups record it as the owner) }
 function Transfer.Export(char, kind, opts)
 	opts = opts or {}
 	local data, includesSecrets, includesBiography
@@ -100,6 +109,8 @@ function Transfer.Export(char, kind, opts)
 		-- The living chronicle travels only in personal backups, filtered
 		-- like everything else: no secrets unless asked (Transfer.StoryForBackup).
 		data.story = Transfer.StoryForBackup(char, includesSecrets)
+		-- The player's own axis words and locks (#21): private, backups only.
+		data.axisMeanings = Util.DeepCopy(char.axisMeanings or {})
 		includesBiography = opts.includeBiography == true and char.sources ~= nil
 		if includesBiography then
 			data.sources = Util.DeepCopy(char.sources)
@@ -115,6 +126,7 @@ function Transfer.Export(char, kind, opts)
 		includesSecrets = includesSecrets,
 		includesBiography = includesBiography,
 		character = data,
+		owner = kind == Transfer.KIND_BACKUP and type(opts.characterKey) == "string" and opts.characterKey or nil,
 	})
 	if not payload then
 		return nil, err
@@ -179,6 +191,7 @@ function Transfer.Decode(text)
 		includesBiography = includesBiography,
 		includesStory = includesStory,
 		addonVersion = type(data.addonVersion) == "string" and data.addonVersion or nil,
+		owner = type(data.owner) == "string" and #data.owner <= Schema.LIMITS.characterKey and data.owner or nil,
 		character = character,
 		notes = report,
 	}
@@ -254,6 +267,11 @@ function Transfer.MergeForImport(current, imported, includesSecrets, now, includ
 		if not includesBiography then
 			result.sources = Util.DeepCopy(current.sources or Schema.NewSources())
 		end
+		-- A backup from before player-defined axis words (#21) has none:
+		-- keep the current ones rather than discarding them.
+		if next(result.axisMeanings or {}) == nil and next(current.axisMeanings or {}) ~= nil then
+			result.axisMeanings = Util.DeepCopy(current.axisMeanings)
+		end
 		if current.story then
 			if not includesStory then
 				result.story = Util.DeepCopy(current.story)
@@ -324,4 +342,59 @@ function Transfer.Describe(plan)
 			or "; no biography in this backup (the current one is kept)")
 		.. (plan.includesStory and "; replaces your story (moments, decisions, memories, arcs, goals) with the backup's; "
 			.. "events recorded since stay recorded" or "")
+end
+
+--- Restore preview ---------------------------------------------------------------
+
+-- What a preview counts, in display order: { label, function(char) -> n }.
+local function storyCount(name)
+	return function(char) return #((char.story or {})[name] or {}) end
+end
+Transfer.PREVIEW_ROWS = {
+	{ "profile fields", function(char) return Util.CountKeys(char.fields or {}) end },
+	{ "facts", function(char) return #(char.facts or {}) end },
+	{ "journal entries", function(char) return #(char.journal or {}) end },
+	{ "family", function(char) return #(char.family or {}) end },
+	{ "history", function(char) return #(char.history or {}) end },
+	{ "personality axes", function(char) return Util.CountKeys(char.personality or {}) end },
+	{ "decisions", storyCount("decisions") },
+	{ "memories", storyCount("memories") },
+	{ "arcs", storyCount("arcs") },
+	{ "goals", storyCount("goals") },
+	{ "stances", storyCount("identity") },
+	{ "people", storyCount("people") },
+	{ "places", function(char) return Util.CountKeys((char.story or {}).places or {}) end },
+	{ "story suggestions waiting", function(char) return #(char.interpretations or {}) end },
+}
+
+--- Warning when a backup was made from another character, or nil. Pure.
+function Transfer.OwnerWarning(plan, characterKey)
+	if plan and plan.owner and characterKey and plan.owner ~= characterKey then
+		return "This backup was made from " .. plan.owner .. ", not " .. characterKey .. ". Importing replaces "
+			.. characterKey .. "'s profile with it."
+	end
+	return nil
+end
+
+--- A restore preview: one line per record type that differs, "now -> after"
+-- (counted on the merged result, so carried-over secrets and kept
+-- biographies are included), then the owner warning if any. Pure: it
+-- merges copies and changes nothing.
+function Transfer.Preview(current, plan, now, characterKey)
+	local merged = Transfer.MergeForImport(current, plan.character, plan.includesSecrets, now,
+		plan.includesBiography, plan.includesStory)
+	local lines = {}
+	for _, row in ipairs(Transfer.PREVIEW_ROWS) do
+		local before = current and row[2](current) or 0
+		local after = row[2](merged)
+		if before ~= after or after > 0 then
+			lines[#lines + 1] = string.format("  %s: %d now -> %d after%s", row[1], before, after,
+				before == after and " (same count)" or "")
+		end
+	end
+	local warning = Transfer.OwnerWarning(plan, characterKey)
+	if warning then
+		lines[#lines + 1] = "Warning: " .. warning
+	end
+	return lines
 end

@@ -69,7 +69,7 @@ return function(t, expect)
 			local full = frame.titleRect.right
 			expect.equal(titleRight(), full, "the journal title uses the whole row")
 			ns.MainWindow.Select("character")
-			expect.equal(titleRight(), full - 420, "room for Preview, Showcase and Total RP 3")
+			expect.equal(titleRight(), full - 540, "room for Import story, Preview, Showcase and Total RP 3")
 			ns.MainWindow.Select("story")
 			expect.equal(titleRight(), full - 230, "room for the moment pager")
 			ns.MainWindow.Select("journal")

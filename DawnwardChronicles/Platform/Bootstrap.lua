@@ -85,6 +85,7 @@ local function buildContext()
 		ToggleJournal = MainWindow.Toggle,
 		ShowGuide = function() ns.GuidePanel.Open(1) end,
 		ShowSetup = function(opts) ns.SetupWizard.Open(opts) end,
+		ShowStoryImport = function() ns.ImportWizard.Open({ from = "chat" }) end,
 		ShowStory = function()
 			if not MainWindow.IsShown() then MainWindow.Show() end
 			MainWindow.Select("story")

@@ -3,25 +3,28 @@
 -- with character data, and so a damaged ledger can only ever pause sync.
 --
 -- It holds:
---   optIn     per character: which experimental writes the player enabled,
---             and the TRP3 profile ID they were enabled for
+--   optIn     per character: the TRP3 profile ID sync is bound to, and an
+--             ownership policy per mapping (policy[id] = "dawnward" |
+--             "trp3" | "off"). about/traits booleans mirror the policy of
+--             those two features, so an older build still reads them.
 --   profiles  per TRP3 profile ID: the exact content Dawnward last wrote
 --             (ownership is proven by an exact match, never by markers),
---             and any unresolved conflict
+--             and any unresolved conflict (per feature, and per field)
 --   backups   serialised copies of whole TRP3 sections taken before every
 --             write, so any write can be rolled back
 --   log       the last few diagnostics, for /dawnward trp3 log
 --
 -- Pure Lua: normalisation follows the same rules as Core/Schema.lua.
 local _, ns = ...
-local Util, Serializer = ns.Util, ns.Serializer
+local Util, Serializer, FieldPlan = ns.Util, ns.Serializer, ns.TRP3FieldPlan
 
 local Ledger = {}
 ns.TRP3Ledger = Ledger
 
 Ledger.VERSION = 1
 Ledger.LIMITS = {
-	backups = 20,          -- section backups kept in total, oldest dropped first
+	backups = 20,          -- section backups kept in total, oldest unpinned dropped first
+	pinned = 4,            -- of those, at most this many pinned (see Ledger.Prune)
 	backupBytes = 65536,   -- a section too large to back up is never written
 	block = 4100,          -- bytes of an owned biography string (section cap plus separator, with margin)
 	ownedTraits = 8,       -- Dawnward-owned personality traits per profile
@@ -31,7 +34,55 @@ Ledger.LIMITS = {
 }
 
 Ledger.SECTIONS = { about = true, characteristics = true }
-Ledger.FEATURES = { about = true, traits = true }
+Ledger.FEATURES = { about = true, traits = true, fields = true }
+
+-- Ownership policies. "dawnward": Dawnward writes it automatically (set
+-- only by an explicit authorisation). "trp3": Total RP 3 manages it and
+-- Dawnward never writes it (the default for every field). "off": not
+-- synchronised in either direction.
+Ledger.POLICIES = { dawnward = true, trp3 = true, off = true }
+-- Every mapping with a policy: the two block features, then each field.
+Ledger.MAPPINGS = { "about", "traits" }
+for _, m in ipairs(FieldPlan.MAPPINGS) do
+	Ledger.MAPPINGS[#Ledger.MAPPINGS + 1] = m.id
+end
+Ledger.MAPPING_SET = {}
+for _, id in ipairs(Ledger.MAPPINGS) do
+	Ledger.MAPPING_SET[id] = true
+end
+Ledger.BLOCK_FEATURES = { about = true, traits = true }
+
+--- The policy of one mapping for an opt-in entry (nil entry = defaults).
+-- Biography and traits default to "off" (sync off), fields to "trp3".
+function Ledger.Policy(entry, id)
+	local policy = entry and entry.policy and entry.policy[id]
+	if policy then
+		return policy
+	end
+	if Ledger.BLOCK_FEATURES[id] then
+		return (entry and entry[id] == true) and "dawnward" or "off"
+	end
+	return "trp3"
+end
+
+--- Sets a mapping's policy, keeping the about/traits booleans in step.
+function Ledger.SetPolicy(entry, id, policy)
+	entry.policy = entry.policy or {}
+	entry.policy[id] = policy
+	if Ledger.BLOCK_FEATURES[id] then
+		entry[id] = policy == "dawnward"
+	end
+end
+
+--- True when any field mapping is managed by Dawnward.
+function Ledger.AnyFieldManaged(entry)
+	for _, m in ipairs(FieldPlan.MAPPINGS) do
+		if Ledger.Policy(entry, m.id) == "dawnward" then
+			return true
+		end
+	end
+	return false
+end
 
 function Ledger.New()
 	return { schemaVersion = Ledger.VERSION, optIn = {}, profiles = {}, backups = {}, nextBackupId = 1, log = {} }
@@ -101,22 +152,58 @@ local function normalizeTraits(raw)
 	return { owned = owned, at = timestamp(raw.at) }
 end
 
+-- { [fieldId] = { value } }: the exact value Dawnward last wrote per field.
+local function normalizeFields(raw)
+	if type(raw) ~= "table" then
+		return nil
+	end
+	local out = {}
+	for id, owned in pairs(raw) do
+		if FieldPlan.BY_ID[id] and type(owned) == "table" then
+			local value = FieldPlan.Clean(owned.value)
+			if value and value == owned.value then
+				out[id] = { value = value }
+			end
+		end
+	end
+	return next(out) and out or nil
+end
+
 local function normalizeProfile(raw)
-	local out = { conflicts = {} }
+	local out = { conflicts = {}, fieldConflicts = {} }
 	if type(raw) ~= "table" then
 		return out
 	end
 	out.about = normalizeAbout(raw.about)
 	out.traits = normalizeTraits(raw.traits)
+	out.fields = normalizeFields(raw.fields)
 	if type(raw.conflicts) == "table" then
-		for feature in pairs(Ledger.FEATURES) do
+		for feature in pairs(Ledger.BLOCK_FEATURES) do
 			out.conflicts[feature] = shortText(raw.conflicts[feature])
+		end
+	end
+	if type(raw.fieldConflicts) == "table" then
+		for id in pairs(FieldPlan.BY_ID) do
+			out.fieldConflicts[id] = shortText(raw.fieldConflicts[id])
 		end
 	end
 	return out
 end
 
-local OWNER_NORMALIZERS = { about = normalizeAbout, traits = normalizeTraits }
+local OWNER_NORMALIZERS = { about = normalizeAbout, traits = normalizeTraits, fields = normalizeFields }
+
+-- { [feature] = owner record } saved with a backup (all features of its section).
+local function normalizeOwners(raw)
+	if type(raw) ~= "table" then
+		return nil
+	end
+	local out = {}
+	for feature, normalize in pairs(OWNER_NORMALIZERS) do
+		out[feature] = normalize(raw[feature])
+	end
+	return next(out) and out or nil
+end
+Ledger.NormalizeOwners = normalizeOwners
 
 local function normalizeBackup(raw)
 	if type(raw) ~= "table" or not Util.IsPositiveInteger(raw.id) or not Ledger.IsStorableProfileId(raw.profileId)
@@ -143,6 +230,22 @@ local function normalizeBackup(raw)
 		out.ownerFeature = raw.ownerFeature
 		out.owner = normalizeOwner(raw.owner)
 	end
+	out.owners = normalizeOwners(raw.owners)
+	if raw.pin == "origin" or raw.pin == "reclaim" then
+		out.pin = raw.pin
+	end
+	return out
+end
+
+local function normalizePolicy(raw)
+	local out = {}
+	if type(raw) == "table" then
+		for _, id in ipairs(Ledger.MAPPINGS) do
+			if Ledger.POLICIES[raw[id]] then
+				out[id] = raw[id]
+			end
+		end
+	end
 	return out
 end
 
@@ -163,8 +266,17 @@ function Ledger.Normalize(raw)
 		for key, entry in pairs(raw.optIn) do
 			if type(key) == "string" and #key <= 100 and type(entry) == "table"
 				and Ledger.IsStorableProfileId(entry.profileId) then
-				out.optIn[key] = { about = entry.about == true, traits = entry.traits == true,
-					profileId = entry.profileId, at = timestamp(entry.at) }
+				local clean = { about = entry.about == true, traits = entry.traits == true,
+					profileId = entry.profileId, at = timestamp(entry.at), policy = normalizePolicy(entry.policy) }
+				-- Migration (v0.7 opt-ins had only the booleans): a feature
+				-- that was on becomes "dawnward", with no change in behaviour.
+				-- A stored policy wins and the boolean follows it.
+				for feature in pairs(Ledger.BLOCK_FEATURES) do
+					if clean.policy[feature] or clean[feature] then
+						Ledger.SetPolicy(clean, feature, Ledger.Policy(clean, feature))
+					end
+				end
+				out.optIn[key] = clean
 			end
 		end
 	end
@@ -189,9 +301,7 @@ function Ledger.Normalize(raw)
 			end
 		end
 		table.sort(out.backups, function(a, b) return a.id < b.id end)
-		while #out.backups > Ledger.LIMITS.backups do
-			table.remove(out.backups, 1)
-		end
+		Ledger.Prune(out)
 	end
 	out.nextBackupId = math.max(maxId + 1, Util.IsPositiveInteger(raw.nextBackupId) and raw.nextBackupId or 1)
 	if type(raw.log) == "table" then
@@ -214,9 +324,10 @@ function Ledger.Profile(ledger, profileId)
 	end
 	local profile = ledger.profiles[profileId]
 	if not profile then
-		profile = { conflicts = {} }
+		profile = { conflicts = {}, fieldConflicts = {} }
 		ledger.profiles[profileId] = profile
 	end
+	profile.fieldConflicts = profile.fieldConflicts or {}
 	return profile
 end
 
@@ -228,8 +339,10 @@ function Ledger.Log(ledger, now, text)
 end
 
 --- Stores a backup of a whole TRP3 section. meta: { reason, characterKey,
--- ownerFeature ("about" | "traits"), owner (that feature's ownership record) }. Returns the backup, or nil plus
--- a reason (for example too large), in which case the caller must not write.
+-- ownerFeature ("about" | "traits" | "fields"), owner (that feature's
+-- ownership record), owners ({ [feature] = record } for every feature of the
+-- section) }. Returns the backup, or nil plus a reason (for example too
+-- large), in which case the caller must not write.
 function Ledger.AddBackup(ledger, profileId, section, data, meta, now)
 	if not Ledger.IsStorableProfileId(profileId) or not Ledger.SECTIONS[section] then
 		return nil, "cannot back up this profile or section"
@@ -249,12 +362,60 @@ function Ledger.AddBackup(ledger, profileId, section, data, meta, now)
 		backup.ownerFeature = meta.ownerFeature
 		backup.owner = OWNER_NORMALIZERS[meta.ownerFeature](Util.DeepCopy(meta.owner))
 	end
+	backup.owners = normalizeOwners(Util.DeepCopy(meta and meta.owners))
 	ledger.nextBackupId = ledger.nextBackupId + 1
-	ledger.backups[#ledger.backups + 1] = backup
-	while #ledger.backups > Ledger.LIMITS.backups do
-		table.remove(ledger.backups, 1)
+	-- Pinning (Ledger.Prune): the state before Dawnward owned anything in
+	-- this section (no owners, or the first backup known for it) is kept
+	-- until a newer such state exists; so is the player's value replaced by
+	-- "Use Dawnward's" (meta.pin = "reclaim").
+	local owned = backup.owner ~= nil or backup.owners ~= nil
+	local known = Ledger.LatestBackup(ledger, profileId, section) ~= nil
+	if meta and meta.pin == "reclaim" then
+		backup.pin = "reclaim"
+	elseif not owned or not known then
+		backup.pin = "origin"
+		for _, other in ipairs(ledger.backups) do
+			if other.pin == "origin" and other.profileId == profileId and other.section == section then
+				other.pin = nil
+			end
+		end
 	end
+	ledger.backups[#ledger.backups + 1] = backup
+	Ledger.Prune(ledger)
 	return backup
+end
+
+--- Keeps the backup list bounded: at most LIMITS.backups in total and
+-- LIMITS.pinned pinned. The oldest unpinned backup goes first, so many
+-- automatic writes never push out the state before Dawnward's first write
+-- (or a value the player handed over with "Use Dawnward's"); beyond the
+-- pinned limit the oldest pinned one goes.
+function Ledger.Prune(ledger)
+	local list = ledger.backups
+	local pinned = 0
+	for _, b in ipairs(list) do
+		if b.pin then pinned = pinned + 1 end
+	end
+	for _, b in ipairs(list) do
+		if pinned <= Ledger.LIMITS.pinned then break end
+		if b.pin then
+			b.pin = nil
+			pinned = pinned - 1
+		end
+	end
+	while #list > Ledger.LIMITS.backups do
+		local removed = false
+		for i, b in ipairs(list) do
+			if not b.pin then
+				table.remove(list, i)
+				removed = true
+				break
+			end
+		end
+		if not removed then
+			table.remove(list, 1)
+		end
+	end
 end
 
 --- Decoded copy of a backup's section data.

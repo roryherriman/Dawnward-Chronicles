@@ -16,6 +16,92 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 
 **Verified: L2** (mocked). Nothing in this section has been tested in game yet.
 
+### Automatic Total RP 3 sync (#4, #5, #6, #7, #10, #15)
+- **Five profile fields, kept up to date:**
+  - **Which fields:** Title (TRP3 full title), Race, Class, Age and Homeland (shown in TRP3 as Birthplace).
+  - **Source:** your Public Dawnward profile, one field at a time.
+  - **When:** only after you authorise it. Every field starts as "Managed by Total RP 3".
+- **Never overwritten:**
+  - **Your own values:** Dawnward writes a field only while it is empty, or still holds exactly what Dawnward last wrote. A value you wrote in Total RP 3 (even one that happens to match) is never claimed or overwritten: that field pauses until you choose **Keep yours** or **Use Dawnward's**. The other fields keep updating.
+  - **Back to Private:** a field you make Private again is taken back out of Total RP 3, only if it still holds Dawnward's value.
+- **Total RP 3 page, new Mappings tab:** who manages each part, a preview of the first sync (Public values only), a warning when several characters share the profile, and the list of what Dawnward never writes (and why).
+- **Compare and import:** compare Total RP 3 with your Public values, and import a value into Dawnward explicitly (Private by default). Total RP 3 never changes Dawnward by itself.
+- **New commands:** `/dawnward trp3 fields`, `trp3 field <name> dawnward|trp3|off confirm`, `trp3 import <field> confirm`.
+- **Rollback is now visibility-aware:**
+  - **Preview:** it first lists anything in the backup that is no longer Public.
+  - **Default (`rollback confirm`):** it restores your own text and rebuilds Dawnward's part from today's Public data.
+  - **Exact restore (`rollback exact confirm`):** brings the old section back unchanged, after a confirmation naming what would become visible again.
+  - **Never automatic:** rollback never runs by itself.
+- **Reliability:**
+  - a sync that waited for combat runs as soon as combat ends;
+  - retries are bounded per change, and "still waiting" is reported once;
+  - Dawnward's own write no longer triggers a second run;
+  - an exact rollback is read back and undone at once if it does not match.
+- **Not synchronised automatically:**
+  - first and last name;
+  - the short title;
+  - pronouns;
+  - faith, occupation, appearance, summary and motivation;
+  - Currently, OOC and RP status;
+  - eye colour, height, weight, residence and relationship.
+
+  The manual `trp3 paste` text now carries every Public profile field.
+- **Multiplayer:** a two-client test procedure is in `docs/TRP3_INTEGRATION.md`. Multiplayer propagation is **not verified yet**.
+- **From the code review:**
+  - **Backups:** Total RP 3 backups always keep the state from before Dawnward's first write, and any value you handed over with "Use Dawnward's".
+  - **No altered values:** a value Total RP 3 would alter is never written, shortened, or used to clear a field.
+  - **Handing a field back:** this first removes a Dawnward value that is no longer Public, unless you choose to keep it.
+  - **Authorize:** it applies all your choices or none.
+  - **Reads and imports:** reading Total RP 3 for import needs an audited version, and an import that would be shortened is refused.
+  - **Less work:** updates to other players' profiles no longer trigger a sync.
+- **Undo answer** in Continuity review never makes anything Public again: a hidden side that was Public comes back as Private. A backup without secrets leaves out the text of answered findings.
+
+### Story Director context and continuity (#20, #25, #42)
+- **Moments draw on your established story:**
+  - **Ranking:** goals, arcs and memories that name the place or faction rank first.
+  - **Stances:** a stance about the event's subject can offer one answer, which never shows the private conviction.
+  - **Why now:** names your homeland, marked places, people, a standing that rose or fell, and your goals and stances about a faction.
+  - **Last time:** recalls your own earlier answer about the same situation.
+- **New authored wording** for a return to your homeland, and for a standing change with a faction you have a stance on.
+- **No repeated questions:**
+  - **Window:** the same question about the same place, faction, zone's quests, instance or guild is not asked again within 3 narrative days of play (`/dawnward story set repeat 0-14`).
+  - **Diagnostics:** `dev story status` explains each suppression.
+  - **Frequency:** this only ever lowers how often you are asked.
+- **Continuity review:**
+  - **Examine:** shows the records side by side with their dates and origin.
+  - **Edit:** opens a record's own form.
+  - **Explain:** keeps your note with your answer.
+  - **Undo answer:** in the Answered list.
+  - **New checks:**
+    - a public stance contradicting a public fact;
+    - a goal marked achieved with open steps, or before its objective is reached;
+    - a memory dated before its event;
+    - a missing replacement record.
+
+  Nothing is ever rewritten for you. Chat: `/dawnward continuity examine|explain|answered|undo <n>`.
+
+### Character journey (#13, #16, #19, #21, #23, #27, #32)
+- **Import a story you already wrote:**
+  - **How:** paste it, or read your Total RP 3 About text, read-only and without Dawnward's own block.
+  - **Exact text:** it is kept word for word (up to 16 KB, never cut).
+  - **Review:** you approve, edit or skip each sentence or paragraph before it becomes part of your character, as Private by default. Approving as Public shows exactly what becomes public and asks first.
+  - **Re-importing:** it only suggests what is new.
+  - **Where:** Character → Import story, Settings → Data → Your story, the setup wizard's Character step, or `/dawnward biography`.
+- **Your own words for personality:** name each axis's two ends in your own words, write what it means, or lock it so story answers never propose changing it. Click an axis in Character → Personality. Everything is reversible ("Use Dawnward's words").
+- **Rejecting a suggested arc** (`/dawnward arc reject`, or Remove in Chronicle) stops that theme being suggested again. Before, a removed suggestion came back.
+- **Publishing a journal entry:** making it Public shows exactly what becomes shareable and asks first.
+- **Restoring a backup:** the preview lists what changes for each record type ("now → after") and warns if the backup came from another character. Backups now keep your axis meanings.
+- **Privacy fix:** public facts no longer carry the original sentence they were approved from into share exports or Total RP 3.
+- **Tests:**
+  - arcs and goals never reach any public output;
+  - a full backup round trip covers every record type;
+  - a damaged saved character is repaired without losing the rest.
+- **Deferred:**
+  - filling profile fields from an import (it would mean guessing);
+  - a diff view when re-importing;
+  - journal reordering and pinning;
+  - selective export.
+
 ### Gameplay events and locations (#11, #14, #18, #35, #48)
 - **Zone Atlas:**
   - **Evidence:** the owner's in-game export and 1–5000 scan from #48 are kept verbatim, with their SHA-256 checked, and all 17 maps and 49 areas are promoted to in-game evidence.

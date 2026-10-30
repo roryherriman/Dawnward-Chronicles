@@ -46,6 +46,18 @@ Every fact Dawnward stores (a family member, a backstory paragraph, a journal en
 - **Places.** The places log (where the character has been, and which places you marked as meaningful) is part of the private `story` table. It is never public, never in a share export and never sent to Total RP 3. Marking a place as meaningful creates nothing else.
 - **Alts.** Story events are recorded only for characters that already use Dawnward, so installing it does not start recording every character on the account.
 
+## Story import, axis meanings and publishing (v0.7.1)
+- **Story import** (Character > Import story, Settings > Data, the setup wizard's Character stage, `/dawnward biography`):
+  - the pasted text, or your own Total RP 3 About text, is stored **verbatim** as a private biography source (same rules as above: never public, never in a share export, in a backup only with the biography option);
+  - reading Total RP 3 is read-only: Dawnward copies the active profile's About text (leaving out any block Dawnward wrote there) and never writes back;
+  - every sentence or paragraph becomes a **private suggestion**. Nothing becomes canon until you choose Approve, and an approved fact is **Private** unless you choose Public, which first shows exactly what would become public and asks;
+  - Skip removes a suggestion and remembers it, so importing the same or an edited story never suggests it again.
+- **Public facts carry only their statement.** The public projection (share exports and Total RP 3) no longer includes a fact's source links or quoted excerpt, so a fact approved from your story never publishes the original sentence, even after you reworded it.
+- **Axis meanings** (your own names for the personality axes, what they mean, and locks) are private: kept in personal backups, never in the public projection, a share export or Total RP 3. Total RP 3 traits keep Dawnward's own labels.
+- **Arcs and goals** are never public, whatever their visibility chip says: they are not part of the public projection, share exports or the Total RP 3 block (tested). A rejected arc suggestion is remembered in the suggestion key memory, privately.
+- **Publishing a journal entry** asks first and shows exactly the text that becomes shareable, and where it can appear.
+- **Backup owner.** A personal backup now records the character it was made from (`Name-Realm`) so a restore can warn before one character's backup replaces another's. Share exports never include it.
+
 ## Total RP 3 sync (experimental, v0.3)
 - TRP3 sync uses **only the public projection**: public facts and public personality values. Private and secret data, sources, suggestions and simulation data can never reach TRP3 (L2).
 - It is off until you opt in for a character. Anything it writes, TRP3 then shares with other players as part of your profile.
@@ -53,7 +65,7 @@ Every fact Dawnward stores (a family member, a backstory paragraph, a journal en
 
 ## The public projection
 
-The **only** way character data leaves the core is `Projection.GetPublic(characterKey)`. It returns a newly built, deep-copied table that contains `public` facts only. The TRP3 integration and the shareable export both work from this projection and never see the core database.
+The **only** way character data leaves the core is `Projection.GetPublic(characterKey)`. It returns a newly built, deep-copied table that contains `public` facts only (each with its statement, category and subject; provenance is reduced to its origin, without source links or excerpts). The TRP3 integration and the shareable export both work from this projection and never see the core database.
 
 Tests check that:
 

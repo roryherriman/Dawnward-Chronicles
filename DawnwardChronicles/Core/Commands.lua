@@ -39,6 +39,7 @@ local HELP = {
 	"  personality list | personality set <axis> <0-20> | personality vis <axis> <level>",
 	"  personality clear <axis> confirm",
 	"  export backup [secrets] [biography] | export share | import | import confirm | import undo",
+	"  biography | biography status   (import a story you already wrote; you approve each piece)",
 	"  sim on | sim off | sim copy confirm | sim reset confirm | sim levelup <level>",
 	"  sim quest <id> [title] | sim death   (test the story loop in simulation data)",
 	"  story | story <#> [<answer #> | write <text> | later | notnow | dismiss] | story settings",
@@ -608,7 +609,7 @@ handlers.export = function(ctx, rest)
 	local includeSecrets = kind == Transfer.KIND_BACKUP and options.secrets == true
 	local includeBiography = kind == Transfer.KIND_BACKUP and options.biography == true
 	local text, err = Transfer.Export(char, kind, { includeSecrets = includeSecrets,
-		includeBiography = includeBiography, addonVersion = ctx.version })
+		includeBiography = includeBiography, addonVersion = ctx.version, characterKey = ctx.characterKey })
 	if not text then
 		out(ctx, "Export failed: " .. tostring(err))
 		return
@@ -648,10 +649,17 @@ function Commands.StageImport(ctx, text)
 		return false, message
 	end
 	ctx.pendingImport = plan
-	local message = "Ready to import " .. Transfer.Describe(plan)
+	local warning = Transfer.OwnerWarning(plan, ctx.characterKey)
+	local message = (warning and ("Warning: " .. warning .. " ") or "") .. "Ready to import " .. Transfer.Describe(plan)
 		.. ". This replaces the " .. modeLabel(ctx) .. " profile for this character; "
 		.. "the current one is kept for /dawnward import undo."
 	out(ctx, message)
+	-- Restore preview: what changes, record type by record type (#32).
+	out(ctx, "What changes:")
+	-- (The owner warning is already part of the message above.)
+	for _, line in ipairs(Transfer.Preview(ctx.store:GetCharacter(ctx.characterKey), plan, ctx.now())) do
+		out(ctx, line)
+	end
 	out(ctx, "Type /dawnward import confirm (or press Import) to apply.")
 	return true, message
 end

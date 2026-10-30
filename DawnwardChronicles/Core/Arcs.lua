@@ -39,7 +39,47 @@ end
 function Arcs.Find(char, id) return Records.Find(list(char), id) end
 function Arcs.Accept(char, id, now) return Records.Accept(list(char), id, now) end
 function Arcs.Dispute(char, id, now) return Records.Dispute(list(char), id, now) end
-function Arcs.Remove(char, id) return Records.Remove(list(char), id) end
+
+--- The remembered key for a rejected arc suggestion about a theme. It lives
+-- in the character's suggestion key memory (char.interpretationKeys, kept in
+-- backups), so a rejected suggestion is not made again.
+function Arcs.RejectKey(theme)
+	return "arc-suggestion:" .. tostring(theme)
+end
+
+local function rememberRejected(char, arc, now)
+	if arc.provenance ~= "suggested" or arc.status ~= "proposed" or type(char.interpretationKeys) ~= "table" then
+		return
+	end
+	for _, tag in ipairs(arc.tags or {}) do
+		local key = Arcs.RejectKey(tag)
+		if ns.Schema.IsInterpretationKey(key) then
+			char.interpretationKeys[key] = { status = "rejected", at = now or 0 }
+		end
+	end
+	ns.Schema.CapKeyMemory(char.interpretationKeys)
+end
+
+--- Rejects an arc Dawnward suggested: it is removed, and its theme is not
+-- suggested again. Only for suggestions still waiting (proposed); an arc
+-- the player accepted or wrote is concluded, abandoned or removed instead.
+function Arcs.Reject(char, id, now)
+	local a = Arcs.Find(char, id)
+	if not a then return nil, "no arc #" .. tostring(id) end
+	if a.provenance ~= "suggested" or a.status ~= "proposed" then
+		return nil, "only a suggested arc that is still waiting can be rejected"
+	end
+	rememberRejected(char, a, now)
+	return Records.Remove(list(char), id)
+end
+
+--- Removing a waiting suggestion counts as rejecting it (its theme is not
+-- suggested again); removing anything else just removes it.
+function Arcs.Remove(char, id, now)
+	local a = Arcs.Find(char, id)
+	if a then rememberRejected(char, a, now) end
+	return Records.Remove(list(char), id)
+end
 function Arcs.SetVisibility(char, id, level, now) return Records.Visibility(list(char), id, level, now) end
 
 --- active, paused, concluded or abandoned.
@@ -114,8 +154,11 @@ function Arcs.SuggestFromPattern(char, now)
 		for _, tag in ipairs(a.tags) do covered[tag] = true end
 	end
 	local themes = {}
+	local rejected = char.interpretationKeys or {}
 	for theme, n in pairs(counts) do
-		if n >= Arcs.PATTERN and not covered[theme] then themes[#themes + 1] = theme end
+		if n >= Arcs.PATTERN and not covered[theme] and not rejected[Arcs.RejectKey(theme)] then
+			themes[#themes + 1] = theme
+		end
 	end
 	table.sort(themes)
 	local theme = themes[1]

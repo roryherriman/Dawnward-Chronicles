@@ -122,7 +122,9 @@ end
 
 --- Personality rows (pure; tested): one per axis, in registry order,
 -- { axis, value (nil when not set), visibility, pending = net waiting delta,
--- waiting = number of waiting changes }, plus the total waiting.
+-- waiting = number of waiting changes, left / right / meaning = the words
+-- shown (the player's own where they wrote any, #21), custom, locked },
+-- plus the total waiting.
 function CharacterView.PersonalityRows(char)
 	local pendingBy, total = {}, 0
 	if char and char.story and ns.Evolution then
@@ -137,8 +139,10 @@ function CharacterView.PersonalityRows(char)
 	for _, axis in ipairs(Schema.PERSONALITY_AXES) do
 		local entry = char and char.personality and char.personality[axis.id]
 		local p = pendingBy[axis.id]
+		local left, right, meaning, custom = ns.AxisMeanings.Labels(char, axis)
 		rows[#rows + 1] = { axis = axis, value = entry and entry.value, visibility = entry and entry.visibility,
-			pending = p and p.delta or 0, waiting = p and p.count or 0 }
+			pending = p and p.delta or 0, waiting = p and p.count or 0, left = left, right = right,
+			meaning = meaning, custom = custom, locked = ns.AxisMeanings.IsLocked(char, axis.id) }
 	end
 	return rows, total
 end
@@ -246,7 +250,7 @@ local function create(parent)
 
 	-- Header actions, level with the close button above the content area.
 	local header = CreateFrame("Frame", nil, f)
-	header:SetSize(420, 30)
+	header:SetSize(540, 30)
 	header:SetPoint("TOPRIGHT", f, "TOPRIGHT", -(36 + 12), L.headerOffset)
 	section.header = header
 	section.previewButton = Widgets.Button(header, "Preview public view", 150, 30)
@@ -262,6 +266,13 @@ local function create(parent)
 	section.trp3Button:SetScript("OnClick", function() CharacterView.OpenTRP3() end)
 	Widgets.Tooltip(section.trp3Button, "Total RP 3",
 		"Sync status, preview, approval and backups for Total RP 3 (optional).")
+	-- Story import (#23): paste a backstory, or read your Total RP 3 About text.
+	section.importButton = Widgets.Button(header, "Import story", 110, 30, "ghost")
+	section.importButton:SetPoint("RIGHT", section.trp3Button, "LEFT", -8, 0)
+	section.importButton:SetScript("OnClick", function() ns.ImportWizard.Open({ from = "character" }) end)
+	Widgets.Tooltip(section.importButton, "Import your story",
+		"Paste a backstory you already wrote (or read your Total RP 3 About text). It is kept exactly as written; "
+		.. "you approve each piece before it becomes part of your character.")
 
 	section.intro = Widgets.Label(f, "GameFontHighlight", false, "muted")
 	section.intro:SetPoint("TOPLEFT", 0, -2)
@@ -317,6 +328,11 @@ local function create(parent)
 		a.knob:SetSize(10, 10)
 		a.note = Widgets.Label(a, "GameFontHighlightSmall", false)
 		a.note:SetPoint("TOPLEFT", 0, -30)
+		a.axisIndex = i
+		-- Click: the player's own words, meaning and lock for this axis (#21).
+		a:SetScript("OnMouseUp", function(self)
+			if section.OpenAxisForm then section:OpenAxisForm(Schema.PERSONALITY_AXES[self.axisIndex]) end
+		end)
 		pers.axes[i] = a
 	end
 
@@ -482,7 +498,8 @@ local function create(parent)
 	end
 
 	local function paintAxis(a, row, theme, width)
-		local axis = row.axis
+		-- The player's own words where they wrote any (#21).
+		local axis = { left = row.left or row.axis.left, right = row.right or row.axis.right }
 		a.left:SetText(axis.left)
 		a.right:SetText(axis.right)
 		local lean = row.value and (row.value > 10 and "right" or row.value < 10 and "left") or nil
@@ -507,13 +524,19 @@ local function create(parent)
 			note = "Not set"
 			Widgets.TextColor(a.note, theme.muted)
 		end
+		if row.locked then
+			note = (note and (note .. " · ") or "") .. "Locked: story answers never change it"
+			if row.waiting == 0 then Widgets.TextColor(a.note, theme.muted) end
+		end
 		a.note:SetText(note or "")
 		a.note:SetShown(note ~= nil)
 		local value = row.value and (row.value .. "/20 (" .. axis.left .. " " .. (20 - row.value) .. ", "
 			.. axis.right .. " " .. row.value .. ")") or "Not set"
 		local vis = row.visibility and Themes.VISIBILITY_LABELS[row.visibility] or nil
 		Widgets.Tooltip(a, axis.left .. " - " .. axis.right, value .. (vis and ("\nVisibility: " .. vis) or "")
-			.. (row.waiting > 0 and "\nA change from your story choices waits in Story." or ""))
+			.. (row.meaning and ("\n\n" .. row.meaning) or "")
+			.. (row.waiting > 0 and "\nA change from your story choices waits in Story." or "")
+			.. "\n\nClick to name this axis in your own words, say what it means, or lock it.")
 		return note and 46 or 30
 	end
 
@@ -826,6 +849,40 @@ function CharacterView.AttachEditing(section)
 		self.header:Hide()
 	end
 
+	--- Personality axes in the player's own words (#21). ---------------------
+
+	CharacterView.AXIS_LOCK_VALUES = { { false, "Story answers may suggest changes" },
+		{ true, "Locked: story answers never change it" } }
+
+	function section:OpenAxisForm(axis)
+		if not axis then return end
+		local entry = ns.AxisMeanings.Get(Actions.Character(ns.ctx), axis.id) or {}
+		local L2 = ns.AxisMeanings.LIMITS
+		self.form:Open({
+			title = "Personality: " .. axis.left .. " - " .. axis.right,
+			hint = "Your own words for this axis. Leave a label empty to keep Dawnward's (" .. axis.left .. " / "
+				.. axis.right .. "). Values, history and Total RP 3 traits are not changed. Private.",
+			fields = {
+				{ key = "left", label = "Left end", kind = "line", max = L2.label },
+				{ key = "right", label = "Right end", kind = "line", max = L2.label },
+				{ key = "meaning", label = "What it means", kind = "area", max = L2.meaning },
+				{ key = "locked", label = "Story changes", kind = "cycle", values = CharacterView.AXIS_LOCK_VALUES },
+			},
+			values = { left = entry.left, right = entry.right, meaning = entry.meaning, locked = entry.locked == true },
+			deleteLabel = "Use Dawnward's words",
+			onDelete = (entry.left or entry.right or entry.meaning or entry.locked) and function()
+				return section.ChangeItem(function(char, now) return ns.AxisMeanings.Reset(char, axis.id, now) end)
+			end or nil,
+			onSave = function(v)
+				return section.ChangeItem(function(char, now)
+					return ns.AxisMeanings.Set(char, axis.id, { left = v.left or "", right = v.right or "",
+						meaning = v.meaning or "", locked = v.locked == true }, now)
+				end)
+			end,
+		})
+		self.header:Hide()
+	end
+
 	-- Fields always offer Edit (Add while empty); visibility only once a
 	-- value exists. shape: "tile" (controls along the bottom) or "card"
 	-- (controls top right).
@@ -976,5 +1033,5 @@ function CharacterView.AttachEditing(section)
 	editor.clear:SetScript("OnClick", section.ConfirmClear)
 end
 
-MainWindow.RegisterSection({ id = "character", label = "Character", order = 2, heading = "Profile", titleInset = 420,
+MainWindow.RegisterSection({ id = "character", label = "Character", order = 2, heading = "Profile", titleInset = 540,
 	icon = "Interface\\Icons\\INV_Misc_Head_Human_01", create = create })
