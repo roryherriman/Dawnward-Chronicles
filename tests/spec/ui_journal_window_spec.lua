@@ -57,6 +57,33 @@ return function(t, expect)
 			expect.truthy(r.content.right - r.content.left >= 520)
 			expect.truthy(r.content.top - r.content.bottom >= 360)
 		end)
+
+		t:it("keeps every rail part apart, top to bottom, inside the rail's padding", function()
+			local stack = { r.wordmark, r.portrait, r.name, r.tabs[1], r.tabs[2], r.tabs[3], r.tabs[4], r.trp3, r.help }
+			for i, region in ipairs(stack) do
+				expect.truthy(region.left >= L.railPad - 0.001 and region.right <= L.railWidth - L.railPad + 0.001,
+					"rail part " .. i .. " inside the padding")
+				if i > 1 then
+					expect.truthy(stack[i - 1].bottom >= region.top, "rail parts " .. (i - 1) .. " and " .. i .. " overlap")
+				end
+			end
+			expect.falsy(overlaps(r.help, r.gear))
+			expect.truthy(inside(r.levelBadge, r.rail))
+			expect.falsy(overlaps(r.levelBadge, r.name), "the level badge stays above the name")
+		end)
+
+		t:it("fits the screen at its smallest and largest scale, and the eyebrow sits above the title", function()
+			local M = ns.MainWindow
+			-- The largest scale on a 1080p screen at UI scale 1 (UIParent 768 tall).
+			local big = M.EffectiveScale(M.MAX_SCALE, 1365, 768)
+			expect.truthy(L.width * big <= 1365 - M.FIT_MARGIN + 0.001 and L.height * big <= 768 - M.FIT_MARGIN + 0.001)
+			local small = M.EffectiveScale(M.MIN_SCALE, 1365, 768)
+			expect.equal(small, M.MIN_SCALE)
+			-- At the smallest scale the 13 px minimum style is still 9 px or more on screen.
+			expect.truthy(ns.Style.MIN_TEXT * M.MIN_SCALE >= 9)
+			expect.truthy(r.eyebrow.bottom >= r.title.top, "eyebrow above the title")
+			expect.falsy(overlaps(r.eyebrow, r.close) or overlaps(r.title, r.close))
+		end)
 	end)
 
 	t:describe("journal window (L2)", function()

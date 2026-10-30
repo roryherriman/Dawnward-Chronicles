@@ -106,11 +106,20 @@ Themes.ROLES = { "background", "panel", "surface", "surfaceHover", "edge", "orna
 	"accentText", "danger", "border" }
 
 -- Visibility labels use fixed meanings across themes, so "Secret" always
--- looks like a warning. Checked for contrast on every theme's panel.
+-- looks like a warning. Values from the design system's visibility chips
+-- (Private #B4C6EA, Public #93D9BB, Secret #EFA9A9). Checked for contrast on
+-- every theme's surfaces and on their own chip fills.
 Themes.VISIBILITY_COLORS = {
-	public = { 0.55, 0.86, 0.55 },
-	private = { 0.78, 0.78, 0.78 },
-	secret = { 0.98, 0.58, 0.48 },
+	public = hex("#93D9BB"),
+	private = hex("#B4C6EA"),
+	secret = hex("#EFA9A9"),
+}
+
+-- Status colours with a fixed meaning across themes: "waiting" is the
+-- design system's "Needs you" amber (#F2C46B), for things waiting on the
+-- player's approval.
+Themes.STATUS_COLORS = {
+	waiting = hex("#F2C46B"),
 }
 
 Themes.VISIBILITY_LABELS = { public = "Public", private = "Private", secret = "Secret" }
