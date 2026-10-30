@@ -1,14 +1,17 @@
 -- Chronicle section: the character's narrative records in the window
--- (v0.7, docs/design/mockups/chronicle-memories.png and chronicle-places.png).
+-- (v0.8, docs/design/mockups/chronicle-memories.png and chronicle-places.png;
+-- audit in docs/design/audit/chronicle.md).
 --
---   Memories, Arcs, Goals, Stances, People   records as cards in a two-column
---       grid: a status chip and the date on top, the title, a meta line, the
---       wrapped text, chips (where it came from, canon status, visibility;
---       the visibility chip is a button that cycles it), a goal's progress
---       from its real milestones or verified objective, and the record's
---       actions in a row at the bottom (Remove on the right). New and Edit
---       open a form, so nothing here needs a slash command. A search box
---       filters the current tab.
+--   Memories, Arcs, Goals, Stances, People   records as cards in two
+--       columns, each card as tall as its content: a status chip and the
+--       date on top, the title, a meta line, the text, chips (where it came
+--       from, canon status, visibility; the visibility chip is a button that
+--       cycles it), a goal's progress from its real milestones or verified
+--       objective, and the record's actions in a row at the bottom (Remove on
+--       the right). A card that cannot show everything offers Read, the full
+--       view of the record with the same actions. New and Edit open a form,
+--       so nothing here needs a slash command. A search box filters the
+--       current tab.
 --   Places                                   list and detail
 --       (UI/ChroniclePlaces.lua): mark a place as meaningful, link it as the
 --       homeland, or write a memory there
@@ -22,7 +25,7 @@
 --
 -- Every button calls the same core functions as the chat commands, through
 -- Actions.WithCharacter (read-only data refused). Cards come from a fixed
--- pool and long lists are paged, so a refresh creates no frames.
+-- pool and long lists are paged by what fits, so a refresh creates no frames.
 local _, ns = ...
 local Widgets, MainWindow, Actions, Forms, Style = ns.Widgets, ns.MainWindow, ns.Actions, ns.Forms, ns.Style
 
@@ -64,63 +67,276 @@ ChronicleView.UNDO_HELP = "Takes this answer back. The finding returns if the re
 	.. "the answer changed is put back, except that nothing becomes Public again: a hidden side that was Public "
 	.. "comes back as Private."
 
--- Layout in section units (the v0.7 content area is 772 x 588, the mockup's
--- main column). Tabs on top, a toolbar (New, search, count, pager) below
--- them, then a 2 x 2 grid of cards.
+-- Layout in section units (the content area is 772 x 588, the mockup's main
+-- column; ChronicleMemories.dc.html). Tabs on top (a 34 px segmented row on
+-- a 3 px padded track), a toolbar (New, search, count, pager) below them,
+-- then the cards in two columns.
+--
+-- Cards are sized to their content (v0.8): a short memory is a short card,
+-- a long one grows up to maxTextLines of text and offers Read, which shows
+-- the whole record. Each card goes to the shorter column, so no card waits
+-- for a taller neighbour, and a page holds as many cards as fit (at most
+-- `pool`, the frames that exist). All sizes are computed by pure functions
+-- (CardLayout, Paginate) from the bundled fonts' real advance widths, so a
+-- refresh creates no frames and tests can check nothing overlaps.
 ChronicleView.LAYOUT = {
-	inset = 0, width = 772,
-	tabHeight = 34, tabGap = 4, tabPad = 3,
-	toolbarTop = 50, toolbarHeight = 30, searchWidth = 240, newWidth = 150,
-	gridTop = 96, cols = 2, gridRows = 2, colGap = 14, rowGap = 12,
-	cardWidth = 379, cardHeight = 240, cardPad = 14, dateWidth = 90, chips = 4,
-	buttons = 5, buttonHeight = 26, buttonGap = 6,
+	inset = 0, width = 772, height = 588,
+	tabHeight = 40, tabGap = 4, tabPad = 3, tabTextPad = 12,
+	toolbarTop = 54, toolbarHeight = 36, searchWidth = 240, newWidth = 148,
+	gridTop = 102, cols = 2, colGap = 12, rowGap = 12, pool = 8,
+	cardWidth = 380, cardPad = 16, padY = 14, gap = 8, dateWidth = 96,
+	chipRow = 24, chipGap = 6, chips = 4,
+	titleHeight = 22, metaLine = 18, maxMetaLines = 2, textLine = 20, maxTextLines = 6, progressHeight = 6,
+	dividerGap = 10, buttons = 6, buttonHeight = 30, buttonGap = 6, buttonPad = 12, buttonPadTight = 8,
+	minButton = 44,
+	-- The full view of one record (Read).
+	detailPad = 20, detailTitleLines = 3, detailTitleLine = 24, detailMetaLines = 3,
 }
-ChronicleView.ROWS = ChronicleView.LAYOUT.cols * ChronicleView.LAYOUT.gridRows
+ChronicleView.LAYOUT.gridHeight = ChronicleView.LAYOUT.height - ChronicleView.LAYOUT.gridTop
+ChronicleView.ROWS = ChronicleView.LAYOUT.pool
 
--- Button widths by label (the rest: 64). Long enough for each label.
-ChronicleView.BUTTON_WIDTHS = { Accept = 68, Edit = 56, Dispute = 68, Remove = 72, Turn = 58, Steps = 60,
-	Growth = 62, Unreliable = 78, Secret = 58, ["Correct it"] = 76, Ignore = 56, ["Explain..."] = 80,
-	["Undo answer"] = 96 }
--- The Examine button at a finding card's top right (where a record's date sits).
-ChronicleView.EXAMINE_RECT = { w = 80, h = 22, y = 9 }
+-- The Examine button at a finding card's top right (where a record's date
+-- sits): a compact button, the top row grows to its height.
+ChronicleView.EXAMINE_RECT = { w = 80, h = 30 }
+
+-- Estimates err on the side of one line more than the client draws (kerning
+-- and rounding): the estimated width of a line is this share of the real one.
+ChronicleView.WRAP_SAFETY = 0.96
+
+local wrapCache, wrapCount = {}, 0
+
+--- Lines text takes when wrapped to width in a Dawnward font style
+-- ("reading", "meta", "title", ...), from the bundled fonts' advance
+-- widths; 0 for no text. Explicit line breaks count. Pure (cached).
+function ChronicleView.WrapLines(text, width, style)
+	if type(text) ~= "string" or not text:find("%S") then return 0 end
+	local key = style .. "\1" .. width .. "\1" .. text
+	local cached = wrapCache[key]
+	if cached then return cached end
+	local limit = width * ChronicleView.WRAP_SAFETY
+	local space = Style.TextWidth(" ", style)
+	local lines = 0
+	for para in (text .. "\n"):gmatch("(.-)\n") do
+		local n, x = 1, 0
+		for word in para:gmatch("%S+") do
+			local w = Style.TextWidth(word, style)
+			local need = x > 0 and (x + space + w) or w
+			if need <= limit then
+				x = need
+			else
+				if x > 0 then n = n + 1 end
+				while w > limit do
+					n = n + 1
+					w = w - limit
+				end
+				x = w
+			end
+		end
+		lines = lines + n
+	end
+	if wrapCount > 2000 then wrapCache, wrapCount = {}, 0 end
+	wrapCache[key], wrapCount = lines, wrapCount + 1
+	return lines
+end
+
+--- Width of a card button labelled label, with pad on each side. Pure.
+function ChronicleView.ButtonWidth(label, pad, L)
+	L = L or ChronicleView.LAYOUT
+	return math.max(L.minButton, math.ceil(ns.Style.TextWidth(label, "buttonSmall")) + 2 * (pad or L.buttonPad))
+end
+
+--- Places a card's buttons in width: left = { { id, label } } from the left,
+-- right = { id, label } or nil alone at the right edge (Remove). One row
+-- when it fits (with the usual padding, else a tighter one); otherwise the
+-- buttons wrap to more rows. Returns { items = { { x, y, w, id, label } },
+-- rows, height }, positions relative to the buttons' top-left. Pure.
+function ChronicleView.ButtonRows(left, right, width, L)
+	L = L or ChronicleView.LAYOUT
+	local all = {}
+	for _, e in ipairs(left or {}) do all[#all + 1] = e end
+	if right then all[#all + 1] = right end
+	if #all == 0 then return { items = {}, rows = 0, height = 0 } end
+	local function widths(pad)
+		local out, total = {}, 0
+		for i, e in ipairs(all) do
+			out[i] = ChronicleView.ButtonWidth(e[2], pad, L)
+			total = total + out[i]
+		end
+		return out, total + L.buttonGap * (#all - 1)
+	end
+	local items = {}
+	for _, pad in ipairs({ L.buttonPad, L.buttonPadTight }) do
+		local w, total = widths(pad)
+		if total <= width then
+			local x = 0
+			for i, e in ipairs(all) do
+				local bx = (right and i == #all) and (width - w[i]) or x
+				items[i] = { x = bx, y = 0, w = w[i], id = e[1], label = e[2] }
+				x = x + w[i] + L.buttonGap
+			end
+			return { items = items, rows = 1, height = L.buttonHeight }
+		end
+	end
+	-- Wrap: left to right, a new row when the next one would not fit.
+	local w = widths(L.buttonPad)
+	local x, row = 0, 0
+	for i, e in ipairs(all) do
+		local bw = math.min(w[i], width)
+		if x > 0 and x + bw > width then
+			row, x = row + 1, 0
+		end
+		local bx = x
+		if right and i == #all then bx = math.max(x, width - bw) end
+		items[i] = { x = bx, y = row * (L.buttonHeight + L.buttonGap), w = bw, id = e[1], label = e[2] }
+		x = bx + bw + L.buttonGap
+	end
+	return { items = items, rows = row + 1, height = (row + 1) * L.buttonHeight + row * L.buttonGap }
+end
+
+--- Width of a chip showing text (a little over the estimate, so the
+-- client's own width always fits in it). Pure.
+function ChronicleView.ChipWidth(text)
+	return math.ceil(ns.Style.TextWidth(text, "small") * 1.04) + 2 * ns.Widgets.CHIP_PAD + 2
+end
+
+--- Width of the visibility chip (a button) for a level. Pure.
+function ChronicleView.VisibilityWidth(level)
+	local label = ns.Themes.VISIBILITY_LABELS[level] or level or "Private"
+	return math.ceil(ns.Style.TextWidth(label, "buttonSmall")) + 26
+end
+
+--- Places chips ({ { text, tone } }) and then the visibility chip (vis, a
+-- level, or nil) in rows of width. Returns { items = { { x, y, w } }, vis =
+-- { x, y, w } or nil, rows, height }. Pure.
+function ChronicleView.ChipRows(chips, vis, width, L)
+	L = L or ChronicleView.LAYOUT
+	local out = { items = {} }
+	local x, row = 0, 0
+	local function put(w)
+		w = math.min(w, width)
+		if x > 0 and x + w > width then row, x = row + 1, 0 end
+		local at = { x = x, y = row * (L.chipRow + L.chipGap), w = w }
+		x = x + w + L.chipGap
+		return at
+	end
+	for i, c in ipairs(chips or {}) do
+		if i > L.chips then break end
+		out.items[i] = put(ChronicleView.ChipWidth(c[1]))
+	end
+	if vis then out.vis = put(ChronicleView.VisibilityWidth(vis)) end
+	local any = #out.items > 0 or out.vis ~= nil
+	out.rows = any and row + 1 or 0
+	out.height = any and (out.rows * L.chipRow + row * L.chipGap) or 0
+	return out
+end
 
 --- Rectangles of one card's parts, relative to its top-left corner (y grows
--- downwards), with x, y, w, h. opts: { title, meta, progress } say which
--- optional parts the card shows. Pure: the frames are placed from it, and
--- tests check nothing overlaps.
-function ChronicleView.CardRects(opts, L)
+-- downwards), and its height. content is CardContent's result, plus
+-- content.vis (the record's visibility, for its chip) and content.examine
+-- (a finding: the Examine button in the top row). actions(read) returns the
+-- card's buttons (left, right; see ChronicleView.Actions); read is true when
+-- the card cannot show everything. Pure.
+function ChronicleView.CardLayout(content, actions, L)
 	L = L or ChronicleView.LAYOUT
-	opts = opts or {}
-	local pad, w = L.cardPad, L.cardWidth
-	local inner = w - 2 * pad
-	local r = {
-		chip = { x = pad, y = 12, w = inner - L.dateWidth - 8, h = 20 },
-		date = { x = w - pad - L.dateWidth, y = 15, w = L.dateWidth, h = 14 },
-	}
-	local y = 40
-	if opts.title then r.title = { x = pad, y = y, w = inner, h = 20 }; y = y + 24 end
-	if opts.meta then r.meta = { x = pad, y = y, w = inner, h = 14 }; y = y + 18 end
-	local textBottom = opts.progress and 152 or 160
-	r.text = { x = pad, y = y, w = inner, h = textBottom - y }
-	if opts.progress then r.progress = { x = pad, y = 156, w = inner, h = 4 } end
-	r.chips = { x = pad, y = 166, w = inner, h = 20 }
-	r.divider = { x = pad, y = 195, w = inner, h = 1 }
-	r.buttons = { x = pad, y = 202, w = inner, h = L.buttonHeight }
+	content = content or {}
+	local pad, inner = L.cardPad, L.cardWidth - 2 * L.cardPad
+	local r = { width = L.cardWidth }
+	local y = L.padY
+	local er = ChronicleView.EXAMINE_RECT
+	local top = content.examine and er.h or L.chipRow
+	local reserve = content.examine and (er.w + 8) or (L.dateWidth + 8)
+	r.chip = { x = pad, y = y + (top - L.chipRow) / 2, w = inner - reserve, h = L.chipRow }
+	if content.examine then
+		r.examine = { x = pad + inner - er.w, y = y, w = er.w, h = er.h }
+	else
+		r.date = { x = pad + inner - L.dateWidth, y = y + (top - 16) / 2, w = L.dateWidth, h = 16 }
+	end
+	y = y + top + L.gap
+	local cut = false
+	if content.title then
+		r.title = { x = pad, y = y, w = inner, h = L.titleHeight }
+		cut = ns.Style.TextWidth(content.title, "title") > inner * ChronicleView.WRAP_SAFETY
+		y = y + L.titleHeight + L.gap
+	end
+	if content.meta then
+		local total = math.max(1, ChronicleView.WrapLines(content.meta, inner, "meta"))
+		local lines = math.min(total, L.maxMetaLines)
+		cut = cut or total > lines
+		r.meta = { x = pad, y = y, w = inner, h = lines * L.metaLine, lines = lines }
+		y = y + r.meta.h + L.gap
+	end
+	local total = ChronicleView.WrapLines(content.text, inner, "reading")
+	if total > 0 then
+		local lines = math.min(total, L.maxTextLines)
+		cut = cut or total > lines
+		r.text = { x = pad, y = y, w = inner, h = lines * L.textLine, lines = lines, total = total }
+		y = y + r.text.h + L.gap
+	end
+	if content.progress then
+		r.progress = { x = pad, y = y, w = inner, h = L.progressHeight }
+		y = y + L.progressHeight + L.gap
+	end
+	local chips = ChronicleView.ChipRows(content.chips, content.vis, inner, L)
+	if chips.rows > 0 then
+		r.chips = { x = pad, y = y, w = inner, h = chips.height, items = chips.items, vis = chips.vis }
+		y = y + chips.height + L.gap
+	end
+	r.truncated = cut
+	local left, right
+	if actions then left, right = actions(cut) end
+	local buttons = ChronicleView.ButtonRows(left, right, inner, L)
+	if buttons.rows > 0 then
+		r.divider = { x = pad, y = y, w = inner, h = 1 }
+		y = y + 1 + L.dividerGap
+		r.buttons = { x = pad, y = y, w = inner, h = buttons.height, items = buttons.items, rows = buttons.rows }
+		y = y + buttons.height + L.padY
+	else
+		y = y - L.gap + L.padY
+	end
+	r.height = math.min(y, L.gridHeight)
 	return r
 end
 
---- Top-left corner of card i (1-based) in the section. Pure.
-function ChronicleView.CardOrigin(i, L)
+--- Splits cards of the given heights into pages: each card goes to the
+-- shorter column of the page (the left one on a tie), and a page ends when
+-- the next card no longer fits under it, or when `pool` cards are on it.
+-- Every page holds at least one card. Returns pages = { { { index, x, y, h,
+-- col } } } (positions in the grid, from its top-left), at least one
+-- (empty) page. Pure.
+function ChronicleView.Paginate(heights, L)
 	L = L or ChronicleView.LAYOUT
-	local col, row = (i - 1) % L.cols, math.floor((i - 1) / L.cols)
-	return L.inset + col * (L.cardWidth + L.colGap), L.gridTop + row * (L.cardHeight + L.rowGap)
+	local pages, i, n = {}, 1, #heights
+	repeat
+		local page, colY = {}, {}
+		for c = 1, L.cols do colY[c] = 0 end
+		while i <= n and #page < L.pool do
+			local col = 1
+			for c = 2, L.cols do
+				if colY[c] < colY[col] then col = c end
+			end
+			local h = math.min(heights[i], L.gridHeight)
+			if #page > 0 and colY[col] + h > L.gridHeight then break end
+			page[#page + 1] = { index = i, col = col, x = L.inset + (col - 1) * (L.cardWidth + L.colGap),
+				y = colY[col], h = h }
+			colY[col] = colY[col] + h + L.rowGap
+			i = i + 1
+		end
+		pages[#pages + 1] = page
+	until i > n
+	return pages
 end
 
---- Number of pages for n items, and the clamped page. Pure.
-function ChronicleView.Pages(n, page)
-	local pages = math.max(1, math.ceil(n / ChronicleView.ROWS))
-	page = math.min(math.max(page or 1, 1), pages)
-	return pages, page
+--- The clamped page number for a list of pages. Pure.
+function ChronicleView.Pages(pages, page)
+	local count = math.max(1, #pages)
+	return count, math.min(math.max(page or 1, 1), count)
+end
+
+--- A tab's width for its label and count (the count may be nil). Pure.
+function ChronicleView.TabWidth(spec, count, L)
+	L = L or ChronicleView.LAYOUT
+	local text = spec.label .. ((count and count > 0) and ("  " .. count) or "")
+	return math.max(spec.width, math.ceil(ns.Style.TextWidth(text, "button")) + 2 * L.tabTextPad)
 end
 
 local IMPORTANCE_CHIPS = { { "Ordinary", "muted" }, { "Notable", "muted" }, { "Defining", "accent" } }
@@ -154,9 +370,9 @@ function ChronicleView.CardContent(listId, r, char, now)
 	end
 	c.date = ChronicleView.ShortDate(r.at, now)
 	if r.status == "proposed" then
-		c.chip, c.highlight = { "Suggested · needs your call", "accent" }, true
+		c.chip, c.highlight = { "Suggested · needs your call", "waiting" }, "waiting"
 	elseif r.status == "disputed" then
-		c.chip, c.highlight = { "Disputed · needs your call", "danger" }, true
+		c.chip, c.highlight = { "Disputed · needs your call", "danger" }, "danger"
 	elseif r.status == "superseded" then
 		c.chip = { "Superseded", "muted" }
 	end
@@ -566,9 +782,9 @@ ChronicleView.TurningPointForm = turningPointForm
 
 local SECTION_DEF -- the registered section, whose heading follows the tab
 
-local function place(region, rect)
+local function place(region, rect, dx, dy)
 	region:ClearAllPoints()
-	region:SetPoint("TOPLEFT", rect.x, -rect.y)
+	region:SetPoint("TOPLEFT", rect.x + (dx or 0), -(rect.y + (dy or 0)))
 	region:SetWidth(rect.w)
 	if rect.h then region:SetHeight(rect.h) end
 end
@@ -577,6 +793,110 @@ local function tabSpec(id)
 	for _, tab in ipairs(ChronicleView.TABS) do
 		if tab.id == id then return tab end
 	end
+end
+
+-- Button labels of the record actions; every other label is an answer.
+ChronicleView.ACTION_LABELS = { accept = "Accept", edit = "Edit", dispute = "Dispute", turn = "Turn",
+	steps = "Steps", read = "Read", remove = "Remove", explain = "Explain...", undo = "Undo answer" }
+-- Remove is destructive, Accept the one primary action, Edit and the
+-- answers the usual ones (filled, with an edge); the rest are quiet.
+ChronicleView.ACTION_VARIANTS = { accept = "primary", edit = "default", remove = "danger", explain = "default",
+	undo = "default", growth = "default", unreliable = "default", secret = "default", correction = "default",
+	ignore = "default" }
+ChronicleView.READ_HELP = "Shows the whole record: its full title, meta line and text, with its actions."
+
+--- The buttons of a card (or of the full view): left = { { id, label } },
+-- right = { id, label } or nil (Remove, at the right edge). opts.read adds
+-- Read (the card cannot show everything). Pure.
+function ChronicleView.Actions(tabId, item, opts)
+	opts = opts or {}
+	local A = ChronicleView.ACTION_LABELS
+	local left = {}
+	local function add(id, label) left[#left + 1] = { id, label or A[id] } end
+	if tabId == "review" then
+		local kind = item.reviewKind
+		if kind == "side" then
+			local side = item.side
+			if side.editable and not side.missing and ChronicleView.FORMS[side.list] then
+				add("edit")
+				if side.list == "goals" then add("steps") end
+			end
+		elseif kind == "explain" then
+			add("explain")
+		elseif kind == "answered" then
+			add("undo")
+		else
+			for _, choice in ipairs(ChronicleView.REVIEW_CHOICES) do add(choice, ChronicleView.REVIEW_LABELS[choice]) end
+		end
+		if opts.read then add("read") end
+		return left
+	end
+	local m = ns[tabSpec(tabId).module] or {}
+	if (item.status == "proposed" or item.status == "disputed") and m.Accept then add("accept") end
+	add("edit")
+	if item.status == "established" and m.Dispute then add("dispute") end
+	if tabId == "arcs" then add("turn")
+	elseif tabId == "goals" then add("steps")
+	elseif tabId == "identity" then
+		add("inner", "Inner: " .. (ns.Themes.VISIBILITY_LABELS[item.convictionVisibility] or item.convictionVisibility))
+	end
+	if opts.read then add("read") end
+	local right = (item.provenance == "player" or item.status == "proposed") and { "remove", A.remove } or nil
+	return left, right
+end
+
+--- What a card shows for an item and where: content (CardContent plus vis
+-- and examine) and layout (CardLayout). Pure.
+function ChronicleView.ItemLayout(tabId, item, char, now, L)
+	local content = ChronicleView.CardContent(tabId, item, char, now)
+	if tabId ~= "review" then content.vis = item.visibility or "private" end
+	content.examine = tabId == "review" and item.reviewKind == nil or nil
+	local layout = ChronicleView.CardLayout(content, function(read)
+		return ChronicleView.Actions(tabId, item, { read = read })
+	end, L)
+	return content, layout
+end
+
+-- The identity of an item across refreshes (records by id, Review items by
+-- their finding and part).
+local function itemKey(item)
+	if item.id then return "id:" .. tostring(item.id) end
+	return tostring(item.reviewKind or "finding") .. ":" .. tostring(item.key) .. ":" .. tostring(item.letter or "")
+end
+ChronicleView.ItemKey = itemKey
+
+-- "rrggbb" of a colour, for inline colour codes.
+local function hex(color)
+	return string.format("%02x%02x%02x", math.floor(color[1] * 255 + 0.5), math.floor(color[2] * 255 + 0.5),
+		math.floor(color[3] * 255 + 0.5))
+end
+
+--- A tab's label: its name, then its count in a quieter colour (the
+-- "needs you" amber on Review, as the mockup's count badge). Pure.
+function ChronicleView.TabLabel(spec, count, selected, theme)
+	if not count or count == 0 then return spec.label end
+	local tones = ns.Style.Tones(theme)
+	local color = spec.id == "review" and ns.Themes.STATUS_COLORS.waiting
+		or (selected and tones.label or ns.Style.Mix(theme.muted, theme.edge, 0.2))
+	return string.format("%s  |cff%s%d|r", spec.label, hex(color), count)
+end
+
+-- Card painting (Widgets.Card, plus the design's "needs your call" card:
+-- an amber edge on a warm fill for a suggestion, a red edge for a dispute).
+-- Kept here until Widgets.Card takes a tone (see docs/design/audit/chronicle.md).
+local function paintCard(c, theme)
+	local tones = Style.Tones(theme)
+	local fill = c.hover and tones.cardHover or theme.surface
+	local edge = c.hover and tones.selectedEdge or theme.edge
+	if c.highlight == "waiting" then
+		fill = tones.calloutFill
+		edge = Style.Mix(theme.surface, ns.Themes.STATUS_COLORS.waiting, c.hover and 0.6 or 0.36)
+	elseif c.highlight == "danger" then
+		edge = c.hover and theme.danger or tones.dangerEdge
+	end
+	Style.Color(c.bg, fill)
+	c.edges:Paint(edge, 1)
+	c.bar:Hide()
 end
 
 local function create(parent)
@@ -606,7 +926,7 @@ local function create(parent)
 		self.form:Open(spec)
 	end
 
-	-- Secondary navigation: a segmented control on a panel bar, each tab
+	-- Secondary navigation: a segmented control on a panel track, each tab
 	-- sized to its label and count.
 	local tabItems = {}
 	for i, tab in ipairs(ChronicleView.TABS) do tabItems[i] = { id = tab.id, label = tab.label } end
@@ -625,25 +945,33 @@ local function create(parent)
 			section.search:SetText("")
 			section.search:ClearFocus()
 		end
+		section.detailKey = nil
 		section.form:Close()
 		-- Before the refresh, which draws the heading first.
 		if SECTION_DEF then SECTION_DEF.heading = tabSpec(id).label end
 		MainWindow.Refresh()
 	end)
-	local barWidth = L.tabPad
 	for i, b in ipairs(section.tabs.buttons) do
-		local tab = ChronicleView.TABS[i]
-		b.tabId = tab.id
-		b:SetWidth(tab.width)
-		b:ClearAllPoints()
-		b:SetPoint("TOPLEFT", L.inset + barWidth, -L.tabPad)
-		barWidth = barWidth + tab.width + L.tabGap
+		b.tabId = ChronicleView.TABS[i].id
 		section.tabButtons[i] = b
 	end
 	section.tabBar:SetPoint("TOPLEFT", L.inset, 0)
-	section.tabBar:SetSize(barWidth - L.tabGap + L.tabPad, L.tabHeight)
 
-	-- Toolbar: New, search, count and pager.
+	--- Sizes each tab to its label and lines them up on the track.
+	function section:LayoutTabs(counts)
+		local x = L.tabPad
+		for i, b in ipairs(self.tabButtons) do
+			local spec = ChronicleView.TABS[i]
+			b:SetWidth(ChronicleView.TabWidth(spec, counts and counts[i]))
+			b:ClearAllPoints()
+			b:SetPoint("TOPLEFT", L.inset + x, -L.tabPad)
+			x = x + b:GetWidth() + L.tabGap
+		end
+		self.tabBar:SetSize(x - L.tabGap + L.tabPad, L.tabHeight)
+	end
+	section:LayoutTabs()
+
+	-- Toolbar: New, search, count and pager (the pager only with more than one page).
 	local barY = -L.toolbarTop
 	section.new = Widgets.Button(f, "New", L.newWidth, L.toolbarHeight, "primary")
 	section.new:SetPoint("TOPLEFT", L.inset, barY)
@@ -662,253 +990,374 @@ local function create(parent)
 			section.query, section.page = text, 1
 			MainWindow.Refresh()
 		end
-	end)
+	end, Style.CONTROL.input)
 	section.search:SetHeight(L.toolbarHeight)
-	section.next = Widgets.Button(f, ">", 26, 24, "ghost")
-	section.next:SetPoint("TOPRIGHT", -L.inset, barY - 3)
+	local pagerY = barY - (L.toolbarHeight - Style.CONTROL.compact) / 2
+	section.next = Widgets.Button(f, ">", Style.CONTROL.compact, Style.CONTROL.compact, "ghost")
+	section.next:SetPoint("TOPRIGHT", -L.inset, pagerY)
 	section.next:SetScript("OnClick", function() section.page = section.page + 1; MainWindow.Refresh() end)
 	Widgets.Tooltip(section.next, "Next page")
-	section.pageLabel = Widgets.Label(f, "GameFontHighlightSmall", false, "muted")
+	section.pageLabel = Widgets.Label(f, "meta", false, "muted")
 	section.pageLabel:SetJustifyH("CENTER")
 	section.pageLabel:SetWidth(84)
 	section.pageLabel:SetPoint("RIGHT", section.next, "LEFT", -4, 0)
-	section.prev = Widgets.Button(f, "<", 26, 24, "ghost")
+	section.prev = Widgets.Button(f, "<", Style.CONTROL.compact, Style.CONTROL.compact, "ghost")
 	section.prev:SetPoint("RIGHT", section.pageLabel, "LEFT", -4, 0)
 	section.prev:SetScript("OnClick", function() section.page = section.page - 1; MainWindow.Refresh() end)
 	Widgets.Tooltip(section.prev, "Previous page")
-	section.count = Widgets.Label(f, "GameFontHighlightSmall", false, "muted")
+	section.count = Widgets.Label(f, "meta", false, "muted")
 	section.count:SetJustifyH("RIGHT")
-	section.count:SetWidth(200)
+	section.count:SetWidth(220)
 	section.toolbar = { section.new, section.search, section.prev, section.pageLabel, section.next, section.count }
+	section.pager = { section.prev, section.pageLabel, section.next }
 
 	-- Empty state: what the tab holds and how to fill it.
 	section.emptyPanel = Widgets.Panel(f, "Nothing here yet")
 	section.emptyPanel:SetPoint("TOPLEFT", L.inset, -L.gridTop)
 	section.emptyPanel:SetSize(L.width, 110)
-	section.empty = Widgets.Label(section.emptyPanel.inner, "GameFontHighlight", true, "body")
+	section.empty = Widgets.Label(section.emptyPanel.inner, "reading", true, "reading")
 	section.empty:SetPoint("TOPLEFT", 0, 0)
 	section.empty:SetWidth(L.width - 2 * Widgets.PANEL_PAD)
 
-	-- The card pool.
-	for i = 1, ChronicleView.ROWS do
-		local row = Widgets.Card(f)
-		row:SetSize(L.cardWidth, L.cardHeight)
-		local x, y = ChronicleView.CardOrigin(i)
-		row:SetPoint("TOPLEFT", x, -y)
+	-- The parts every record view has (a card, and the full view): status
+	-- chip, date, title, meta, text, progress, chips, visibility, divider,
+	-- Examine and the action buttons. width: the text width.
+	local function addParts(row, width)
 		row.chip = Widgets.Chip(row, "", "muted")
 		row.date = Widgets.Label(row, "GameFontHighlightSmall", false, "muted")
 		row.date:SetJustifyH("RIGHT")
-		row.title = Widgets.Label(row, "GameFontHighlightLarge", false, "body")
+		row.meta = Widgets.Label(row, "meta", true, "muted")
+		row.progress = Widgets.ProgressBar(row, width, Style.CONTROL.progress)
+		row.chips = {}
+		for c = 1, L.chips do row.chips[c] = Widgets.Chip(row, "", "muted") end
+		row.vis = Widgets.VisibilityButton(row, function(level)
+			if row.onVisibility then row.onVisibility(level) end
+		end)
+		row.vis:SetHeight(L.chipRow)
+		row.divider = Widgets.Divider(row)
+		-- Review findings only: Examine, where a record card shows its date.
+		local er = ChronicleView.EXAMINE_RECT
+		row.examine = Widgets.Button(row, "Examine", er.w, er.h, "default")
+		Widgets.Tooltip(row.examine, "Examine", ChronicleView.EXAMINE_HELP)
+		row.examine:Hide()
+		row.actions, row.buttons = {}, {}
+		for b = 1, L.buttons do
+			local button = Widgets.Button(row, "", 64, L.buttonHeight, "ghost")
+			button:Hide()
+			row.actions[b] = button
+			row.buttons[b] = button
+		end
+		-- The visibility chip is one of the record's buttons too.
+		row.buttons[#row.buttons + 1] = row.vis
+	end
+
+	-- The card pool.
+	for i = 1, L.pool do
+		local row = Widgets.Card(f)
+		Style.Register(row, paintCard)
+		row:SetSize(L.cardWidth, 200)
+		row.title = Widgets.Label(row, nil, false, "title")
 		-- One line, so a long title is cut with "..."; hovering shows it whole.
 		row.titleHover = CreateFrame("Frame", nil, row)
 		Widgets.Tooltip(row.titleHover, "", nil)
 		-- Hovering the title still highlights its card.
 		row.titleHover:HookScript("OnEnter", function() row:SetRowHover(true) end)
 		row.titleHover:HookScript("OnLeave", function() row:SetRowHover(false) end)
-		row.meta = Widgets.Label(row, "GameFontHighlightSmall", false, "muted")
-		row.text = Widgets.Label(row, "GameFontHighlight", true, "body")
-		row.progress = Widgets.ProgressBar(row, L.cardWidth - 2 * L.cardPad, 4)
-		row.chips = {}
-		for c = 1, L.chips do row.chips[c] = Widgets.Chip(row, "", "muted") end
-		row.vis = Widgets.VisibilityButton(row, function(level)
-			if row.onVisibility then row.onVisibility(level) end
-		end)
-		row.divider = Widgets.Divider(row)
-		-- Review findings only: Examine, where a record card shows its date.
-		local er = ChronicleView.EXAMINE_RECT
-		row.examine = Widgets.Button(row, "Examine", er.w, er.h, "default")
-		row.examine:SetPoint("TOPLEFT", L.cardWidth - L.cardPad - er.w, -er.y)
-		Widgets.Tooltip(row.examine, "Examine", ChronicleView.EXAMINE_HELP)
-		row.examine:Hide()
-		row.actions = {}
-		row.buttons = {}
-		for b = 1, L.buttons do
-			local button = Widgets.Button(row, "", 64, L.buttonHeight, "ghost")
-			row.actions[b] = button
-			row.buttons[b] = button
-		end
-		-- The visibility chip is one of the record's buttons too.
-		row.buttons[#row.buttons + 1] = row.vis
+		row.text = Widgets.Label(row, "reading", true, "reading")
+		addParts(row, L.cardWidth - 2 * L.cardPad)
+		row:Hide()
 		section.rows[i] = row
 	end
 
-	-- Row actions: Remove is destructive, Accept the one primary action,
-	-- Edit the usual one; the rest are quiet.
-	local VARIANTS = { Remove = "danger", Accept = "primary", Edit = "default" }
+	-- The full view of one record (Read): over the toolbar and the cards,
+	-- under the forms. Title and meta wrap; the text scrolls.
+	local DW, DH, DP = L.width, L.height - L.toolbarTop, L.detailPad
+	local dInner = DW - 2 * DP
+	local detail = Widgets.Panel(f)
+	detail:SetPoint("TOPLEFT", L.inset, -L.toolbarTop)
+	detail:SetSize(DW, DH)
+	if detail.SetFrameLevel and f.GetFrameLevel then detail:SetFrameLevel((f:GetFrameLevel() or 1) + 10) end
+	if detail.EnableMouse then detail:EnableMouse(true) end
+	detail.back = Widgets.Button(detail, "<  Back", 120, Style.CONTROL.compact, "ghost")
+	detail.back:SetPoint("TOPLEFT", DP, -DP)
+	detail.back:SetScript("OnClick", function()
+		section.detailKey = nil
+		MainWindow.Refresh()
+	end)
+	detail.title = Widgets.Label(detail, nil, true, "title")
+	detail.scroll = CreateFrame("ScrollFrame", Widgets.NextName("ChronicleRead"), detail, "UIPanelScrollFrameTemplate")
+	detail.body = CreateFrame("Frame", nil, detail.scroll)
+	detail.body:SetSize(dInner - 26, 100)
+	detail.scroll:SetScrollChild(detail.body)
+	detail.text = Widgets.Label(detail.body, "reading", true, "reading")
+	detail.text:SetPoint("TOPLEFT", 0, 0)
+	detail.text:SetWidth(dInner - 26)
+	addParts(detail, dInner)
+	detail:Hide()
+	section.detail = detail
 
-	local function setButton(button, label, fn)
-		button:SetShown(label ~= nil)
-		if label then
-			button:SetText(label)
-			button:SetVariant(VARIANTS[label] or "ghost")
-			button:SetScript("OnClick", fn)
-			button:SetWidth(ChronicleView.BUTTON_WIDTHS[label] or (label:sub(1, 6) == "Inner:" and 84) or 64)
+	local function setTooltip(button, id, item)
+		if ChronicleView.REVIEW_HELP[id] then
+			Widgets.Tooltip(button, ChronicleView.REVIEW_LABELS[id], ChronicleView.REVIEW_HELP[id])
+		elseif id == "explain" then
+			Widgets.Tooltip(button, "Explain", ChronicleView.REVIEW_HELP.explained)
+		elseif id == "undo" then
+			Widgets.Tooltip(button, "Undo answer", ChronicleView.UNDO_HELP)
+		elseif id == "read" then
+			Widgets.Tooltip(button, "Read", ChronicleView.READ_HELP)
+		elseif id == "edit" and item.reviewKind == "side" then
+			Widgets.Tooltip(button, "Edit", "Correct this record yourself, in its own form.")
+		elseif id == "inner" then
+			Widgets.Tooltip(button, "Private side", string.format("Who may see what your character privately "
+				.. "believes: now %s. Click to change it to %s.",
+				ns.Themes.VISIBILITY_LABELS[item.convictionVisibility] or item.convictionVisibility,
+				ns.Themes.VISIBILITY_LABELS[ChronicleView.CYCLE[item.convictionVisibility]] or "Private"))
+		else
+			Widgets.Tooltip(button, nil)
 		end
 	end
 
-	-- Buttons left to right, { label, fn } or false to skip; right = { label,
-	-- fn } sits alone at the card's right edge (Remove).
-	local function fill(row, list, right)
-		local rect = ChronicleView.CardRects().buttons
-		local n, x = 0, rect.x
-		for _, entry in ipairs(list) do
-			if entry then
-				n = n + 1
-				local button = row.actions[n]
-				setButton(button, entry[1], entry[2])
-				button:ClearAllPoints()
-				button:SetPoint("TOPLEFT", x, -rect.y)
-				x = x + button:GetWidth() + L.buttonGap
+	-- What a button does, by its action id.
+	local function handler(id, tabId, item)
+		if tabId == "review" then
+			if id == "edit" then
+				return function() section:OpenForm(ChronicleView.FORMS[item.side.list](item.side.record)) end
+			elseif id == "steps" then
+				return function() section:OpenForm(ChronicleView.MilestoneForm(item.side.record)) end
+			elseif id == "explain" then
+				return function() section:OpenForm(ChronicleView.ExplainForm(item.finding)) end
+			elseif id == "undo" then
+				return function() act(function(c) return ns.Continuity.Undo(c, item.key) end) end
+			elseif id == "read" then
+				return function() section.detailKey = itemKey(item); MainWindow.Refresh() end
+			end
+			return function()
+				act(function(c, now2) return ns.Continuity.Review(c, item.key, id, nil, now2) end)
 			end
 		end
-		if right then
-			n = n + 1
-			local button = row.actions[n]
-			setButton(button, right[1], right[2])
-			button:ClearAllPoints()
-			button:SetPoint("TOPLEFT", rect.x + rect.w - button:GetWidth(), -rect.y)
-		end
-		for b = n + 1, #row.actions do
-			setButton(row.actions[b], nil)
-		end
-	end
-
-	local function recordButtons(row, listId, mod, r)
-		local m = ns[mod]
-		local removable = r.provenance == "player" or r.status == "proposed"
-		local list = {
-			(r.status == "proposed" or r.status == "disputed") and m.Accept and { "Accept", function()
-				act(function(char, now) return m.Accept(char, r.id, now) end)
-			end } or false,
-			{ "Edit", function() section:OpenForm(ChronicleView.FORMS[listId](r)) end },
-			r.status == "established" and m.Dispute and { "Dispute", function()
-				act(function(char, now) return m.Dispute(char, r.id, now) end)
-			end } or false,
-		}
-		if listId == "arcs" then
-			list[#list + 1] = { "Turn", function() section:OpenForm(ChronicleView.TurningPointForm(r)) end }
-		elseif listId == "goals" then
-			list[#list + 1] = { "Steps", function() section:OpenForm(ChronicleView.MilestoneForm(r)) end }
-		elseif listId == "identity" then
-			list[#list + 1] = { "Inner: " .. r.convictionVisibility:sub(1, 3), function()
+		local m = ns[tabSpec(tabId).module]
+		local r = item
+		if id == "accept" then
+			return function() act(function(char, now) return m.Accept(char, r.id, now) end) end
+		elseif id == "edit" then
+			return function() section:OpenForm(ChronicleView.FORMS[tabId](r)) end
+		elseif id == "dispute" then
+			return function() act(function(char, now) return m.Dispute(char, r.id, now) end) end
+		elseif id == "turn" then
+			return function() section:OpenForm(ChronicleView.TurningPointForm(r)) end
+		elseif id == "steps" then
+			return function() section:OpenForm(ChronicleView.MilestoneForm(r)) end
+		elseif id == "inner" then
+			return function()
 				act(function(char, now) return ns.Identity.SetConvictionVisibility(char, r.id,
 					ChronicleView.CYCLE[r.convictionVisibility], now) end)
-			end }
-		end
-		fill(row, list, removable and { "Remove", function()
-			Widgets.Confirm("Remove this record?", "Remove", function()
-				act(function(char) return m.Remove(char, r.id) end)
-			end)
-		end } or nil)
-		row.onVisibility = function(level)
-			act(function(char, now) return m.SetVisibility(char, r.id, level, now) end)
-		end
-	end
-
-	-- A Review card's buttons: the five answers on a finding; Edit (and a
-	-- goal's Steps) on an examined record; Explain; Undo answer.
-	local function reviewButtons(row, item)
-		local kind = item.reviewKind
-		if kind == "side" then
-			local side = item.side
-			local list = {}
-			if side.editable and not side.missing and ChronicleView.FORMS[side.list] then
-				list[#list + 1] = { "Edit", function() section:OpenForm(ChronicleView.FORMS[side.list](side.record)) end }
-				if side.list == "goals" then
-					list[#list + 1] = { "Steps", function() section:OpenForm(ChronicleView.MilestoneForm(side.record)) end }
-				end
 			end
-			fill(row, list)
-			if list[1] then Widgets.Tooltip(row.actions[1], "Edit", "Correct this record yourself, in its own form.") end
-			return
-		elseif kind == "explain" then
-			fill(row, { { "Explain...", function() section:OpenForm(ChronicleView.ExplainForm(item.finding)) end } })
-			row.actions[1]:SetVariant("default")
-			Widgets.Tooltip(row.actions[1], "Explain", ChronicleView.REVIEW_HELP.explained)
-			return
-		elseif kind == "answered" then
-			fill(row, { { "Undo answer", function()
-				act(function(c) return ns.Continuity.Undo(c, item.key) end)
-			end } })
-			row.actions[1]:SetVariant("default")
-			Widgets.Tooltip(row.actions[1], "Undo answer", ChronicleView.UNDO_HELP)
-			return
+		elseif id == "read" then
+			return function() section.detailKey = itemKey(r); MainWindow.Refresh() end
+		elseif id == "remove" then
+			return function()
+				Widgets.Confirm("Remove this record?", "Remove", function()
+					act(function(char) return m.Remove(char, r.id) end)
+				end)
+			end
 		end
-		local list = {}
-		for _, choice in ipairs(ChronicleView.REVIEW_CHOICES) do
-			list[#list + 1] = { ChronicleView.REVIEW_LABELS[choice], function()
-				act(function(c, now2) return ns.Continuity.Review(c, item.key, choice, nil, now2) end)
-			end }
-		end
-		fill(row, list)
-		-- Answers are real buttons (filled, with an edge), each explained.
-		for b, choice in ipairs(ChronicleView.REVIEW_CHOICES) do
-			row.actions[b]:SetVariant("default")
-			Widgets.Tooltip(row.actions[b], ChronicleView.REVIEW_LABELS[choice], ChronicleView.REVIEW_HELP[choice])
-		end
-		row.examine:SetScript("OnClick", function()
-			section.reviewMode, section.examineKey, section.page = "examine", item.key, 1
-			MainWindow.Refresh()
-		end)
 	end
 
-	-- Chips left to right; one that would not fit (with the visibility
-	-- chip after it) is left out rather than overlapping.
-	local function layoutChips(row, list, withVis)
-		local rect = ChronicleView.CardRects().chips
-		local x, limit = rect.x, rect.x + rect.w - (withVis and (row.vis:GetWidth() + 6) or 0)
-		for c, chip in ipairs(row.chips) do
-			local spec = list[c]
-			local shown = false
+	-- Places the buttons of a laid-out view (rect = layout.buttons) and wires them.
+	local function fillButtons(row, rect, tabId, item)
+		local items = rect and rect.items or {}
+		for b, button in ipairs(row.actions) do
+			local spec = items[b]
+			button:SetShown(spec ~= nil)
 			if spec then
-				chip:SetChip(spec[1], spec[2])
-				if x + chip:GetWidth() <= limit then
-					chip:ClearAllPoints()
-					chip:SetPoint("TOPLEFT", x, -rect.y)
-					x = x + chip:GetWidth() + 6
-					shown = true
-				end
+				button:SetText(spec.label)
+				button:SetVariant(ChronicleView.ACTION_VARIANTS[spec.id] or "ghost")
+				button:SetWidth(spec.w)
+				button:ClearAllPoints()
+				button:SetPoint("TOPLEFT", rect.x + spec.x, -(rect.y + spec.y))
+				button:SetScript("OnClick", handler(spec.id, tabId, item))
+				button.actionId = spec.id
+				setTooltip(button, spec.id, item)
 			end
-			chip:SetShown(shown)
 		end
-		row.vis:SetShown(withVis)
-		if withVis then
-			row.vis:ClearAllPoints()
-			row.vis:SetPoint("TOPLEFT", x, -rect.y)
+		row.examine:SetShown(tabId == "review" and item.reviewKind == nil)
+		if tabId == "review" then
+			row.examine:SetScript("OnClick", function()
+				section.reviewMode, section.examineKey, section.page, section.detailKey = "examine", item.key, 1, nil
+				MainWindow.Refresh()
+			end)
+			row.onVisibility = nil
+		else
+			local m = ns[tabSpec(tabId).module]
+			row.onVisibility = function(level)
+				act(function(char, now) return m.SetVisibility(char, item.id, level, now) end)
+			end
 		end
 	end
 
-	local function fillCard(row, content)
-		local rects = ChronicleView.CardRects({ title = content.title ~= nil, meta = content.meta ~= nil,
-			progress = content.progress ~= nil })
+	-- Chips and the visibility chip at the positions of rect (= layout.chips).
+	local function fillChips(row, rect, content)
+		for c, chip in ipairs(row.chips) do
+			local spec, at = content.chips[c], rect and rect.items[c]
+			chip:SetShown(spec ~= nil and at ~= nil)
+			if spec and at then
+				chip:SetMaxWidth(at.w)
+				chip:SetChip(spec[1], spec[2])
+				chip:ClearAllPoints()
+				chip:SetPoint("TOPLEFT", rect.x + at.x, -(rect.y + at.y))
+			end
+		end
+		local vis = rect and rect.vis
+		row.vis:SetShown(vis ~= nil)
+		if vis then
+			row.vis:SetLevel(content.vis)
+			row.vis:SetWidth(vis.w)
+			row.vis:ClearAllPoints()
+			row.vis:SetPoint("TOPLEFT", rect.x + vis.x, -(rect.y + vis.y))
+		end
+	end
+
+	local function fillTop(row, layout, content)
 		row.chip:SetShown(content.chip ~= nil)
 		if content.chip then
+			row.chip:SetMaxWidth(layout.chip.w)
 			row.chip:SetChip(content.chip[1], content.chip[2])
 			row.chip:ClearAllPoints()
-			row.chip:SetPoint("TOPLEFT", rects.chip.x, -rects.chip.y)
+			row.chip:SetPoint("TOPLEFT", layout.chip.x, -layout.chip.y)
 		end
-		place(row.date, rects.date)
+		row.date:SetShown(layout.date ~= nil)
+		if layout.date then place(row.date, layout.date) end
 		row.date:SetText(content.date or "")
-		row.title:SetShown(content.title ~= nil)
-		row.titleHover:SetShown(content.title ~= nil)
-		if content.title then
-			place(row.title, rects.title)
+		if layout.examine then
+			row.examine:ClearAllPoints()
+			row.examine:SetPoint("TOPLEFT", layout.examine.x, -layout.examine.y)
+		end
+	end
+
+	local function fillCard(row, content, layout, tabId, item)
+		row.layout, row.content = layout, content
+		row:SetHeight(layout.height)
+		fillTop(row, layout, content)
+		row.title:SetShown(layout.title ~= nil)
+		row.titleHover:SetShown(layout.title ~= nil)
+		if layout.title then
+			place(row.title, layout.title)
 			row.title:SetText(content.title)
-			place(row.titleHover, rects.title)
+			place(row.titleHover, layout.title)
 			Widgets.Tooltip(row.titleHover, content.title, content.meta)
 		end
-		row.meta:SetShown(content.meta ~= nil)
-		if content.meta then place(row.meta, rects.meta); row.meta:SetText(content.meta) end
-		place(row.text, rects.text)
+		row.meta:SetShown(layout.meta ~= nil)
+		if layout.meta then
+			place(row.meta, layout.meta)
+			if row.meta.SetMaxLines then row.meta:SetMaxLines(layout.meta.lines) end
+			row.meta:SetText(content.meta)
+		end
+		row.text:SetShown(layout.text ~= nil)
+		if layout.text then
+			place(row.text, layout.text)
+			-- The estimate allows for the client's own wrapping; if it still
+			-- needs more lines, the client ends the last one with "..." and
+			-- Read shows the rest.
+			if row.text.SetMaxLines then row.text:SetMaxLines(layout.text.lines) end
+		end
 		row.text:SetText(content.text or "")
-		row.progress:SetShown(content.progress ~= nil)
-		if content.progress then
-			place(row.progress, rects.progress)
+		row.progress:SetShown(layout.progress ~= nil)
+		if layout.progress then
+			place(row.progress, layout.progress)
 			row.progress:SetValue(content.progress)
 		end
-		place(row.divider, rects.divider)
+		row.divider:SetShown(layout.divider ~= nil)
+		if layout.divider then place(row.divider, layout.divider) end
+		fillChips(row, layout.chips, content)
+		fillButtons(row, layout.buttons, tabId, item)
 		row.highlight = content.highlight or nil
 		Style.Repaint(row)
+	end
+
+	--- The full view of item: everything a card shows, nothing cut.
+	function section:ShowDetail(tabId, item, char, now)
+		local content = ChronicleView.CardContent(tabId, item, char, now)
+		if tabId ~= "review" then content.vis = item.visibility or "private" end
+		local d = self.detail
+		d.item, d.content = item, content
+		local spec = tabSpec(tabId)
+		local backTo = tabId == "review" and "findings" or (spec.noun and spec.noun[2]) or "the list"
+		d.back:SetText("<  Back to " .. backTo)
+		d.back:SetWidth(ChronicleView.ButtonWidth(d.back:GetText(), L.buttonPad))
+		local y = DP
+		-- The top row: Back, then the date at the right.
+		place(d.date, { x = DP + dInner - L.dateWidth, y = y + 7, w = L.dateWidth, h = 16 })
+		d.date:SetText(content.date or "")
+		y = y + Style.CONTROL.compact + 12
+		local examine = tabId == "review" and item.reviewKind == nil
+		local er = ChronicleView.EXAMINE_RECT
+		local top = examine and er.h or L.chipRow
+		d.chip:SetShown(content.chip ~= nil)
+		if content.chip then
+			d.chip:SetMaxWidth(dInner - (examine and (er.w + 8) or 0))
+			d.chip:SetChip(content.chip[1], content.chip[2])
+			d.chip:ClearAllPoints()
+			d.chip:SetPoint("TOPLEFT", DP, -(y + (top - L.chipRow) / 2))
+		end
+		if examine then
+			d.examine:ClearAllPoints()
+			d.examine:SetPoint("TOPLEFT", DP + dInner - er.w, -y)
+		end
+		y = y + top + L.gap
+		d.title:SetShown(content.title ~= nil)
+		if content.title then
+			local lines = math.max(1, math.min(L.detailTitleLines, ChronicleView.WrapLines(content.title, dInner, "title")))
+			place(d.title, { x = DP, y = y, w = dInner, h = lines * L.detailTitleLine })
+			if d.title.SetMaxLines then d.title:SetMaxLines(lines) end
+			d.title:SetText(content.title)
+			y = y + lines * L.detailTitleLine + L.gap
+		end
+		d.meta:SetShown(content.meta ~= nil)
+		if content.meta then
+			local lines = math.max(1, math.min(L.detailMetaLines, ChronicleView.WrapLines(content.meta, dInner, "meta")))
+			place(d.meta, { x = DP, y = y, w = dInner, h = lines * L.metaLine })
+			d.meta:SetText(content.meta)
+			y = y + lines * L.metaLine + L.gap
+		end
+		-- From the bottom: the buttons, the divider, the chips.
+		local left, right = ChronicleView.Actions(tabId, item, {})
+		local rows = ChronicleView.ButtonRows(left, right, dInner, L)
+		local bottom = DH - DP
+		local buttons
+		if rows.rows > 0 then
+			buttons = { x = DP, y = bottom - rows.height, w = dInner, h = rows.height, items = rows.items }
+			bottom = buttons.y - L.dividerGap - 1
+			place(d.divider, { x = DP, y = bottom, w = dInner, h = 1 })
+			bottom = bottom - L.gap
+		end
+		d.divider:SetShown(buttons ~= nil)
+		local chipRows = ChronicleView.ChipRows(content.chips, content.vis, dInner, L)
+		local chips
+		if chipRows.rows > 0 then
+			chips = { x = DP, y = bottom - chipRows.height, w = dInner, h = chipRows.height, items = chipRows.items,
+				vis = chipRows.vis }
+			bottom = chips.y - L.gap
+		end
+		d.progress:SetShown(content.progress ~= nil)
+		if content.progress then
+			bottom = bottom - L.progressHeight
+			place(d.progress, { x = DP, y = bottom, w = dInner, h = L.progressHeight })
+			d.progress:SetValue(content.progress)
+			bottom = bottom - L.gap
+		end
+		-- The text, whole, scrolling when it is longer than the room left.
+		-- The scroll bar (UIPanelScrollFrameTemplate) sits just right of the
+		-- frame, so the frame leaves it room inside the panel.
+		place(d.scroll, { x = DP, y = y, w = dInner - 26, h = math.max(L.textLine, bottom - y) })
+		local text = content.text or ""
+		d.text:SetText(text)
+		local lines = ChronicleView.WrapLines(text, dInner - 26, "reading")
+		local measured = d.text.GetStringHeight and d.text:GetStringHeight() or 0
+		d.body:SetHeight(math.max(L.textLine, lines * L.textLine, type(measured) == "number" and measured or 0))
+		d.scroll:SetVerticalScroll(0)
+		fillChips(d, chips, content)
+		fillButtons(d, buttons, tabId, item)
+		d:Show()
 	end
 
 	function section:ApplyTheme(theme)
@@ -955,14 +1404,17 @@ local function create(parent)
 		local char = view.char
 		local spec = tabSpec(self.tab)
 		local now = ns.ctx and ns.ctx.now and ns.ctx.now() or nil
+		local theme = Style.Current() -- the theme being painted (a preview included)
 		-- The heading over the section names the tab, as in the mockup.
 		if SECTION_DEF then SECTION_DEF.heading = spec.label end
 		self.tabs:Select(self.tab)
+		local counts = {}
 		for i, b in ipairs(self.tabButtons) do
 			local tab = ChronicleView.TABS[i]
-			local n = char and #self:Items(char, tab.id) or 0
-			b:SetText(n > 0 and string.format("%s  %d", tab.label, n) or tab.label)
+			counts[i] = char and #self:Items(char, tab.id) or 0
+			b:SetText(ChronicleView.TabLabel(tab, counts[i], tab.id == self.tab, theme))
 		end
+		self:LayoutTabs(counts)
 
 		local places = self.tab == "places"
 		if places then
@@ -972,6 +1424,8 @@ local function create(parent)
 		if self.places then self.places.frame:SetShown(places) end
 		for _, region in ipairs(self.toolbar) do region:SetShown(not places) end
 		if places then
+			self.detailKey = nil
+			self.detail:Hide()
 			self.emptyPanel:Hide()
 			self.empty:Hide()
 			for _, row in ipairs(self.rows) do row:Hide() end
@@ -999,15 +1453,28 @@ local function create(parent)
 		for _, item in ipairs(all) do
 			if ChronicleView.Matches(self.tab, item, self.query) then items[#items + 1] = item end
 		end
+
+		-- Each card sized to its content, then paged by what fits.
+		local contents, layouts, heights = {}, {}, {}
+		for i, item in ipairs(items) do
+			contents[i], layouts[i] = ChronicleView.ItemLayout(self.tab, item, char, now)
+			heights[i] = layouts[i].height
+		end
+		local pageList = ChronicleView.Paginate(heights)
 		local pages
-		pages, self.page = ChronicleView.Pages(#items, self.page)
+		pages, self.page = ChronicleView.Pages(pageList, self.page)
 		self.prev:SetEnabled(self.page > 1)
 		self.next:SetEnabled(self.page < pages)
 		self.pageLabel:SetText(string.format("Page %d of %d", self.page, pages))
+		for _, region in ipairs(self.pager) do region:SetShown(pages > 1) end
 		local noun = spec.noun[#all == 1 and 1 or 2]
 		if review and self.reviewMode == "answered" then noun = #all == 1 and "answer" or "answers" end
 		self.count:ClearAllPoints()
-		self.count:SetPoint("RIGHT", self.prev, "LEFT", -10, 0)
+		if pages > 1 then
+			self.count:SetPoint("RIGHT", self.prev, "LEFT", -10, 0)
+		else
+			self.count:SetPoint("RIGHT", f, "TOPRIGHT", -L.inset, -(L.toolbarTop + L.toolbarHeight / 2))
+		end
 		if self.query ~= "" then
 			self.count:SetText(string.format("%d of %d %s", #items, #all, spec.noun[2]))
 		else
@@ -1033,25 +1500,32 @@ local function create(parent)
 			self.empty:SetText(empty[2])
 		end
 
-		local offset = (self.page - 1) * ChronicleView.ROWS
+		local page = pageList[self.page] or {}
 		for i, row in ipairs(self.rows) do
-			local item = items[offset + i]
+			local at = page[i]
+			local item = at and items[at.index]
 			row:SetShown(item ~= nil)
 			row.record = item
 			if item then
-				local content = ChronicleView.CardContent(self.tab, item, char, now)
-				fillCard(row, content)
-				row.examine:SetShown(self.tab == "review" and item.reviewKind == nil)
-				if self.tab == "review" then
-					reviewButtons(row, item)
-					row.onVisibility = nil
-					layoutChips(row, content.chips, false)
-				else
-					recordButtons(row, self.tab, spec.module, item)
-					row.vis:SetLevel(item.visibility)
-					layoutChips(row, content.chips, true)
-				end
+				row:ClearAllPoints()
+				row:SetPoint("TOPLEFT", at.x, -(L.gridTop + at.y))
+				fillCard(row, contents[at.index], layouts[at.index], self.tab, item)
 			end
+		end
+
+		-- The full view stays on its record while it exists (an action may
+		-- have changed it); it closes when the record is gone.
+		local shownItem
+		if self.detailKey then
+			for _, item in ipairs(all) do
+				if itemKey(item) == self.detailKey then shownItem = item end
+			end
+			if not shownItem then self.detailKey = nil end
+		end
+		if shownItem then
+			self:ShowDetail(self.tab, shownItem, char, now)
+		else
+			self.detail:Hide()
 		end
 	end
 

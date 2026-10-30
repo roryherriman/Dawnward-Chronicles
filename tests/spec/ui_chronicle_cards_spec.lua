@@ -132,6 +132,71 @@ return function(t, expect)
 			expect.equal(P.ReturnText(false, "ordinary", {}), "Only once it is tied to your story")
 		end)
 
+		t:it("lays the place detail out from its content, nothing overlapping, the actions in one row", function()
+			local _, _, ns = start()
+			local P = ns.ChroniclePlaces
+			local L = P.LAYOUT
+			local width = 772 - L.listWidth - L.gap
+			local function overlaps(a, b)
+				return a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.h and b.y < a.y + a.h
+			end
+			for _, info in ipairs({
+				{ chips = { "2 memories tied to it" }, note = "Short", stats = { { "Visits", "3" }, { "Last here", "Today" },
+					{ "Next return moment", "Your next visit can count" } }, tied = 0 },
+				{ chips = { "Homeland", "Marked meaningful", "12 memories tied to it" },
+					note = string.rep("Your Homeland field reads a very long place name and stays Private. ", 3),
+					stats = { { "Visits", "1400" }, { "Last here", "28 Oct 2025" },
+						{ "Next return moment", "After 12 h 50 min more play away" } }, tied = 12 },
+			}) do
+				local r = P.DetailLayout(info, width)
+				local parts = { r.name, r.sub, r.means, r.note, r.tiedLabel, r.divider, r.buttons }
+				for _, c in ipairs(r.chips) do parts[#parts + 1] = c end
+				for _, s in ipairs(r.stats) do parts[#parts + 1] = s end
+				for i = 1, r.shown do parts[#parts + 1] = r.tied[i] end
+				if info.tied > r.shown then parts[#parts + 1] = r.more end
+				for i = 1, #parts do
+					local a = parts[i]
+					expect.truthy(a.x >= 0 and a.x + a.w <= width and a.y >= 0 and a.y + a.h <= L.height, "inside")
+					for j = i + 1, #parts do
+						expect.falsy(overlaps(a, parts[j]), string.format("detail parts %d and %d overlap", i, j))
+					end
+				end
+				expect.truthy(r.stats[1].h >= L.statMin)
+				if info.tied > 0 then expect.truthy(r.shown >= 1, "at least one tied memory shows") end
+			end
+			local long = P.DetailLayout({ chips = { "x" }, note = "n", stats = { { "Next return moment",
+				"After 12 h 50 min more play away" } }, tied = 0 }, width)
+			expect.truthy(long.stats[1].h > L.statMin, "a long value makes the tiles taller instead of being cut")
+			local inner = width - 2 * L.detailPad
+			local widths = P.ActionWidths(inner)
+			local total = L.buttonGap * 2
+			for i, w in ipairs(widths) do
+				total = total + w
+				expect.truthy(ns.Widgets.LabelFits(P.ACTIONS[i], w, L.buttonHeight), P.ACTIONS[i])
+			end
+			expect.truthy(total <= inner, "the three actions fit the detail")
+		end)
+
+		t:it("shows a tied memory and a place whole on hover", function()
+			local _, char, ns, section = start()
+			char.story.places[ns.Places.Key("Elwynn Forest", "Goldshire")] = ns.Places.CleanEntry({
+				zone = "Elwynn Forest", subzone = "Goldshire", kind = "town", first = 1, last = 1 })
+			local text = string.rep("Goldshire felt smaller than she remembered. ", 6)
+			ns.Memories.Add(char, { title = "Coming home smaller", text = text,
+				links = { events = { "place:Elwynn Forest / Goldshire" } } }, "player", 2)
+			for _, b in ipairs(section.tabButtons) do
+				if b.tabId == "places" then click(b) end
+			end
+			local view = section.places
+			local tied = view.tiedRows[1]
+			expect.truthy(tied:IsShown())
+			expect.equal(tied.tooltipTitle, "Coming home smaller")
+			expect.equal(tied.tooltipText, char.story.memories[1].text, "the whole memory")
+			expect.truthy(tied.text:GetText():find("Ordinary", 1, true))
+			expect.equal(view.rows[1].tooltipTitle, "Goldshire")
+			expect.truthy(view.rows[1].tooltipText:find("Elwynn Forest", 1, true))
+		end)
+
 		t:it("pages a long list of places and keeps the selection on the page", function()
 			local _, char, ns, section = start()
 			for i = 1, 10 do

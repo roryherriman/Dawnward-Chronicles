@@ -399,15 +399,42 @@ return function(t, expect)
 			C.Findings, C.Find = findings, find
 		end)
 
+		t:it("reads a long examined record whole, still running the rules once per refresh", function()
+			local _, env, ns, section = start()
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			local long = string.rep("The fire took the whole grove and the old shrine with it. ", 8)
+			ns.Memories.Add(char, { title = "The fire", text = long }, "player", 100)
+			ns.Memories.Add(char, { title = "The fire", text = "Second" }, "player", 200)
+			ns.MainWindow.Refresh()
+			click(section.rows[1].examine)
+			local C = ns.Continuity
+			local findings, calls = C.Findings, 0
+			C.Findings = function(...) calls = calls + 1; return findings(...) end
+			click(button(section.rows[1], "Read"))
+			C.Findings = findings
+			expect.equal(calls, 1, "opening the full view is one refresh")
+			local d = section.detail
+			expect.truthy(d:IsShown())
+			expect.equal(d.text:GetText(), char.story.memories[1].text)
+			expect.equal(d.chip.label:GetText(), "A · Memory")
+			expect.equal(d.back:GetText(), "<  Back to findings")
+			click(button(d, "Edit"))
+			expect.equal(section.form.spec.title, "Edit memory", "the record's own form, from the full view")
+			click(section.form.cancel)
+			click(d.back)
+			expect.falsy(d:IsShown())
+			expect.equal(section.reviewMode, "examine", "back where the player was")
+		end)
+
 		t:it("keeps the Examine button clear of the card's chip", function()
 			local _, _, ns = Boot.Start()
 			local CV = ns.ChronicleView
-			local L = CV.LAYOUT
-			local chip = CV.CardRects({}).chip
-			local er = CV.EXAMINE_RECT
-			local x = L.cardWidth - L.cardPad - er.w
-			expect.truthy(chip.x + chip.w <= x, "no horizontal overlap")
-			expect.truthy(er.y + er.h <= CV.CardRects({ meta = true }).meta.y, "above the meta line")
+			local r = CV.CardLayout({ chip = { "Possible duplicate", "accent" }, examine = true, meta = "Examined",
+				text = "A finding" })
+			expect.truthy(r.chip.x + r.chip.w <= r.examine.x, "no horizontal overlap")
+			expect.truthy(r.examine.y + r.examine.h <= r.meta.y, "above the meta line")
+			expect.equal(r.examine.h, ns.Style.CONTROL.compact, "a real, compact button")
+			expect.falsy(r.date, "a finding has no date where Examine sits")
 		end)
 	end)
 end

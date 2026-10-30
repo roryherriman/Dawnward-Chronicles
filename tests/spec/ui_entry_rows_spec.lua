@@ -42,10 +42,10 @@ return function(t, expect)
 			ns.Memories.Add(char, { title = "Mine", text = "My own" }, "player", 2)
 			ns.MainWindow.Refresh()
 			local L = ns.ChronicleView.LAYOUT
-			local r = ns.ChronicleView.CardRects({ title = true })
 			expect.truthy(L.rowGap >= 4 and L.colGap >= 4, "cards are separated by a visible gap")
 			for i = 1, 2 do
 				local row = section.rows[i]
+				local r = row.layout
 				local spans = {}
 				for _, b in ipairs(row.actions) do
 					if b:IsShown() then
@@ -53,7 +53,7 @@ return function(t, expect)
 						local x, top = b.__points[1][2], -b.__points[1][3]
 						expect.truthy(x >= L.cardPad and x + b:GetWidth() <= L.cardWidth - L.cardPad,
 							"inside the card's sides: " .. b:GetText())
-						expect.truthy(top >= r.divider.y and top + L.buttonHeight <= L.cardHeight, "below the divider")
+						expect.truthy(top >= r.divider.y and top + L.buttonHeight <= row:GetHeight(), "below the divider")
 						spans[#spans + 1] = { x, x + b:GetWidth() }
 					end
 				end
@@ -155,7 +155,8 @@ return function(t, expect)
 			expect.falsy(section.places.frame:IsShown())
 			expect.truthy(section.rows[1]:IsShown())
 			expect.truthy(section.new:IsShown())
-			expect.equal(section.rows[1].text:GetWidth(), ns.ChronicleView.CardRects().text.w)
+			local L = ns.ChronicleView.LAYOUT
+			expect.equal(section.rows[1].text:GetWidth(), L.cardWidth - 2 * L.cardPad)
 		end)
 
 		t:it("highlights the whole record while pointing at one of its buttons", function()
