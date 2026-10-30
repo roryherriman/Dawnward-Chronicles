@@ -142,7 +142,13 @@ return function(t, expect)
 			expect.truthy(mock.Slash("trp3 backups"):find("#1 about"))
 			expect.truthy(mock.Slash("trp3 log"):find("insert"))
 			expect.truthy(mock.Slash("trp3 rollback"):find("confirm"))
-			expect.truthy(mock.Slash("trp3 rollback confirm"):find("Restored"))
+			-- The safe default restores the player's own text and rebuilds
+			-- Dawnward's part from what is Public now (v0.8); "exact" restores
+			-- the backup byte for byte.
+			local written = fake.profile.player.about.T1.TX
+			expect.truthy(mock.Slash("trp3 rollback confirm"):find("Restored your own", 1, true))
+			expect.equal(fake.profile.player.about.T1.TX, written)
+			expect.truthy(mock.Slash("trp3 rollback 1 exact confirm"):find("Restored"))
 			expect.equal(fake.profile.player.about.T1.TX, "Private about text")
 			expect.truthy(mock.Slash("trp3 help"):find("enable about"))
 		end)
