@@ -98,12 +98,27 @@ function Methods:EnableMouse(on) self.__mouse = on and true or false end
 function Methods:IsMouseEnabled() return self.__mouse == true end
 function Methods:GetFont() return self.__font and self.__font.file, self.__font and self.__font.height end
 function Methods:SetFontObject(font) self.__fontObject = font end
--- Models: SetUnit succeeds unless mock.modelFails is set.
-function Methods:SetUnit(unit)
-	if self.__mock.modelFails then return false end
+-- Models: SetUnit fails on a model frame that is not visible (a hidden
+-- model cannot load), and while mock.modelFails is set: true fails every
+-- call, a number fails that many calls and then counts down.
+function Methods:SetUnit(unit, blend)
+	self.__mock.setUnitCalls = (self.__mock.setUnitCalls or 0) + 1
+	self.__blend = blend
+	local fails = self.__mock.modelFails
+	if type(fails) == "number" then
+		if fails > 0 then
+			self.__mock.modelFails = fails - 1
+			return false
+		end
+	elseif fails then
+		return false
+	end
+	if not self:IsVisible() then return false end
 	self.__unit = unit
 	return true
 end
+function Methods:SetAlpha(a) self.__alpha = a end
+function Methods:GetAlpha() return self.__alpha or 1 end
 function Methods:ClearModel() self.__unit = nil end
 function Methods:SetRotation(r) self.__rotation = r end
 function Methods:GetRotation() return self.__rotation or 0 end
