@@ -769,6 +769,31 @@ Parts **T** (the 0.7.1 fixes) and **Q** (gameplay time) still apply; the steps b
 
 **Also report:** for any moment that felt repetitive, wrong or badly timed, its text and what you were doing. Then send screenshots of each screen beside its mockup, for the v0.8 visual comparison.
 
+#### Part V: v0.8 visual acceptance (compare each screen with its approved rendering)
+
+Do this after part U. For each screen:
+- open it in game at your normal UI scale, beside its mockup in [design/mockups](design/mockups/README.md);
+- follow the numbered acceptance steps at the end of its audit;
+- then repeat a quick look at window scale 0.7 (drag the grip smaller) and in one other theme.
+
+| # | Screen | Mockup | Steps |
+|---|---|---|---|
+| V1 | Window, rail, design system | journal-dashboard.png, design-system.png | [shell-and-components.md](design/audit/shell-and-components.md) section 5 |
+| V2 | Journal | journal-dashboard.png | [journal.md](design/audit/journal.md) section 10 |
+| V3 | Character and Showcase | character-profile.png, proposed-character-showcase.png | [character.md](design/audit/character.md) section 6 |
+| V4 | Story Director | story-director.png | [story.md](design/audit/story.md), last section |
+| V5 | Chronicle and Places | chronicle-memories.png, chronicle-places.png | [chronicle.md](design/audit/chronicle.md) section 8 |
+| V6 | Settings, setup, Total RP 3 page, import | first-time-setup.png, proposed-trp3-sync.png | [settings-setup-trp3.md](design/audit/settings-setup-trp3.md) section 8 |
+
+**Pass when:**
+- nothing overlaps;
+- no important text is cut off without a way to read it in full (hover or Read);
+- round shapes are round, or tidy squares if masks are unsupported;
+- every control works by mouse and keyboard;
+- each theme repaints everything.
+
+**Report:** a screenshot of each screen beside its mockup, and the differences you would still like closed, in order.
+
 **Screenshots requested:** Journal, Character (profile and Showcase), Story, Chronicle (Memories and Places), setup and the Total RP 3 page, at your normal UI scale, so they can be compared side by side with the mockups and, once approved, replace the concepts in the README. Crop or blur anything you would rather not share.
 
 **Report:**

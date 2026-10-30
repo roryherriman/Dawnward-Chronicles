@@ -102,6 +102,41 @@ A feature is never called "tested" or "compatible" in this file unless it reache
   - journal reordering and pinning;
   - selective export.
 
+### Visual fidelity refinement (v0.8)
+Refines every screen towards the approved renderings. This is not a redesign: no behaviour, rule or safety check changed. Details and the remaining differences are in [`docs/design/UI_DESIGN_V08.md`](docs/design/UI_DESIGN_V08.md) and the per-screen audits.
+- **Design system:**
+  - **Type:** the mockup's type scale, with nothing below 13 px.
+  - **Sizes:** control heights, and secondary tones for every theme (contrast-tested).
+  - **Round shapes:** chips, badges, number discs and the portrait ring, using the game's own mask textures.
+  - **Buttons:** they keep a visible edge.
+- **Rail:**
+  - **Identity:** a ringed portrait with a level pill, and the class name in its class colour.
+  - **Chips:** Homeland and privacy, from your real data.
+  - **Navigation:** a clear selected item, which now also shows on the very first open.
+- **Journal:** one scrolling list of story cards instead of pages of 10, plus the mockup's toolbar, moment banner and right column.
+- **Character:**
+  - fields as tiles with their chip and Edit side by side;
+  - personality knobs on a track;
+  - family cards.
+- **Character Showcase:** the live model fills most of its card, and the portrait fallback is a framed round portrait, no longer stretched.
+- **Story Director:**
+  - a measured moment card, so long questions and reasons no longer overlap;
+  - round answer numbers;
+  - side panels that fit.
+- **Chronicle:**
+  - cards sized to their content;
+  - a Read view for long records;
+  - amber suggested and red disputed records;
+  - Review answers on one row;
+  - a Places detail laid out from its content.
+- **Settings:**
+  - grouped panels with descriptions;
+  - each Story setting shows every option, with the active one selected;
+  - Done sits at the top.
+- **Setup wizard:** a step rail with round badges, and roomier fields.
+- **Total RP 3 page:** amber states, one-line backups, and a fixed ownership selector.
+- **Import window:** restyled the same way.
+
 ### Gameplay events and locations (#11, #14, #18, #35, #48)
 - **Zone Atlas:**
   - **Evidence:** the owner's in-game export and 1–5000 scan from #48 are kept verbatim, with their SHA-256 checked, and all 17 maps and 49 areas are promoted to in-game evidence.

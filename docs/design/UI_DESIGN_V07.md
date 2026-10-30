@@ -1,6 +1,6 @@
 # Dawnward Chronicles v0.7: UI design specification
 
-Status: **implemented (stages A to D)**. Every screen is rebuilt to its approved mockup and passes the automated suite (L2). **Nothing in v0.7 has been verified in game yet**; see [TESTING.md](../TESTING.md) parts Q, R and S.
+Status: **implemented (stages A to D); refined by v0.8, see [UI_DESIGN_V08.md](UI_DESIGN_V08.md), which is newer where the two differ (type sizes, control heights, Journal scrolling).** Every screen is rebuilt to its approved mockup and passes the automated suite (L2). **Nothing in v0.7 has been verified in game yet**; see [TESTING.md](../TESTING.md) parts Q, R and S.
 Baseline: v0.6.0-dev, schema 5, Classic Era 1.15.9 (interface 11509), Lua 5.1.
 Supersedes the visual design in [UI_DESIGN_V06.md](UI_DESIGN_V06.md). The v0.6 component kit, keyboard rules, inline validation and themes are kept.
 
