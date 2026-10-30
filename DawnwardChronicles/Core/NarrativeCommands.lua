@@ -297,7 +297,8 @@ Commands.Register("continuity", function(ctx, rest)
 			return
 		end
 		run(ctx, function(c) return Continuity.Undo(c, a.review.key) end,
-			"Answer taken back. If the records still disagree, the finding is open again.")
+			"Answer taken back. If the records still disagree, the finding is open again. Nothing was made "
+				.. "Public: a hidden side that was Public is now Private.")
 		return
 	elseif sub == "examine" or sub == "explain" then
 		local word, tail = Util.NextWord(args)

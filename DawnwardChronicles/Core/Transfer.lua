@@ -76,6 +76,11 @@ function Transfer.StoryForBackup(char, includeSecrets)
 			d.custom = Transfer.WITHHELD
 		end
 	end
+	-- A review keeps the finding's text, which can quote a record or a
+	-- conviction that is Secret; it is rebuilt from the records when shown.
+	for _, review in ipairs(story.reviews or {}) do
+		if review.message then review.message = Transfer.WITHHELD end
+	end
 	return story
 end
 

@@ -189,6 +189,38 @@ return function(t, expect)
 			expect.truthy(err:find("no answer", 1, true))
 		end)
 
+		t:it("undo never makes a conviction Public again: a Public one comes back as Private", function()
+			local ns, char = setup()
+			local stance = assert(ns.Identity.Add(char, { subject = "The Horde", persona = "Proud",
+				conviction = "Wants to leave", convictionVisibility = "public" }, 1))
+			stance.convictionVisibility = "public"
+			local key = ns.Continuity.Findings(char)[1].key
+			assert(ns.Continuity.Review(char, key, "secret", nil, 2))
+			expect.equal(stance.convictionVisibility, "secret")
+			local review = assert(ns.Continuity.Undo(char, key))
+			expect.equal(stance.convictionVisibility, "private", "never republished by an undo")
+			expect.truthy(review.keptPrivate)
+			local public = ns.Projection.GetPublic(char)
+			for _, st in ipairs(public.stances or {}) do
+				expect.falsy(st.conviction == "Wants to leave", "not in the public projection")
+			end
+		end)
+
+		t:it("a backup without secrets withholds the finding text an answer kept", function()
+			local ns, char = setup()
+			local stance = assert(ns.Identity.Add(char, { subject = "The Horde", persona = "Proud",
+				conviction = "Wants to leave" }, 1))
+			local key = ns.Continuity.Findings(char)[1].key
+			assert(ns.Continuity.Review(char, key, "secret", nil, 2))
+			expect.equal(stance.convictionVisibility, "secret")
+			local story = ns.Transfer.StoryForBackup(char, false)
+			for _, review in ipairs(story.reviews) do
+				expect.falsy((review.message or ""):find("Wants to leave", 1, true), "no secret text in the backup")
+			end
+			local withSecrets = ns.Transfer.StoryForBackup(char, true)
+			expect.truthy(withSecrets.reviews[1].message:find("Wants to leave", 1, true), "kept when secrets are included")
+		end)
+
 		t:it("cleans saved answers additively: message and undo kept, junk dropped", function()
 			local ns, char = setup()
 			char.story.reviews = {

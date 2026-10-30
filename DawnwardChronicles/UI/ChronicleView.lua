@@ -61,7 +61,8 @@ ChronicleView.ANSWER_LABELS = { growth = "Growth", unreliable = "Unreliable", se
 ChronicleView.EXAMINE_HELP = "See the records behind this finding side by side, with their dates and where they came "
 	.. "from, and edit either one yourself."
 ChronicleView.UNDO_HELP = "Takes this answer back. The finding returns if the records still disagree, and anything "
-	.. "the answer changed is put back."
+	.. "the answer changed is put back, except that nothing becomes Public again: a hidden side that was Public "
+	.. "comes back as Private."
 
 -- Layout in section units (the v0.7 content area is 772 x 588, the mockup's
 -- main column). Tabs on top, a toolbar (New, search, count, pager) below

@@ -458,7 +458,8 @@ end
 --- Takes an answer back. The finding is open again if the records still
 -- disagree. What a "secret" answer changed on a stance is restored, field
 -- by field, only where it still holds the value the answer set (a later
--- change by the player is kept). Returns the removed review or nil, reason.
+-- change by the player is kept); a conviction that was Public comes back as
+-- Private (review.keptPrivate). Returns the removed review or nil, reason.
 function Continuity.Undo(char, key)
 	local list = char.story.reviews
 	for i = #list, 1, -1 do
@@ -469,8 +470,14 @@ function Continuity.Undo(char, key)
 			if u and u.identity then
 				local stance = ns.Identity.Find(char, u.identity)
 				if stance then
+					-- Never more visible than Private: undoing an answer must not
+					-- publish anything (a Public conviction reaches share exports
+					-- and, with biography sync on, Total RP 3). The player can make
+					-- it Public again themselves.
 					if stance.convictionVisibility == Privacy.SECRET then
-						stance.convictionVisibility = u.convictionVisibility
+						local before = u.convictionVisibility
+						stance.convictionVisibility = before == Privacy.PUBLIC and Privacy.PRIVATE or before
+						review.keptPrivate = before == Privacy.PUBLIC or nil
 					end
 					if stance.deliberate == true and not u.deliberate then
 						stance.deliberate = nil
