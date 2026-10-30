@@ -39,6 +39,7 @@ local HELP = {
 	"  personality list | personality set <axis> <0-20> | personality vis <axis> <level>",
 	"  personality clear <axis> confirm",
 	"  export backup [secrets] [biography] | export share | import | import confirm | import undo",
+	"  biography | biography status   (import a story you already wrote; you approve each piece)",
 	"  sim on | sim off | sim copy confirm | sim reset confirm | sim levelup <level>",
 	"  sim quest <id> [title] | sim death   (test the story loop in simulation data)",
 	"  story | story <#> [<answer #> | write <text> | later | notnow | dismiss] | story settings",
