@@ -714,6 +714,27 @@ Build: **0.7.0-dev** from `main`. Everything here has passed automated tests (L2
 | S12.2 | Log in on a second character: its rail, journal, places, narrative clock (`/dawnward dev story status`) and Showcase choice are its own; nothing from the first character shows |
 | S12.3 | `/dawnward sim on`, change something, `/dawnward sim off`: the real character is unchanged |
 
+#### Part T: fixes from the first in-game inspection (0.7.1-dev)
+
+Run these first on the new build. Report each step as pass or fail, with any Lua error.
+
+| # | Check | Pass when |
+|---|---|---|
+| T1 | Character → Showcase, wearing normal gear | Within a few seconds the chip says **Live model** and your character is shown in your gear. If it does not, run `/dawnward dev showcase` and send the four lines it prints |
+| T2 | Turn (‹ ›, drag) and zoom (− +, mouse wheel) | The model turns and zooms; your equipment is unchanged |
+| T3 | Click **Show portrait instead**, then **Show the live model**, three times | It switches every time; the chip says Portrait (your choice), then Live model |
+| T4 | Choose the portrait, `/reload`, reopen the Showcase | Still the portrait; Show the live model brings the model back |
+| T5 | Change a piece of gear with the Showcase open | The model updates |
+| T6 | Close and reopen the journal on the Showcase; go through a loading screen (hearth, instance) and reopen | The live model comes back each time |
+| T7 | Drag the gold grip in the bottom-right corner larger and smaller | The window scales smoothly, the top-left corner stays put, text stays readable, it never goes off screen, nothing overlaps |
+| T8 | `/reload`, then log out and in | The window keeps the size you chose |
+| T9 | Settings → General → **Reset window size** | Back to the design size (smaller only if your screen needs it) |
+| T10 | Change the game's UI scale (System → Interface) with the window open | The window still fits the screen |
+| T11 | Chronicle → Review with a finding | The five answers look like buttons; hovering each explains it |
+| T12 | Chronicle → Goals with a long goal name | Hovering the cut-off title shows it in full |
+| T13 | Settings → Total RP 3 with backups | Each backup shows its name, and its full date on a second line, without crowding |
+| T14 | Settings → Story | Each button reads like "Moments: Normal  ›"; clicking moves to the next option; the tooltip lists all options with the current one in [brackets] |
+
 **Screenshots requested:** Journal, Character (profile and Showcase), Story, Chronicle (Memories and Places), setup and the Total RP 3 page, at your normal UI scale, so they can be compared side by side with the mockups and, once approved, replace the concepts in the README. Crop or blur anything you would rather not share.
 
 **Report:**

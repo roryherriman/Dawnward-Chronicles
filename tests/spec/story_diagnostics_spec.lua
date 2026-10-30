@@ -30,7 +30,7 @@ return function(t, expect)
 		char.fields.pronouns = { value = "she/her", visibility = "public" }
 		local clock = { now = 100, place = NORTHSHIRE }
 		local ctx = { store = { real = { characters = { [KEY] = char } }, realReadOnly = false }, characterKey = KEY,
-			now = function() return clock.now end, version = "0.7.0-dev",
+			now = function() return clock.now end, version = "0.7.1-dev",
 			location = function() return where(clock.place) end }
 		return ns, char, ctx, clock
 	end
