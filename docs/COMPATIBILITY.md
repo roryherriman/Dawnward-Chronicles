@@ -134,7 +134,7 @@ The owner tested the build of PR #9, PR #43 and PR #47 on a Human character in E
 
 | Version | Source audited | Tier 0 (read) | Tier A (public setters) | Tier B (manual export) | Tier C (owned direct write) |
 |---|---|---|---|---|---|
-| 3.4.1 | Yes, see [TRP3_INTEGRATION.md](TRP3_INTEGRATION.md) | **L3**: v0.2 acceptance items M20–M22 confirmed the version and active-profile status, coexistence, and TRP3 left unchanged | Not built | Not built | Research only |
+| 3.4.1 | Yes (tag `3.4.1`, commit `4c25cb0`), see [TRP3_INTEGRATION.md](TRP3_INTEGRATION.md) | **L3**: v0.2 acceptance items M20–M22 confirmed the version and active-profile status, coexistence, and TRP3 left unchanged | Not used: Title, Race and Class have public setters, but the five profile fields are written as one transaction through the editor's own path (see [Field mappings](TRP3_INTEGRATION.md#field-mappings)) | **L2**: `/dawnward trp3 paste` (biography, traits, every Public profile field) | **L2** (opt-in per mapping): biography block, traits since v0.3; Title→FT, Race→RA, Class→CL, Age→AG, Homeland→BP since v0.8. Biography and traits owner-reported L3 for v0.4; fields **not tested in game**; two-client procedure in [TRP3_INTEGRATION.md](TRP3_INTEGRATION.md#multiplayer-test-procedure-two-clients-not-yet-performed) |
 | 3.5.3 | No | Reported as "not audited", status only | — | — | — |
 | Any other version | No | Read only, if capability checks pass | Off | — | Off |
 
@@ -189,6 +189,7 @@ Every name below is also in the per-directory lists in `.luacheckrc`.
 |---|---|---|---|
 | `C_Timer.After` | Merging sync requests and retrying after an open editor or combat | Assumed | — |
 | `InCombatLockdown` | No TRP3 writes in combat (also used by the copy window since v0.1) | Assumed | — |
+| `PLAYER_REGEN_ENABLED` (event) | v0.8: a TRP3 sync run waiting for combat to end is released at once | S (`Blizzard_APIDocumentationGenerated/UnitDocumentation.lua`), L2 | — |
 
 TRP3 internals used by the experimental sync (TRP3 3.4.1 only) are listed with their risks in [TRP3_INTEGRATION.md](TRP3_INTEGRATION.md#internal-dependencies-and-their-risk). The sync is allowlisted for TRP3 3.4.1 by source audit only. It has **not** been tested in game.
 

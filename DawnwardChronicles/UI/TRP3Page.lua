@@ -84,9 +84,9 @@ TRP3Page.EXPLAIN = {
 		.. "traits you made yourself are never changed.",
 }
 
-TRP3Page.UNSUPPORTED_TEXT = "Not written by Dawnward: name, title, pronouns and the other profile fields; "
-	.. "Total RP 3 keeps its own. Only Public facts, stances and defining moments go into the biography block, "
-	.. "and Public personality axes into traits."
+TRP3Page.UNSUPPORTED_TEXT = "Title, race, class, age and homeland are written only if you hand them to "
+	.. "Dawnward on the Mappings tab; name, pronouns and the other fields never. Only Public facts, stances and "
+	.. "defining moments go into the biography block, and Public personality axes into traits."
 
 TRP3Page.BACKUP_NOTE = "A backup is taken before every write, and each write is read back and undone at once if "
 	.. "anything differs. Older backups: /dawnward trp3 backups."
