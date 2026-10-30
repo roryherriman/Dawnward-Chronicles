@@ -72,6 +72,30 @@ return function(t, expect)
 			expect.falsy(kinds(ns, char).memorydate)
 		end)
 
+		t:it("stays cheap on full lists (the Review tab counts findings on every refresh)", function()
+			local ns, char = setup()
+			local keys = {}
+			for i = 1, 300 do
+				local e = ns.GameEvents.Record(char, "quest", { questId = i, title = "Q" .. i, zone = "Zone" .. i % 30 }, i)
+				if e then keys[#keys + 1] = e.key end
+			end
+			for i = 1, 300 do
+				local links = {}
+				for j = 1, 20 do links[j] = keys[(i + j) % #keys + 1] end
+				ns.Memories.Add(char, { title = "M" .. i, links = { events = links } }, "player", 1000 + i)
+			end
+			for i = 1, 60 do
+				ns.Identity.Add(char, { subject = "S" .. i, persona = "P" .. i, conviction = "C" .. i,
+					visibility = "public" }, 1)
+				ns.Facts.Add(char, { category = "belief", statement = "Not S" .. i, subject = "S" .. i,
+					visibility = "public" }, nil, 1)
+			end
+			local started = os.clock()
+			for _ = 1, 10 do ns.Continuity.Findings(char) end
+			local elapsed = os.clock() - started
+			expect.truthy(elapsed < 2, string.format("10 full reviews took %.2fs", elapsed))
+		end)
+
 		t:it("a record replaced by one that no longer exists", function()
 			local ns, char = setup()
 			local a = assert(ns.Memories.Add(char, { title = "Old" }, "player", 1))

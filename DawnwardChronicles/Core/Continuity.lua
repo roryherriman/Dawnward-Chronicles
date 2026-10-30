@@ -213,10 +213,13 @@ end
 -- chronicle began).
 RULES[#RULES + 1] = function(char)
 	local out = {}
+	-- One pass over the events (at most StorySchema.LIMITS.events), not one per link.
+	local byKey = {}
+	for _, e in ipairs(char.story.events) do byKey[e.key] = e end
 	for _, m in ipairs(char.story.memories) do
 		if m.status ~= "superseded" and m.at and m.at > 0 then
 			for _, k in ipairs(m.links.events) do
-				local e = ns.GameEvents.Find(char, k)
+				local e = byKey[k]
 				if e and e.at and e.at > 0 and e.at > m.at then
 					out[#out + 1] = { key = string.format("memorydate:%d:%s", m.id, k), kind = "date",
 						refs = { memories = m.id }, sides = { { list = "memories", id = m.id }, { list = "events", id = k } },

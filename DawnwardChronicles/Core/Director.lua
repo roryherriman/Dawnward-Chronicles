@@ -529,10 +529,13 @@ function Director.Echo(char, record, template)
 	if not subject then return nil end
 	local decisions = char.story.decisions
 	local best, sameTemplate
+	-- One pass over the events (bounded), not one per decision.
+	local byKey = {}
+	for _, e in ipairs(char.story.events) do byKey[e.key] = e end
 	for i = #decisions, math.max(1, #decisions - 50), -1 do
 		local d = decisions[i]
 		if d.phrase and d.eventKeys and d.eventKeys[1] ~= record.key then
-			local e = ns.GameEvents.Find(char, d.eventKeys[1])
+			local e = byKey[d.eventKeys[1]]
 			if e and Director.Subject(e) == subject then
 				if template ~= nil and d.templateId == template.id then
 					best, sameTemplate = d, true
