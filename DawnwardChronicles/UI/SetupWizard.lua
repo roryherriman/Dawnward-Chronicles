@@ -20,10 +20,12 @@
 -- dialog in the main window's design language. A left step rail lists the
 -- six stages (done / current / upcoming; click one to go there), the right
 -- side shows "STEP n OF 6", the stage title and subtitle, the stage's
--- grouped panels, and a footer with Set up later, Back and Next. Classic
--- Era has no rounded corners, so the step numbers sit in square badges and
--- the done mark is the game's own check texture. The dialog scales down to
--- fit small screens (Style.FitScale), like the main window.
+-- grouped panels, and a footer with Set up later, Back and Next. The step
+-- numbers sit in round badges (Style.Disc; square where the client has no
+-- masks) and the done mark is the game's own check texture. Sizes follow
+-- SetupWizard.dc.html: steps 44 high with 26 px badges, a Cinzel 28 stage
+-- title, 36 px inputs and buttons. The dialog scales down to fit small
+-- screens (Style.FitScale), like the main window.
 local _, ns = ...
 local Widgets, Style, Actions, Onboarding, Themes, MainWindow =
 	ns.Widgets, ns.Style, ns.Actions, ns.Onboarding, ns.Themes, ns.MainWindow
@@ -35,8 +37,9 @@ SetupWizard.FRAME_NAME = "DawnwardChroniclesSetup"
 SetupWizard.STRATA = "HIGH" -- above the journal (MEDIUM), below game dialogs
 -- rail: step rail width; pad: content padding; bodyTop: where a stage's
 -- panels start; footer: the button strip; button: footer button height.
-SetupWizard.LAYOUT = { width = 820, height = 600, rail = 236, pad = 30, top = 26, bodyTop = 108, footer = 70,
-	button = 30, step = 40, stepGap = 4, stepsTop = 104, field = 28 }
+SetupWizard.LAYOUT = { width = 820, height = 600, rail = 236, pad = 30, top = 26, bodyTop = 118, footer = 70,
+	button = 36, step = 44, stepGap = 4, stepsTop = 92, field = 36, badge = 26, fieldRow = 80, portrait = 48,
+	area = 80, cycle = 30, cycleRow = 40, tile = 40 }
 
 local L = SetupWizard.LAYOUT
 local BODY_WIDTH = L.width - L.rail - 2 * L.pad
@@ -100,13 +103,18 @@ local function panel(parent, title, x, y, w, h, callout)
 end
 
 -- A labelled cycle button for one of Onboarding.PREFS (or any { key, label, values }).
+-- The button names the value in use; a "›" at its right edge and the
+-- tooltip (every option, the current one marked) say a click moves on.
 local function cycleRow(parent, y, spec, width)
 	local label = Widgets.Label(parent, "GameFontNormal", false, "heading")
-	label:SetPoint("TOPLEFT", 0, y - 6)
+	label:SetPoint("TOPLEFT", 0, y - 7)
 	label:SetWidth(LABEL_WIDTH - 8)
 	label:SetText(spec.label)
-	local b = Widgets.Button(parent, "", width - LABEL_WIDTH, 26, "choice")
+	local b = Widgets.Button(parent, "", width - LABEL_WIDTH, L.cycle, "choice")
 	b:SetPoint("TOPLEFT", LABEL_WIDTH, y)
+	b.chevron = Widgets.Label(b, "glyph", false, "accent")
+	b.chevron:SetPoint("RIGHT", -10, 1)
+	b.chevron:SetText("\226\128\186")
 	b.spec = spec
 	b:SetScript("OnClick", function(self)
 		local values = self.spec.values
@@ -121,9 +129,13 @@ local function cycleRow(parent, y, spec, width)
 	end)
 	Widgets.Tooltip(b, spec.label, "Click to change.")
 	function b.Update(self)
+		local options = {}
 		for _, v in ipairs(self.spec.values) do
-			if v[1] == wizard.values[self.spec.key] then self:SetText(v[2]) end
+			local on = v[1] == wizard.values[self.spec.key]
+			if on then self:SetText(v[2]) end
+			options[#options + 1] = on and ("[" .. v[2] .. "]") or v[2]
 		end
+		Widgets.Tooltip(self, self.spec.label, "Options: " .. table.concat(options, " · ") .. "\nClick for the next option.")
 	end
 	wizard.cycles[#wizard.cycles + 1] = b
 	return b
@@ -145,20 +157,20 @@ local function fieldBox(parent, field, x, y, width, height, hint)
 	if field.multiline then
 		-- Long text keeps its full size and line breaks.
 		local area = Widgets.TextArea(parent, maxBytes, width)
-		area.frame:SetPoint("TOPLEFT", x, y - 20)
+		area.frame:SetPoint("TOPLEFT", x, y - 22)
 		area.frame:SetSize(width, height)
 		input = area.edit
 	else
-		input = Widgets.EditLine(parent, maxBytes)
-		input:SetPoint("TOPLEFT", x, y - 20)
-		input:SetSize(width, height)
+		input = Widgets.EditLine(parent, maxBytes, height)
+		input:SetPoint("TOPLEFT", x, y - 22)
+		input:SetWidth(width)
 	end
 	input.fieldKey, input.field = field.key, field
 	Widgets.FieldError(input, width)
 	if hint then
 		local region = input.anchorRegion or input
 		input.hint = Widgets.Label(parent, "GameFontHighlightSmall", true, "muted")
-		input.hint:SetPoint("TOPLEFT", region, "BOTTOMLEFT", 0, -3)
+		input.hint:SetPoint("TOPLEFT", region, "BOTTOMLEFT", 0, -4)
 		input.hint:SetWidth(width)
 		input.hint:SetText(hint)
 	end
@@ -167,6 +179,20 @@ local function fieldBox(parent, field, x, y, width, height, hint)
 	end
 	wizard.inputs[#wizard.inputs + 1] = input
 	return input
+end
+
+-- The Character stage's privacy note uses the Private chip's colours
+-- (SetupWizard.dc.html: #1B2436 fill, #3A4D73 edge, #C9D6F0 text).
+function SetupWizard.PrivateNoteText()
+	return Style.Mix(Themes.VISIBILITY_COLORS.private, { 1, 1, 1 }, 0.25)
+end
+
+function SetupWizard.PaintPrivateNote(note)
+	Style.Register(note, function(p, theme)
+		local fill, edge = Widgets.ChipColors(Themes.VISIBILITY_COLORS.private, theme, theme.background)
+		Style.Color(p.bg, fill)
+		p.edges:Paint(edge, 1)
+	end)
 end
 
 --- Pages ---------------------------------------------------------------------------
@@ -189,29 +215,32 @@ local function buildCharacter()
 	local p = pageFrame("character")
 	-- The player's own portrait and the game's identity line: read live,
 	-- never stored, nothing invented.
-	wizard.portrait = ns.Showcase.Portrait(p, 56)
+	wizard.portrait = ns.Showcase.Portrait(p, L.portrait)
 	wizard.portrait:SetPoint("TOPLEFT", 0, 0)
+	local idX = L.portrait + 14
 	wizard.identity = Widgets.Label(p, "GameFontNormal", false, "heading")
-	wizard.identity:SetPoint("TOPLEFT", 70, -10)
-	wizard.identity:SetWidth(BODY_WIDTH - 70)
-	wizard.identityNote = Widgets.Label(p, "GameFontHighlightSmall", true, "muted")
-	wizard.identityNote:SetPoint("TOPLEFT", 70, -30)
-	wizard.identityNote:SetWidth(BODY_WIDTH - 70)
+	wizard.identity:SetPoint("TOPLEFT", idX, -6)
+	wizard.identity:SetWidth(BODY_WIDTH - idX)
+	wizard.identityNote = Widgets.Label(p, "GameFontHighlightSmall", false, "muted")
+	wizard.identityNote:SetPoint("TOPLEFT", idX, -26)
+	wizard.identityNote:SetWidth(BODY_WIDTH - idX)
 	wizard.identityNote:SetText("From the game. Existing details are kept; an empty box never erases anything.")
 
 	wizard.inputs = {}
 	local F = Onboarding.FIELDS
 	local hints = { name = "Suggested from the game; change it freely.",
 		pronouns = "Used in story questions." }
-	local top = -72
+	-- Two columns of one-line fields (label, 36 px input, hint or error), then
+	-- the long field across the full width (SetupWizard.dc.html grid).
+	local top = -(L.portrait + 12)
 	for i = 1, 4 do
 		local field = F[i]
 		local col, row = (i - 1) % 2, math.floor((i - 1) / 2)
-		fieldBox(p, field, col * (COLUMN_WIDTH + COLUMN_GAP), top - row * 72, COLUMN_WIDTH, L.field,
+		fieldBox(p, field, col * (COLUMN_WIDTH + COLUMN_GAP), top - row * L.fieldRow, COLUMN_WIDTH, L.field,
 			hints[field.key])
 	end
 	for i = 5, #F do
-		fieldBox(p, F[i], 0, top - 144 - (i - 5) * 112, BODY_WIDTH, 80, hints[F[i].key])
+		fieldBox(p, F[i], 0, top - 2 * L.fieldRow - (i - 5) * 112, BODY_WIDTH, L.area, hints[F[i].key])
 	end
 	-- Keyboard: Tab / Shift+Tab between the fields, Enter on a one-line field
 	-- moves on (and after the last, to the next page), Escape closes setup
@@ -221,13 +250,18 @@ local function buildCharacter()
 		onEscape = function() SetupWizard.Close() end,
 	})
 	wizard.chain.SetFields(wizard.inputs)
-	local note = panel(p, nil, 0, -346, BODY_WIDTH, 44, true)
-	paragraph(note.inner, 0, 2, INNER_WIDTH - 150, "Everything starts Private. Nothing is sent to Total RP 3 unless you "
-		.. "choose to share it later.", "small")
+	-- The privacy note in the Private chip's colours (the design's lock note).
+	local note = panel(p, nil, 0, -346, BODY_WIDTH, 46)
+	SetupWizard.PaintPrivateNote(note)
+	wizard.privateNote = note
+	wizard.privateNoteText = paragraph(note.inner, 0, 0, INNER_WIDTH - 160, "Everything starts Private. Nothing is "
+		.. "sent to Total RP 3 unless you choose to share it later.", "small")
+	wizard.privateNoteText:SetPoint("TOPLEFT", 0, 3)
+	Style.Register(wizard.privateNoteText, function(fs) Style.TextColor(fs, SetupWizard.PrivateNoteText()) end)
 	-- A story the player already wrote (#23): its own window, saved only
 	-- when they choose Save and review there; this setup is not affected.
-	wizard.importStory = Widgets.Button(note.inner, "Import a story...", 140, 24)
-	wizard.importStory:SetPoint("TOPRIGHT", 0, 4)
+	wizard.importStory = Widgets.Button(note.inner, "Import a story...", 150, Style.CONTROL.compact)
+	wizard.importStory:SetPoint("RIGHT", 0, 0)
 	wizard.importStory:SetScript("OnClick", function() ns.ImportWizard.Open({ from = "setup" }) end)
 	Widgets.Tooltip(wizard.importStory, "Import a story", "Already wrote a backstory, or have one in Total RP 3? "
 		.. "Paste or read it in; it is kept exactly as written, and you approve each piece before it becomes "
@@ -236,14 +270,16 @@ end
 
 local function buildStory()
 	local p = pageFrame("story")
-	local q = panel(p, "Story questions", 0, 0, BODY_WIDTH, 36 + #Onboarding.PREFS * 38 + 14)
+	local qH = 36 + #Onboarding.PREFS * L.cycleRow + 4
+	local q = panel(p, "Story questions", 0, 0, BODY_WIDTH, qH)
 	for i, pref in ipairs(Onboarding.PREFS) do
-		cycleRow(q.inner, -(i - 1) * 38, pref, INNER_WIDTH)
+		cycleRow(q.inner, -(i - 1) * L.cycleRow, pref, INNER_WIDTH)
 	end
-	paragraph(p, 0, -230, BODY_WIDTH, "When something worth remembering happens, Dawnward may ask a quiet question "
-		.. "about it, never in combat.", "muted")
-	paragraph(p, 0, -270, BODY_WIDTH, "Questions are weighted: your homeland and the places, people and goals you "
-		.. "care about matter most. Ordinary travel is logged quietly.", "muted")
+	local about = panel(p, "How it works", 0, -(qH + 14), BODY_WIDTH, 112)
+	paragraph(about.inner, 0, 0, INNER_WIDTH, "When something worth remembering happens, Dawnward may ask a quiet "
+		.. "question about it, never in combat.", "body")
+	paragraph(about.inner, 0, -40, INNER_WIDTH, "Questions are weighted: your homeland and the places, people and "
+		.. "goals you care about matter most. Ordinary travel is logged quietly.", "muted")
 end
 
 local function buildPrivacy()
@@ -283,12 +319,22 @@ local function buildAppearance()
 	for i, theme in ipairs(Themes.LIST) do
 		local tile = Widgets.Button(themes.inner, theme.name, tileWidth, 36, "choice")
 		tile:SetPoint("TOPLEFT", ((i - 1) % 3) * (tileWidth + 8), -math.floor((i - 1) / 3) * 42)
+		-- Round swatches (square where the client has no masks).
 		for k, role in ipairs({ "background", "surface", "accent" }) do
-			local sw = Widgets.Solid(tile, "ARTWORK")
-			sw:SetSize(12, 12)
-			sw:SetPoint("RIGHT", -8 - (3 - k) * 14, 0)
+			local ring = Style.Disc(tile, "ARTWORK", 0, 14)
+			ring:SetPoint("RIGHT", -8 - (3 - k) * 17, 0)
+			Style.Register(ring, function(t, current) Style.Color(t, current.edge) end)
+			local sw = Style.Disc(tile, "ARTWORK", 1, ring.round and 12 or 14)
+			sw:SetPoint("CENTER", ring, "CENTER", 0, 0)
 			Widgets.SetColor(sw, theme[role])
 		end
+		-- The chosen theme also carries a gold bar on its left edge.
+		tile.mark = Style.Solid(tile, "ARTWORK", 2)
+		tile.mark:SetPoint("TOPLEFT", 0, 0)
+		tile.mark:SetPoint("BOTTOMLEFT", 0, 0)
+		tile.mark:SetWidth(3)
+		Style.Register(tile.mark, function(t, current) Style.Color(t, current.accent) end)
+		tile.mark:Hide()
 		tile.themeId = theme.id
 		tile:SetScript("OnClick", function()
 			wizard.values.theme = theme.id
@@ -302,7 +348,7 @@ local function buildAppearance()
 	paragraph(p, 0, -(36 + rows * 42 + 60) - 2, BODY_WIDTH, "It changes only how the journal looks, and never "
 		.. "depends on class, race or faction.", "muted")
 
-	local mini = panel(p, "Minimap", 0, -(36 + rows * 42 + 60) - 34, BODY_WIDTH, 36 + 26 + 14)
+	local mini = panel(p, "Minimap", 0, -(36 + rows * 42 + 60) - 34, BODY_WIDTH, 36 + L.cycle + 14)
 	cycleRow(mini.inner, 0, { key = "minimap", label = "Minimap button",
 		values = { { true, "Show the button on the minimap" }, { false, "Hide it (/dawnward still works)" } } },
 		INNER_WIDTH)
@@ -333,19 +379,29 @@ end
 
 --- Step rail ---------------------------------------------------------------------------
 
--- States: done (check mark), current (gold badge, highlighted row), future.
+-- States (SetupWizard.dc.html .step): done (gold-tinted badge with the
+-- check mark, light text), current (gold badge, raised row with the
+-- ornament edge, title-white text), future (an edged badge, muted text).
 local function paintStep(step, theme)
 	local s = step.state
 	local current, done = s == "current", s == "done"
+	local tones = Style.Tones(theme)
 	Style.Color(step.bg, theme.surfaceHover, current and 1 or (step.hover and 0.6 or 0))
 	step.edges:Paint(theme.border, current and 1 or 0)
-	Style.Color(step.badgeBg, theme.accent, current and 1 or done and 0.16 or 0)
-	step.badgeEdges:Paint(current and theme.accent or done and theme.border or theme.edge, 1)
+	local fill = current and theme.accent or done and Style.Mix(theme.surface, theme.accent, 0.12) or theme.panel
+	local edge = current and theme.accent or done and theme.border or tones.edgeStrong
+	Style.Color(step.badgeRing, edge)
+	Style.Color(step.badgeBg, fill)
+	if not step.badgeRing.round then
+		-- Square fallback: the ring would hide under the fill, so draw an edge.
+		step.badgeEdges:Paint(edge, 1)
+	end
 	Style.TextColor(step.num, current and theme.accentText or theme.muted)
 	step.num:SetShown(not done)
 	step.check:SetShown(done)
-	step.check:SetVertexColor(theme.accent[1], theme.accent[2], theme.accent[3])
-	Style.TextColor(step.label, (current or done) and theme.text or theme.muted)
+	local gold = tones.accentBright
+	step.check:SetVertexColor(gold[1], gold[2], gold[3])
+	Style.TextColor(step.label, current and tones.heading or done and tones.ghostText or theme.muted)
 end
 
 local function buildRail()
@@ -358,11 +414,18 @@ local function buildRail()
 	wizard.railLine:SetPoint("TOPLEFT", L.rail, -1)
 	wizard.railLine:SetPoint("BOTTOMLEFT", L.rail, 1)
 
-	wizard.brand = Widgets.Label(wizard, "GameFontNormal", false, "title")
-	wizard.brand:SetPoint("TOPLEFT", 24, -L.top)
+	-- Wordmark: the shell's gold jewel and DAWNWARD (Cinzel 13, gold).
+	wizard.jewel = Widgets.Solid(wizard, "ARTWORK")
+	wizard.jewel:SetSize(8, 8)
+	wizard.jewel:SetPoint("CENTER", wizard, "TOPLEFT", 30, -L.top - 8)
+	if wizard.jewel.SetRotation then wizard.jewel:SetRotation(math.pi / 4) end
+	Style.Register(wizard.jewel, function(t, theme) Style.Color(t, theme.accent) end)
+	wizard.brand = Widgets.Label(wizard, nil, false, "eyebrow")
+	Widgets.SetTextRole(wizard.brand, "accent")
+	wizard.brand:SetPoint("TOPLEFT", 42, -L.top)
 	wizard.brand:SetText("DAWNWARD")
 	wizard.eyebrow = Widgets.Label(wizard, "GameFontNormalSmall", true, "eyebrow")
-	wizard.eyebrow:SetPoint("TOPLEFT", 24, -L.top - 22)
+	wizard.eyebrow:SetPoint("TOPLEFT", 24, -L.top - 26)
 	wizard.eyebrow:SetWidth(L.rail - 48)
 
 	wizard.steps = {}
@@ -375,19 +438,23 @@ local function buildRail()
 		step.bg:SetAllPoints(step)
 		step.edges = Style.Edge(step, "BORDER")
 		step.badge = CreateFrame("Frame", nil, step)
-		step.badge:SetSize(24, 24)
+		step.badge:SetSize(L.badge, L.badge)
 		step.badge:SetPoint("LEFT", 10, 0)
-		step.badgeBg = Style.Solid(step.badge, "BACKGROUND")
-		step.badgeBg:SetAllPoints(step.badge)
+		-- A round badge: an edge-coloured disc under a fill disc 2 px smaller.
+		step.badgeRing = Style.Disc(step.badge, "BACKGROUND", 0, L.badge)
+		step.badgeRing:SetPoint("CENTER", 0, 0)
+		step.badgeBg = Style.Disc(step.badge, "BACKGROUND", 1, step.badgeRing.round and L.badge - 2 or L.badge)
+		step.badgeBg:SetPoint("CENTER", 0, 0)
 		step.badgeEdges = Style.Edge(step.badge, "BORDER")
-		step.num = step.badge:CreateFontString(nil, "OVERLAY", Style.Font("GameFontNormalSmall"))
+		step.badgeEdges:SetShown(not step.badgeRing.round)
+		step.num = step.badge:CreateFontString(nil, "OVERLAY", Style.FontFor("badge"))
 		step.num:SetPoint("CENTER", 0, 0)
 		step.num:SetText(tostring(i))
 		step.check = step.badge:CreateTexture(nil, "OVERLAY")
 		step.check:SetTexture(SetupWizard.CHECK_TEXTURE)
 		step.check:SetSize(20, 20)
 		step.check:SetPoint("CENTER", 0, 0)
-		step.label = Widgets.Label(step, "GameFontHighlight")
+		step.label = Widgets.Label(step, "reading")
 		step.label:SetPoint("LEFT", step.badge, "RIGHT", 12, 0)
 		step.label:SetText(page.title)
 		step.state = "future"
@@ -422,17 +489,20 @@ local function build()
 	buildRail()
 
 	local x = L.rail + L.pad
+	-- Header (SetupWizard.dc.html): STEP n OF 6, the stage title in Cinzel
+	-- (the shell's screen title style), a one-line subtitle; the 36 px close.
 	wizard.stepLabel = Widgets.Label(wizard, "GameFontNormalSmall", false, "eyebrow")
 	wizard.stepLabel:SetPoint("TOPLEFT", x, -L.top)
-	wizard.title = Widgets.Label(wizard, "GameFontNormalLarge", false, "title")
-	wizard.title:SetPoint("TOPLEFT", x, -L.top - 18)
-	wizard.subtitle = Widgets.Label(wizard, "GameFontHighlight", true, "muted")
-	wizard.subtitle:SetPoint("TOPLEFT", x, -L.top - 46)
-	wizard.subtitle:SetWidth(BODY_WIDTH - 40)
+	wizard.title = Widgets.Label(wizard, "GameFontNormalHuge", false, "title")
+	wizard.title:SetPoint("TOPLEFT", x, -L.top - 20)
+	wizard.subtitle = Widgets.Label(wizard, "GameFontHighlight", false, "muted")
+	Widgets.SetTextRole(wizard.subtitle, "navText")
+	wizard.subtitle:SetPoint("TOPLEFT", x, -L.top - 60)
+	wizard.subtitle:SetWidth(BODY_WIDTH - 44)
 	wizard.close = Widgets.IconButton(wizard, "X", "Close", "Close setup. It resumes where you left it the next "
 		.. "time you open Dawnward, or from Settings > Run setup.")
-	wizard.close:SetSize(30, 30)
-	wizard.close:SetPoint("TOPRIGHT", -L.pad + 6, -L.top + 6)
+	wizard.close:SetSize(Style.CONTROL.icon, Style.CONTROL.icon)
+	wizard.close:SetPoint("TOPRIGHT", -L.pad, -L.top)
 	wizard.close:SetScript("OnClick", function() SetupWizard.Close() end)
 
 	buildPages()
@@ -444,13 +514,13 @@ local function build()
 	wizard.later:SetScript("OnClick", function() SetupWizard.Later() end)
 	Widgets.Tooltip(wizard.later, "Set up later", "Keep your answers and open the journal. Setup resumes the "
 		.. "next time you log in, or from Settings > Run setup.")
-	wizard.next = Widgets.Button(wizard, "Next", 150, L.button, "primary")
+	wizard.next = Widgets.Button(wizard, "Next", 170, L.button, "primary")
 	wizard.next:SetPoint("BOTTOMRIGHT", -L.pad, 22)
 	wizard.next:SetScript("OnClick", function() SetupWizard.Next() end)
-	wizard.back = Widgets.Button(wizard, "Back", 90, L.button)
+	wizard.back = Widgets.Button(wizard, "Back", 96, L.button)
 	wizard.back:SetPoint("RIGHT", wizard.next, "LEFT", -10, 0)
 	wizard.back:SetScript("OnClick", function() SetupWizard.Go(wizard.page - 1) end)
-	wizard.discard = Widgets.Button(wizard, "Close preview", 120, L.button)
+	wizard.discard = Widgets.Button(wizard, "Close preview", 130, L.button)
 	wizard.discard:SetPoint("RIGHT", wizard.back, "LEFT", -10, 0)
 	wizard.discard:SetScript("OnClick", function() SetupWizard.Close() end)
 
@@ -567,6 +637,7 @@ function SetupWizard.Refresh()
 	-- Appearance: the chosen theme is previewed on the wizard itself.
 	for _, tile in ipairs(wizard.themeTiles) do
 		tile:SetSelected(tile.themeId == wizard.values.theme)
+		tile.mark:SetShown(tile.themeId == wizard.values.theme)
 	end
 	local theme = Themes.Get(wizard.values.theme)
 	wizard.themeNote:SetText(theme.name .. ": " .. theme.description)
@@ -684,9 +755,10 @@ function SetupWizard.Open(opts)
 	wizard.initial, wizard.edited = initial, edited
 	wizard.finished = false
 	wizard.values, wizard.page = values, page
-	wizard.eyebrow:SetText(wizard.test and "PREVIEW  -  TEST MODE: NOTHING IS SAVED UNLESS YOU CHOOSE"
-		or wizard.simulation and "FIRST-TIME SETUP  -  SIMULATION MODE: PREVIEW ONLY"
-		or wizard.readOnly and "FIRST-TIME SETUP  -  READ-ONLY: NOTHING CAN BE SAVED" or "FIRST-TIME SETUP")
+	-- At most two lines in the rail; the rail note says what the mode means.
+	wizard.eyebrow:SetText(wizard.test and "PREVIEW · TEST MODE"
+		or wizard.simulation and "SIMULATION · PREVIEW ONLY"
+		or wizard.readOnly and "READ-ONLY · NOTHING SAVED" or "FIRST-TIME SETUP")
 	wizard.eyebrow.textRole = (wizard.test or wizard.readOnly) and "danger" or "ornament"
 	Style.Repaint(wizard.eyebrow)
 	fill()
