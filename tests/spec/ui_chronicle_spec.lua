@@ -59,87 +59,225 @@ return function(t, expect)
 	end
 
 	t:describe("Chronicle layout (#46, v0.7 cards)", function()
-		t:it("never lets a card's parts overlap, and fits the grid in the content area", function()
-			local _, _, ns = Boot.Start()
-			local CV = ns.ChronicleView
-			local L = CV.LAYOUT
-			for _, opts in ipairs({ {}, { title = true }, { title = true, meta = true },
-				{ title = true, meta = true, progress = true }, { meta = true, progress = true } }) do
-				local r = CV.CardRects(opts)
-				local parts = { r.chip, r.text, r.chips, r.divider, r.buttons }
-				for _, k in ipairs({ "title", "meta", "progress" }) do
-					if r[k] then parts[#parts + 1] = r[k] end
+		local _, _, PNS = Boot.Start()
+		local PCV = PNS.ChronicleView
+		-- Cards of every shape: short, long, with and without title, meta,
+		-- progress, many chips and many buttons.
+		local LONG = string.rep("She walked the whole Lantern Road with a single candle. ", 12)
+		local function shapes()
+			return {
+				{ chip = { "Ordinary", "muted" }, date = "Today", text = "Short", chips = {}, vis = "private" },
+				{ chip = { "Defining", "accent" }, date = "28 Oct", title = "The night the lanterns went out",
+					text = LONG, chips = { { "Goldshire", "muted" }, { "Your words", "muted" },
+						{ "Established", "muted" } }, vis = "private" },
+				{ chip = { "Active", "accent" }, title = "Restore the grove", meta = string.rep("1/2 milestones · ", 12),
+					text = "Why", progress = 0.5, chips = { { "Your words", "muted" } }, vis = "public" },
+				{ chip = { "Stance", "accent" }, examine = true, text = LONG,
+					chips = { { "Elwynn Forest and its many quiet places", "muted" }, { "Suggested by Dawnward", "muted" },
+						{ "Established", "muted" }, { "Fourth chip", "muted" } }, vis = "secret" },
+				{ text = "", chips = {} },
+			}
+		end
+		local ACTIONS = {
+			function() return { { "edit", "Edit" } } end,
+			function(read)
+				local left = { { "accept", "Accept" }, { "edit", "Edit" }, { "turn", "Turn" } }
+				if read then left[#left + 1] = { "read", "Read" } end
+				return left, { "remove", "Remove" }
+			end,
+			function(read)
+				local left = { { "edit", "Edit" }, { "dispute", "Dispute" }, { "inner", "Inner: Private" } }
+				if read then left[#left + 1] = { "read", "Read" } end
+				return left, { "remove", "Remove" }
+			end,
+			function()
+				local left = {}
+				for _, id in ipairs({ "growth", "unreliable", "secret", "correction", "ignore" }) do
+					left[#left + 1] = { id, PNS.ChronicleView.REVIEW_LABELS[id] }
 				end
-				for i = 1, #parts do
-					expect.truthy(parts[i].x >= 0 and parts[i].x + parts[i].w <= L.cardWidth, "inside the card width")
-					expect.truthy(parts[i].y >= 0 and parts[i].y + parts[i].h <= L.cardHeight, "inside the card height")
-					for j = i + 1, #parts do
-						expect.falsy(overlaps(parts[i], parts[j]), string.format("parts %d and %d overlap", i, j))
+				return left
+			end,
+			function() return {} end,
+		}
+
+		local function parts(r)
+			local out = { r.chip }
+			for _, k in ipairs({ "date", "examine", "title", "meta", "text", "progress", "chips", "divider" }) do
+				if r[k] then out[#out + 1] = r[k] end
+			end
+			if r.buttons then
+				for _, b in ipairs(r.buttons.items) do
+					out[#out + 1] = { x = r.buttons.x + b.x, y = r.buttons.y + b.y, w = b.w, h = PCV.LAYOUT.buttonHeight }
+				end
+			end
+			return out
+		end
+
+		t:it("sizes each card to its content and never lets its parts overlap", function()
+			local L = PCV.LAYOUT
+			for si, content in ipairs(shapes()) do
+				for ai, actions in ipairs(ACTIONS) do
+					local r = PCV.CardLayout(content, actions)
+					local list = parts(r)
+					for i = 1, #list do
+						local p = list[i]
+						expect.truthy(p.x >= 0 and p.x + p.w <= L.cardWidth, "inside the card width " .. si .. "/" .. ai)
+						expect.truthy(p.y >= 0 and p.y + p.h <= r.height, "inside the card height " .. si .. "/" .. ai)
+						for j = i + 1, #list do
+							expect.falsy(overlaps(list[i], list[j]),
+								string.format("parts %d and %d overlap (shape %d, actions %d)", i, j, si, ai))
+						end
+					end
+					if r.date then expect.falsy(overlaps(r.chip, r.date), "the status chip leaves room for the date") end
+					if r.examine then expect.falsy(overlaps(r.chip, r.examine), "and for Examine") end
+					expect.truthy(r.height <= L.gridHeight, "a card always fits a page")
+					if r.chips then
+						for c = 1, #r.chips.items do
+							for d = c + 1, #r.chips.items do
+								expect.falsy(overlaps(
+									{ x = r.chips.items[c].x, y = r.chips.items[c].y, w = r.chips.items[c].w, h = L.chipRow },
+									{ x = r.chips.items[d].x, y = r.chips.items[d].y, w = r.chips.items[d].w, h = L.chipRow }),
+									"chips never overlap")
+							end
+						end
 					end
 				end
-				expect.falsy(overlaps(r.chip, r.date), "the status chip leaves room for the date")
-				expect.truthy(r.text.h >= 50, "at least three lines of text")
 			end
-			expect.truthy(L.inset * 2 + L.width <= ns.MainWindow.ContentWidth())
+			-- Content-aware: a short card is much shorter than a long one.
+			local short = PCV.CardLayout(shapes()[1], ACTIONS[1])
+			local long = PCV.CardLayout(shapes()[2], ACTIONS[2])
+			expect.truthy(short.height < 170, "a short memory is a short card: " .. short.height)
+			expect.truthy(long.height > short.height + 100)
+			expect.truthy(long.truncated, "the long text is cut")
+			expect.equal(long.text.lines, L.maxTextLines)
+			expect.falsy(short.truncated)
+			-- The long text's card offers Read; the short one does not need it.
+			local labels = {}
+			for _, b in ipairs(long.buttons.items) do labels[#labels + 1] = b.label end
+			expect.truthy(table.concat(labels, ","):find("Read", 1, true))
+			-- Grid and toolbar fit the content area.
+			expect.truthy(L.inset * 2 + L.width <= PNS.MainWindow.ContentWidth())
+			expect.equal(L.height, PNS.MainWindow.ContentHeight())
 			expect.equal(L.cols * L.cardWidth + (L.cols - 1) * L.colGap, L.width, "two columns fill the width")
-			local width = 0
-			for _, spec in ipairs(CV.TABS) do width = width + spec.width + L.tabGap end
-			expect.truthy(width + 2 * L.tabPad <= L.width, "tabs fit one row")
-			local lastX, lastY = CV.CardOrigin(CV.ROWS)
-			expect.truthy(lastX + L.cardWidth <= L.inset + L.width)
-			expect.truthy(lastY + L.cardHeight <= ns.MainWindow.ContentHeight(), "cards end inside the content area")
-			expect.truthy(L.toolbarTop + L.toolbarHeight <= L.gridTop, "toolbar above the cards")
+			expect.truthy(L.tabHeight <= L.toolbarTop and L.toolbarTop + L.toolbarHeight <= L.gridTop,
+				"tabs, then the toolbar, then the cards")
 		end)
 
-		t:it("fits each tab's buttons inside a card without overlapping", function()
-			local _, _, ns = Boot.Start()
-			local CV = ns.ChronicleView
-			local W = CV.BUTTON_WIDTHS
-			local inner = CV.LAYOUT.cardWidth - 2 * CV.LAYOUT.cardPad
-			local gap = CV.LAYOUT.buttonGap
-			local rows = {
-				{ W.Accept, W.Edit, 84, W.Remove },             -- a suggested stance-like record
-				{ W.Edit, W.Dispute, W.Steps, W.Remove },
-				{ W.Accept, W.Edit, W.Turn, W.Remove },
-				{ W.growth, W.unreliable, W.secret, W.correction, W.ignore },
-			}
-			for _, widths in ipairs(rows) do
-				local total = 0
-				for _, w in ipairs(widths) do total = total + w end
-				expect.truthy(total + gap * (#widths - 1) <= inner, "the row of buttons fits")
+		t:it("pages cards by what fits: the shorter column first, never past the grid", function()
+			local L = PCV.LAYOUT
+			expect.equal(#PCV.Paginate({}), 1, "an empty list is one empty page")
+			local pages = PCV.Paginate({ 150, 300, 150, 150, 150 })
+			expect.equal(pages[1][1].col, 1)
+			expect.equal(pages[1][2].col, 2)
+			expect.equal(pages[1][3].col, 1, "the third card goes under the shorter first one")
+			expect.equal(pages[1][3].y, 150 + L.rowGap)
+			expect.equal(pages[1][4].col, 2, "the fourth: under the 300 card, now the shorter column")
+			for _, page in ipairs(PCV.Paginate({ 480, 200, 200, 200, 120, 170, 300, 486, 600, 160, 160, 160, 160, 160 })) do
+				expect.truthy(#page >= 1 and #page <= L.pool)
+				for i, a in ipairs(page) do
+					expect.truthy(a.y + a.h <= L.gridHeight, "inside the grid")
+					for j = i + 1, #page do
+						local b = page[j]
+						expect.falsy(a.col == b.col and a.y < b.y + b.h + L.rowGap and b.y < a.y + a.h + L.rowGap,
+							"cards in a column keep their gap")
+					end
+				end
 			end
+			local n, page = PCV.Pages(pages, 9)
+			expect.equal(n, #pages)
+			expect.equal(page, n, "a page past the end shows the last one")
 		end)
 
-		t:it("places each card's frames from the same rectangles, in a two-column grid", function()
+		t:it("fits each tab's buttons inside a card, the five answers in one row", function()
+			local L = PCV.LAYOUT
+			local inner = L.cardWidth - 2 * L.cardPad
+			for ai, actions in ipairs(ACTIONS) do
+				local left, right = actions(true)
+				local rows = PCV.ButtonRows(left, right, inner)
+				for _, b in ipairs(rows.items) do
+					expect.truthy(b.x >= 0 and b.x + b.w <= inner, "inside the card: " .. b.label)
+					expect.truthy(PNS.Widgets.LabelFits(b.label, b.w, L.buttonHeight), "label fits: " .. b.label)
+				end
+				if ai == 4 then expect.equal(rows.rows, 1, "the answers sit in one row") end
+				if ai == 2 then expect.equal(rows.rows, 1, "Accept, Edit, Turn, Read and Remove in one row") end
+			end
+			-- Toolbar labels fit the New button.
+			for _, spec in ipairs(PCV.TABS) do
+				if spec.new then
+					expect.truthy(PNS.Widgets.LabelFits("+  " .. spec.new, L.newWidth, L.toolbarHeight), spec.new)
+				end
+			end
+			expect.truthy(PNS.Widgets.LabelFits("<  All findings", L.newWidth, L.toolbarHeight))
+			expect.truthy(PNS.Widgets.LabelFits("Answered  999", L.newWidth, L.toolbarHeight))
+		end)
+
+		t:it("fits the tabs in one row, even with three-digit counts", function()
+			local L = PCV.LAYOUT
+			local width = L.tabPad
+			for _, spec in ipairs(PCV.TABS) do
+				local w = PCV.TabWidth(spec, 999)
+				expect.truthy(PNS.Widgets.LabelFits(spec.label .. "  999", w, L.tabHeight - 2 * L.tabPad, "segment"),
+					spec.label)
+				width = width + w + L.tabGap
+			end
+			expect.truthy(width - L.tabGap + L.tabPad <= L.width, "tabs fit one row")
+		end)
+
+		t:it("places each card's frames from its layout, two cards side by side", function()
 			local _, env, ns, section = start()
+			local CV = ns.ChronicleView
 			local char = env.DawnwardChroniclesDB.characters[CHAR]
 			ns.Memories.Add(char, { title = "The grove", text = "It burned" }, "player", 1)
 			ns.Memories.Add(char, { text = "A second" }, "player", 2)
 			ns.MainWindow.Refresh()
-			local r = ns.ChronicleView.CardRects({ title = true })
 			local row = section.rows[2]
-			expect.equal(row.text:GetWidth(), r.text.w)
+			expect.equal(row.text:GetWidth(), row.layout.text.w)
+			expect.equal(row.text:GetWidth(), CV.LAYOUT.cardWidth - 2 * CV.LAYOUT.cardPad)
 			expect.equal(row.title:GetText(), "The grove")
+			expect.equal(row:GetHeight(), row.layout.height, "the card is as tall as its content")
 			local p1, p2 = section.rows[1].__points[1], section.rows[2].__points[1]
 			expect.equal(p1[3], p2[3], "first two cards share a row")
-			expect.truthy(p2[2] >= p1[2] + ns.ChronicleView.LAYOUT.cardWidth, "side by side, apart")
+			expect.truthy(p2[2] >= p1[2] + CV.LAYOUT.cardWidth, "side by side, apart")
 			expect.falsy(section.rows[1].title:IsShown(), "no title: the text takes its place")
+			expect.truthy(section.rows[1]:GetHeight() < row:GetHeight(), "no title: a shorter card")
 		end)
 
 		t:it("pages long lists", function()
 			local _, env, ns, section = start()
-			expect.equal(select(1, ns.ChronicleView.Pages(0, 1)), 1)
-			expect.equal(select(2, ns.ChronicleView.Pages(13, 9)), 4)
 			local char = env.DawnwardChroniclesDB.characters[CHAR]
-			for i = 1, 6 do ns.Memories.Add(char, { text = "Memory " .. i }, "player", i) end
+			for i = 1, 6 do ns.Memories.Add(char, { title = "Title " .. i, text = "Memory " .. i }, "player", i) end
 			ns.MainWindow.Refresh()
 			expect.equal(section.pageLabel:GetText(), "Page 1 of 2")
+			expect.truthy(section.next:IsShown(), "the pager shows with more than one page")
 			expect.equal(section.rows[1].text:GetText(), "Memory 6")
 			expect.equal(section.count:GetText(), "Newest first · 6 memories")
 			click(section.next)
 			expect.equal(section.rows[1].text:GetText(), "Memory 2")
 			expect.falsy(section.rows[3]:IsShown())
 			expect.falsy(section.next:IsEnabled())
+		end)
+
+		t:it("fills a page with short cards and hides the pager for one page", function()
+			local _, env, ns, section = start()
+			local CV = ns.ChronicleView
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			for i = 1, 6 do ns.Memories.Add(char, { text = "Memory " .. i }, "player", i) end
+			ns.MainWindow.Refresh()
+			local shown, bottom = 0, 0
+			for _, row in ipairs(section.rows) do
+				if row:IsShown() then
+					shown = shown + 1
+					bottom = math.max(bottom, -row.__points[1][3] + row:GetHeight())
+				end
+			end
+			expect.truthy(shown >= 4, "short cards: at least four on a page")
+			expect.truthy(bottom <= CV.LAYOUT.height, "the cards end inside the content area")
+			local long = string.rep("A long memory that wraps over many lines. ", 30)
+			ns.Memories.Add(char, { title = "Long", text = long }, "player", 7)
+			ns.MainWindow.Refresh()
+			expect.equal(section.rows[1].text:GetText(), char.story.memories[7].text,
+				"the card holds the whole text; the client cuts it")
+			expect.truthy(section.rows[1].layout.truncated)
 		end)
 
 		t:it("names the tab in the heading and counts each tab's records", function()
@@ -150,7 +288,10 @@ return function(t, expect)
 			ns.MainWindow.Refresh()
 			expect.equal(ns.MainWindow.HeadingFor(ns.MainWindow.Sections()[4], char, false), "Memories")
 			local labels = {}
-			for _, b in ipairs(section.tabButtons) do labels[b.tabId] = b:GetText() end
+			-- The count is drawn in a quieter colour (inline colour code).
+			for _, b in ipairs(section.tabButtons) do
+				labels[b.tabId] = b:GetText():gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+			end
 			expect.equal(labels.memories, "Memories  1")
 			expect.equal(labels.identity, "Stances  1")
 			expect.equal(labels.arcs, "Arcs")
@@ -340,6 +481,67 @@ return function(t, expect)
 			ns.MainWindow.Refresh()
 			expect.falsy(d.chips[1].label:GetText() == "Homeland")
 			expect.truthy(d.homeland:IsEnabled(), "it can be made the homeland again")
+		end)
+
+		t:it("shows a long record whole in its full view, with the same actions, and goes back", function()
+			local mock, env, ns, section = start()
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			local long = string.rep("She walked the whole Lantern Road with a single candle. ", 10)
+			ns.Memories.Add(char, { title = "The night the lanterns went out", text = long }, "player", 1)
+			ns.Memories.Add(char, { title = "Short", text = "Short" }, "player", 2)
+			ns.MainWindow.Refresh()
+			local d = section.detail
+			expect.falsy(d:IsShown())
+			-- Newest first: the short one has no Read; the long one does.
+			expect.falsy(pcall(button, section.rows[1], "Read"), "nothing to read further")
+			local read = button(section.rows[2], "Read")
+			expect.equal(read.variant, "ghost")
+			expect.truthy(read.tooltipText, "Read explains itself")
+			click(read)
+			expect.truthy(d:IsShown())
+			expect.equal(d.title:GetText(), "The night the lanterns went out")
+			expect.equal(d.text:GetText(), char.story.memories[1].text, "the whole text")
+			expect.truthy(d.body:GetHeight() > ns.ChronicleView.LAYOUT.maxTextLines * ns.ChronicleView.LAYOUT.textLine,
+				"the text scrolls when it is longer than a card")
+			expect.equal(d.back:GetText(), "<  Back to memories")
+			expect.falsy(pcall(button, d, "Read"), "no Read inside the full view")
+			-- The record's own actions work from the full view.
+			click(button(d, "Private"))
+			expect.equal(char.story.memories[1].visibility, "public")
+			expect.truthy(d:IsShown(), "the full view stays on its record after an action")
+			click(button(d, "Edit"))
+			expect.truthy(section.form:IsOpen())
+			expect.equal(section.form.spec.title, "Edit memory")
+			click(section.form.cancel)
+			click(d.back)
+			expect.falsy(d:IsShown())
+			-- Removing the record closes its full view.
+			click(button(section.rows[2], "Read"))
+			click(button(d, "Remove"))
+			mock.AcceptPopup()
+			expect.equal(#char.story.memories, 1)
+			expect.falsy(d:IsShown())
+			-- Changing tab closes it too.
+			ns.Memories.Add(char, { title = "Again", text = long }, "player", 3)
+			ns.MainWindow.Refresh()
+			click(button(section.rows[1], "Read"))
+			expect.truthy(d:IsShown())
+			tab(section, "arcs")
+			expect.falsy(d:IsShown())
+		end)
+
+		t:it("marks a suggestion in the design's amber and a dispute in red", function()
+			local _, env, ns, section = start()
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			local m = ns.Memories.Add(char, { text = "Mine" }, "player", 1)
+			ns.Memories.Dispute(char, m.id, 2)
+			ns.Memories.Add(char, { text = "Suggested" }, "suggested", 3)
+			ns.MainWindow.Refresh()
+			expect.equal(section.rows[1].highlight, "waiting")
+			expect.equal(section.rows[1].chip.tone, "waiting")
+			expect.equal(section.rows[2].highlight, "danger")
+			expect.equal(section.rows[2].chip.tone, "danger")
+			expect.equal(button(section.rows[2], "Accept").variant, "primary")
 		end)
 
 		t:it("answers continuity findings from the Review tab without changing canon", function()

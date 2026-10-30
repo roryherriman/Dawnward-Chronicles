@@ -28,7 +28,7 @@ return function(t, expect)
 
 		t:it("declares the expected metadata", function()
 			local _, meta = readToc()
-			expect.equal(meta.Version, "0.7.1-dev")
+			expect.equal(meta.Version, "0.8.0-dev")
 			expect.equal(meta.SavedVariables, "DawnwardChroniclesDB, DawnwardChroniclesSimDB, DawnwardChroniclesTRP3DB")
 			expect.equal(meta.OptionalDeps, "totalRP3")
 		end)

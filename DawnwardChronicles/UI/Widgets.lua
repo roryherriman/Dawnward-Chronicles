@@ -31,12 +31,14 @@ function Widgets.Place(region, anchor, rect)
 	region:SetPoint("TOPRIGHT", anchor, "BOTTOMLEFT", rect.right, rect.top)
 end
 
---- A font string. role (title, eyebrow, heading, body, muted, small, accent,
--- danger) colours it from the theme automatically; without a role the
--- caller colours it.
+--- A font string. role (title, eyebrow, heading, body, reading, muted, small,
+-- accent, danger) colours it from the theme automatically; without a role
+-- the caller colours it. font is a game font template ("GameFontHighlight")
+-- or a Style.FONTS style name ("reading", "meta", "button", ...).
 function Widgets.Label(parent, font, wrap, role)
 	local spec = role and Style.TEXT[role]
-	local fs = parent:CreateFontString(nil, "OVERLAY", Style.Font(font or (spec and spec.font) or "GameFontHighlight"))
+	font = font or (spec and spec.font) or "GameFontHighlight"
+	local fs = parent:CreateFontString(nil, "OVERLAY", Style.FontFor(font))
 	fs:SetJustifyH("LEFT")
 	fs:SetJustifyV("TOP")
 	fs:SetWordWrap(wrap and true or false)
@@ -45,16 +47,28 @@ function Widgets.Label(parent, font, wrap, role)
 	end
 	if spec then
 		fs.textRole = spec.color
-		Style.Register(fs, function(f, theme) Style.TextColor(f, theme[f.textRole]) end)
+		Style.Register(fs, function(f, theme) Style.TextColor(f, Style.Tone(theme, f.textRole)) end)
 	end
+	return fs
+end
+
+--- Sets a label's colour role ("muted", "accent", a Style.Tones key, ...),
+-- so it follows theme changes. Pure painting; no layout change.
+function Widgets.SetTextRole(fs, colorRole)
+	fs.textRole = colorRole
+	Style.Register(fs, function(f, theme) Style.TextColor(f, Style.Tone(theme, f.textRole)) end)
 	return fs
 end
 
 --- Tooltips ------------------------------------------------------------------------
 
+-- Title in the design's bright gold, body lines in white and wrapped. A
+-- frame whose tooltip was cleared (title nil) shows none.
 local function showTooltip(owner, title, text)
+	if not title then return end
+	local gold = Style.Tones(Style.Current()).accentBright
 	GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
-	GameTooltip:SetText(title)
+	GameTooltip:SetText(title, gold[1], gold[2], gold[3])
 	if text then
 		GameTooltip:AddLine(text, 1, 1, 1, true)
 	end
@@ -86,31 +100,46 @@ function Widgets.Tooltip(frame, title, text)
 end
 
 --- Buttons --------------------------------------------------------------------------
--- Variants: default (surface), primary (accent fill), ghost (no fill until
--- hovered), danger (danger text), choice (a left-aligned answer card).
--- States: hover, pressed, disabled and selected (segmented controls).
+-- Variants of the design system (DesignSystem.dc.html "Buttons"):
+--   default   "secondary": raised fill, stronger edge, text colour
+--   primary   gold fill, bright gold edge, dark text (one per panel)
+--   ghost     no fill, a quiet 1 px edge, softer text ("Later", "Guide")
+--   danger    no fill, a dark red edge, light red text ("Delete")
+--   choice    a left-aligned answer card (regular text, not bold)
+--   segment   an item of a segmented control: no edge until selected
+-- States: hover (lighter fill, gold edge), pressed (label nudged), disabled
+-- (dimmed, muted text, as the design's 45 % opacity) and selected (the
+-- segmented control's raised item).
+-- Labels: Alegreya Sans Bold, 15 on standard (34 px and taller), 14 below.
+Widgets.BUTTON = { insetChoice = 12, inset = 6, standardFrom = 34, disabledAlpha = 0.45 }
 
 local function paintButton(b, theme)
+	local tones = Style.Tones(theme)
 	local enabled = b:IsEnabled() and true or false
 	local hover = enabled and b.hover
 	local v = b.variant
 	local fill, fillAlpha, edge, edgeAlpha, text
 	if b.selected then
-		fill, fillAlpha, edge, edgeAlpha, text = theme.surfaceHover, 1, theme.accent, 1, theme.accent
-	elseif v == "primary" and enabled then
-		fill, fillAlpha = hover and Style.Lighten(theme.accent, 0.15) or theme.accent, 1
-		edge, edgeAlpha, text = theme.accent, 1, theme.accentText
-	elseif v == "ghost" or v == "danger" then
-		fill, fillAlpha = theme.surfaceHover, hover and 1 or 0
-		edge, edgeAlpha = v == "danger" and hover and theme.danger or theme.edge, hover and 1 or 0
-		text = v == "danger" and theme.danger or (hover and theme.accent or theme.text)
+		fill, fillAlpha, edge, edgeAlpha, text = tones.selectedFill, 1, tones.selectedEdge, 1, tones.heading
+	elseif v == "primary" then
+		fill, fillAlpha = hover and Style.Lighten(theme.accent, 0.12) or theme.accent, 1
+		edge, edgeAlpha, text = tones.accentBright, 1, theme.accentText
+	elseif v == "ghost" or v == "danger" or v == "segment" then
+		fill, fillAlpha = theme.surfaceHover, hover and (v == "segment" and 0.6 or 1) or 0
+		if v == "danger" then
+			edge, text = hover and theme.danger or tones.dangerEdge, tones.dangerText
+		else
+			edge, text = hover and theme.border or theme.edge, hover and tones.heading or tones.ghostText
+		end
+		edgeAlpha = (v == "segment" and not hover) and 0 or 1
 	else
-		fill, fillAlpha = hover and theme.surfaceHover or theme.surface, 1
-		edge, edgeAlpha, text = hover and theme.accent or theme.edge, 1, theme.text
+		fill, fillAlpha = hover and tones.selectedFill or theme.surfaceHover, 1
+		edge, edgeAlpha, text = hover and theme.border or tones.edgeStrong, 1, theme.text
+		if v == "choice" then fill = hover and theme.surfaceHover or theme.surface end
 	end
 	if not enabled and not b.selected then
 		text = theme.muted
-		if v == "primary" then fill, edge = theme.surface, theme.edge end
+		fillAlpha, edgeAlpha = fillAlpha * Widgets.BUTTON.disabledAlpha, edgeAlpha * Widgets.BUTTON.disabledAlpha
 	end
 	Style.Color(b.bg, fill, fillAlpha)
 	b.edges:Paint(edge, edgeAlpha)
@@ -125,19 +154,36 @@ local function placeLabel(b, pressed)
 	b.label:SetPoint("RIGHT", -b.textInset + d, -d)
 end
 
+--- The font style a button of height and variant uses. Pure.
+function Widgets.ButtonFontStyle(height, variant)
+	if variant == "choice" then
+		return height >= Style.SIZE.button and "body" or "small"
+	end
+	return height >= Widgets.BUTTON.standardFrom and "button" or "buttonSmall"
+end
+
+--- Whether text fits a button of width and height (estimated with the
+-- bundled font's real advance widths, Style.TextWidth). Pure.
+function Widgets.LabelFits(text, width, height, variant)
+	local inset = variant == "choice" and Widgets.BUTTON.insetChoice or Widgets.BUTTON.inset
+	return Style.TextWidth(text, Widgets.ButtonFontStyle(height, variant)) <= width - 2 * inset
+end
+
 --- A styled button. API-compatible with the v0.5 buttons (SetText, GetText,
 -- SetEnabled, Enable, Disable, GetFontString), plus SetSelected and SetVariant.
+-- height: a Style.CONTROL height (compact 30, standard 36) for the design
+-- system's sizes; smaller heights still work.
 function Widgets.Button(parent, text, width, height, variant)
 	local b = CreateFrame("Button", nil, parent)
 	height = height or Style.SIZE.button
 	b:SetSize(width or 100, height)
 	b.variant = variant or "default"
-	b.textInset = b.variant == "choice" and 12 or 4
+	b.textInset = b.variant == "choice" and Widgets.BUTTON.insetChoice or Widgets.BUTTON.inset
 	b.bg = Style.Solid(b, "BACKGROUND")
 	b.bg:SetAllPoints(b)
 	b.edges = Style.Edge(b, "BORDER")
-	b.label = b:CreateFontString(nil, "OVERLAY", Style.Font(height < Style.SIZE.button and "GameFontHighlightSmall"
-		or "GameFontHighlight"))
+	b.fontStyle = Widgets.ButtonFontStyle(height, b.variant)
+	b.label = b:CreateFontString(nil, "OVERLAY", Style.FontFor(b.fontStyle))
 	b.label:SetJustifyH(b.variant == "choice" and "LEFT" or "CENTER")
 	b.label:SetWordWrap(false)
 	placeLabel(b, false)
@@ -177,9 +223,20 @@ function Widgets.Button(parent, text, width, height, variant)
 	return Style.Register(b, paintButton)
 end
 
---- A small square button with a text glyph ("?", "x", "<", ">").
+-- Glyphs drawn larger than a label: Close is the multiplication sign of the
+-- design's icon button (Alegreya Sans has it; so do the game fonts).
+Widgets.GLYPHS = { X = "\195\151", x = "\195\151" }
+
+--- A small square button with a text glyph ("?", "X", "<", ">"): a ghost
+-- button with a visible 1 px edge, as the design's icon button. "X" is
+-- drawn as a large multiplication sign. Size it with Style.CONTROL.icon (36).
 function Widgets.IconButton(parent, glyph, title, text)
-	local b = Widgets.Button(parent, glyph, Style.SIZE.icon, Style.SIZE.icon, "ghost")
+	local shown = Widgets.GLYPHS[glyph]
+	local b = Widgets.Button(parent, shown or glyph, Style.SIZE.icon, Style.SIZE.icon, "ghost")
+	b.glyph = glyph
+	if shown and Style.UsesBundledFont("glyph") then
+		b.label:SetFontObject(Style.fontObjects[Style.FontFor("glyph")])
+	end
 	if title then
 		Widgets.Tooltip(b, title, text)
 	end
@@ -192,13 +249,22 @@ function Widgets.Segmented(parent, items, width, height, onSelect)
 	local seg = { buttons = {} }
 	local each = math.floor(width / #items)
 	for i, item in ipairs(items) do
-		local b = Widgets.Button(parent, item.label, each - 2, height or Style.SIZE.segment)
+		local b = Widgets.Button(parent, item.label, each - 2, height or Style.SIZE.segment, "segment")
 		b.segmentId = item.id
 		b:SetScript("OnClick", function() onSelect(item.id) end)
 		seg.buttons[i] = b
 		if i > 1 then
 			b:SetPoint("LEFT", seg.buttons[i - 1], "RIGHT", 2, 0)
 		end
+	end
+	-- The design's segmented control sits in a panel-coloured track; it spans
+	-- the buttons exactly, so it never needs more room than the caller gave.
+	local first, last = seg.buttons[1], seg.buttons[#seg.buttons]
+	if first then
+		seg.track = Style.Solid(parent, "BACKGROUND", -1)
+		seg.track:SetPoint("TOPLEFT", first, "TOPLEFT", 0, 0)
+		seg.track:SetPoint("BOTTOMRIGHT", last, "BOTTOMRIGHT", 0, 0)
+		Style.Register(seg.track, function(t, theme) Style.Color(t, theme.panel) end)
 	end
 	function seg.Select(_, id)
 		seg.selected = id
@@ -215,8 +281,10 @@ end
 -- status and actions all sit inside its own panel (surface fill, 1 px
 -- edge, ENTRY.pad inside); panels are ENTRY.gap apart, so a button is always
 -- inside its own record and never nearer the next one. Hovering the record
--- or any of its buttons highlights the whole unit (lighter fill and an
--- accent bar on the left). SetPlain(true) makes the frame an unboxed line,
+-- or any of its buttons highlights the whole unit (a lighter fill and a
+-- stronger edge, as the design's featured card); a highlighted record (a
+-- suggestion) has a gold edge and an accent bar on the left.
+-- SetPlain(true) makes the frame an unboxed line,
 -- for headings and hints in lists that reuse rows.
 Widgets.ENTRY = { pad = 8, gap = 6 }
 
@@ -244,9 +312,11 @@ function Widgets.Card(parent)
 	hook(card, "OnLeave", function(self) self:SetRowHover(false) end)
 	Style.Register(card, function(c, theme)
 		local boxed = not c.plain
-		Style.Color(c.bg, c.hover and theme.surfaceHover or theme.surface, boxed and 1 or 0)
-		c.edges:Paint(c.highlight and theme.accent or theme.edge, boxed and 1 or 0)
-		c.bar:SetShown(boxed and (c.hover or c.highlight) and true or false)
+		local tones = Style.Tones(theme)
+		Style.Color(c.bg, c.hover and tones.cardHover or theme.surface, boxed and 1 or 0)
+		local edge = c.highlight and theme.accent or (c.hover and tones.selectedEdge or theme.edge)
+		c.edges:Paint(edge, boxed and 1 or 0)
+		c.bar:SetShown(boxed and c.highlight and true or false)
 		Style.Color(c.bar, theme.accent)
 	end)
 	return card
@@ -268,17 +338,68 @@ Widgets.VISIBILITY_HELP = "Public: may be shared (share exports, and Total RP 3 
 	.. "Private: only you; included in your personal backups.\n"
 	.. "Secret: only you; left out of backups unless you ask.\nClick to change."
 
---- A small button showing Public / Private / Secret in its fixed colour.
--- Clicking cycles the level and calls onChange(newLevel); the caller saves.
+-- Chip tints: a chip's fill and edge are its text colour mixed into the
+-- surface it sits on (opaque, so round ends can be layered). The design
+-- system's Private chip is #B4C6EA on #1B2436 with a #3A4D73 edge.
+Widgets.CHIP_TINT = { fill = 0.12, edge = 0.36, hoverFill = 0.2, hoverEdge = 0.7 }
+
+--- Fill and edge colours of a chip of color on base (default theme.surface). Pure.
+function Widgets.ChipColors(color, theme, base, hover)
+	base = base or theme.surface
+	local T = Widgets.CHIP_TINT
+	return Style.Mix(base, color, hover and T.hoverFill or T.fill), Style.Mix(base, color, hover and T.hoverEdge or T.edge)
+end
+
+-- Keeps a pill's round ends the height of its frame.
+local function followHeight(frame, pill)
+	hook(frame, "OnSizeChanged", function(self, _, height)
+		height = height or self:GetHeight()
+		if type(height) == "number" and height > 2 then pill:Resize(height) end
+	end)
+end
+
+-- Paints a visibility button as a chip in its fixed colour. Called directly
+-- (not only through the registry) so the chip stays right even where a
+-- screen registers its own painter for the button.
+local function paintVisibilityChip(b, theme)
+	theme = theme or Style.Current()
+	local color = Themes.VISIBILITY_COLORS[b.level] or Themes.VISIBILITY_COLORS.private
+	local hover = b.hover and b:IsEnabled()
+	local fill, edge = Widgets.ChipColors(color, theme, b.chipBase and Style.Tone(theme, b.chipBase), hover)
+	if b.pill then
+		b.pill:Paint(fill, edge)
+		b.bg:Hide()
+		b.edges:SetShown(false)
+	else
+		Style.Color(b.bg, fill)
+		b.edges:Paint(edge, 1)
+	end
+	Style.TextColor(b.label, b:IsEnabled() and color or theme.muted)
+end
+
+--- A visibility chip showing Public / Private / Secret in its fixed colour
+-- (a pill with round ends where the client can draw them). It stays a
+-- button: clicking cycles the level and calls onChange(newLevel); the caller
+-- saves. :SetChipBase(role) names the surface it sits on (default surface).
 function Widgets.VisibilityButton(parent, onChange)
 	local button = Widgets.Button(parent, "Private", 72, Style.SIZE.compact, "ghost")
+	button.pill = Style.Pill(button, Style.SIZE.compact)
+	if button.pill then followHeight(button, button.pill) end
 	button.level = "private"
 	function button:SetLevel(level)
 		self.level = level
 		self:SetText(Themes.VISIBILITY_LABELS[level] or level)
 		self.textColor = Themes.VISIBILITY_COLORS[level] or Themes.VISIBILITY_COLORS.private
+		paintVisibilityChip(self)
 		Style.Repaint(self)
 	end
+	function button:SetChipBase(role)
+		self.chipBase = role
+		paintVisibilityChip(self)
+	end
+	Style.Register(button, paintVisibilityChip)
+	hook(button, "OnEnter", function(self) paintVisibilityChip(self) end)
+	hook(button, "OnLeave", function(self) paintVisibilityChip(self) end)
 	button:SetLevel("private")
 	button:SetScript("OnClick", function(self)
 		onChange(CYCLE[self.level] or "private", self)
@@ -289,14 +410,21 @@ end
 
 --- Text input --------------------------------------------------------------------
 
--- Field states, shared by one-line inputs and text areas. Focus is shown by
--- a lighter fill, an accent edge and a 3 px bar on the left; an invalid
--- field uses the danger colour for both, so focus and errors are visible
--- without relying on colour alone (the error message also starts with "!").
+-- Field states, shared by one-line inputs and text areas (design system
+-- "Inputs and validation"): a dark well with a 1 px edge; focused, a 2 px
+-- gold edge and a slightly lighter well; invalid, a 2 px danger edge. The
+-- 2 px ring (twice the resting edge) shows focus and errors without
+-- relying on colour alone; the error message also starts with "!". The
+-- focus bar is the ring's left side, kept as its own texture for callers.
+Widgets.FIELD = { textInset = 10 }
+
 local function paintField(box, theme, fill, edges, bar, edit)
+	local tones = Style.Tones(theme)
 	local state = box.invalid and theme.danger or box.focused and theme.accent or nil
-	Style.Color(fill, box.focused and theme.surfaceHover or theme.surface)
-	edges:Paint(state or theme.edge, 1)
+	Style.Color(fill, box.focused and tones.fieldFocus or tones.field)
+	edges:Paint(state or tones.fieldEdge, 1)
+	box.ring:SetShown(state ~= nil)
+	if state then box.ring:Paint(state, 1) end
 	bar:SetShown(state ~= nil)
 	if state then Style.Color(bar, state) end
 	edit:SetTextColor(theme.text[1], theme.text[2], theme.text[3])
@@ -306,15 +434,23 @@ local function focusBar(frame)
 	local bar = Style.Solid(frame, "ARTWORK")
 	bar:SetPoint("TOPLEFT", 0, 0)
 	bar:SetPoint("BOTTOMLEFT", 0, 0)
-	bar:SetWidth(3)
+	bar:SetWidth(2)
 	bar:Hide()
 	return bar
+end
+
+-- The second pixel of the 2 px focus and error ring.
+local function focusRing(frame)
+	local ring = Style.Edge(frame, "BORDER", 1)
+	ring:SetShown(false)
+	return ring
 end
 
 local function inputFrame(edit)
 	edit.bg = Style.Solid(edit, "BACKGROUND", -1)
 	edit.bg:SetAllPoints(edit)
 	edit.edges = Style.Edge(edit, "BORDER")
+	edit.ring = focusRing(edit)
 	edit.focusBar = focusBar(edit)
 	hook(edit, "OnEditFocusGained", function(self) self.focused = true; Style.Repaint(self) end)
 	hook(edit, "OnEditFocusLost", function(self) self.focused = nil; Style.Repaint(self) end)
@@ -323,13 +459,14 @@ local function inputFrame(edit)
 	end)
 end
 
---- A one-line input on a surface well (no FrameXML template).
-function Widgets.EditLine(parent, maxBytes)
+--- A one-line input on a dark well (no FrameXML template). height defaults
+-- to the v0.6 size; Style.CONTROL.input (36) is the design system's.
+function Widgets.EditLine(parent, maxBytes, height)
 	local edit = CreateFrame("EditBox", Widgets.NextName("Line"), parent)
 	edit:SetAutoFocus(false)
-	edit:SetHeight(Style.SIZE.input)
+	edit:SetHeight(height or Style.SIZE.input)
 	edit:SetFontObject(Style.FontObject("ChatFontNormal") or ChatFontNormal)
-	edit:SetTextInsets(6, 6, 0, 0)
+	edit:SetTextInsets(Widgets.FIELD.textInset, Widgets.FIELD.textInset, 0, 0)
 	edit:SetMaxBytes(maxBytes or 100)
 	edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 	edit:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
@@ -368,7 +505,7 @@ function Widgets.TextArea(parent, maxBytes, width)
 	edit:SetAutoFocus(false)
 	edit:SetMaxBytes(maxBytes or 2000)
 	edit:SetFontObject(Style.FontObject("ChatFontNormal") or ChatFontNormal)
-	edit:SetTextInsets(4, 4, 4, 4)
+	edit:SetTextInsets(6, 6, 4, 4)
 	edit:SetWidth(math.max(100, (width or 230) - 30)) -- minus scroll bar and padding
 	edit:SetHeight(100)
 	edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
@@ -382,6 +519,7 @@ function Widgets.TextArea(parent, maxBytes, width)
 	scroll:SetScript("OnMouseDown", function() edit:SetFocus() end)
 	area.edit = edit
 	area.followCursor = followCursor
+	area.ring = focusRing(area.frame)
 	area.focusBar = focusBar(area.frame)
 	-- The edit box is what forms and focus chains hold; its state is drawn
 	-- on the area around it.
@@ -415,7 +553,7 @@ end
 -- changes the field. Returns the label.
 function Widgets.FieldError(input, width)
 	local region = input.anchorRegion or input
-	local fs = Widgets.Label(region:GetParent(), "GameFontHighlightSmall", true, "danger")
+	local fs = Widgets.Label(region:GetParent(), "meta", true, "danger")
 	fs:SetPoint("TOPLEFT", region, "BOTTOMLEFT", 0, -3)
 	fs:SetWidth(width or 300)
 	fs:Hide()
@@ -563,10 +701,10 @@ local function buildDialog()
 	d.text = Widgets.Label(d, nil, true, "body")
 	d.text:SetPoint("TOPLEFT", 18, -36)
 	d.text:SetWidth(344)
-	d.cancel = Widgets.Button(d, "Cancel", 100, 22)
+	d.cancel = Widgets.Button(d, "Cancel", 100, Style.CONTROL.compact, "ghost")
 	d.cancel:SetPoint("BOTTOMRIGHT", -16, 16)
 	d.cancel:SetScript("OnClick", function() d:Hide() end)
-	d.accept = Widgets.Button(d, "Confirm", 120, 22, "danger")
+	d.accept = Widgets.Button(d, "Confirm", 120, Style.CONTROL.compact, "danger")
 	d.accept:SetPoint("RIGHT", d.cancel, "LEFT", -8, 0)
 	d.accept:SetScript("OnClick", function()
 		local fn = d.onAccept
@@ -610,51 +748,132 @@ end
 -- design system: status chips, panels with an eyebrow title, a callout, a
 -- date block, a progress bar and a search box.
 
--- Chip tones. Visibility tones reuse the fixed visibility colours so a
--- "Secret" chip always reads as a warning, whatever the theme.
-Widgets.CHIP_HEIGHT = 20
-local function chipColor(tone, theme)
-	if tone == "public" or tone == "private" or tone == "secret" then
-		return Themes.VISIBILITY_COLORS[tone]
+-- Chips (design system "Chips"): 24 high, 10 px side padding, 13 px text,
+-- round ends where the client can draw them. Tones:
+--   accent    gold ("Defining", "Homeland")         waiting  amber ("Waiting for approval")
+--   muted     neutral tag ("Recorded event")         danger   red
+--   public / private / secret  the fixed visibility colours, whatever the theme
+Widgets.CHIP_HEIGHT = 24
+Widgets.CHIP_PAD = 10
+
+--- Text, fill and edge colours of a chip tone on base (a colour). Pure.
+function Widgets.ChipTone(tone, theme, base)
+	base = base or theme.surface
+	local tones = Style.Tones(theme)
+	if Themes.VISIBILITY_COLORS[tone] then
+		local color = Themes.VISIBILITY_COLORS[tone]
+		local fill, edge = Widgets.ChipColors(color, theme, base)
+		return color, fill, edge
 	end
-	if tone == "danger" then return theme.danger end
-	if tone == "muted" then return theme.muted end
-	return theme.accent
+	if tone == "waiting" then
+		local color = Themes.STATUS_COLORS.waiting
+		local fill, edge = Widgets.ChipColors(color, theme, base)
+		return color, fill, edge
+	end
+	if tone == "danger" then
+		local fill, edge = Widgets.ChipColors(theme.danger, theme, base)
+		return tones.dangerText, fill, edge
+	end
+	if tone == "muted" then
+		return Style.Mix(theme.muted, theme.text, 0.3), Style.Mix(base, theme.edge, 0.3), theme.edge
+	end
+	return tones.accentBright, Style.Mix(base, theme.accent, 0.1), theme.border
 end
 
 --- A small status pill ("Defining", "Homeland", "Waiting for your approval").
--- tone: accent (default), muted, danger, public, private or secret.
--- Sizes itself to its text; :SetChip(text, tone) changes it.
-function Widgets.Chip(parent, text, tone)
+-- tone: accent (default), waiting, muted, danger, public, private or secret.
+-- height: Widgets.CHIP_HEIGHT (24) by default; Style.CONTROL.chipSmall (20)
+-- for dense lists. Sizes itself to its text; :SetChip(text, tone) changes
+-- it, :SetMaxWidth(w) caps it (the full text then shows as a tooltip) and
+-- :SetBase(role) names the surface it sits on (default "surface").
+function Widgets.Chip(parent, text, tone, height)
 	local chip = CreateFrame("Frame", nil, parent)
-	chip:SetHeight(Widgets.CHIP_HEIGHT)
+	height = height or Widgets.CHIP_HEIGHT
+	chip:SetHeight(height)
 	chip.bg = Style.Solid(chip, "BACKGROUND")
 	chip.bg:SetAllPoints(chip)
 	chip.edges = Style.Edge(chip, "BORDER")
-	chip.label = chip:CreateFontString(nil, "OVERLAY", Style.Font("GameFontHighlightSmall"))
+	chip.pill = Style.Pill(chip, height)
+	if chip.pill then
+		chip.bg:Hide()
+		chip.edges:SetShown(false)
+		followHeight(chip, chip.pill)
+	end
+	chip.label = chip:CreateFontString(nil, "OVERLAY", Style.FontFor("small"))
 	chip.label:SetPoint("CENTER", 0, 0)
 	chip.label:SetWordWrap(false)
+	chip.base = "surface"
 	function chip.SetChip(self, t, newTone)
 		self.tone = newTone or self.tone or "accent"
-		self.label:SetText(t or "")
-		local w = self.label.GetStringWidth and self.label:GetStringWidth() or 0
-		if type(w) ~= "number" or w <= 0 then w = #(t or "") * 6 end
-		self:SetWidth(math.floor(w + 18))
+		self.text = t or ""
+		-- Measure the text unconstrained: a width left from an earlier, shorter
+		-- text would make GetStringWidth report the cut width. 1.15.9 also has
+		-- GetUnboundedStringWidth (SimpleFontStringAPIDocumentation), which
+		-- ignores any width; it is preferred when present.
+		if self.maxWidth then self.label:SetWidth(0) end
+		self.label:SetText(self.text)
+		local fs = self.label
+		local w = (fs.GetUnboundedStringWidth and fs:GetUnboundedStringWidth())
+			or (fs.GetStringWidth and fs:GetStringWidth()) or 0
+		if type(w) ~= "number" or w <= 0 then w = Style.TextWidth(self.text, "small") end
+		w = math.ceil(w)
+		local full = w + 2 * Widgets.CHIP_PAD
+		if self.maxWidth and full > self.maxWidth then
+			full = self.maxWidth
+			self.label:SetWidth(full - 2 * Widgets.CHIP_PAD)
+			self.truncated = true
+		else
+			if self.maxWidth then self.label:SetWidth(w + 1) end
+			self.truncated = nil
+		end
+		self:SetWidth(math.max(full, self:GetHeight()))
+		if self.truncated then
+			Widgets.Tooltip(self, self.text)
+			if self.EnableMouse then self:EnableMouse(true) end
+			-- Hovering a cut chip inside a card keeps the card highlighted.
+			if not self.rowHoverHooked and self.HookScript then
+				self.rowHoverHooked = true
+				self:HookScript("OnEnter", function(c)
+					local row = c:GetParent()
+					if row and row.SetRowHover then row:SetRowHover(true) end
+				end)
+				self:HookScript("OnLeave", function(c)
+					local row = c:GetParent()
+					if row and row.SetRowHover then row:SetRowHover(false) end
+				end)
+			end
+		elseif self.tooltipHooked then
+			self.tooltipTitle, self.tooltipText = nil, nil
+			-- A chip that fits takes no mouse input, so it never steals the card's hover.
+			if self.EnableMouse then self:EnableMouse(false) end
+		end
+		Style.Repaint(self)
+	end
+	function chip.SetMaxWidth(self, w)
+		self.maxWidth = w
+		self:SetChip(self.text, self.tone)
+	end
+	function chip.SetBase(self, role)
+		self.base = role
 		Style.Repaint(self)
 	end
 	Style.Register(chip, function(c, theme)
-		local color = chipColor(c.tone, theme)
-		Style.Color(c.bg, color, 0.14)
-		c.edges:Paint(color, 0.55)
+		local color, fill, edge = Widgets.ChipTone(c.tone, theme, Style.Tone(theme, c.base))
+		if c.pill then
+			c.pill:Paint(fill, edge)
+		else
+			Style.Color(c.bg, fill)
+			c.edges:Paint(edge, 1)
+		end
 		Style.TextColor(c.label, color)
 	end)
 	chip:SetChip(text, tone)
 	return chip
 end
 
---- A panel: a surface with an optional eyebrow title (Cinzel, ornament
--- colour) and an inner content area at panel.inner (pad 14). Used for the
--- right-hand columns and grouped sections.
+--- A panel (the design's card): a surface with a 1 px edge, an optional
+-- eyebrow title (Cinzel, ornament colour) and an inner content area at
+-- panel.inner (pad 14). Used for the right-hand columns and grouped sections.
 Widgets.PANEL_PAD = 14
 function Widgets.Panel(parent, title)
 	local panel = CreateFrame("Frame", nil, parent)
@@ -675,33 +894,37 @@ function Widgets.Panel(parent, title)
 		if self.title then self.title:SetText((t or ""):upper()) end
 	end
 	Style.Register(panel, function(p, theme)
-		Style.Color(p.bg, theme.panel)
+		Style.Color(p.bg, p.callout and Style.Tones(theme).calloutFill or theme.surface)
 		p.edges:Paint(p.callout and theme.border or theme.edge, 1)
 	end)
 	return panel
 end
 
---- A callout: a panel with a gold edge and a warm fill, for the one thing
--- waiting on the player ("A moment awaits", "Needs your approval").
+--- A callout: a panel with a gold edge and a warm dark fill, for the one
+-- thing waiting on the player ("A moment awaits", "Needs your approval").
 function Widgets.Callout(parent, title)
 	local panel = Widgets.Panel(parent, title)
 	panel.callout = true
 	panel.glow = Style.Solid(panel, "BACKGROUND", -2)
 	panel.glow:SetAllPoints(panel)
-	Style.Register(panel.glow, function(t, theme) Style.Color(t, theme.accent, 0.06) end)
+	Style.Register(panel.glow, function(t, theme) Style.Color(t, theme.accent, 0.03) end)
 	Style.Repaint(panel)
 	return panel
 end
 
---- A date block: the day large (Cinzel) over a short month, for entry cards.
--- :SetDate(timestamp) shows "?" when the date is unknown.
+--- A date block: the day large (Cinzel 24, bright gold) over a short month
+-- (Cinzel 13, muted), for entry cards. :SetDate(timestamp) shows "?" when
+-- the date is unknown.
 function Widgets.DateBlock(parent)
 	local block = CreateFrame("Frame", nil, parent)
 	block:SetSize(56, 46)
-	block.day = Widgets.Label(block, "GameFontNormalLarge", false, "title")
+	block.day = Widgets.Label(block, "day", false, "title")
+	Widgets.SetTextRole(block.day, "accentBright")
 	block.day:SetPoint("TOP", 0, 0)
+	block.day:SetJustifyH("CENTER")
 	block.month = Widgets.Label(block, "GameFontNormalSmall", false, "muted")
 	block.month:SetPoint("TOP", block.day, "BOTTOM", 0, -2)
+	block.month:SetJustifyH("CENTER")
 	function block.SetDate(self, timestamp)
 		if type(timestamp) == "number" and timestamp > 0 then
 			self.day:SetText(tostring(tonumber(date("%d", timestamp))))
@@ -714,7 +937,8 @@ function Widgets.DateBlock(parent)
 	return block
 end
 
---- A thin progress bar. :SetValue(fraction 0..1).
+--- A thin progress bar (design: 6 high, a dark track, a gold fill).
+-- :SetValue(fraction 0..1).
 function Widgets.ProgressBar(parent, width, height)
 	local bar = CreateFrame("Frame", nil, parent)
 	bar:SetSize(width or 200, height or 4)
@@ -731,7 +955,7 @@ function Widgets.ProgressBar(parent, width, height)
 		self.fill:SetShown(fraction > 0)
 	end
 	Style.Register(bar, function(b, theme)
-		Style.Color(b.track, theme.edge)
+		Style.Color(b.track, Style.Tones(theme).track)
 		Style.Color(b.fill, theme.accent)
 	end)
 	bar:SetValue(0)
@@ -739,12 +963,13 @@ function Widgets.ProgressBar(parent, width, height)
 end
 
 --- A search box: a one-line input with a placeholder. onChange(text) runs
--- as the player types (text trimmed; "" when cleared).
-function Widgets.SearchBox(parent, width, placeholder, onChange)
-	local box = Widgets.EditLine(parent, 60)
+-- as the player types (text trimmed; "" when cleared). height defaults to
+-- the v0.6 size; Style.CONTROL.input (36) is the design system's.
+function Widgets.SearchBox(parent, width, placeholder, onChange, height)
+	local box = Widgets.EditLine(parent, 60, height)
 	box:SetWidth(width or 200)
 	box.placeholder = Widgets.Label(box, "GameFontHighlightSmall", false, "muted")
-	box.placeholder:SetPoint("LEFT", 8, 0)
+	box.placeholder:SetPoint("LEFT", Widgets.FIELD.textInset, 0)
 	box.placeholder:SetText(placeholder or "Search")
 	local function update(self)
 		local text = (self:GetText() or ""):match("^%s*(.-)%s*$")

@@ -2,7 +2,7 @@
 ## Title: Dawnward Chronicles
 ## Notes: A living chronicle for your character: gameplay moments, your choices, gradual personality development and a private-by-default journal. A companion to Total RP 3, not a replacement.
 ## Author: roryherriman
-## Version: 0.7.1-dev
+## Version: 0.8.0-dev
 ## SavedVariables: DawnwardChroniclesDB, DawnwardChroniclesSimDB, DawnwardChroniclesTRP3DB
 ## OptionalDeps: totalRP3
 ## X-License: MIT

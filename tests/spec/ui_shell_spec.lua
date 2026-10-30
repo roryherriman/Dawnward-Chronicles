@@ -87,6 +87,135 @@ return function(t, expect)
 			expect.equal(ns.MainWindow.CurrentSection(), "settings", "the status line opens the Total RP 3 page")
 		end)
 
+		t:it("shows homeland and privacy chips from the profile's own data, never invented", function()
+			local mock, env, ns, frame = open()
+			expect.falsy(frame.homelandChip:IsShown(), "no homeland set: no chip")
+			expect.falsy(frame.privacyChip:IsShown(), "no profile field set: nothing to summarise")
+			mock.Slash("set name Aelin")
+			expect.truthy(frame.privacyChip:IsShown())
+			expect.equal(frame.privacyChip.label:GetText(), "Private")
+			expect.equal(frame.privacyChip.tone, "private")
+			mock.Slash("set homeland Goldshire")
+			expect.truthy(frame.homelandChip:IsShown())
+			expect.equal(frame.homelandChip.label:GetText(), "Goldshire")
+			mock.Slash("vis name public")
+			expect.equal(frame.privacyChip.label:GetText(), "1 of 2 public")
+			expect.equal(frame.privacyChip.tone, "public")
+			expect.truthy(frame.privacyChip.tooltipText:find("1 of your 2 profile fields are Public", 1, true))
+			mock.Slash("vis homeland public")
+			expect.equal(frame.privacyChip.label:GetText(), "Public")
+			-- Showing the chips stores nothing.
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			expect.equal(char.fields.homeland.value, "Goldshire")
+			expect.equal(ns.MainWindow.PrivacySummary({ fields = {} }), nil)
+		end)
+
+		t:it("keeps the chips inside the rail, cutting a long homeland with its full name on hover", function()
+			local mock, _, ns, frame = open()
+			mock.Slash("set name Aelin")
+			mock.Slash("set homeland The Very Long Named Hamlet Beyond the Northern Hills of Lordaeron")
+			local L = ns.MainWindow.LAYOUT
+			local width = L.railWidth - 2 * L.railPad
+			expect.truthy(frame.chipRow.total <= width, "chips fit the rail: " .. frame.chipRow.total)
+			expect.truthy(frame.homelandChip.truncated)
+			expect.equal(frame.homelandChip.tooltipTitle,
+				"The Very Long Named Hamlet Beyond the Northern Hills of Lordaeron")
+		end)
+
+		t:it("colours the class as the game does, lightened only when too dark to read on the rail", function()
+			local mock, env, ns, frame = open()
+			env.RAID_CLASS_COLORS = { MAGE = { r = 0.25, g = 0.78, b = 0.92 } }
+			mock.classToken = "MAGE"
+			ns.MainWindow.Refresh()
+			expect.equal(frame.charLine:GetText(), "Orc · |cff40c7ebMage|r")
+			local panel = ns.Style.Current().panel
+			local shaman = { 0, 0.44, 0.87 }
+			expect.truthy(ns.Themes.Contrast(shaman, panel) < 4.5, "the Shaman's blue is too dark as it is")
+			local readable = ns.MainWindow.ReadableColor(shaman, panel)
+			expect.truthy(ns.Themes.Contrast(readable, panel) >= 4.5)
+			expect.truthy(readable[3] >= shaman[3], "still the same hue, only lighter")
+		end)
+
+		t:it("lays the rail out as the design: wordmark, ring, badge, name block, navigation, status, buttons", function()
+			local ns = select(3, open())
+			local L = ns.MainWindow.LAYOUT
+			local r = ns.MainWindow.ComputeLayout(L)
+			expect.equal(L.portraitSize, 116)
+			expect.equal(r.portrait.top, L.height - 56)
+			-- The level badge sits on the ring's bottom edge: 14 above it, 8 below.
+			expect.equal(r.levelBadge.top - r.portrait.bottom, L.badgeHeight - L.badgeDrop)
+			expect.equal(r.portrait.bottom - r.levelBadge.bottom, L.badgeDrop)
+			-- The name block (two name lines at most, one title line, the identity
+			-- line and the chips) ends before the navigation.
+			local nameLine = ns.Style.FONT_BY_STYLE.railName.size + 3
+			local block = L.nameLines * nameLine + L.identityGap + 18 + L.identityGap + 17 + L.chipGap
+				+ ns.Widgets.CHIP_HEIGHT
+			expect.truthy(L.nameTop + block <= L.navTop - 8, "name block " .. block .. " fits above the navigation")
+			expect.truthy(r.levelBadge.bottom > L.height - L.nameTop, "the badge stays above the name")
+			-- Navigation: 44 high, 4 apart, the rail's full inner width.
+			for i = 1, L.tabCount do
+				expect.equal(r.tabs[i].top - r.tabs[i].bottom, 44)
+				expect.equal(r.tabs[i].right - r.tabs[i].left, L.railWidth - 2 * L.railPad)
+				if i > 1 then expect.equal(r.tabs[i - 1].bottom - r.tabs[i].top, 4) end
+			end
+			expect.truthy(r.tabs[L.tabCount].bottom > r.trp3.top + 16, "room between the navigation and the status")
+			expect.truthy(r.trp3.bottom >= r.help.top + 8, "status above Guide and Settings")
+			expect.equal(r.help.top - r.help.bottom, 30, "compact rail buttons")
+			-- Header: eyebrow, then the 28 px screen title, clear of the content.
+			expect.truthy(r.title.top - r.title.bottom >= ns.Style.FONT_BY_STYLE.screen.size + 6)
+			expect.truthy(r.title.bottom >= r.content.top + 12)
+			expect.equal(r.close.top - r.close.bottom, 36)
+			expect.equal(ns.MainWindow.ContentWidth(), 772, "main area 772 at the 1100 x 720 window")
+		end)
+
+		t:it("marks the selected section with a filled panel and a gold edge", function()
+			local _, _, ns, frame = open()
+			local theme = ns.Style.Current()
+			local tones = ns.Style.Tones(theme)
+			local on, off = frame.tabs[1], frame.tabs[2]
+			expect.truthy(on.underline:IsShown(), "the selected fill")
+			expect.equal(on.underline.__color[1], theme.surfaceHover[1])
+			expect.deepEqual(on.edges.top.__color, { theme.border[1], theme.border[2], theme.border[3], 1 })
+			expect.equal(on.label.__textColor[1], tones.accentBright[1])
+			expect.falsy(off.underline:IsShown())
+			expect.equal(off.edges.top.__color[4], 0, "no edge on the others")
+			expect.equal(off.label.__textColor[1], tones.navText[1])
+			off:GetScript("OnEnter")(off)
+			expect.truthy(off.bg.__color[4] > 0, "hover shows a light fill")
+			off:GetScript("OnLeave")(off)
+			expect.equal(off.bg.__color[4], 0)
+		end)
+
+		t:it("draws the portrait ring, badge and chips round where the client has masks, square otherwise", function()
+			-- Without masks (the mock): the Showcase's tinted ring and square shapes.
+			local _, _, _, frame = open()
+			expect.falsy(frame.portraitRing.round)
+			expect.truthy(frame.portrait.ring:IsShown())
+			expect.equal(frame.levelBadge.pill, nil)
+			expect.equal(frame.privacyChip.pill, nil)
+			-- With masks (stubbed as the client's CreateMaskTexture would give).
+			local mock, _, ns = Boot.Load()
+			local masks = 0
+			ns.Style.NewMask = function(f)
+				masks = masks + 1
+				local mask = f:CreateTexture()
+				mask.isMask = true
+				return mask
+			end
+			Boot.Login(mock)
+			mock.Slash("set name Aelin")
+			mock.Slash("")
+			local round = ns.MainWindow.GetFrame()
+			-- AddMaskTexture is a no-op in the mock, so it is present on textures.
+			expect.truthy(round.portraitRing.round, "ring, gap and well are discs")
+			expect.falsy(round.portrait.ring:IsShown(), "the tracking-ring stand-in is hidden")
+			expect.truthy(round.levelBadge.pill ~= nil, "the level badge is a pill")
+			expect.truthy(round.privacyChip.pill ~= nil, "chips are pills")
+			expect.falsy(round.privacyChip.bg:IsShown(), "no square fill under a pill")
+			expect.truthy(round.tabs[1].badgeBg.round, "the Story badge is a disc")
+			expect.truthy(masks > 0)
+		end)
+
 		t:it("keeps Guide and Settings in the rail", function()
 			local _, _, ns, frame = open()
 			click(frame.gear)
@@ -333,7 +462,7 @@ return function(t, expect)
 			mock.Slash("set summary Kind to strangers.")
 			local _, section = showcaseOf(ns)
 			local view = section.showcaseView
-			expect.equal(view.game.title:GetText(), "IN GAME")
+			expect.equal(view.game.title:GetText(), "FROM THE GAME", "the mockup's panel title")
 			expect.equal(view.own.title:GetText(), "Keeper of the Road")
 			local values = {}
 			for i, row in ipairs(view.game.rows) do values[i] = row.key:GetText() .. "=" .. row.value:GetText() end
@@ -365,6 +494,85 @@ return function(t, expect)
 			local empty = ns.Showcase.GameRows({})
 			expect.equal(empty[1].value, "Unknown")
 			expect.truthy(empty[3].empty)
+		end)
+
+		t:it("gives the live model the whole stage above the control bar (v0.8 layout)", function()
+			local _, _, ns = open()
+			local showcase = showcaseOf(ns)
+			local S = ns.Showcase
+			local stageHeight = showcase:GetHeight() - S.BAR_HEIGHT - 2
+			expect.truthy(stageHeight / showcase:GetHeight() >= 0.85, "the model takes most of the card")
+			expect.equal(showcase.model.__points[1][1], "TOPLEFT")
+			expect.equal(showcase.model.__points[1][2], showcase.stage, "the model fills the stage")
+			-- The bar: two 36 px turn buttons, the note on at most two lines.
+			expect.equal(showcase.left:GetHeight(), S.CARD.button)
+			expect.equal(showcase.right:GetHeight(), S.CARD.button)
+			local noteWidth = S.MODEL_WIDTH - 2 * S.CARD.pad - 2 * S.CARD.button - S.CARD.gap - 12
+			expect.truthy(ns.Style.TextWidth(S.BAR_NOTE, "small") <= 2 * noteWidth * 0.95, "two lines at 13")
+			-- Zoom sits over the stage while the model shows, clear of the chip.
+			expect.truthy(showcase.zoomIn:IsShown() and showcase.zoomOut:IsShown())
+			expect.truthy(S.CARD.pad + showcase.chip:GetWidth() + S.CARD.gap
+				<= S.MODEL_WIDTH - S.CARD.pad - S.CARD.zoomButton, "the chip never runs under the zoom buttons")
+			for _, label in pairs(S.MODE_LABELS) do
+				showcase.chip:SetChip(label, "muted")
+				expect.falsy(showcase.chip.truncated, label .. " fits beside the zoom buttons")
+			end
+			showcase.chip:SetChip(S.MODE_LABELS.live, "accent")
+		end)
+
+		t:it("shows the portrait fallback as a framed, centred round portrait, never stretched", function()
+			local mock, _, ns = open()
+			mock.modelFails = true
+			local showcase, section = showcaseOf(ns)
+			local S = ns.Showcase
+			local fb = showcase.fallback
+			expect.truthy(fb:IsShown())
+			expect.equal(fb.badge:GetWidth(), S.CARD.portrait, "a fixed size")
+			expect.equal(fb.badge:GetWidth(), fb.badge:GetHeight(), "square, so the round portrait stays round")
+			expect.equal(fb.portrait:GetWidth(), fb.portrait:GetHeight())
+			expect.truthy(fb.portrait:GetWidth() <= 128, "close to the game's own portrait size, so it stays sharp")
+			expect.equal(fb.box.__points[1][1], "CENTER", "centred on the stage")
+			local stageHeight = showcase:GetHeight() - S.BAR_HEIGHT - 2
+			expect.truthy(fb.box:GetHeight() <= stageHeight - 2 * 40, "the frame leaves room for the chip above it")
+			expect.truthy(fb.box:GetWidth() <= S.MODEL_WIDTH - 2 * S.CARD.frameInset)
+			expect.equal(fb.text:GetText(), S.FALLBACK_TEXT.loading)
+			expect.falsy(showcase.zoomIn:IsShown(), "no zoom buttons over the portrait")
+			expect.truthy(showcase.chip:IsShown(), "the mode chip still says what shows")
+			for _ = 1, 20 do
+				if mock.RunTimers() == 0 then break end
+			end
+			expect.equal(fb.text:GetText(), S.FALLBACK_TEXT.unavailable)
+			mock.modelFails = false
+			click(section.showcaseView.note.toggle) -- try again
+			click(section.showcaseView.note.toggle) -- choose the portrait
+			expect.equal(showcase.state, "choice")
+			expect.equal(fb.text:GetText(), S.FALLBACK_TEXT.choice)
+		end)
+
+		t:it("lays the game and own-words panels out as the mockup, inside the content area", function()
+			local mock, _, ns = open()
+			mock.guild = { name = "The Lantern Watch", rank = "Member" }
+			mock.Slash("set name Aelin Brightwater")
+			mock.Slash("set title Keeper of the Lantern Road")
+			mock.Slash("set summary " .. string.rep("She is kind to strangers and sharp with friends. ", 6))
+			local _, section = showcaseOf(ns)
+			local view = section.showcaseView
+			local P = ns.Showcase.PANEL
+			for i, row in ipairs(view.game.rows) do
+				expect.truthy(ns.Style.TextWidth(row.key:GetText(), "eyebrow") <= P.keyWidth,
+					row.key:GetText() .. " fits its column")
+				expect.equal(row.value.__template, ns.Style.FontFor("reading"), "values at 16")
+				expect.truthy(P.rowsTop + i * P.rowHeight <= view.game:GetHeight(), "row inside the panel")
+			end
+			expect.equal(view.game.rows[1].value.textRole, "heading", "values in title white")
+			expect.equal(view.own.title:GetText(), "Keeper of the Lantern Road")
+			expect.equal(view.own.summary.__template, ns.Style.FontFor("reading"))
+			local H = ns.MainWindow.ContentHeight()
+			local total = view.game:GetHeight() + P.gap + view.own:GetHeight() + P.gap + view.note:GetHeight()
+			expect.truthy(total <= H, "the three panels fit the content height with a long summary")
+			expect.equal(view.note.toggle:GetHeight(), ns.Style.CONTROL.compact)
+			expect.truthy(ns.Widgets.LabelFits("Try the live model again", view.note.toggle:GetWidth(),
+				view.note.toggle:GetHeight()))
 		end)
 
 		t:it("listens for guild changes only while the showcase is shown", function()
@@ -416,9 +624,47 @@ return function(t, expect)
 		t:it("falls back per font when a file fails to load", function()
 			local mock, _, ns = Boot.Load()
 			mock.fontFails = "Cinzel"
-			expect.equal(ns.Style.InitFonts(), 5, "the four Cinzel fonts fall back")
+			local cinzel = 0
+			for _, f in ipairs(ns.Style.FONTS) do
+				if f.file == "display" then cinzel = cinzel + 1 end
+			end
+			expect.equal(ns.Style.InitFonts(), #ns.Style.FONTS - cinzel, "the Cinzel fonts fall back")
 			expect.equal(ns.Style.Font("GameFontNormalLarge"), "GameFontNormalLarge")
 			expect.equal(ns.Style.Font("GameFontHighlight"), "DawnwardFontBody")
+			expect.equal(ns.Style.FontFor("railName"), "GameFontHighlightLarge", "a named style falls back to its game font")
+			expect.equal(ns.Style.FontFor("button"), "DawnwardFontButton")
+		end)
+
+		t:it("follows the design system's type scale and never goes below the readable minimum", function()
+			local _, _, ns = Boot.Load()
+			local S = ns.Style
+			local function size(style) return S.FONT_BY_STYLE[style].size end
+			expect.equal(size("screen"), 28, "screen title: Cinzel 28")
+			expect.equal(size("title"), 18, "entry and section title: Cinzel 18")
+			expect.equal(size("railName"), 21, "the rail's name: Cinzel 21")
+			expect.equal(size("reading"), 16, "story text: Alegreya Sans 16")
+			expect.equal(S.FONT_BY_STYLE.reading.spacing, 4, "with generous leading (16 / 1.5)")
+			expect.equal(size("meta"), 14, "meta line: 14")
+			expect.equal(size("button"), 15, "buttons: Alegreya Sans Bold 15")
+			expect.equal(S.FONT_BY_STYLE.button.file, "bold")
+			expect.equal(size("buttonSmall"), 14, "compact buttons: 14")
+			expect.equal(size("nav"), 17, "rail navigation: 17")
+			for _, f in ipairs(S.FONTS) do
+				expect.truthy(f.size >= S.MIN_TEXT, f.name .. " is " .. f.size .. ", below " .. S.MIN_TEXT)
+			end
+			expect.equal(size("eyebrow"), 13, "eyebrows one size above the design's 12, which relies on letter spacing")
+		end)
+
+		t:it("estimates text widths from the bundled fonts' real advance widths", function()
+			local _, _, ns = Boot.Load()
+			local S = ns.Style
+			-- "Approve" in Alegreya Sans Bold is 3.395 em (hmtx); at 15 that is 50.9.
+			expect.truthy(math.abs(S.TextWidth("Approve", "button") - 3.395 * 15) < 0.05)
+			expect.truthy(S.TextWidth("DAWNWARD", "eyebrow") > S.TextWidth("DAWNWARD", "small"), "Cinzel is wide")
+			expect.equal(S.TextWidth("|cffff0000Mage|r", "body"), S.TextWidth("Mage", "body"), "colour codes ignored")
+			expect.truthy(S.TextWidth("Human · Paladin", "meta") > S.TextWidth("Human  Paladin", "meta"))
+			expect.truthy(ns.Widgets.LabelFits("Settings", 109, 30, "ghost"))
+			expect.falsy(ns.Widgets.LabelFits("A very long label for a small button", 80, 30))
 		end)
 	end)
 end

@@ -1,31 +1,37 @@
--- Journal section (v0.7 dashboard, docs/design/mockups/journal-dashboard.png).
+-- Journal section (v0.8 dashboard, docs/design/mockups/journal-dashboard.png
+-- and its source Main.dc.html; audit: docs/design/audit/journal.md).
 --
---   subline      real counts: entries, defining moments, when the last was written
+--   subline      real counts: entries, defining moments, when the last was
+--                written; directly under the window's title, as in the design
 --   toolbar      New entry, a search box (title, text and place) and a filter:
 --                All / Defining (important) / Story (story entries) / Events
---                (automatic entries)
+--                (automatic entries), on a padded, edged track
 --   callout      "A moment awaits": the first Story Director reaction still
 --                pending, with Answer (opens it in the Story section) and Later
 --                (the same postpone as the reaction card). Hidden when none.
---   cards        entries newest first, ten per page: date block, title, meta
---                line, text, status chips, visibility and the entry's actions,
---                all inside the card
+--   cards        entries newest first in one scrolling list: date block,
+--                title with its status chips, meta line, the story text and a
+--                footer with the visibility chip and the entry's actions, all
+--                inside the card. Defining moments use the design's featured
+--                card (lighter fill, stronger edge, gold day).
 --   right column Active goals (milestones and verified progress) and Recent
 --                places (from the places log, with Homeland / Meaningful chips)
 --
--- Cards, goal rows and place rows are created once and reused, so the number of
--- frames stays small however large the journal grows. Every write goes
--- through Core/Actions.lua.
+-- The list is virtual: every matching entry gets a measured height (cached
+-- by its content), but only the cards that intersect the visible part of the
+-- scroll frame exist, drawn from a small pool. Scrolling lays out only the
+-- cards that come into view, so the number of frames stays small however
+-- large the journal grows. Every write goes through Core/Actions.lua.
 local _, ns = ...
-local Widgets, MainWindow, Actions, Journal = ns.Widgets, ns.MainWindow, ns.Actions, ns.Journal
+local Widgets, MainWindow, Actions, Journal, Style = ns.Widgets, ns.MainWindow, ns.Actions, ns.Journal, ns.Style
 
 local JournalView = {}
 ns.JournalView = JournalView
 
-JournalView.PAGE_SIZE = 10
 JournalView.EMPTY_TEXT = "Your journal is empty.\n\nWrite your first entry with New entry, or keep adventuring: "
 	.. "level-ups are recorded here automatically."
 JournalView.NO_MATCH_TEXT = "No entries match.\n\nTry other words, or choose All to see every entry."
+JournalView.SEARCH_DELAY = 0.15
 JournalView.GOALS_EMPTY = "No active goals yet. Add one in Chronicle > Goals: its milestones and verified "
 	.. "progress show here."
 JournalView.PLACES_EMPTY = "No places recorded yet. Places are logged as you travel; mark the ones that "
@@ -40,26 +46,77 @@ JournalView.MAX_GOALS = 3
 JournalView.MAX_PLACES = 4
 
 local SEP = " · "
+local CONTROL = Style.CONTROL
 
--- Layout (UI units, measured from the content area's top-left corner).
-local CONTENT_W = MainWindow.ContentWidth()
-local CONTENT_H = MainWindow.ContentHeight()
-local SIDE_W = 270          -- right column
-local COL_GAP = 16
-local LIST_W = CONTENT_W - SIDE_W - COL_GAP
-local SCROLLBAR = 22        -- the scroll bar sits inside the list column
-local SUBLINE_TOP = 0
-local TOOLBAR_TOP = 24
-local TOOLBAR_H = 28
-local CALLOUT_TOP = 64
-local BLOCK_GAP = 12
-local PAGER_H = 30
-local PAD = 14              -- inside a card
-local DATE_W = 56
-local TEXT_X = PAD + DATE_W + 6
-local CHIP_GAP = 6
-local MAX_CHIPS = 3
-local SEGMENT_W = 264
+-- Layout in UI units, from the content area's top-left corner. The values
+-- are Main.dc.html's; exposed for the layout tests.
+local L = {
+	contentW = MainWindow.ContentWidth(),   -- 772
+	contentH = MainWindow.ContentHeight(),  -- 588
+	sideW = 250,            -- right column (aside 250)
+	colGap = 20,            -- list to right column
+	gutter = 14,            -- the list column's right padding; the scroll bar sits in it
+	scrollBarW = 6,
+	-- The subline sits right under the window's title (the title box ends 80
+	-- below the window top, the content area starts at 96): 16 above.
+	sublineTop = -16,
+	sublineH = 18,
+	toolbarTop = 18,
+	toolbarH = 38,          -- the filter track: 30 high items, 3 padding and a 1 px edge
+	newW = 124,
+	searchW = 230,
+	toolGap = 10,
+	segmentW = 62,          -- each filter item
+	segmentGap = 2,
+	trackPad = 4,           -- 3 padding + the 1 px edge
+	calloutTop = 72,
+	blockGap = 16,          -- toolbar, callout and list (the main column's gap)
+	calloutPadX = 18,
+	calloutPadY = 14,
+	disc = 44,
+	discGap = 16,
+	eyebrowH = 16,
+	calloutMinH = 76,
+	answerW = 92,
+	laterW = 76,
+	cardGap = 12,           -- between cards
+	padX = 18,              -- inside a card
+	padY = 14,
+	padYFeatured = 16,
+	dateW = 52,
+	dateGap = 16,
+	lineGap = 6,            -- title, meta and text (gap 6)
+	footerGap = 10,         -- text to the footer (gap 6 + margin 4)
+	footerH = CONTROL.compact,
+	chipGap = 8,
+	maxChips = 3,
+	chipMaxW = 200,
+	actionGap = 8,
+	visW = 72,
+	titleLine = 22,         -- Cinzel 18
+	metaLine = 17,          -- 14
+	readingLine = 20,       -- 16 + 4 spacing
+	panelGap = 12,          -- between the right column's panels
+	panelFirst = 6,         -- eyebrow to the first row
+	goalGap = 12,
+	goalInner = 6,
+	placeGap = 10,
+	thumbMin = 30,
+}
+L.listW = L.contentW - L.sideW - L.colGap        -- 502
+L.cardW = L.listW - L.gutter                      -- 488
+L.textX = L.padX + L.dateW + L.dateGap            -- 86
+L.textW = L.cardW - L.textX - L.padX              -- 384
+L.segmentsW = #JournalView.FILTERS * L.segmentW + (#JournalView.FILTERS - 1) * L.segmentGap
+L.trackW = L.segmentsW + 2 * L.trackPad
+L.questionX = L.calloutPadX + L.disc + L.discGap  -- 78
+L.questionW = L.contentW - L.questionX - L.discGap - L.answerW - 8 - L.laterW - L.calloutPadX
+L.sideInner = L.sideW - 2 * Widgets.PANEL_PAD
+L.panelTop = Widgets.PANEL_PAD + 22               -- a panel's eyebrow takes this much
+JournalView.LAYOUT = L
+
+-- Footer actions (bold 14 on 30 high buttons; tested to fit their labels).
+JournalView.ACTION_WIDTHS = { Delete = 68, Edit = 54, Approve = 78, Defining = 80 }
 
 --- Full meta text for an entry (date, level, place, origin, flags). Kept for
 -- the card's date tooltip and for callers outside the window.
@@ -127,13 +184,15 @@ function JournalView.CardMeta(char, entry)
 end
 
 --- Status chips for an entry, from its real flags: { { text, tone } }. Pure.
+-- Tones follow the design: gold for a defining moment, amber for what
+-- waits on the player, neutral tags for the rest.
 function JournalView.Chips(entry)
 	local chips = {}
 	if entry.important then
 		chips[#chips + 1] = { text = "Defining", tone = "accent" }
 	end
 	if Journal.NeedsApproval(entry) then
-		chips[#chips + 1] = { text = "Waiting for your approval", tone = "accent" }
+		chips[#chips + 1] = { text = "Waiting for your approval", tone = "waiting" }
 	elseif entry.kind == "story" then
 		chips[#chips + 1] = { text = "Story", tone = "muted" }
 	elseif entry.kind == "event" then
@@ -260,34 +319,44 @@ function JournalView.PlaceDetail(entry)
 	return table.concat(parts, SEP)
 end
 
---- Page maths: returns clamped page and page count for n entries.
-function JournalView.ClampPage(page, n)
-	local pages = math.max(1, math.ceil(n / JournalView.PAGE_SIZE))
-	if page < 1 then
-		page = 1
-	elseif page > pages then
-		page = pages
+--- Virtual list maths ----------------------------------------------------------
+
+--- Tops of items { height } stacked with gap; returns the total height. Pure.
+function JournalView.Stack(items, gap)
+	local y = 0
+	for i, item in ipairs(items) do
+		item.top = y
+		y = y + item.height + (i < #items and gap or 0)
 	end
-	return page, pages
+	return y
 end
 
--- Lays chips out from a right edge leftwards; returns the width they take.
-local function placeChips(chips, specs, anchor, x, y)
-	local width = 0
-	for i = 1, #chips do
-		local chip, spec = chips[i], specs[i]
-		if spec then
-			chip:SetChip(spec.text, spec.tone)
-			chip:ClearAllPoints()
-			chip:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", -(x + width), y)
-			chip:Show()
-			width = width + chip:GetWidth() + CHIP_GAP
-		else
-			chip:Hide()
-		end
+--- The first and last index of items (with top and height) that intersect
+-- [offset, offset + viewH]; nil when none. Binary search. Pure.
+function JournalView.Window(items, offset, viewH)
+	local n = #items
+	if n == 0 then return nil end
+	local lo, hi = 1, n
+	while lo < hi do -- first item whose bottom is below offset
+		local mid = math.floor((lo + hi) / 2)
+		if items[mid].top + items[mid].height <= offset then lo = mid + 1 else hi = mid end
 	end
-	return width
+	local first = lo
+	if items[first].top + items[first].height <= offset then return nil end
+	local last = first
+	while last < n and items[last + 1].top < offset + viewH do
+		last = last + 1
+	end
+	return first, last
 end
+
+--- The scroll range: 0 .. max(0, total - viewH), offset clamped into it. Pure.
+function JournalView.ClampOffset(offset, total, viewH)
+	local max = math.max(0, total - viewH)
+	return math.max(0, math.min(max, offset or 0)), max
+end
+
+--- Helpers -------------------------------------------------------------------------
 
 local function textHeight(fs, minimum)
 	local h = fs.GetStringHeight and fs:GetStringHeight() or 0
@@ -306,65 +375,98 @@ local function openChronicle(tab)
 	MainWindow.Select("chronicle")
 end
 
+-- A small framed area of plain textures (fill and 1 px edge) in theme roles.
+local function framedTrack(parent, fillRole, edgeRole)
+	local f = CreateFrame("Frame", nil, parent)
+	f.bg = Style.Solid(f, "BACKGROUND", -2)
+	f.bg:SetAllPoints(f)
+	f.edges = Style.Edge(f, "BACKGROUND", 0)
+	Style.Register(f, function(t, theme)
+		Style.Color(t.bg, Style.Tone(theme, fillRole))
+		t.edges:Paint(Style.Tone(theme, edgeRole), 1)
+	end)
+	return f
+end
+
+-- A text link (the design's "All" in Active goals): accent text, brighter
+-- on hover, no box. Built on a Button so it keeps clicks and tooltips.
+local function textLink(parent, text, width, height)
+	local b = Widgets.Button(parent, text, width, height, "ghost")
+	b.label:SetJustifyH("RIGHT")
+	b.underline = Style.Solid(b, "ARTWORK")
+	b.underline:SetHeight(1)
+	b.underline:SetPoint("BOTTOMRIGHT", b.label, "BOTTOMRIGHT", 0, -1)
+	b.underline:SetWidth(math.ceil(Style.TextWidth(text, "buttonSmall")))
+	Style.Register(b, function(link, theme)
+		local tones = Style.Tones(theme)
+		local color = link.hover and tones.accentBright or theme.accent
+		Style.Color(link.bg, theme.surface, 0)
+		link.edges:Paint(theme.edge, 0)
+		Style.TextColor(link.label, color)
+		Style.Color(link.underline, color, 0.8)
+	end)
+	return b
+end
+
 --- The right column ---------------------------------------------------------------
 
-local SIDE_INNER = SIDE_W - 2 * Widgets.PANEL_PAD
-local PANEL_TOP = Widgets.PANEL_PAD + 22  -- the panel's title takes this much
-
 local function buildSide(section, f)
+	local inner = L.sideInner
 	-- Active goals.
 	local goals = Widgets.Panel(f, "Active goals")
-	goals:SetWidth(SIDE_W)
-	goals.all = Widgets.Button(goals, "All", 40, 18, "ghost")
-	goals.all:SetPoint("TOPRIGHT", -8, -10)
+	goals:SetWidth(L.sideW)
+	goals.all = textLink(goals, "All", 36, 20)
+	goals.all:SetPoint("TOPRIGHT", -Widgets.PANEL_PAD, -Widgets.PANEL_PAD + 2)
 	goals.all:SetScript("OnClick", function() openChronicle("goals") end)
 	Widgets.Tooltip(goals.all, "All goals", "Open Chronicle > Goals to see, add and edit every goal.")
 	goals.empty = Widgets.Label(goals.inner, "GameFontHighlightSmall", true, "muted")
-	goals.empty:SetPoint("TOPLEFT", 0, 0)
-	goals.empty:SetWidth(SIDE_INNER)
+	goals.empty:SetPoint("TOPLEFT", 0, -L.panelFirst)
+	goals.empty:SetWidth(inner)
 	goals.empty:SetText(JournalView.GOALS_EMPTY)
 	goals.rows = {}
 	for i = 1, JournalView.MAX_GOALS do
 		local row = CreateFrame("Frame", nil, goals.inner)
-		row:SetWidth(SIDE_INNER)
+		row:SetWidth(inner)
 		row.title = Widgets.Label(row, "GameFontHighlight", true, "body")
 		row.title:SetPoint("TOPLEFT", 0, 0)
-		row.title:SetWidth(SIDE_INNER)
-		row.bar = Widgets.ProgressBar(row, SIDE_INNER, 4)
+		row.title:SetWidth(inner)
+		row.bar = Widgets.ProgressBar(row, inner, CONTROL.progress)
 		row.caption = Widgets.Label(row, "GameFontHighlightSmall", true, "muted")
-		row.caption:SetWidth(SIDE_INNER)
+		row.caption:SetWidth(inner)
 		goals.rows[i] = row
 	end
 	section.goals = goals
 
 	-- Recent places.
 	local places = Widgets.Panel(f, "Recent places")
-	places:SetWidth(SIDE_W)
+	places:SetWidth(L.sideW)
 	places.empty = Widgets.Label(places.inner, "GameFontHighlightSmall", true, "muted")
-	places.empty:SetPoint("TOPLEFT", 0, 0)
-	places.empty:SetWidth(SIDE_INNER)
+	places.empty:SetPoint("TOPLEFT", 0, -L.panelFirst)
+	places.empty:SetWidth(inner)
 	places.empty:SetText(JournalView.PLACES_EMPTY)
 	places.rows = {}
 	for i = 1, JournalView.MAX_PLACES do
 		local row = CreateFrame("Frame", nil, places.inner)
-		row:SetWidth(SIDE_INNER)
+		row:SetWidth(inner)
 		row.divider = Widgets.Divider(row)
 		row.divider:SetPoint("TOPLEFT", 0, 0)
 		row.divider:SetPoint("TOPRIGHT", 0, 0)
 		row.name = Widgets.Label(row, "GameFontHighlight", false, "body")
-		row.name:SetWidth(SIDE_INNER)
-		row.chips = { Widgets.Chip(row, "Homeland"), Widgets.Chip(row, "Meaningful") }
+		row.name:SetWidth(inner)
+		row.chips = { Widgets.Chip(row, "Homeland", "accent", CONTROL.chipSmall),
+			Widgets.Chip(row, "Meaningful", "accent", CONTROL.chipSmall) }
 		row.detail = Widgets.Label(row, "GameFontHighlightSmall", true, "muted")
-		row.detail:SetWidth(SIDE_INNER)
+		row.detail:SetWidth(inner)
 		places.rows[i] = row
 	end
 	section.places = places
 end
 
+-- Lays the goal rows out; returns the panel's height.
 local function renderGoals(goals, char)
 	local list = char and ns.Goals.Active(char) or {}
 	goals.empty:SetShown(#list == 0)
-	local y = 0
+	local y = L.panelFirst
 	for i, row in ipairs(goals.rows) do
 		local goal = list[i]
 		row:SetShown(goal ~= nil)
@@ -372,31 +474,33 @@ local function renderGoals(goals, char)
 			row.goalId = goal.id
 			row.title:SetText(goal.title)
 			local fraction, caption = JournalView.GoalProgress(char, goal)
-			local th = textHeight(row.title, 16)
+			local th = textHeight(row.title, 18)
 			row.bar:ClearAllPoints()
-			row.bar:SetPoint("TOPLEFT", 0, -(th + 6))
+			row.bar:SetPoint("TOPLEFT", 0, -(th + L.goalInner))
 			row.bar:SetValue(fraction)
+			local captionTop = th + L.goalInner + CONTROL.progress + L.goalInner
 			row.caption:ClearAllPoints()
-			row.caption:SetPoint("TOPLEFT", 0, -(th + 16))
+			row.caption:SetPoint("TOPLEFT", 0, -captionTop)
 			row.caption:SetText(caption)
-			local h = th + 16 + textHeight(row.caption, 14)
+			local h = captionTop + textHeight(row.caption, 16)
 			row:ClearAllPoints()
 			row:SetPoint("TOPLEFT", 0, -y)
 			row:SetHeight(h)
-			y = y + h + 12
+			y = y + h + L.goalGap
 		end
 	end
 	if #list == 0 then
-		y = textHeight(goals.empty, 28) + 12
+		y = y + textHeight(goals.empty, 32) + L.goalGap
 	end
 	goals.shown = math.min(#list, #goals.rows)
-	return PANEL_TOP + y - 12 + Widgets.PANEL_PAD
+	return L.panelTop + y - L.goalGap + Widgets.PANEL_PAD
 end
 
+-- Lays out as many place rows as fit in available; returns the height used.
 local function renderPlaces(places, char, available)
 	local list = char and ns.Places.List(char) or {}
 	places.empty:SetShown(#list == 0)
-	local y, shown = 0, 0
+	local y, shown = L.panelFirst, 0
 	for i, row in ipairs(places.rows) do
 		local entry = list[i]
 		local fits = false
@@ -404,12 +508,15 @@ local function renderPlaces(places, char, available)
 			local specs = {}
 			if ns.Places.IsHomeland(char, entry) then specs[#specs + 1] = { text = "Homeland" } end
 			if entry.meaningful then specs[#specs + 1] = { text = "Meaningful" } end
-			local top = i > 1 and 9 or 0
+			local top = i > 1 and L.placeGap + 1 + L.placeGap or 0
+			row.divider:ClearAllPoints()
+			row.divider:SetPoint("TOPLEFT", 0, -L.placeGap)
+			row.divider:SetPoint("TOPRIGHT", 0, -L.placeGap)
 			row.divider:SetShown(i > 1)
 			row.name:ClearAllPoints()
 			row.name:SetPoint("TOPLEFT", 0, -top)
 			row.name:SetText(entry.subzone or entry.zone)
-			local h = top + 18
+			local h = top + 18 + 2
 			for c, chip in ipairs(row.chips) do
 				local spec = specs[c]
 				chip:SetShown(spec ~= nil)
@@ -417,17 +524,18 @@ local function renderPlaces(places, char, available)
 					chip:SetChip(spec.text, "accent")
 					chip:ClearAllPoints()
 					if c == 1 then
-						chip:SetPoint("TOPLEFT", 0, -h - 2)
+						chip:SetPoint("TOPLEFT", 0, -h)
 					else
-						chip:SetPoint("LEFT", row.chips[c - 1], "RIGHT", CHIP_GAP, 0)
+						chip:SetPoint("LEFT", row.chips[c - 1], "RIGHT", 6, 0)
 					end
 				end
 			end
-			if #specs > 0 then h = h + Widgets.CHIP_HEIGHT + 6 end
+			if #specs > 0 then h = h + CONTROL.chipSmall + 4 end
 			row.detail:ClearAllPoints()
 			row.detail:SetPoint("TOPLEFT", 0, -h)
-			row.detail:SetText(JournalView.PlaceDetail(entry))
-			h = h + textHeight(row.detail, 14)
+			local detail = JournalView.PlaceDetail(entry)
+			row.detail:SetText(detail)
+			h = h + textHeight(row.detail, 16)
 			fits = y + h <= available
 			if fits then
 				row:ClearAllPoints()
@@ -443,63 +551,115 @@ local function renderPlaces(places, char, available)
 			break
 		end
 	end
+	if #list == 0 then
+		y = y + textHeight(places.empty, 32)
+	end
 	places.shown = shown
+	return y
+end
+
+--- Cards -----------------------------------------------------------------------------
+
+-- Paints a card: the design's featured look for a defining moment (and on
+-- hover), the plain card otherwise; a hovered featured card gets the gold edge.
+local function paintCard(c, theme)
+	local tones = Style.Tones(theme)
+	local lifted = c.hover or c.featured
+	Style.Color(c.bg, lifted and tones.cardHover or theme.surface, 1)
+	local edge = (c.hover and c.featured) and theme.border or (lifted and tones.selectedEdge or theme.edge)
+	c.edges:Paint(edge, 1)
+	c.bar:Hide()
+end
+
+-- One card's content signature: everything its height depends on.
+local function signature(title, meta, body, chips)
+	local parts = { title or "", meta, body or "" }
+	for _, chip in ipairs(chips) do parts[#parts + 1] = chip.text end
+	return table.concat(parts, "\1")
 end
 
 --- The section ----------------------------------------------------------------------
 
 local function create(parent)
-	local section = { frame = CreateFrame("Frame", nil, parent), rows = {}, page = 1, filter = "all", query = "" }
+	local section = { frame = CreateFrame("Frame", nil, parent), rows = {}, filter = "all", query = "", offset = 0,
+		items = {}, heights = {}, heightCount = 0, gen = 0, visibleCount = 0, matchCount = 0 }
 	local f = section.frame
 
-	-- Subline and toolbar.
+	-- Subline, right under the window's title.
 	section.subline = Widgets.Label(f, "GameFontHighlight", false, "muted")
-	section.subline:SetPoint("TOPLEFT", 0, -SUBLINE_TOP)
-	section.subline:SetWidth(CONTENT_W)
+	section.subline:SetPoint("TOPLEFT", 0, -L.sublineTop)
+	section.subline:SetWidth(L.contentW - 60)
 
+	-- Toolbar: New entry (added with the editing parts), search, filter.
 	section.toolbar = CreateFrame("Frame", nil, f)
-	section.toolbar:SetPoint("TOPLEFT", 0, -TOOLBAR_TOP)
-	section.toolbar:SetSize(CONTENT_W, TOOLBAR_H)
+	section.toolbar:SetPoint("TOPLEFT", 0, -L.toolbarTop)
+	section.toolbar:SetSize(L.contentW, L.toolbarH)
 
-	section.search = Widgets.SearchBox(section.toolbar, 230, "Search the journal", function(text)
-		if text ~= section.query then
-			section.query = text
-			section.page = 1
-			MainWindow.Refresh()
+	-- Typing refreshes once it pauses (JournalView.SEARCH_DELAY), not per key.
+	section.search = Widgets.SearchBox(section.toolbar, L.searchW, "Search the journal", function(text)
+		if text == section.query then return end
+		section.query = text
+		section.offset = 0
+		section.searchToken = (section.searchToken or 0) + 1
+		local token = section.searchToken
+		local function refresh()
+			if token == section.searchToken then MainWindow.Refresh() end
 		end
-	end)
-	section.search:SetHeight(TOOLBAR_H - 2)
+		if C_Timer and C_Timer.After and JournalView.SEARCH_DELAY > 0 then
+			C_Timer.After(JournalView.SEARCH_DELAY, refresh)
+		else
+			refresh()
+		end
+	end, CONTROL.input)
 	Widgets.Tooltip(section.search, "Search the journal", "Finds entries by title, text or recorded place.")
 
-	section.filters = Widgets.Segmented(section.toolbar, JournalView.FILTERS, SEGMENT_W, 24, function(id)
-		section.filter, section.page = id, 1
-		section.scroll:SetVerticalScroll(0)
-		MainWindow.Refresh()
-	end)
-	-- Right-aligned: the first button's right edge sits (n - 1) buttons in.
-	section.filters.buttons[1]:SetPoint("TOPRIGHT", section.toolbar, "TOPRIGHT",
-		-((#JournalView.FILTERS - 1) * math.floor(SEGMENT_W / #JournalView.FILTERS)), -2)
+	-- The filter: a panel-coloured, edged track with 3 px padding around the items.
+	section.filterTrack = framedTrack(section.toolbar, "panel", "edge")
+	section.filterTrack:SetSize(L.trackW, L.toolbarH)
+	section.filterTrack:SetPoint("TOPRIGHT", section.toolbar, "TOPRIGHT", 0, 0)
+	if section.filterTrack.SetFrameLevel and section.toolbar.GetFrameLevel then
+		section.filterTrack:SetFrameLevel(math.max(0, (section.toolbar:GetFrameLevel() or 1)))
+	end
+	section.filters = Widgets.Segmented(section.toolbar, JournalView.FILTERS, L.segmentsW + L.segmentGap,
+		CONTROL.compact, function(id)
+			section.filter, section.offset = id, 0
+			MainWindow.Refresh()
+		end)
+	for _, b in ipairs(section.filters.buttons) do b:SetWidth(L.segmentW) end
+	section.filters.buttons[1]:SetPoint("TOPLEFT", section.filterTrack, "TOPLEFT", L.trackPad, -L.trackPad)
+	if section.filters.track then section.filters.track:Hide() end -- the framed track replaces it
 	section.filters:Select("all")
 
 	-- "A moment awaits".
 	local callout = Widgets.Callout(f, "A moment awaits")
-	callout:SetPoint("TOPLEFT", 0, -CALLOUT_TOP)
-	callout:SetWidth(CONTENT_W)
-	callout.icon = callout:CreateTexture(nil, "ARTWORK")
-	callout.icon:SetSize(36, 36)
-	callout.icon:SetPoint("TOPLEFT", 16, -14)
-	callout.icon:SetTexture("Interface\\Icons\\INV_Misc_Note_01")
-	callout.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+	callout:SetPoint("TOPLEFT", 0, -L.calloutTop)
+	callout:SetWidth(L.contentW)
+	-- The icon disc: a gold-edged dark disc with a gold jewel (the design's
+	-- four-point star is vector art).
+	callout.discEdge = Style.Disc(callout, "ARTWORK", 1, L.disc)
+	callout.discEdge:SetPoint("LEFT", L.calloutPadX, 0)
+	callout.disc = Style.Disc(callout, "ARTWORK", 2, L.disc - 2)
+	callout.disc:SetPoint("CENTER", callout.discEdge, "CENTER", 0, 0)
+	callout.jewel = Style.Solid(callout, "OVERLAY")
+	callout.jewel:SetSize(12, 12)
+	callout.jewel:SetPoint("CENTER", callout.discEdge, "CENTER", 0, 0)
+	if callout.jewel.SetRotation then callout.jewel:SetRotation(math.pi / 4) end
+	Style.Register(callout.discEdge, function(t, theme) Style.Color(t, theme.border) end)
+	Style.Register(callout.disc, function(t, theme)
+		Style.Color(t, Style.Mix(Style.Tones(theme).calloutFill, theme.accent, 0.1))
+	end)
+	Style.Register(callout.jewel, function(t, theme) Style.Color(t, Style.Tones(theme).accentBright) end)
 	callout.title:ClearAllPoints()
-	callout.title:SetPoint("TOPLEFT", 66, -12)
-	callout.later = Widgets.Button(callout, "Later", 80, 26, "ghost")
-	callout.later:SetPoint("TOPRIGHT", -16, -18)
+	callout.title:SetPoint("TOPLEFT", L.questionX, -L.calloutPadY)
+	callout.title:SetWidth(L.questionW)
+	callout.later = Widgets.Button(callout, "Later", L.laterW, CONTROL.standard, "ghost")
+	callout.later:SetPoint("RIGHT", -L.calloutPadX, 0)
 	Widgets.Tooltip(callout.later, "Later", "Keep it in the Story section for later. You will not be reminded again.")
-	callout.answer = Widgets.Button(callout, "Answer", 90, 26, "primary")
+	callout.answer = Widgets.Button(callout, "Answer", L.answerW, CONTROL.standard, "primary")
 	callout.answer:SetPoint("RIGHT", callout.later, "LEFT", -8, 0)
-	callout.question = Widgets.Label(callout, "GameFontHighlight", true, "body")
-	callout.question:SetPoint("TOPLEFT", 66, -30)
-	callout.question:SetWidth(CONTENT_W - 66 - 220)
+	callout.question = Widgets.Label(callout, "reading", true, "title")
+	callout.question:SetPoint("TOPLEFT", L.questionX, -(L.calloutPadY + L.eyebrowH + 2))
+	callout.question:SetWidth(L.questionW)
 	callout.answer:SetScript("OnClick", function()
 		local id = callout.reactionId
 		if ns.StoryView and ns.StoryView.section then
@@ -515,57 +675,87 @@ local function create(parent)
 	callout:Hide()
 	section.callout = callout
 
-	-- The list column.
+	-- The list column: a scroll frame whose child holds the pooled cards at
+	-- their place in the whole list.
 	local scroll = CreateFrame("ScrollFrame", Widgets.NextName("JournalScroll"), f, "UIPanelScrollFrameTemplate")
 	local child = CreateFrame("Frame", nil, scroll)
-	child:SetSize(100, 100)
+	child:SetSize(L.cardW, 1)
 	scroll:SetScrollChild(child)
 	section.scroll, section.child = scroll, child
 
-	section.older = Widgets.Button(f, "Older >", 76, 22, "ghost")
-	section.older:SetPoint("BOTTOMRIGHT", f, "BOTTOMLEFT", LIST_W, 0)
-	section.pageLabel = Widgets.Label(f, "GameFontHighlightSmall", false, "muted")
-	section.pageLabel:SetJustifyH("CENTER")
-	section.pageLabel:SetWidth(90)
-	section.pageLabel:SetPoint("RIGHT", section.older, "LEFT", -4, 0)
-	section.newer = Widgets.Button(f, "< Newer", 76, 22, "ghost")
-	section.newer:SetPoint("RIGHT", section.pageLabel, "LEFT", -4, 0)
-	section.newer:SetScript("OnClick", function()
-		section.page = section.page - 1
-		section.scroll:SetVerticalScroll(0)
-		MainWindow.Refresh()
-	end)
-	section.older:SetScript("OnClick", function()
-		section.page = section.page + 1
-		section.scroll:SetVerticalScroll(0)
-		MainWindow.Refresh()
-	end)
+	-- The design's slim scroll bar: a 6 px track in the list's gutter and a
+	-- proportional thumb; the template's arrow buttons are not shown (the
+	-- mouse wheel and dragging the thumb scroll).
+	local bar = scroll.ScrollBar -- parentKey in the 1.15.9 template
+	if type(bar) ~= "table" then bar = nil end
+	if bar and bar.ClearAllPoints then
+		bar:ClearAllPoints()
+		bar:SetPoint("TOPLEFT", scroll, "TOPRIGHT", L.gutter - L.scrollBarW, 0)
+		bar:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", L.gutter - L.scrollBarW, 0)
+		bar:SetWidth(L.scrollBarW)
+		for _, key in ipairs({ "ScrollUpButton", "ScrollDownButton" }) do
+			local arrow = type(bar[key]) == "table" and bar[key] or nil
+			if arrow then
+				arrow:SetAlpha(0)
+				if arrow.EnableMouse then arrow:EnableMouse(false) end
+				arrow:SetSize(1, 1)
+			end
+		end
+		bar.track = Style.Solid(bar, "BACKGROUND")
+		bar.track:SetAllPoints(bar)
+		local thumb = type(bar.ThumbTexture) == "table" and bar.ThumbTexture or nil
+		bar.thumb = thumb
+		if thumb then
+			thumb:SetTexture(nil)
+			thumb:SetTexCoord(0, 1, 0, 1)
+			thumb:SetSize(L.scrollBarW, 90)
+		end
+		Style.Register(bar, function(b, theme)
+			local tones = Style.Tones(theme)
+			Style.Color(b.track, Style.Mix(theme.background, theme.panel, 0.6))
+			if b.thumb then Style.Color(b.thumb, tones.edgeStrong) end
+		end)
+		section.scrollBar = bar
+	end
 
-	section.empty = Widgets.Label(f, "GameFontHighlight", true, "muted")
+	-- Empty states: a card at the top of the list with the explanation.
+	section.emptyCard = Widgets.Card(f)
+	section.emptyCard:SetWidth(L.cardW)
+	section.empty = Widgets.Label(section.emptyCard, "reading", true, "muted")
 	section.empty:SetJustifyH("CENTER")
-	section.empty:SetWidth(LIST_W - 60)
+	section.empty:SetPoint("TOP", 0, -24)
+	section.empty:SetWidth(L.cardW - 2 * 40)
 	section.empty:SetText(JournalView.EMPTY_TEXT)
+	section.emptyCard:Hide()
 
 	buildSide(section, f)
+
+	local function buildCard(parentFrame)
+		local row = Widgets.Card(parentFrame)
+		Style.Register(row, paintCard)
+		row:SetWidth(L.cardW)
+		row.date = Widgets.DateBlock(row)
+		row.date:SetWidth(L.dateW)
+		if row.date.EnableMouse then row.date:EnableMouse(true) end
+		Widgets.Tooltip(row.date, "Written")
+		row.title = Widgets.Label(row, "GameFontNormalLarge", true, "title")
+		row.meta = Widgets.Label(row, "meta", true, "muted")
+		row.body = Widgets.Label(row, "reading", true, "reading")
+		row.chips = {}
+		for i = 1, L.maxChips do
+			row.chips[i] = Widgets.Chip(row, "", "accent")
+			row.chips[i]:SetMaxWidth(L.chipMaxW)
+			row.chips[i]:Hide()
+		end
+		return row
+	end
 
 	local function getRow(index)
 		local row = section.rows[index]
 		if row then
 			return row
 		end
-		row = Widgets.Card(child)
-		row.date = Widgets.DateBlock(row)
-		row.date:SetPoint("TOPLEFT", PAD - 4, -PAD)
-		if row.date.EnableMouse then row.date:EnableMouse(true) end
-		Widgets.Tooltip(row.date, "Written")
-		row.title = Widgets.Label(row, "GameFontHighlightLarge", true, "body")
-		row.meta = Widgets.Label(row, "GameFontHighlightSmall", true, "muted")
-		row.body = Widgets.Label(row, "GameFontHighlight", true, "body")
-		row.chips = {}
-		for i = 1, MAX_CHIPS do
-			row.chips[i] = Widgets.Chip(row, "")
-			row.chips[i]:Hide()
-		end
+		row = buildCard(child)
 		row.vis = Widgets.VisibilityButton(row, function(level)
 			local function apply()
 				local _, message = Actions.SetEntryVisibility(ns.ctx, row.entryId, level)
@@ -581,6 +771,7 @@ local function create(parent)
 				apply()
 			end
 		end)
+		row.vis:SetSize(L.visW, CONTROL.chip)
 		if section.decorateRow then
 			section.decorateRow(row)
 		end
@@ -588,68 +779,113 @@ local function create(parent)
 		return row
 	end
 
-	-- Lays out one card for entry at vertical offset y; returns its height plus the gap.
-	local function layoutRow(row, entry, y, width, char)
-		row.entryId = entry.id
-		row.entry = entry
-		row:ClearAllPoints()
-		row:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -y)
-		row:SetWidth(width)
-		row.date:SetDate(entry.createdAt)
-		row.date.tooltipText = JournalView.MetaText(entry, Widgets.FormatDate)
-
-		local textWidth = width - TEXT_X - PAD
-		local chipsWidth = placeChips(row.chips, JournalView.Chips(entry), row, PAD, -PAD)
-		local headWidth = textWidth - chipsWidth
+	-- What a card shows for entry: title, body, meta and chips.
+	local function cardContent(entry, char)
 		local title, body = JournalView.TitleAndBody(entry)
 		if body and entry.kind == "story" and char then
 			-- Story drafts show their development's current status (display only).
 			body = ns.Narrative.DisplayText(char, entry)
 		end
+		return title, body, JournalView.CardMeta(char, entry), JournalView.Chips(entry)
+	end
 
-		local cursor = PAD
+	-- Lays out one card for item at its place in the list; returns its height.
+	-- measuring: lay out the hidden measuring card only (no actions, no show).
+	local function layoutRow(row, item, measuring)
+		local entry = item.entry
+		local featured = entry.important and true or false
+		local padY = featured and L.padYFeatured or L.padY
+		row.entryId = entry.id
+		row.entry = entry
+		if row.featured ~= featured then
+			row.featured = featured
+			Widgets.SetTextRole(row.date.day, featured and "accentBright" or "ghostText")
+			Style.Repaint(row)
+		end
+		row:ClearAllPoints()
+		row:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -(item.top or 0))
+		row.date:ClearAllPoints()
+		row.date:SetPoint("TOPLEFT", L.padX, -(padY + 2))
+		row.date:SetDate(entry.createdAt)
+		row.date.tooltipText = JournalView.MetaText(entry, Widgets.FormatDate)
+
+		local title, body, meta, chips = item.title, item.body, item.meta, item.chips
+		-- Chips from the right edge leftwards, centred on the first line.
+		local chipsWidth = 0
+		for i, chip in ipairs(row.chips) do
+			local spec = chips[i]
+			if spec then
+				chip:SetChip(spec.text, spec.tone)
+				chip:ClearAllPoints()
+				chip:SetPoint("TOPRIGHT", row, "TOPRIGHT", -(L.padX + chipsWidth),
+					-(padY + math.floor((L.titleLine - CONTROL.chip) / 2)))
+				chip:Show()
+				chipsWidth = chipsWidth + chip:GetWidth() + L.chipGap
+			else
+				chip:Hide()
+			end
+		end
+		local headWidth = L.textW - chipsWidth
+
+		local cursor = padY
 		if title then
 			row.title:Show()
 			row.title:SetWidth(headWidth)
 			row.title:SetText(title)
 			row.title:ClearAllPoints()
-			row.title:SetPoint("TOPLEFT", TEXT_X, -cursor)
-			cursor = cursor + math.max(textHeight(row.title, 18), chipsWidth > 0 and Widgets.CHIP_HEIGHT or 0) + 4
+			row.title:SetPoint("TOPLEFT", L.textX, -cursor)
+			cursor = cursor + math.max(textHeight(row.title, L.titleLine), chipsWidth > 0 and CONTROL.chip or 0)
+				+ L.lineGap
 		else
 			row.title:Hide()
 		end
-		row.meta:SetWidth(title and textWidth or headWidth)
-		row.meta:SetText(JournalView.CardMeta(char, entry))
+		row.meta:SetWidth(title and L.textW or headWidth)
+		row.meta:SetText(meta)
 		row.meta:ClearAllPoints()
-		row.meta:SetPoint("TOPLEFT", TEXT_X, -cursor)
-		cursor = cursor + math.max(textHeight(row.meta, 14), (not title and chipsWidth > 0) and Widgets.CHIP_HEIGHT or 0)
+		row.meta:SetPoint("TOPLEFT", L.textX, -cursor)
+		cursor = cursor + math.max(textHeight(row.meta, L.metaLine), (not title and chipsWidth > 0) and CONTROL.chip or 0)
 		if body then
 			row.body:Show()
-			row.body:SetWidth(textWidth)
+			row.body:SetWidth(L.textW)
 			row.body:SetText(body)
 			row.body:ClearAllPoints()
-			row.body:SetPoint("TOPLEFT", TEXT_X, -(cursor + 8))
-			cursor = cursor + 8 + textHeight(row.body, 14)
+			row.body:SetPoint("TOPLEFT", L.textX, -(cursor + L.lineGap))
+			cursor = cursor + L.lineGap + textHeight(row.body, L.readingLine)
 		else
 			row.body:Hide()
 		end
 
-		-- Visibility on the left, the entry's actions on the right: inside the card.
-		cursor = cursor + 10
-		row.vis:ClearAllPoints()
-		row.vis:SetPoint("TOPLEFT", TEXT_X, -cursor)
-		row.vis:SetLevel(entry.visibility)
-		if section.updateRowActions then
+		-- Footer: the visibility chip on the left, the entry's actions on the right.
+		cursor = cursor + L.footerGap
+		if row.vis then
+			row.vis:ClearAllPoints()
+			row.vis:SetPoint("TOPLEFT", L.textX, -(cursor + (L.footerH - CONTROL.chip) / 2))
+			row.vis:SetLevel(entry.visibility)
+		end
+		if not measuring and section.updateRowActions then
 			section.updateRowActions(row, entry, cursor)
 		end
-		local height = math.max(cursor + 20 + PAD, PAD + 46 + PAD)
+		local height = math.max(cursor + L.footerH + padY, padY + 46 + padY)
 		row:SetHeight(height)
-		row:Show()
-		return height + Widgets.ENTRY.gap + 4
+		if not measuring then row:Show() end
+		return height
+	end
+	section.layoutRow = layoutRow
+
+	-- The hidden card used to measure entries that have no cached height.
+	local measureCard
+	local function measure(item)
+		if not measureCard then
+			measureCard = buildCard(child)
+			measureCard:Hide()
+		end
+		return layoutRow(measureCard, item, true)
 	end
 
 	function section:ApplyTheme(theme)
 		self.theme = theme
+		-- Font metrics can differ per theme only through fonts; a cheap reset.
+		self.heights, self.heightCount = {}, 0
 	end
 
 	-- The callout for the first pending reaction; returns its height (0 when hidden).
@@ -672,71 +908,172 @@ local function create(parent)
 		self.callout.reactionId = presentation.reaction.id
 		self.callout:SetTitle(string.format("A moment awaits%s%d of %d", SEP, index, #pending))
 		self.callout.question:SetText(presentation.question or "")
-		local height = math.max(64, 30 + textHeight(self.callout.question, 18) + 14)
+		local height = math.max(L.calloutMinH,
+			L.calloutPadY + L.eyebrowH + 2 + textHeight(self.callout.question, L.readingLine) + L.calloutPadY)
 		self.callout:SetHeight(height)
 		return height
 	end
 
+	-- Shows the cards that intersect the visible part of the list. Cards that
+	-- already show the right entry (same render generation) stay as they are.
+	function section:RenderWindow(offset)
+		local items = self.items
+		local max
+		offset, max = JournalView.ClampOffset(offset, self.totalHeight or 0, self.viewH or 0)
+		self.offset, self.maxOffset = offset, max
+		local first, last = JournalView.Window(items, offset, self.viewH or 0)
+		local keep, free = {}, {}
+		for _, row in ipairs(self.rows) do
+			local i = row.itemIndex
+			if row:IsShown() and row.gen == self.gen and first and i and i >= first and i <= last
+				and items[i] and items[i].entry == row.entry then
+				keep[i] = row
+			else
+				free[#free + 1] = row
+			end
+		end
+		local ordered, mismatch = {}, false
+		if first then
+			for i = first, last do
+				local row = keep[i]
+				if not row then
+					row = table.remove(free, 1) or getRow(#self.rows + 1)
+					local h = layoutRow(row, items[i])
+					if h ~= items[i].height then
+						-- The measured height was off (fonts were not ready): correct it.
+						items[i].height = h
+						self.heights[items[i].sig] = h
+						mismatch = true
+					end
+					row.itemIndex, row.gen = i, self.gen
+				end
+				ordered[#ordered + 1] = row
+			end
+		end
+		for _, row in ipairs(free) do
+			row:Hide()
+			row.itemIndex = nil
+			ordered[#ordered + 1] = row
+		end
+		self.rows = ordered
+		self.firstIndex = first
+		self.visibleCount = first and (last - first + 1) or 0
+		if mismatch and not self.correcting then
+			-- Restack and lay out again; newly visible cards may correct
+			-- their heights too, so repeat a few times at most.
+			self.correcting = true
+			for _ = 1, 3 do
+				if not self:Restack() then break end
+			end
+			self.correcting = nil
+		end
+		return mismatch
+	end
+
+	-- Recomputes tops and the list's height after a height correction;
+	-- returns whether another correction was needed.
+	function section:Restack()
+		self.totalHeight = JournalView.Stack(self.items, L.cardGap)
+		self.child:SetHeight(math.max(self.totalHeight, 1))
+		self.gen = self.gen + 1
+		self:UpdateThumb()
+		return self:RenderWindow(self.offset)
+	end
+
+	-- A proportional thumb for the slim scroll bar.
+	function section:UpdateThumb()
+		local sb = self.scrollBar
+		if not (sb and sb.thumb) then return end
+		local total, viewH = self.totalHeight or 0, self.viewH or 0
+		local h = total > viewH and math.max(L.thumbMin, math.floor(viewH * viewH / total)) or viewH
+		sb.thumb:SetSize(L.scrollBarW, math.max(1, h))
+		sb:SetShown(total > viewH)
+	end
+
+	--- Scrolls the list to offset (clamped) and shows the cards there.
+	function section:ScrollTo(offset)
+		offset = JournalView.ClampOffset(offset, self.totalHeight or 0, self.viewH or 0)
+		self.scroll:SetVerticalScroll(offset)
+		self:RenderWindow(offset)
+	end
+
+	-- The template moves the list (mouse wheel, thumb): show what comes into view.
+	scroll:HookScript("OnVerticalScroll", function(_, offset)
+		if offset ~= section.offset then section:RenderWindow(offset) end
+	end)
+
 	function section:RenderList(view)
 		local char = view.char
+		self.char = char
 		local now = view.ctx and view.ctx.now and view.ctx.now() or nil
 		self.subline:SetText(JournalView.Subline(char, now))
 		self.filters:Select(self.filter)
 
 		local calloutHeight = self:RenderCallout(char, now)
-		local top = CALLOUT_TOP + (calloutHeight > 0 and (calloutHeight + BLOCK_GAP) or 0)
+		local top = L.calloutTop + (calloutHeight > 0 and (calloutHeight + L.blockGap) or 0)
+		self.listTop = top
+		self.viewH = L.contentH - top
 
 		local total = char and #char.journal or 0
 		local entries = char and JournalView.Filter(char, self.filter, self.query) or {}
-		local pages
-		self.page, pages = JournalView.ClampPage(self.page, #entries)
-		self.pageLabel:SetText(string.format("Page %d of %d", self.page, pages))
-		self.newer:SetEnabled(self.page > 1)
-		self.older:SetEnabled(self.page < pages)
-		local paged = pages > 1
-		self.newer:SetShown(paged)
-		self.older:SetShown(paged)
-		self.pageLabel:SetShown(paged)
+		self.matchCount = #entries
+
+		-- Every matching entry: its content and height (measured once per content).
+		if self.heightCount > 4 * #entries + 200 then
+			self.heights, self.heightCount = {}, 0
+		end
+		local items = {}
+		for i, entry in ipairs(entries) do
+			local title, body, meta, chips = cardContent(entry, char)
+			local item = { entry = entry, title = title, body = body, meta = meta, chips = chips }
+			item.sig = signature(title, meta, body, chips) .. (entry.important and "\2" or "")
+			local h = self.heights[item.sig]
+			if not h then
+				h = measure(item)
+				self.heights[item.sig] = h
+				self.heightCount = self.heightCount + 1
+			end
+			item.height = h
+			items[i] = item
+		end
+		self.items = items
+		self.totalHeight = JournalView.Stack(items, L.cardGap)
+		self.gen = self.gen + 1
 
 		self.scroll:ClearAllPoints()
 		self.scroll:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, -top)
-		self.scroll:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMLEFT", LIST_W - SCROLLBAR, paged and PAGER_H or 0)
+		self.scroll:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMLEFT", L.cardW, 0)
 		self.scroll:Show()
+		self.child:SetWidth(L.cardW)
+		self.child:SetHeight(math.max(self.totalHeight, 1))
+		self:UpdateThumb()
 
+		self.emptyCard:SetShown(#entries == 0)
 		self.empty:SetShown(#entries == 0)
 		self.empty:SetText(total == 0 and JournalView.EMPTY_TEXT or JournalView.NO_MATCH_TEXT)
-		self.empty:ClearAllPoints()
-		self.empty:SetPoint("TOP", self.frame, "TOPLEFT", LIST_W / 2, -(top + 60))
+		self.emptyCard:ClearAllPoints()
+		self.emptyCard:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, -top)
+		self.emptyCard:SetHeight(24 + textHeight(self.empty, 60) + 24)
 
-		local width = LIST_W - SCROLLBAR
-		self.child:SetWidth(width)
-		local first = (self.page - 1) * JournalView.PAGE_SIZE + 1
-		local y, shown = 0, 0
-		for i = first, math.min(#entries, first + JournalView.PAGE_SIZE - 1) do
-			shown = shown + 1
-			y = y + layoutRow(getRow(shown), entries[i], y, width, char)
-		end
-		for i = shown + 1, #self.rows do
-			self.rows[i]:Hide()
-		end
-		self.child:SetHeight(math.max(y, 1))
-		self.visibleCount = shown
+		local offset = JournalView.ClampOffset(self.offset, self.totalHeight, self.viewH)
+		self.scroll:SetVerticalScroll(offset)
+		self:RenderWindow(offset)
 
 		-- Right column.
-		local sideX = LIST_W + COL_GAP
+		local sideX = L.listW + L.colGap
 		local goals, places = self.goals, self.places
 		local goalsHeight = renderGoals(goals, char)
 		goals:ClearAllPoints()
 		goals:SetPoint("TOPLEFT", self.frame, "TOPLEFT", sideX, -top)
 		goals:SetHeight(goalsHeight)
 		goals:Show()
-		local placesTop = top + goalsHeight + BLOCK_GAP
-		local placesHeight = CONTENT_H - placesTop
+		local placesTop = top + goalsHeight + L.panelGap
+		local available = L.contentH - placesTop
 		places:ClearAllPoints()
 		places:SetPoint("TOPLEFT", self.frame, "TOPLEFT", sideX, -placesTop)
-		places:SetHeight(placesHeight)
-		renderPlaces(places, char, placesHeight - PANEL_TOP - Widgets.PANEL_PAD)
-		places:SetShown(placesHeight >= PANEL_TOP + Widgets.PANEL_PAD + 30)
+		local used = renderPlaces(places, char, available - L.panelTop - Widgets.PANEL_PAD)
+		places:SetHeight(math.min(available, L.panelTop + used + Widgets.PANEL_PAD))
+		places:SetShown(available >= L.panelTop + Widgets.PANEL_PAD + 30)
 	end
 
 	function section:Refresh(view)
@@ -757,10 +1094,6 @@ end
 --- Editing ---------------------------------------------------------------------
 
 local INSET = 8
-local EDIT_BUTTON_WIDTH = 50
-local DELETE_BUTTON_WIDTH = 58
-local APPROVE_BUTTON_WIDTH = 64
-local MARK_BUTTON_WIDTH = 64
 
 local function preview(text)
 	text = text or ""
@@ -773,19 +1106,20 @@ end
 --- Adds the New entry button, row Edit/Delete/Approve/Defining buttons and the entry editor.
 function JournalView.AttachEditing(section)
 	local f = section.frame
+	local W = JournalView.ACTION_WIDTHS
 
-	section.newButton = Widgets.Button(section.toolbar, "+ New entry", 112, TOOLBAR_H, "primary")
+	section.newButton = Widgets.Button(section.toolbar, "+ New entry", L.newW, CONTROL.standard, "primary")
 	section.newButton:SetPoint("LEFT", 0, 0)
 	section.newButton:SetScript("OnClick", function() section:OpenEditor(nil) end)
-	section.search:SetPoint("LEFT", section.newButton, "RIGHT", 10, 0)
+	section.search:SetPoint("LEFT", section.newButton, "RIGHT", L.toolGap, 0)
 
 	function section.decorateRow(row)
-		row.delete = Widgets.Button(row, "Delete", DELETE_BUTTON_WIDTH, 20, "danger")
+		row.delete = Widgets.Button(row, "Delete", W.Delete, CONTROL.compact, "danger")
 		row.delete:SetScript("OnClick", function() section:ConfirmDelete(row.entry) end)
-		row.edit = Widgets.Button(row, "Edit", EDIT_BUTTON_WIDTH, 20)
+		row.edit = Widgets.Button(row, "Edit", W.Edit, CONTROL.compact)
 		row.edit:SetScript("OnClick", function() section:OpenEditor(row.entry) end)
 		-- Story drafts are Dawnward's words until the player approves them.
-		row.approve = Widgets.Button(row, "Approve", APPROVE_BUTTON_WIDTH, 20, "primary")
+		row.approve = Widgets.Button(row, "Approve", W.Approve, CONTROL.compact, "primary")
 		row.approve:SetScript("OnClick", function()
 			local _, message = Actions.ApproveEntry(ns.ctx, row.entryId)
 			MainWindow.SetStatus(message)
@@ -794,7 +1128,7 @@ function JournalView.AttachEditing(section)
 		Widgets.Tooltip(row.approve, "Approve draft",
 			"Accept this draft as part of your character's story. It stays private until you change its visibility.")
 		-- Any entry can be marked as a defining moment.
-		row.mark = Widgets.Button(row, "Defining", MARK_BUTTON_WIDTH, 20, "ghost")
+		row.mark = Widgets.Button(row, "Defining", W.Defining, CONTROL.compact, "ghost")
 		row.mark:SetScript("OnClick", function()
 			local _, message = Actions.SetEntryImportant(ns.ctx, row.entryId, not (row.entry and row.entry.important))
 			MainWindow.SetStatus(message)
@@ -814,12 +1148,12 @@ function JournalView.AttachEditing(section)
 		row.delete:SetShown(written)
 		row.approve:SetShown(Journal.NeedsApproval(entry))
 		row.mark:SetSelected(entry.important)
-		local x = PAD
+		local x = L.padX
 		for _, button in ipairs(row.actions) do
 			if button:IsShown() then
 				button:ClearAllPoints()
 				button:SetPoint("TOPRIGHT", row, "TOPRIGHT", -x, -(y or 0))
-				x = x + button:GetWidth() + 6
+				x = x + button:GetWidth() + L.actionGap
 			end
 		end
 	end
@@ -862,9 +1196,9 @@ function JournalView.AttachEditing(section)
 	editor.save:SetPoint("RIGHT", editor.cancel, "LEFT", -6, 0)
 
 	-- The dashboard's parts, hidden while the editor is open. Showing them
-	-- again is RenderList's job (the callout, pager and empty state depend on data).
-	local dashboard = { section.subline, section.toolbar, section.callout, section.scroll, section.newer,
-		section.older, section.pageLabel, section.empty, section.goals, section.places }
+	-- again is RenderList's job (the callout and empty state depend on data).
+	local dashboard = { section.subline, section.toolbar, section.callout, section.scroll, section.emptyCard,
+		section.goals, section.places }
 	local function listParts(shown)
 		if shown then
 			section.subline:Show()
@@ -916,7 +1250,7 @@ function JournalView.AttachEditing(section)
 		else
 			ok, message = Actions.AddNote(ns.ctx, title, text, editor.vis.level)
 			if ok then
-				self.page = 1
+				self.offset = 0 -- the new entry is at the top
 			end
 		end
 		if ok then

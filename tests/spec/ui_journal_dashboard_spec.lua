@@ -15,9 +15,11 @@ local function turnIn(mock, id, title)
 	mock.Fire("QUEST_TURNED_IN", id, 100, 10)
 end
 
-local function typeInto(box, text)
+-- Types text and lets the search's short pause run out (mock = the client).
+local function typeInto(box, text, mock)
 	box:SetText(text)
 	box:GetScript("OnTextChanged")(box, true)
+	if mock then mock.RunTimers() end
 end
 
 local function start()
@@ -110,17 +112,19 @@ return function(t, expect)
 			mock.Fire("PLAYER_LEVEL_UP", 7) -- recorded in Goldshire, Elwynn Forest
 			mock.Slash("journal add A quiet evening by the river")
 			ns.MainWindow.Refresh()
-			typeInto(section.search, "goldshire")
+			typeInto(section.search, "gold")
+			expect.equal(section.visibleCount, 2, "nothing refreshes while the player is still typing")
+			typeInto(section.search, "goldshire", mock)
 			expect.equal(section.visibleCount, 1)
 			expect.equal(section.rows[1].entry.kind, "event", "matched by its place")
-			typeInto(section.search, "RIVER")
+			typeInto(section.search, "RIVER", mock)
 			expect.equal(section.visibleCount, 1)
 			expect.equal(section.rows[1].entry.kind, "note")
-			typeInto(section.search, "dragons")
+			typeInto(section.search, "dragons", mock)
 			expect.equal(section.visibleCount, 0)
 			expect.truthy(section.empty:IsShown())
 			expect.equal(section.empty:GetText(), ns.JournalView.NO_MATCH_TEXT)
-			typeInto(section.search, "")
+			typeInto(section.search, "", mock)
 			expect.equal(section.visibleCount, 2)
 		end)
 	end)
@@ -186,27 +190,109 @@ return function(t, expect)
 			expect.truthy(ns.JournalView.MetaText(char(env).journal[1], ns.Widgets.FormatDate):find("Level 7", 1, true))
 		end)
 
-		t:it("reuses card frames across refreshes and pages", function()
+		t:it("scrolls one long list from a small pool of reused cards", function()
 			local mock, _, ns, section = start()
-			for i = 1, 15 do mock.Slash("journal add Entry " .. i) end
+			for i = 1, 60 do mock.Slash("journal add Entry " .. i) end
 			ns.MainWindow.Refresh()
-			local first = section.rows[1]
-			expect.equal(#section.rows, 10)
-			expect.truthy(section.older:IsShown(), "the pager appears when there is more than one page")
-			click(section.older)
+			local L = ns.JournalView.LAYOUT
+			expect.equal(section.matchCount, 60, "every entry is in the one list")
+			expect.equal(section.rows[1].entry.text, "Entry 60", "newest first")
+			expect.truthy(section.maxOffset > 0, "the list scrolls")
+			-- Only the cards in view exist: a card is at least 46 + padding high.
+			local most = math.ceil(section.viewH / (46 + 2 * L.padY + L.cardGap)) + 1
+			expect.truthy(#section.rows <= most, "pool bounded by the visible area, not the journal")
+			local pool = {}
+			for _, row in ipairs(section.rows) do pool[row] = true end
+			-- Scroll through the whole list, a card at a time.
+			local step = 40
+			local offset = 0
+			while offset < section.maxOffset do
+				offset = offset + step
+				section:ScrollTo(offset)
+			end
+			expect.equal(section.offset, section.maxOffset)
+			expect.equal(section.rows[section.visibleCount].entry.text, "Entry 1", "the oldest at the end")
+			section:ScrollTo(0)
 			ns.MainWindow.Refresh()
-			expect.equal(#section.rows, 10)
-			expect.equal(section.rows[1], first)
-			expect.equal(section.visibleCount, 5)
-			expect.falsy(section.rows[6]:IsShown())
+			expect.equal(section.rows[1].entry.text, "Entry 60")
+			local created = 0
+			for _, row in ipairs(section.rows) do
+				if not pool[row] then created = created + 1 end
+			end
+			expect.truthy(#section.rows <= most + 1, "scrolling reuses the pool")
+			expect.truthy(created <= 1, "at most one card added while scrolling")
+			-- Shown cards are stacked in list order, a card gap apart, never overlapping.
+			for i = 2, section.visibleCount do
+				local above, row = section.rows[i - 1], section.rows[i]
+				local aboveTop, rowTop = -lastPoint(above)[5], -lastPoint(row)[5]
+				expect.equal(rowTop, aboveTop + above:GetHeight() + L.cardGap)
+			end
 		end)
 
-		t:it("hides the pager when everything fits on one page", function()
+		t:it("keeps the scroll position on refresh; a filter, a search or a new entry go back to the top", function()
+			local mock, _, ns, section = start()
+			for i = 1, 30 do mock.Slash("journal add Entry " .. i) end
+			ns.MainWindow.Refresh()
+			section:ScrollTo(300)
+			mock.Fire("PLAYER_LEVEL_UP", 9)
+			expect.equal(section.offset, 300, "a milestone arriving does not move the list")
+			click(section.filters.buttons[1])
+			expect.equal(section.offset, 0)
+			section:ScrollTo(300)
+			typeInto(section.search, "Entry", mock)
+			expect.equal(section.offset, 0)
+			typeInto(section.search, "", mock)
+			section:ScrollTo(300)
+			expect.equal(section.offset, 300)
+			click(section.newButton)
+			section.editor.area.edit:SetText("Fresh")
+			click(section.editor.save)
+			expect.equal(section.offset, 0)
+			expect.equal(section.rows[1].entry.text, "Fresh")
+		end)
+
+		t:it("a short journal has no scroll range and no pager", function()
 			local mock, _, ns, section = start()
 			mock.Slash("journal add Only one")
 			ns.MainWindow.Refresh()
-			expect.falsy(section.older:IsShown())
-			expect.falsy(section.newer:IsShown())
+			expect.equal(section.maxOffset, 0)
+			expect.equal(section.older, nil)
+			expect.equal(section.newer, nil)
+			expect.equal(section.visibleCount, 1)
+		end)
+
+		t:it("measures an entry once: a refresh with the same content measures nothing new", function()
+			local mock, _, ns, section = start()
+			for i = 1, 12 do mock.Slash("journal add Entry " .. i) end
+			ns.MainWindow.Refresh()
+			local measured = section.heightCount
+			ns.MainWindow.Refresh()
+			ns.MainWindow.Refresh()
+			expect.equal(section.heightCount, measured)
+			mock.Slash("journal add One more")
+			expect.equal(section.heightCount, measured + 1)
+		end)
+
+		t:it("defining moments are featured cards with a gold day; drafts wait in amber", function()
+			local mock, env, ns, section = start()
+			turnIn(mock, 30, "Draft Quest")
+			mock.Slash("story 1 1")
+			mock.Slash("journal add Plain")
+			mock.Slash("journal add Defining")
+			local list = char(env).journal
+			ns.Actions.SetEntryImportant(ns.ctx, list[#list].id, true)
+			ns.MainWindow.Refresh()
+			local byText = {}
+			for i = 1, section.visibleCount do
+				local row = section.rows[i]
+				byText[row.entry.kind == "story" and "story" or row.entry.text] = row
+			end
+			expect.truthy(byText.Defining.featured)
+			expect.equal(byText.Defining.date.day.textRole, "accentBright")
+			expect.falsy(byText.Plain.featured)
+			expect.equal(byText.Plain.date.day.textRole, "ghostText")
+			expect.equal(byText.story.chips[1].tone, "waiting")
+			expect.equal(byText.Defining.chips[1].tone, "accent")
 		end)
 	end)
 
@@ -263,20 +349,161 @@ return function(t, expect)
 			ns.MainWindow.Refresh()
 			expect.truthy(section.callout:IsShown())
 			local W, H = ns.MainWindow.ContentWidth(), ns.MainWindow.ContentHeight()
-			-- Toolbar: New entry, then search, then the filter at the right edge.
-			local searchRight = section.newButton:GetWidth() + 10 + section.search:GetWidth()
+			local L = ns.JournalView.LAYOUT
+			-- Toolbar: New entry, then search, then the filter's track at the right edge.
+			local searchRight = section.newButton:GetWidth() + L.toolGap + section.search:GetWidth()
 			local seg = section.filters.buttons
-			local segWidth = #seg * seg[1]:GetWidth() + (#seg - 1) * 2
-			local segLeft = W + lastPoint(seg[1])[4] - seg[1]:GetWidth()
-			expect.truthy(searchRight + 10 <= segLeft, "search and filter apart")
-			expect.truthy(segLeft + segWidth <= W, "filter inside the content area")
+			local segWidth = #seg * seg[1]:GetWidth() + (#seg - 1) * L.segmentGap
+			expect.equal(segWidth, L.segmentsW)
+			local trackLeft = W - section.filterTrack:GetWidth()
+			expect.equal(lastPoint(section.filterTrack)[1], "TOPRIGHT")
+			expect.truthy(searchRight + 10 <= trackLeft, "search and filter apart")
+			expect.truthy(L.trackPad + segWidth + L.trackPad <= section.filterTrack:GetWidth(), "items inside the track")
 			-- Right column: both panels stacked inside the content height.
 			local goalsTop = -lastPoint(section.goals)[5]
 			local placesTop = -lastPoint(section.places)[5]
 			expect.truthy(goalsTop + section.goals:GetHeight() <= placesTop, "goals above places")
 			expect.truthy(placesTop + section.places:GetHeight() <= H, "places inside the content area")
-			expect.equal(lastPoint(section.goals)[4], W - 270, "right column 270 wide at the right edge")
+			expect.equal(lastPoint(section.goals)[4], W - 250, "right column 250 wide at the right edge")
 			expect.equal(section.goals.shown, 3)
+		end)
+	end)
+
+	t:describe("journal dashboard: design sizes (L2, Main.dc.html)", function()
+		t:it("splits the content area like the design: list, gutter with the scroll bar, gap, right column", function()
+			local _, _, ns = start()
+			local L = ns.JournalView.LAYOUT
+			local W = ns.MainWindow.ContentWidth()
+			expect.equal(L.listW + L.colGap + L.sideW, W)
+			expect.equal(L.cardW + L.gutter, L.listW)
+			expect.equal(L.sideW, 250)
+			expect.equal(L.textX, 86, "18 padding, 52 date, 16 gap")
+			expect.truthy(L.scrollBarW <= L.gutter, "the scroll bar sits in the gutter, beside the cards")
+		end)
+
+		t:it("puts the subline under the window title and above the toolbar, without overlapping either", function()
+			local _, _, ns, section = start()
+			local L, W = ns.JournalView.LAYOUT, ns.MainWindow.LAYOUT
+			local titleBottom = W.headerTop + W.eyebrowHeight + W.titleGap + W.titleHeight -- from the window top
+			local sublineTop = W.contentTop + L.sublineTop
+			expect.truthy(sublineTop >= titleBottom, "below the title box")
+			expect.truthy(sublineTop - titleBottom <= 4, "close under the title, as in the design")
+			expect.truthy(L.sublineTop + L.sublineH <= L.toolbarTop, "above the toolbar")
+			expect.equal(lastPoint(section.subline)[3], -L.sublineTop)
+			expect.equal(section.subline:GetText(), "No entries yet")
+		end)
+
+		t:it("uses the design system's control heights in the toolbar, callout and cards", function()
+			local mock, _, ns, section = start()
+			local C = ns.Style.CONTROL
+			turnIn(mock, 10, "The Defias Brotherhood")
+			mock.Slash("journal add Words")
+			ns.MainWindow.Refresh()
+			expect.equal(section.newButton:GetHeight(), C.standard)
+			expect.equal(section.search:GetHeight(), C.input)
+			for _, b in ipairs(section.filters.buttons) do
+				expect.equal(b:GetHeight(), C.compact)
+				expect.truthy(ns.Widgets.LabelFits(b:GetText(), b:GetWidth(), b:GetHeight(), "segment"), b:GetText())
+			end
+			expect.equal(section.filterTrack:GetHeight(), C.compact + 2 * ns.JournalView.LAYOUT.trackPad)
+			expect.equal(section.callout.answer:GetHeight(), C.standard)
+			expect.equal(section.callout.later:GetHeight(), C.standard)
+			expect.truthy(ns.Widgets.LabelFits("+ New entry", section.newButton:GetWidth(), C.standard, "primary"))
+			local row = section.rows[1]
+			for _, b in ipairs({ row.edit, row.delete, row.approve, row.mark }) do
+				expect.equal(b:GetHeight(), C.compact)
+				expect.truthy(ns.Widgets.LabelFits(b:GetText(), b:GetWidth(), b:GetHeight()), b:GetText() .. " fits")
+			end
+			expect.equal(row.vis:GetHeight(), C.chip)
+		end)
+
+		t:it("sets story text in the reading style, meta in the meta style and titles in Cinzel", function()
+			local mock, _, ns, section = start()
+			mock.Slash("journal add Words")
+			ns.MainWindow.Refresh()
+			local row = section.rows[1]
+			local S = ns.Style
+			expect.equal(row.body.__template, S.FontFor("reading"))
+			expect.equal(row.meta.__template, S.FontFor("meta"))
+			expect.equal(row.title.__template, S.FontFor("GameFontNormalLarge"))
+			expect.equal(section.callout.question.__template, S.FontFor("reading"))
+			expect.equal(row.body.textRole, "reading")
+			expect.equal(row.title.textRole, "heading", "title white")
+		end)
+
+		t:it("keeps a draft's footer apart: visibility on the left, every action inside the card's text column", function()
+			local mock, _, ns, section = start()
+			turnIn(mock, 30, "Draft Quest")
+			mock.Slash("story 1 1")
+			ns.MainWindow.Refresh()
+			local L = ns.JournalView.LAYOUT
+			local row
+			for i = 1, section.visibleCount do
+				if section.rows[i].entry.kind == "story" then row = section.rows[i] end
+			end
+			expect.truthy(row.approve:IsShown() and row.edit:IsShown() and row.delete:IsShown() and row.mark:IsShown())
+			-- Actions laid from the right edge: the leftmost one ends right of the visibility chip.
+			local width = 0
+			for _, b in ipairs(row.actions) do
+				if b:IsShown() then width = width + b:GetWidth() + L.actionGap end
+			end
+			local actionsLeft = L.cardW - L.padX - (width - L.actionGap)
+			expect.truthy(actionsLeft >= L.textX + row.vis:GetWidth() + L.actionGap, "no overlap with visibility")
+			-- Title and chips share the first line without overlapping.
+			local chipsWidth = 0
+			for _, chip in ipairs(row.chips) do
+				if chip:IsShown() then chipsWidth = chipsWidth + chip:GetWidth() + L.chipGap end
+			end
+			expect.truthy(row.meta:GetWidth() + chipsWidth <= L.textW or row.title:IsShown(), "meta beside chips")
+			if row.title:IsShown() then
+				expect.truthy(row.title:GetWidth() + chipsWidth <= L.textW, "title beside chips")
+			end
+			for _, chip in ipairs(row.chips) do
+				expect.truthy(chip:GetWidth() <= L.chipMaxW, "long chips are capped (full text on hover)")
+			end
+		end)
+
+		t:it("lays the callout out like the design: disc, eyebrow and question, buttons at the right", function()
+			local mock, _, ns, section = start()
+			turnIn(mock, 10, "The Defias Brotherhood")
+			ns.MainWindow.Refresh()
+			local L = ns.JournalView.LAYOUT
+			local c = section.callout
+			expect.truthy(c:IsShown())
+			expect.truthy(c:GetHeight() >= L.calloutMinH)
+			expect.equal(lastPoint(c.question)[2], L.questionX)
+			local buttons = L.answerW + 8 + L.laterW + L.calloutPadX
+			expect.truthy(L.questionX + c.question:GetWidth() + L.discGap + buttons <= ns.MainWindow.ContentWidth(),
+				"question never runs under Answer and Later")
+			expect.equal(lastPoint(c.later)[1], "RIGHT")
+			expect.truthy(c.discEdge and c.disc and c.jewel, "icon disc")
+			-- The list starts below the callout with the design's gap.
+			expect.equal(section.listTop, L.calloutTop + c:GetHeight() + L.blockGap)
+		end)
+
+		t:it("shows an empty list as a card explaining what to do", function()
+			local _, _, ns, section = start()
+			expect.truthy(section.emptyCard:IsShown())
+			expect.equal(section.empty:GetText(), ns.JournalView.EMPTY_TEXT)
+			expect.equal(section.empty:GetParent(), section.emptyCard)
+			expect.truthy(section.emptyCard:GetHeight() >= 24 + 60 + 24)
+		end)
+
+		t:it("finds the cards in view with pure list maths", function()
+			local JV = select(3, Boot.Start()).JournalView
+			local items = { { height = 100 }, { height = 50 }, { height = 200 }, { height = 80 } }
+			expect.equal(JV.Stack(items, 12), 100 + 50 + 200 + 80 + 3 * 12)
+			expect.equal(items[3].top, 174)
+			local a, b = JV.Window(items, 0, 120)
+			expect.equal(a, 1); expect.equal(b, 2)
+			a, b = JV.Window(items, 165, 30)
+			expect.equal(a, 3); expect.equal(b, 3)
+			a, b = JV.Window(items, 380, 500)
+			expect.equal(a, 4); expect.equal(b, 4)
+			expect.equal(JV.Window({}, 0, 100), nil)
+			expect.equal(JV.ClampOffset(900, 466, 300), 166)
+			expect.equal(JV.ClampOffset(-5, 466, 300), 0)
+			expect.equal(JV.ClampOffset(50, 100, 300), 0)
 		end)
 	end)
 

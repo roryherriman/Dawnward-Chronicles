@@ -58,9 +58,10 @@ return function(t, expect)
 			local shadow = ns.Themes.Get("shadowbound")
 			expect.equal(frame.background.__color[1], shadow.background[1])
 			expect.truthy(panel.themeDescription:GetText():find("Shadowbound"))
-			-- Every themed control follows: a button's fill is the theme's surface.
-			expect.equal(panel.done.bg.__color[1], shadow.accent[1], "primary button")
-			expect.equal(panel.guide.bg.__color[1], shadow.surface[1], "default button")
+			-- Every themed control follows: a default (secondary) button is filled with the raised colour.
+			expect.equal(panel.trp3Page.approve.bg.__color[1], shadow.accent[1], "primary button")
+			expect.equal(panel.done.bg.__color[1], shadow.surfaceHover[1], "Done is secondary (one gold button per view)")
+			expect.equal(panel.guide.bg.__color[1], shadow.surfaceHover[1], "default button")
 		end)
 
 		t:it("starts new characters on Classic Dawnward, and keeps the v0.2 themes selectable", function()
@@ -115,6 +116,110 @@ return function(t, expect)
 			assert(ns.SettingsPanel.OpenPage("trp3"))
 			expect.truthy(panel.trp3:GetText():find("Total RP 3"))
 			expect.truthy(panel.trp3:GetText():find("not installed"))
+		end)
+	end)
+
+	t:describe("settings panel v0.8 layout (L2)", function()
+		-- The window scales as a whole (MainWindow: SetScale between MIN_SCALE and
+		-- MAX_SCALE), so a layout that fits in UI units fits at every window size.
+		local function topOf(widget)
+			for _, p in ipairs(widget.__points or {}) do
+				if p[1] == "TOPLEFT" then return p[#p] end
+			end
+		end
+
+		t:it("the page switcher and Done share the top row without overlapping", function()
+			local _, _, ns, panel = openSettings()
+			local L = ns.SettingsPanel.LAYOUT
+			local navWidth = #panel.nav.buttons * L.navItem
+			expect.truthy(navWidth + 16 + panel.done:GetWidth() <= ns.MainWindow.ContentWidth())
+			expect.equal(panel.done:GetHeight(), ns.Style.CONTROL.standard)
+			expect.equal(panel.nav.buttons[1]:GetHeight(), L.navHeight)
+			for _, b in ipairs(panel.nav.buttons) do
+				expect.truthy(ns.Widgets.LabelFits(b:GetText(), b:GetWidth(), b:GetHeight(), "segment"), b:GetText())
+			end
+		end)
+
+		t:it("every panel of General, Story and Data fits inside its page", function()
+			local _, _, ns, panel = openSettings()
+			for _, p in ipairs({ panel.appearance, panel.interface, panel.story, panel.backupPanel, panel.storyPanel,
+				panel.simPanel }) do
+				expect.truthy(-topOf(p) + p:GetHeight() <= panel.pageHeight, "panel inside the page")
+				expect.equal(p:GetWidth(), ns.MainWindow.ContentWidth())
+			end
+			-- Panels on one page never overlap.
+			expect.truthy(-topOf(panel.interface) >= panel.appearance:GetHeight())
+			expect.truthy(-topOf(panel.storyPanel) >= panel.backupPanel:GetHeight())
+			expect.truthy(-topOf(panel.simPanel) >= -topOf(panel.storyPanel) + panel.storyPanel:GetHeight())
+		end)
+
+		t:it("Story: one row per setting, every option shown and fitting, descriptions on one line", function()
+			local _, _, ns, panel = openSettings()
+			local S = ns.SettingsPanel
+			expect.equal(#panel.storyRows, #S.STORY_SETTINGS)
+			local rowsEnd = -topOf(panel.storyRows[#panel.storyRows]) + S.LAYOUT.row
+			expect.truthy(rowsEnd <= panel.story:GetHeight() - 36, "rows inside the Story panel")
+			for _, row in ipairs(panel.storyRows) do
+				local seg = row.control
+				expect.equal(#seg.buttons, #row.setting.values, row.setting.label .. ": every option")
+				expect.truthy(seg.width <= S.LAYOUT.control, row.setting.label .. " fits the control column")
+				for _, b in ipairs(seg.buttons) do
+					expect.truthy(ns.Widgets.LabelFits(b:GetText(), b:GetWidth(), b:GetHeight(), "segment"),
+						row.setting.label .. ": " .. b:GetText())
+				end
+				expect.truthy(ns.Style.TextWidth(row.setting.short, "meta") <= row.textWidth,
+					row.setting.label .. " description fits one line")
+				expect.truthy(ns.Style.TextWidth(row.setting.label, "label") <= row.textWidth)
+			end
+		end)
+
+		t:it("Story: exactly one option is selected per setting, and it follows the saved value", function()
+			local mock, _, ns, panel = openSettings()
+			mock.Slash("set name A")
+			assert(ns.Actions.SetStoryPref(ns.ctx, "pace", "slow"))
+			ns.MainWindow.Refresh()
+			for _, row in ipairs(panel.storyRows) do
+				local selected = 0
+				for _, b in ipairs(row.control.buttons) do
+					if b.selected then selected = selected + 1 end
+				end
+				expect.equal(selected, 1, row.setting.label)
+			end
+			local pace
+			for _, row in ipairs(panel.storyRows) do
+				if row.setting.key == "pace" then pace = row end
+			end
+			local labels = {}
+			for i, b in ipairs(pace.control.buttons) do labels[i] = b:GetText() end
+			expect.deepEqual(labels, { "Brisk (1 h)", "Standard (2 h)", "Slow (4 h)" }, "shortest to longest")
+			expect.equal(pace.control.selected, "slow")
+		end)
+
+		t:it("General: setting descriptions fit one line and every button label fits its button", function()
+			local _, _, ns, panel = openSettings()
+			for _, row in ipairs(panel.generalRows) do
+				expect.truthy(ns.Style.TextWidth(row.description:GetText(), "meta") <= row.textWidth,
+					row.name:GetText())
+			end
+			for _, b in ipairs({ panel.minimap, panel.guide, panel.setup, panel.resetSize, panel.exportBackup,
+				panel.exportShare, panel.import, panel.importStory, panel.simToggle, panel.simReset, panel.done }) do
+				expect.truthy(ns.Widgets.LabelFits(b:GetText(), b:GetWidth(), b:GetHeight()), b:GetText())
+				expect.truthy(b:GetHeight() >= ns.Style.CONTROL.compact, b:GetText() .. " uses a design-system height")
+			end
+			expect.truthy(ns.Widgets.LabelFits("Minimap button: hidden", panel.minimap:GetWidth(),
+				panel.minimap:GetHeight()))
+			expect.truthy(ns.Widgets.LabelFits("Turn off", panel.simToggle:GetWidth(), panel.simToggle:GetHeight()))
+		end)
+
+		t:it("the theme in use is marked twice: raised tile and a gold bar", function()
+			local _, _, _, panel = openSettings()
+			for i, b in ipairs(panel.themeButtons) do
+				expect.equal(b.mark:IsShown(), i == 1)
+				expect.equal(b.selected == true, i == 1)
+			end
+			click(panel.themeButtons[2])
+			expect.truthy(panel.themeButtons[2].mark:IsShown())
+			expect.falsy(panel.themeButtons[1].mark:IsShown())
 		end)
 	end)
 end

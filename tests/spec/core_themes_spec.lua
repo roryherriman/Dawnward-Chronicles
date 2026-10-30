@@ -53,6 +53,27 @@ return function(t, expect)
 			end
 		end)
 
+		t:it("uses the design system's visibility and status colours, readable on every theme", function()
+			local function hexOf(c)
+				return string.format("#%02X%02X%02X", math.floor(c[1] * 255 + 0.5), math.floor(c[2] * 255 + 0.5),
+					math.floor(c[3] * 255 + 0.5))
+			end
+			expect.equal(hexOf(Themes.VISIBILITY_COLORS.private), "#B4C6EA")
+			expect.equal(hexOf(Themes.VISIBILITY_COLORS.public), "#93D9BB")
+			expect.equal(hexOf(Themes.VISIBILITY_COLORS.secret), "#EFA9A9")
+			expect.equal(hexOf(Themes.STATUS_COLORS.waiting), "#F2C46B")
+			local dawnward = Themes.Get("dawnward")
+			expect.equal(hexOf(dawnward.background), "#0E1219", "ground")
+			expect.equal(hexOf(dawnward.panel), "#121825", "rail")
+			expect.equal(hexOf(dawnward.border), "#6B5631", "ornament line")
+			for _, theme in ipairs(Themes.LIST) do
+				for _, surface in ipairs({ "background", "panel", "surface", "surfaceHover" }) do
+					local ratio = Themes.Contrast(Themes.STATUS_COLORS.waiting, theme[surface])
+					expect.truthy(ratio >= 4.5, string.format("%s waiting on %s is %.2f:1", theme.id, surface, ratio))
+				end
+			end
+		end)
+
 		t:it("is cosmetic: no theme is tied to a class, race or faction", function()
 			local tokens = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID",
 				"Human", "Orc", "Alliance", "Horde" }

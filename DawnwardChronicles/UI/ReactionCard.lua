@@ -4,15 +4,36 @@
 -- player: "Answer" opens the Story section on that moment.
 -- Keyboard: Escape hides it like the close button (UISpecialFrames, as the
 -- copy window and the setup wizard do); the moment keeps waiting.
+--
+-- Look: the Story screen's moment in miniature (docs/design/mockups/
+-- story-director.png): the gold frame line, the eyebrow, what happened and
+-- where in the meta style, the question in reading type, and the design's
+-- compact (30 px) buttons. Its height follows the question (up to 3 lines).
 local _, ns = ...
 local Widgets, MainWindow, Actions, Reactions, Style = ns.Widgets, ns.MainWindow, ns.Actions, ns.Reactions, ns.Style
 
 local ReactionCard = {}
 ns.ReactionCard = ReactionCard
 
-ReactionCard.WIDTH, ReactionCard.HEIGHT = 400, 116
+ReactionCard.WIDTH = 400
+ReactionCard.LAYOUT = { pad = 16, top = 14, eyebrowH = 18, metaH = 18, gap = 8, buttonH = Style.CONTROL.compact,
+	close = 28, question = { size = 16, spacing = 4, maxLines = 3 } }
+local L = ReactionCard.LAYOUT
+L.questionW = ReactionCard.WIDTH - 2 * L.pad
+
+--- Card height for a question of lines lines. Pure.
+function ReactionCard.Height(lines)
+	lines = math.max(1, math.min(lines or 1, L.question.maxLines))
+	local q = lines * L.question.size + (lines - 1) * L.question.spacing
+	return L.top + L.eyebrowH + L.metaH + L.gap + q + 14 + L.buttonH + L.pad
+end
+ReactionCard.HEIGHT = ReactionCard.Height(2)
 
 local card
+
+local function width(text)
+	return math.ceil(Style.TextWidth(text, "buttonSmall")) + 24
+end
 
 local function build()
 	card = CreateFrame("Frame", "DawnwardChroniclesReactionCard", UIParent)
@@ -26,19 +47,19 @@ local function build()
 	end
 	Style.Chrome(card, "background")
 	card.background = card.chrome.fill
-	card.title = Widgets.Label(card, "GameFontNormalSmall", false, "eyebrow")
-	card.title:SetPoint("TOPLEFT", 16, -14)
+	card.title = Widgets.Label(card, nil, false, "eyebrow")
+	card.title:SetPoint("TOPLEFT", L.pad, -L.top)
 	card.title:SetText("A MOMENT FOR YOUR STORY")
 	-- What happened and where, from the event record (as in the Story section).
-	card.meta = Widgets.Label(card, "GameFontHighlightSmall", false, "muted")
-	card.meta:SetPoint("TOPRIGHT", -44, -15)
-	card.meta:SetJustifyH("RIGHT")
-	card.meta:SetWidth(ReactionCard.WIDTH - 220)
-	card.question = Widgets.Label(card, "GameFontHighlight", true, "body")
-	card.question:SetPoint("TOPLEFT", 16, -34)
-	card.question:SetWidth(ReactionCard.WIDTH - 32)
-	card.answer = Widgets.Button(card, "Answer", 96, 22, "primary")
-	card.answer:SetPoint("BOTTOMLEFT", 16, 14)
+	card.meta = Widgets.Label(card, "meta", false, "muted")
+	-- On its own line under the eyebrow, so a long place name is not cut.
+	card.meta:SetPoint("TOPLEFT", L.pad, -(L.top + L.eyebrowH))
+	card.meta:SetWidth(L.questionW - L.close)
+	card.question = Widgets.Label(card, "reading", true, "title")
+	card.question:SetPoint("TOPLEFT", L.pad, -(L.top + L.eyebrowH + L.metaH + L.gap))
+	card.question:SetWidth(L.questionW)
+	card.answer = Widgets.Button(card, "Answer", width("Answer") + 12, L.buttonH, "primary")
+	card.answer:SetPoint("BOTTOMLEFT", L.pad, L.pad)
 	card.answer:SetScript("OnClick", function()
 		local id = card.reactionId
 		card:Hide()
@@ -50,21 +71,22 @@ local function build()
 		end
 		MainWindow.Select("story")
 	end)
-	card.later = Widgets.Button(card, "Later", 80, 22, "ghost")
-	card.later:SetPoint("LEFT", card.answer, "RIGHT", 6, 0)
+	card.later = Widgets.Button(card, "Later", width("Later"), L.buttonH, "ghost")
+	card.later:SetPoint("LEFT", card.answer, "RIGHT", 8, 0)
 	card.later:SetScript("OnClick", function()
 		Actions.PostponeReaction(ns.ctx, card.reactionId)
 		card:Hide()
 		MainWindow.Refresh()
 	end)
-	card.dismiss = Widgets.Button(card, "Dismiss", 80, 22, "danger")
-	card.dismiss:SetPoint("BOTTOMRIGHT", -16, 14)
+	card.dismiss = Widgets.Button(card, "Dismiss", width("Dismiss"), L.buttonH, "danger")
+	card.dismiss:SetPoint("BOTTOMRIGHT", -L.pad, L.pad)
 	card.dismiss:SetScript("OnClick", function()
 		Actions.DismissReaction(ns.ctx, card.reactionId)
 		card:Hide()
 		MainWindow.Refresh()
 	end)
 	card.close = Widgets.IconButton(card, "X", "Close", "Hide this card. The moment keeps waiting in the Story section.")
+	card.close:SetSize(L.close, L.close)
 	card.close:SetPoint("TOPRIGHT", -10, -10)
 	card.close:SetScript("OnClick", function() card:Hide() end)
 	card:RegisterEvent("PLAYER_REGEN_DISABLED")
@@ -89,6 +111,15 @@ function ReactionCard.Show(reactionId)
 	end
 	card.reactionId = reactionId
 	card.question:SetText(view.question)
+	-- The card grows with the question; a longer one is cut at three lines
+	-- (the Story section shows it whole).
+	-- Measured a little narrow (as the Chronicle does, 0.96) so a line the
+	-- client wraps sooner than the estimate still gets its room.
+	local lines = ns.StoryView and ns.StoryView.WrapLines(view.question, "reading", L.question.size,
+		L.questionW * 0.96) or 2
+	lines = math.min(lines, L.question.maxLines)
+	if card.question.SetMaxLines then card.question:SetMaxLines(L.question.maxLines) end
+	card:SetHeight(ReactionCard.Height(lines))
 	local record = view.record
 	local meta = {}
 	if record then
@@ -109,4 +140,3 @@ end
 function ReactionCard.Frame()
 	return card
 end
-

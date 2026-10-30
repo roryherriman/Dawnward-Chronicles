@@ -75,6 +75,9 @@ Story pacing follows a per-character **narrative clock** that only advances whil
 - A **narrative day** is 2 hours of play by default. Choose Brisk (1 hour) or Slow (4 hours) in Settings → Story.
 - Returning to a place that matters can become a moment after **one narrative day away**, at most once per place every **seven narrative days**. Crossing a zone border back and forth earns nothing.
 
+### Import your existing story
+Paste a backstory you already wrote, or read your Total RP 3 About text (read-only). It is kept word for word, and you approve, edit or skip each sentence before it becomes part of your character (Private by default). Character → Import story, or `/dawnward biography`.
+
 ### Memories, goals and arcs
 - Memories linked to what happened and where. Suggested memories wait for you to accept or reject them.
 - Long-term arcs with turning points, suggested when your answers share a theme.
@@ -100,11 +103,16 @@ Dawnward works fully without [Total RP 3](https://github.com/Total-RP/Total-RP-3
 - conflicts, backups and rollback;
 - which TRP3 fields Dawnward never writes.
 
-Sync is **experimental and off by default**:
-- **Approval:** opt-in per character and per TRP3 profile, and it writes only after you approve.
-- **What it writes:** only into a section Dawnward owns.
-- **Safety:** a backup before every write, and a read-back that undoes the write at once if anything differs.
-- **Conflicts:** it stops when you have edited something in TRP3, and never overwrites what you wrote yourself.
+Sync is **experimental and off by default**. Once you authorise it, it keeps your **Public** information up to date in Total RP 3 by itself:
+- **What it can manage:**
+  - Dawnward's own biography section and personality traits;
+  - Title, Race, Class, Age and Homeland (shown as Birthplace), each with its own setting: managed by Dawnward, managed by Total RP 3 (the default), or not synchronised.
+- **Your own values stay yours:** Dawnward writes a field only while it is empty or still holds exactly what Dawnward last wrote. If you or another addon changed it, that field pauses until you choose **Keep yours** or **Use Dawnward's**.
+- **Approval:** opt-in per character and per TRP3 profile, after a preview of exactly what would be written; a shared profile is flagged.
+- **Safety:** a backup before every write (the state before Dawnward's first write is always kept), and a read-back that undoes the write at once if anything differs.
+- **Rollback:** it shows anything no longer Public before restoring, and by default never makes it visible again.
+- **Import from TRP3:** always explicit (Private by default).
+- **Never written:** first and last name, pronouns, Currently/OOC and the other fields listed on the page.
 
 ### Privacy guarantees
 - **Private and Secret never leave Dawnward.** They never reach Total RP 3 or a share export.
@@ -192,6 +200,9 @@ Approved designs are listed separately: an approved mockup is a design, not a fe
 | **Modern interface and accessibility** *(new)* | The approved v0.7 design: character rail, cards, chips, bundled fonts, six themes, keyboard navigation, inline validation, scale to fit | 🧪 v0.6–v0.7 ([#17](https://github.com/roryherriman/Dawnward-Chronicles/issues/17)) |
 | **First-time setup wizard** *(new)* | Six guided steps for a new character, with drafts you can resume | 🧪 v0.6–v0.7 ([#51](https://github.com/roryherriman/Dawnward-Chronicles/issues/51), [#16](https://github.com/roryherriman/Dawnward-Chronicles/issues/16)) |
 | **TRP3 sync management screen** *(new)* | Status, linked profile, public preview, proposed changes, conflicts, backups and rollback on one page; uses the existing guarded sync | 🧪 v0.7 |
+| **Automatic TRP3 field sync** *(new)* | Title, Race, Class, Age and Homeland kept up to date from Public values; per-field ownership; conflicts pause; visibility-aware rollback | 🧪 v0.8-dev; multiplayer ⛔ untested ([#7](https://github.com/roryherriman/Dawnward-Chronicles/issues/7), [#15](https://github.com/roryherriman/Dawnward-Chronicles/issues/15)) |
+| **Story import** *(new)* | Paste or read your existing backstory; every sentence approved by you before it becomes canon | 🧪 v0.8-dev ([#23](https://github.com/roryherriman/Dawnward-Chronicles/issues/23), [#16](https://github.com/roryherriman/Dawnward-Chronicles/issues/16)) |
+| **Context-aware Story Director** *(new)* | Uses your goals, arcs, memories, stances, homeland and standings; recalls earlier answers; no repeated questions; continuity review with examine, explain and undo | 🧪 v0.8-dev ([#20](https://github.com/roryherriman/Dawnward-Chronicles/issues/20), [#25](https://github.com/roryherriman/Dawnward-Chronicles/issues/25), [#42](https://github.com/roryherriman/Dawnward-Chronicles/issues/42)) |
 | **Dungeon bosses, relationship graph, scrapbook, letters** | Boss detection, family-tree views, scrapbook and alternate journal formats | 🗺️ [#11](https://github.com/roryherriman/Dawnward-Chronicles/issues/11), [#37](https://github.com/roryherriman/Dawnward-Chronicles/issues/37), [#41](https://github.com/roryherriman/Dawnward-Chronicles/issues/41), [#31](https://github.com/roryherriman/Dawnward-Chronicles/issues/31) |
 | **Immersive journal redesign** | The customisable fantasy journal | 🚧 v0.7 design implemented, in-game check pending ([#17](https://github.com/roryherriman/Dawnward-Chronicles/issues/17)) |
 
@@ -232,7 +243,8 @@ Approved designs are listed separately: an approved mockup is a design, not a fe
 | **0.4** (PR [#43](https://github.com/roryherriman/Dawnward-Chronicles/pull/43), [#47](https://github.com/roryherriman/Dawnward-Chronicles/pull/47)) | The living chronicle: events, moments, decisions, personality evolution, story journal, TRP3 presentation, memories, arcs, goals, persona and convictions, people, world events, origins and places | ✅ core features owner-tested in game on 2026-10-26 ([results](docs/COMPATIBILITY.md)); some checklist parts still open |
 | **0.5** (PR [#52](https://github.com/roryherriman/Dawnward-Chronicles/pull/52)) | Forms for every record, Chronicle layout fix, Places tab, minimap button, guide, weighted place moments, Zone Atlas | 🧪 automated; atlas export and scan ✅ in game |
 | **0.6** (PR [#54](https://github.com/roryherriman/Dawnward-Chronicles/pull/54)) | Design system and themes, first-time setup wizard, keyboard navigation, inline validation, entry rows, developer diagnostics | 🧪 automated; in-game checklist parts N to P not yet run |
-| **0.7-dev** | Gameplay-time Story Director, the approved v0.7 interface (rail, Journal dashboard, Character profile and Showcase, Story Director, Chronicle cards and Places, setup wizard), the Total RP 3 page, bundled fonts | 🧪 automated; in-game checklist parts Q to S pending |
+| **0.7** | Gameplay-time Story Director, the approved v0.7 interface (rail, Journal dashboard, Character profile and Showcase, Story Director, Chronicle cards and Places, setup wizard), the Total RP 3 page, bundled fonts; 0.7.1: live model fix, resizable window | 🧪 automated; first in-game inspection done by the owner (fixes in 0.7.1); checklist parts Q to T pending |
+| **0.8-dev** (pre-playthrough candidate) | Automatic TRP3 field sync with per-field ownership, story import, own axis words and locks, context-aware Story Director with repetition control, continuity review, verified atlas evidence, calmer timing, v0.8 visual refinement | 🧪 automated; first-playthrough checklist [part U](docs/TESTING.md) pending |
 | **Release gate** | WoW Forever compatibility and launch readiness | ⛔ [#24](https://github.com/roryherriman/Dawnward-Chronicles/issues/24) |
 
 ### Compatibility
@@ -241,7 +253,7 @@ Approved designs are listed separately: an approved mockup is a design, not a fe
 |---|---|
 | WoW Classic Era 1.15.9 | Primary development client. Client APIs are checked against Blizzard's 1.15.9 interface source; the v0.7 interface awaits in-game verification. |
 | WoW Forever | **Pending verification.** Nothing has been tested on a Forever client, and no compatibility is claimed. |
-| Total RP 3 3.4.1 | Read-only status verified in game. Opt-in sync, editor protection, backup and rollback owner-tested in game; the new management page is tested against a mock only. |
+| Total RP 3 3.4.1 | Read-only status verified in game. Opt-in biography/traits sync, editor protection, backup and rollback owner-tested in game. The management page and the automatic field sync (v0.8) are tested against a mock only; multiplayer propagation is not verified. |
 | Total RP 3, other versions | Read-only status only; sync refuses versions not on its allowlist. |
 | Languages | The bundled fonts cover Latin-script clients; other clients use the game's own fonts. Only English text is provided. |
 

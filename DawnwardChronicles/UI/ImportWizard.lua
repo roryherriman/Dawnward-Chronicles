@@ -19,6 +19,10 @@
 --                removes it for good; Later moves on and keeps it waiting.
 -- Nothing becomes canon without Approve, and every write goes through
 -- Actions.WithCharacter (read-only data refused).
+--
+-- Look (v0.8): the setup wizard's header (eyebrow, Cinzel title, subtitle,
+-- 36 px close), 36 px inputs and buttons, the split choice as a segmented
+-- control showing both options, notes in plain panels.
 local _, ns = ...
 local Widgets, Style, Schema, MainWindow = ns.Widgets, ns.Style, ns.Schema, ns.MainWindow
 
@@ -27,7 +31,8 @@ ns.ImportWizard = ImportWizard
 
 ImportWizard.FRAME_NAME = "DawnwardChroniclesStoryImport"
 ImportWizard.STRATA = "HIGH" -- like the setup wizard; raised over it when opened from there
-ImportWizard.LAYOUT = { width = 760, height = 580, pad = 28, top = 22, bodyTop = 100, footer = 64, area = 280 }
+ImportWizard.LAYOUT = { width = 760, height = 580, pad = 28, top = 22, bodyTop = 126, footer = 64, area = 240,
+	control = 36, label = 120, quote = 130, note = 62 }
 -- The paste box accepts a little more than can be saved, so an over-long
 -- paste is shown and named rather than cut off silently by the box.
 ImportWizard.OVERFLOW = 4096
@@ -44,6 +49,7 @@ ImportWizard.TEXT_NOTE = "Saved word for word, line breaks and all. Dawnward spl
 ImportWizard.REVIEW_NOTE = "Approve adds this to your character's canon (Private unless you choose). Skip "
 	.. "means it is not suggested again. Later keeps it waiting. Your saved story is never changed."
 ImportWizard.MODE_LABELS = { sentence = "Split: by sentence", paragraph = "Split: by paragraph" }
+ImportWizard.MODES = { { id = "sentence", label = "By sentence" }, { id = "paragraph", label = "By paragraph" } }
 
 local L = ImportWizard.LAYOUT
 local BODY = L.width - 2 * L.pad
@@ -119,7 +125,21 @@ end
 
 local function setStatus(text)
 	wizard.status:SetText(text or "")
+	-- Two lines on the window; the whole message on hover.
+	Widgets.Tooltip(wizard.statusHover, (text and text ~= "") and "Status" or nil, text)
 	if MainWindow.SetStatus and text then MainWindow.SetStatus(text) end
+end
+
+-- A plain panel holding one note paragraph (meta 14, at most two lines).
+local function notePanel(p, y, text)
+	local note = Widgets.Panel(p, nil)
+	note:SetPoint("TOPLEFT", 0, y)
+	note:SetSize(BODY, L.note)
+	local fs = label(note.inner, "meta", true, "muted", 0, 0, BODY - 2 * Widgets.PANEL_PAD)
+	fs:SetMaxLines(2)
+	fs:SetText(text)
+	note.text = fs
+	return note
 end
 
 local function buildText()
@@ -130,33 +150,35 @@ local function buildText()
 	wizard.area.frame:SetSize(BODY, L.area)
 	wizard.edit = wizard.area.edit
 	wizard.edit:SetScript("OnTextChanged", function() ImportWizard.UpdateCount() end)
-	wizard.count = label(p, "GameFontHighlightSmall", false, "muted", 0, -L.area - 6, BODY)
+	wizard.count = label(p, "meta", false, "muted", 0, -L.area - 6, BODY)
 
-	local y = -L.area - 30
-	wizard.readTRP3 = Widgets.Button(p, "Read from Total RP 3", 170, 26)
+	local y = -L.area - 34
+	wizard.readTRP3 = Widgets.Button(p, "Read from Total RP 3", 180, L.control)
 	wizard.readTRP3:SetPoint("TOPLEFT", 0, y)
 	wizard.readTRP3:SetScript("OnClick", function() ImportWizard.FillFromTRP3() end)
 	Widgets.Tooltip(wizard.readTRP3, "Read from Total RP 3", "Copies your own About text from your active Total RP 3 "
 		.. "profile into the box (without anything Dawnward added there). Read-only: Total RP 3 is not changed.")
-	wizard.loadSaved = Widgets.Button(p, "Load saved story", 150, 26)
+	wizard.loadSaved = Widgets.Button(p, "Load saved story", 160, L.control)
 	wizard.loadSaved:SetPoint("LEFT", wizard.readTRP3, "RIGHT", 8, 0)
 	wizard.loadSaved:SetScript("OnClick", function() ImportWizard.FillFromSaved() end)
 	Widgets.Tooltip(wizard.loadSaved, "Load saved story", "Puts the story you saved last into the box, to add to it "
 		.. "or revise it. Importing again suggests only the new parts.")
-	wizard.mode = Widgets.Button(p, "", 190, 26, "choice")
-	wizard.mode:SetPoint("LEFT", wizard.loadSaved, "RIGHT", 8, 0)
-	wizard.mode:SetScript("OnClick", function()
-		wizard.modeValue = wizard.modeValue == "sentence" and "paragraph" or "sentence"
+	-- How to split: both options visible, the one in use selected.
+	local modeWidth = 2 * 116
+	wizard.mode = Widgets.Segmented(p, ImportWizard.MODES, modeWidth, L.control, function(id)
+		wizard.modeValue = id
 		ImportWizard.Refresh()
 	end)
-	Widgets.Tooltip(wizard.mode, "How to split", "By sentence: one piece per sentence (best for long prose). By "
-		.. "paragraph: one piece per paragraph (long ones are cut into parts at word boundaries).")
+	wizard.mode.buttons[1]:SetPoint("TOPLEFT", BODY - modeWidth, y)
+	wizard.modeLabel = Widgets.Label(p, "GameFontNormal", false, "heading")
+	wizard.modeLabel:SetPoint("RIGHT", wizard.mode.buttons[1], "LEFT", -10, 0)
+	wizard.modeLabel:SetText("Split")
+	for _, b in ipairs(wizard.mode.buttons) do
+		Widgets.Tooltip(b, ImportWizard.MODE_LABELS[b.segmentId], "By sentence: one piece per sentence (best for "
+			.. "long prose). By paragraph: one piece per paragraph (long ones are cut into parts at word boundaries).")
+	end
 
-	local note = Widgets.Callout(p, nil)
-	note:SetPoint("TOPLEFT", 0, y - 40)
-	note:SetSize(BODY, 62)
-	label(note.inner, "GameFontHighlightSmall", true, "small", 0, 0, BODY - 2 * Widgets.PANEL_PAD)
-		:SetText(ImportWizard.TEXT_NOTE)
+	wizard.textNote = notePanel(p, y - L.control - 12, ImportWizard.TEXT_NOTE)
 end
 
 local function buildReview()
@@ -165,26 +187,32 @@ local function buildReview()
 
 	local quote = Widgets.Panel(p, "From your story")
 	quote:SetPoint("TOPLEFT", 0, -26)
-	quote:SetSize(BODY, 120)
-	wizard.ref = label(quote.inner, "GameFontHighlightSmall", false, "muted", 0, 0, BODY - 2 * Widgets.PANEL_PAD)
-	wizard.excerpt = label(quote.inner, "GameFontHighlight", true, "body", 0, -18, BODY - 2 * Widgets.PANEL_PAD)
+	quote:SetSize(BODY, L.quote)
+	wizard.quote = quote
+	local qW = BODY - 2 * Widgets.PANEL_PAD
+	wizard.ref = label(quote.inner, "meta", false, "muted", 0, 0, qW)
+	wizard.excerpt = label(quote.inner, "reading", true, "reading", 0, -20, qW)
+	wizard.excerpt:SetMaxLines(3)
+	-- A long piece is cut to three lines here; the whole of it is on hover.
+	wizard.excerptHover = CreateFrame("Frame", nil, quote)
+	wizard.excerptHover:SetAllPoints(quote)
 
-	local y = -162
-	label(p, "GameFontNormal", false, "heading", 0, y - 6, 110):SetText("As a fact")
-	wizard.statement = Widgets.EditLine(p, Schema.FOUNDATION.statement + 64)
-	wizard.statement:SetPoint("TOPLEFT", 120, y)
-	wizard.statement:SetWidth(BODY - 120)
+	local y = -26 - L.quote - 14
+	label(p, "GameFontNormal", false, "heading", 0, y - 10, L.label - 10):SetText("As a fact")
+	wizard.statement = Widgets.EditLine(p, Schema.FOUNDATION.statement + 64, L.control)
+	wizard.statement:SetPoint("TOPLEFT", L.label, y)
+	wizard.statement:SetWidth(BODY - L.label)
 	wizard.statement:SetScript("OnTextChanged", function(_, userInput)
 		if userInput then ImportWizard.RememberEdits() end
 	end)
 	-- After the script above: the error line hooks it.
-	wizard.statementError = Widgets.FieldError(wizard.statement, BODY - 120)
+	wizard.statementError = Widgets.FieldError(wizard.statement, BODY - L.label)
 	wizard.statement:SetScript("OnEnterPressed", function() ImportWizard.Approve() end)
 
-	y = y - 50
-	label(p, "GameFontNormal", false, "heading", 0, y - 6, 110):SetText("Category")
-	wizard.category = Widgets.Button(p, "", 260, 26, "choice")
-	wizard.category:SetPoint("TOPLEFT", 120, y)
+	y = y - L.control - 24
+	label(p, "GameFontNormal", false, "heading", 0, y - 10, L.label - 10):SetText("Category")
+	wizard.category = Widgets.Button(p, "", 300, L.control, "choice")
+	wizard.category:SetPoint("TOPLEFT", L.label, y)
 	wizard.category:SetScript("OnClick", function() ImportWizard.CycleCategory() end)
 	Widgets.Tooltip(wizard.category, "Category", "Click for the next category. A suggested category is only a "
 		.. "guess from a few words; change it freely.")
@@ -192,32 +220,29 @@ local function buildReview()
 		button:SetLevel(level)
 		ImportWizard.RememberEdits()
 	end)
+	wizard.vis:SetSize(84, Style.CONTROL.compact)
 	wizard.vis:SetPoint("LEFT", wizard.category, "RIGHT", 12, 0)
 
-	y = y - 46
-	wizard.approve = Widgets.Button(p, "Approve", 120, 28, "primary")
-	wizard.approve:SetPoint("TOPLEFT", 120, y)
+	y = y - L.control - 14
+	wizard.approve = Widgets.Button(p, "Approve", 130, L.control, "primary")
+	wizard.approve:SetPoint("TOPLEFT", L.label, y)
 	wizard.approve:SetScript("OnClick", function() ImportWizard.Approve() end)
 	Widgets.Tooltip(wizard.approve, "Approve", "Add this to your character's canon, as written in the box.")
-	wizard.skip = Widgets.Button(p, "Skip", 90, 28, "danger")
+	wizard.skip = Widgets.Button(p, "Skip", 96, L.control, "danger")
 	wizard.skip:SetPoint("LEFT", wizard.approve, "RIGHT", 8, 0)
 	wizard.skip:SetScript("OnClick", function() ImportWizard.Skip() end)
 	Widgets.Tooltip(wizard.skip, "Skip", "Not part of your canon. It will not be suggested again (your saved story "
 		.. "keeps it).")
-	wizard.later = Widgets.Button(p, "Later", 90, 28, "ghost")
+	wizard.later = Widgets.Button(p, "Later", 96, L.control, "ghost")
 	wizard.later:SetPoint("LEFT", wizard.skip, "RIGHT", 8, 0)
 	wizard.later:SetScript("OnClick", function() ImportWizard.Move(1) end)
 	Widgets.Tooltip(wizard.later, "Later", "Keep it waiting and show the next piece.")
-	wizard.previous = Widgets.Button(p, "Previous", 90, 28, "ghost")
+	wizard.previous = Widgets.Button(p, "Previous", 96, L.control, "ghost")
 	wizard.previous:SetPoint("LEFT", wizard.later, "RIGHT", 8, 0)
 	wizard.previous:SetScript("OnClick", function() ImportWizard.Move(-1) end)
 
-	local note = Widgets.Callout(p, nil)
-	note:SetPoint("TOPLEFT", 0, y - 46)
-	note:SetSize(BODY, 62)
-	label(note.inner, "GameFontHighlightSmall", true, "small", 0, 0, BODY - 2 * Widgets.PANEL_PAD)
-		:SetText(ImportWizard.REVIEW_NOTE)
-	wizard.empty = label(p, "GameFontHighlight", true, "muted", 0, -30, BODY)
+	wizard.reviewNote = notePanel(p, y - L.control - 12, ImportWizard.REVIEW_NOTE)
+	wizard.empty = label(p, "reading", true, "reading", 0, -30, BODY)
 end
 
 local function build()
@@ -237,24 +262,29 @@ local function build()
 
 	wizard.eyebrow = label(wizard, "GameFontNormalSmall", false, "eyebrow", L.pad, -L.top)
 	wizard.eyebrow:SetText("STORY IMPORT")
-	wizard.title = label(wizard, "GameFontNormalLarge", false, "title", L.pad, -L.top - 18)
-	wizard.subtitle = label(wizard, "GameFontHighlight", true, "muted", L.pad, -L.top - 46, BODY - 40)
+	wizard.title = label(wizard, "GameFontNormalHuge", false, "title", L.pad, -L.top - 20)
+	wizard.subtitle = label(wizard, "GameFontHighlight", true, "muted", L.pad, -L.top - 60, BODY - 48)
+	Widgets.SetTextRole(wizard.subtitle, "navText")
+	wizard.subtitle:SetMaxLines(2)
 	wizard.close = Widgets.IconButton(wizard, "X", "Close", "Close. What you saved is kept; pieces you have not "
 		.. "reviewed keep waiting.")
-	wizard.close:SetSize(30, 30)
-	wizard.close:SetPoint("TOPRIGHT", -L.pad + 6, -L.top + 6)
+	wizard.close:SetSize(Style.CONTROL.icon, Style.CONTROL.icon)
+	wizard.close:SetPoint("TOPRIGHT", -L.pad, -L.top)
 	wizard.close:SetScript("OnClick", function() ImportWizard.Close() end)
 
 	buildText()
 	buildReview()
 
-	wizard.status = Widgets.Label(wizard, "GameFontHighlightSmall", true, "muted")
-	wizard.status:SetPoint("BOTTOMLEFT", L.pad, 24)
-	wizard.status:SetWidth(BODY - 330)
-	wizard.primary = Widgets.Button(wizard, "", 170, 30, "primary")
-	wizard.primary:SetPoint("BOTTOMRIGHT", -L.pad, 18)
+	wizard.status = Widgets.Label(wizard, "meta", true, "muted")
+	wizard.status:SetPoint("BOTTOMLEFT", L.pad, 18)
+	wizard.status:SetWidth(BODY - 380)
+	wizard.status:SetMaxLines(2)
+	wizard.statusHover = CreateFrame("Frame", nil, wizard)
+	wizard.statusHover:SetAllPoints(wizard.status)
+	wizard.primary = Widgets.Button(wizard, "", 180, L.control, "primary")
+	wizard.primary:SetPoint("BOTTOMRIGHT", -L.pad, 16)
 	wizard.primary:SetScript("OnClick", function() ImportWizard.Primary() end)
-	wizard.secondary = Widgets.Button(wizard, "", 140, 30)
+	wizard.secondary = Widgets.Button(wizard, "", 180, L.control)
 	wizard.secondary:SetPoint("RIGHT", wizard.primary, "LEFT", -10, 0)
 	wizard.secondary:SetScript("OnClick", function() ImportWizard.Secondary() end)
 
@@ -337,7 +367,7 @@ function ImportWizard.Refresh()
 	local char = character()
 	local counts = ns.StoryImport.Counts(char)
 	if onText then
-		wizard.mode:SetText(ImportWizard.MODE_LABELS[wizard.modeValue] .. "  ›")
+		wizard.mode:Select(wizard.modeValue)
 		wizard.loadSaved:SetEnabled(char ~= nil and ns.Sources.Current(char) ~= nil)
 		ImportWizard.UpdateCount()
 		wizard.primary:SetText("Save and review")
@@ -347,8 +377,8 @@ function ImportWizard.Refresh()
 	local item, items = current()
 	wizard.primary:SetText("Done")
 	wizard.secondary:SetText("Back to text")
-	local controls = { wizard.statement, wizard.category, wizard.vis, wizard.approve, wizard.skip, wizard.later,
-		wizard.previous }
+	local controls = { wizard.quote, wizard.statement, wizard.category, wizard.vis, wizard.approve, wizard.skip,
+		wizard.later, wizard.previous }
 	for _, c in ipairs(controls) do c:SetShown(item ~= nil) end
 	wizard.empty:SetShown(item == nil)
 	wizard.progress:SetText(item and string.format("Piece %d of %d waiting  ·  %d approved  ·  %d skipped",
@@ -366,6 +396,7 @@ function ImportWizard.Refresh()
 	wizard.ref:SetText(ns.StoryImport.RefText(item.ref) .. (item.origin == "trp3-biography" and "  ·  from Total RP 3"
 		or ""))
 	wizard.excerpt:SetText(item.excerpt or item.statement)
+	Widgets.Tooltip(wizard.excerptHover, "From your story", item.excerpt or item.statement)
 	if wizard.shownKey ~= item.key then
 		wizard.statement:SetText(e.statement or item.statement)
 		Widgets.SetFieldError(wizard.statement, nil)

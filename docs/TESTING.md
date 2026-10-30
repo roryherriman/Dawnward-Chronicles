@@ -735,6 +735,65 @@ Run these first on the new build. Report each step as pass or fail, with any Lua
 | T13 | Settings → Total RP 3 with backups | Each backup shows its name, and its full date on a second line, without crowding |
 | T14 | Settings → Story | Each button reads like "Moments: Normal  ›"; clicking moves to the next option; the tooltip lists all options with the current one in [brackets] |
 
+#### Part U: the first full playthrough (0.8.0-dev, pre-playthrough candidate)
+
+Build: **0.8.0-dev** from `main`. Everything below passed automated tests (L2) only.
+
+**Before you start:**
+- Close the game. Back up `Interface\AddOns\DawnwardChronicles` and `WTF\Account\<account>\SavedVariables\DawnwardChronicles*.lua`, plus Total RP 3's saved files.
+- Install the new package.
+- Use a **new character** for U1, and your existing test character for the rest.
+- For Total RP 3, use a **spare, non-default profile**.
+- Turn on Lua errors (`/console scriptErrors 1`) and report every error with its text.
+
+Parts **T** (the 0.7.1 fixes) and **Q** (gameplay time) still apply; the steps below refer to them where they cover the same ground.
+
+| # | Area | Steps | Pass when |
+|---|---|---|---|
+| U1 | New-character onboarding | Log in on a brand-new character | The setup wizard opens by itself once. Go through all six steps, and on the Character step use **Import a story...** with a short backstory. Close it mid-way, `/reload`: it resumes where you left off. Finish: the journal opens; nothing is sent to Total RP 3 |
+| U2 | Character profile | Character: fill name, title, pronouns, homeland, faith, summary; set some Public, one Secret; **Preview public view** | The preview shows only Public fields; the Secret one appears nowhere |
+| U3 | Story import | `/dawnward biography`: approve one piece (edited), skip one, keep one for later; approve one as Public | Only approved pieces become facts (Private by default). Public asks first and shows the exact text. Re-saving the same story suggests only new sentences |
+| U4 | Character Showcase | Character → **Showcase** | The live model in your gear (else run `/dawnward dev showcase` and send the lines). Portrait ↔ live model switches every time (part T1–T6) |
+| U5 | Resizable window | Drag the gold grip; `/reload`; Settings → General → Reset window size | Part T7–T10 |
+| U6 | Journal and memories | Level up, complete quests, write an entry, answer moments | Entries appear with date, place and level. Search and filters work. Making an entry Public asks first. Memories show in Chronicle |
+| U7 | Story Director | Play normally for an hour or two | Moments appear at calm moments only: never in combat, while AFK, or inside a dungeon. "Why now" reads true. The same question about the same place is not asked again within 3 narrative days. `/dawnward dev story status` explains every suppression |
+| U8 | Narrative gameplay time | `/dawnward dev story status` now and after an hour offline | The clock counts play only (part Q). Story pace in Settings → Story changes the day length |
+| U9 | Goals and arcs | Add a level goal and a reputation goal; get an arc suggestion and remove it | Progress follows verified level-ups and standing changes, and "why now" mentions the goal. No goal completes by itself. A removed arc suggestion is not suggested again |
+| U10 | Personality development | Answer a moment that proposes a change; approve one, reject one, reverse one. Lock an axis (click it in Character → Personality) | Nothing changes without your approval. A locked axis is never proposed. Your own axis words show |
+| U11 | Location returns | Mark a place meaningful or set your Homeland; leave for one narrative day of play; come back | One return moment. Crossing back and forth again asks nothing. Lion's Pride Inn is logged under Elwynn Forest (see #48 steps) |
+| U12 | Automatic Total RP 3 sync | Settings → Total RP 3 → **Mappings**: set Race to Dawnward (Race Public in Dawnward), **Authorize…** | The preview names exactly what is written. After authorising, TRP3 shows the value within a few seconds and updates by itself when you change it in Dawnward. A field you edited in TRP3 is never overwritten |
+| U13 | TRP3 conflicts and rollback | Edit the managed Race in TRP3, then change it in Dawnward; then roll back a backup | A conflict notice, with your TRP3 value kept; Keep yours / Use Dawnward's works. The rollback preview lists anything no longer Public. The default rollback never makes it visible again |
+| U14 | Cross-character isolation | Log in on a second character | Its own journal, places, clock, Showcase choice and TRP3 mappings. Nothing from the first character shows. A shared TRP3 profile shows a warning |
+| U15 | Logout and reload persistence | Change something in every section, log out fully, log back in | Everything is still there; no new Total RP 3 write or conflict on login |
+| U16 | Import/export recovery | `/dawnward export backup`; add a memory; `/dawnward import` the backup | The preview lists "now → after" per record type. Confirm, then `/dawnward import undo` restores the memory |
+
+**Also report:** for any moment that felt repetitive, wrong or badly timed, its text and what you were doing. Then send screenshots of each screen beside its mockup, for the v0.8 visual comparison.
+
+#### Part V: v0.8 visual acceptance (compare each screen with its approved rendering)
+
+Do this after part U. For each screen:
+- open it in game at your normal UI scale, beside its mockup in [design/mockups](design/mockups/README.md);
+- follow the numbered acceptance steps at the end of its audit;
+- then repeat a quick look at window scale 0.7 (drag the grip smaller) and in one other theme.
+
+| # | Screen | Mockup | Steps |
+|---|---|---|---|
+| V1 | Window, rail, design system | journal-dashboard.png, design-system.png | [shell-and-components.md](design/audit/shell-and-components.md) section 5 |
+| V2 | Journal | journal-dashboard.png | [journal.md](design/audit/journal.md) section 10 |
+| V3 | Character and Showcase | character-profile.png, proposed-character-showcase.png | [character.md](design/audit/character.md) section 6 |
+| V4 | Story Director | story-director.png | [story.md](design/audit/story.md), last section |
+| V5 | Chronicle and Places | chronicle-memories.png, chronicle-places.png | [chronicle.md](design/audit/chronicle.md) section 8 |
+| V6 | Settings, setup, Total RP 3 page, import | first-time-setup.png, proposed-trp3-sync.png | [settings-setup-trp3.md](design/audit/settings-setup-trp3.md) section 8 |
+
+**Pass when:**
+- nothing overlaps;
+- no important text is cut off without a way to read it in full (hover or Read);
+- round shapes are round, or tidy squares if masks are unsupported;
+- every control works by mouse and keyboard;
+- each theme repaints everything.
+
+**Report:** a screenshot of each screen beside its mockup, and the differences you would still like closed, in order.
+
 **Screenshots requested:** Journal, Character (profile and Showcase), Story, Chronicle (Memories and Places), setup and the Total RP 3 page, at your normal UI scale, so they can be compared side by side with the mockups and, once approved, replace the concepts in the README. Crop or blur anything you would rather not share.
 
 **Report:**
