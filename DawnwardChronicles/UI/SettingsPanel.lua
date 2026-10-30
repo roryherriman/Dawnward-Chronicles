@@ -59,12 +59,38 @@ function SettingsPanel.NextValue(setting, prefs)
 	return setting.values[1]
 end
 
-function SettingsPanel.ButtonText(setting, prefs)
-	local value = currentValue(setting, prefs)
+-- How each stored value reads on screen.
+SettingsPanel.VALUE_LABELS = {
+	rare = "Rare", normal = "Normal", frequent = "Frequent", off = "Off", on = "On", fewer = "Fewer",
+	ask = "Ask me", auto = "Automatic", neutral = "Neutral", silverhand = "Silver Hand", arcane = "Arcane",
+	standard = "Standard (2 h)", brisk = "Brisk (1 h)", slow = "Slow (4 h)",
+	[1] = "Any event", [2] = "Notable", [3] = "Major only",
+}
+
+--- A value as the player reads it. Pure.
+function SettingsPanel.ValueText(value)
 	if type(value) == "boolean" then
-		value = value and "on" or "off"
+		return value and "On" or "Off"
 	end
-	return setting.label .. ": " .. tostring(value)
+	return SettingsPanel.VALUE_LABELS[value] or tostring(value)
+end
+
+--- The button shows the setting, its current value, and a "›" saying a
+-- click moves on to the next option. Pure.
+function SettingsPanel.ButtonText(setting, prefs)
+	return setting.label .. ": " .. SettingsPanel.ValueText(currentValue(setting, prefs)) .. "  ›"
+end
+
+--- The tooltip: what it does, then every option with the current one
+-- marked, and how to change it. Pure.
+function SettingsPanel.ButtonHelp(setting, prefs)
+	local value = currentValue(setting, prefs)
+	local options = {}
+	for _, v in ipairs(setting.values) do
+		local text = SettingsPanel.ValueText(v)
+		options[#options + 1] = v == value and ("[" .. text .. "]") or text
+	end
+	return setting.help .. "\n\nOptions: " .. table.concat(options, " › ") .. "\nClick to switch to the next option."
 end
 
 SettingsPanel.PAGES = {
@@ -171,13 +197,14 @@ local function create(parent)
 
 	-- Story ---------------------------------------------------------------------------
 	heading("story", "Story moments", -4)
-	note("story", -22):SetText("Each button cycles one setting for this character. Hover for details.")
+	note("story", -22):SetText("Each button shows a setting and its current value for this character. Click it to "
+		.. "switch to the next option; hover to see every option.")
 	panel.storyButtons = {}
 	local storyWidth = math.floor((WIDTH - 16) / 3)
 	for i, setting in ipairs(SettingsPanel.STORY_SETTINGS) do
 		local button = Widgets.Button(panel.pages.story, setting.label, storyWidth, 22, "choice")
 		local col, rowIndex = (i - 1) % 3, math.floor((i - 1) / 3)
-		button:SetPoint("TOPLEFT", INSET + col * (storyWidth + 8), -44 - rowIndex * 28)
+		button:SetPoint("TOPLEFT", INSET + col * (storyWidth + 8), -60 - rowIndex * 28)
 		button.setting = setting
 		button:SetScript("OnClick", function(self)
 			local char = Actions.Character(ns.ctx)
@@ -257,6 +284,7 @@ local function create(parent)
 		local prefs = view.char and view.char.story.prefs or ns.StorySchema.NewPrefs()
 		for _, button in ipairs(self.storyButtons) do
 			button:SetText(SettingsPanel.ButtonText(button.setting, prefs))
+			Widgets.Tooltip(button, button.setting.label, SettingsPanel.ButtonHelp(button.setting, prefs))
 		end
 
 		self.minimap:SetText(Actions.MinimapSettings(view.ctx).hidden and "Minimap button: hidden"
