@@ -31,6 +31,7 @@ ns.JournalView = JournalView
 JournalView.EMPTY_TEXT = "Your journal is empty.\n\nWrite your first entry with New entry, or keep adventuring: "
 	.. "level-ups are recorded here automatically."
 JournalView.NO_MATCH_TEXT = "No entries match.\n\nTry other words, or choose All to see every entry."
+JournalView.SEARCH_DELAY = 0.15
 JournalView.GOALS_EMPTY = "No active goals yet. Add one in Chronicle > Goals: its milestones and verified "
 	.. "progress show here."
 JournalView.PLACES_EMPTY = "No places recorded yet. Places are logged as you travel; mark the ones that "
@@ -594,11 +595,20 @@ local function create(parent)
 	section.toolbar:SetPoint("TOPLEFT", 0, -L.toolbarTop)
 	section.toolbar:SetSize(L.contentW, L.toolbarH)
 
+	-- Typing refreshes once it pauses (JournalView.SEARCH_DELAY), not per key.
 	section.search = Widgets.SearchBox(section.toolbar, L.searchW, "Search the journal", function(text)
-		if text ~= section.query then
-			section.query = text
-			section.offset = 0
-			MainWindow.Refresh()
+		if text == section.query then return end
+		section.query = text
+		section.offset = 0
+		section.searchToken = (section.searchToken or 0) + 1
+		local token = section.searchToken
+		local function refresh()
+			if token == section.searchToken then MainWindow.Refresh() end
+		end
+		if C_Timer and C_Timer.After and JournalView.SEARCH_DELAY > 0 then
+			C_Timer.After(JournalView.SEARCH_DELAY, refresh)
+		else
+			refresh()
 		end
 	end, CONTROL.input)
 	Widgets.Tooltip(section.search, "Search the journal", "Finds entries by title, text or recorded place.")

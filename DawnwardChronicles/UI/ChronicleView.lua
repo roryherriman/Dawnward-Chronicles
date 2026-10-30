@@ -803,6 +803,7 @@ ChronicleView.ACTION_LABELS = { accept = "Accept", edit = "Edit", dispute = "Dis
 ChronicleView.ACTION_VARIANTS = { accept = "primary", edit = "default", remove = "danger", explain = "default",
 	undo = "default", growth = "default", unreliable = "default", secret = "default", correction = "default",
 	ignore = "default" }
+ChronicleView.CUT_HELP = "The game shortened this text to fit. Click to read the whole record."
 ChronicleView.READ_HELP = "Shows the whole record: its full title, meta line and text, with its actions."
 
 --- The buttons of a card (or of the full view): left = { { id, label } },
@@ -843,6 +844,17 @@ function ChronicleView.Actions(tabId, item, opts)
 	if opts.read then add("read") end
 	local right = (item.provenance == "player" or item.status == "proposed") and { "remove", A.remove } or nil
 	return left, right
+end
+
+--- True when the client cut a card's text or meta line although its layout
+-- estimated they fit (no Read button). Guarded: IsTruncated may be missing.
+function ChronicleView.ClientCut(row, layout)
+	if layout.truncated then return false end
+	for _, key in ipairs({ "text", "meta" }) do
+		local fs = row[key]
+		if layout[key] and fs and fs.IsTruncated and fs:IsTruncated() then return true end
+	end
+	return false
 end
 
 --- What a card shows for an item and where: content (CardContent plus vis
@@ -1064,6 +1076,16 @@ local function create(parent)
 		row.titleHover:HookScript("OnEnter", function() row:SetRowHover(true) end)
 		row.titleHover:HookScript("OnLeave", function() row:SetRowHover(false) end)
 		row.text = Widgets.Label(row, "reading", true, "reading")
+		-- Over the text, shown only when the client shortened it although the
+		-- estimate said it fits (so the card has no Read button): hovering
+		-- says so, clicking opens the full view.
+		row.textHover = CreateFrame("Button", nil, row)
+		row.textHover:HookScript("OnEnter", function() row:SetRowHover(true) end)
+		row.textHover:HookScript("OnLeave", function() row:SetRowHover(false) end)
+		row.textHover:SetScript("OnClick", function()
+			if row.readKey then section.detailKey = row.readKey; MainWindow.Refresh() end
+		end)
+		row.textHover:Hide()
 		addParts(row, L.cardWidth - 2 * L.cardPad)
 		row:Hide()
 		section.rows[i] = row
@@ -1261,6 +1283,13 @@ local function create(parent)
 			if row.text.SetMaxLines then row.text:SetMaxLines(layout.text.lines) end
 		end
 		row.text:SetText(content.text or "")
+		row.readKey = nil
+		if ChronicleView.ClientCut(row, layout) then
+			row.readKey = itemKey(item)
+			place(row.textHover, layout.text or layout.title)
+			Widgets.Tooltip(row.textHover, "Shortened", ChronicleView.CUT_HELP)
+		end
+		row.textHover:SetShown(row.readKey ~= nil)
 		row.progress:SetShown(layout.progress ~= nil)
 		if layout.progress then
 			place(row.progress, layout.progress)

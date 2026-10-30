@@ -264,6 +264,10 @@ function Style.TextWidth(text, style)
 		local byte = char:byte()
 		if #char == 1 and byte >= 32 and byte <= 126 then
 			units = units + advance[byte - 31]
+		elseif #char >= 3 then
+			-- CJK and other 3- and 4-byte characters are full width (about one em)
+			-- in the game's fonts, which those clients use (Style.LATIN_LOCALES).
+			units = units + 1000
 		elseif #char > 1 then
 			units = units + WIDE_CHAR
 		end

@@ -57,6 +57,24 @@ return function(t, expect)
 			expect.truthy(box.placeholder:IsShown())
 		end)
 
+		t:it("width estimates count wide (CJK) characters as full width", function()
+			local _, _, ns = load()
+			local wide = ns.Style.TextWidth("\228\184\173\230\150\135\229\173\151", "reading")
+			local latin = ns.Style.TextWidth("abc", "reading")
+			expect.truthy(wide > latin, "three CJK characters are wider than three Latin letters")
+		end)
+
+		t:it("a Chronicle card offers its full view when the client cut text the estimate thought fits", function()
+			local _, _, ns = load()
+			local CV = ns.ChronicleView
+			local cut = { IsTruncated = function() return true end }
+			local whole = { IsTruncated = function() return false end }
+			expect.truthy(CV.ClientCut({ text = cut, meta = whole }, { text = {}, meta = {} }))
+			expect.falsy(CV.ClientCut({ text = whole, meta = whole }, { text = {}, meta = {} }))
+			expect.falsy(CV.ClientCut({ text = cut }, { text = {}, truncated = true }), "Read already shows")
+			expect.falsy(CV.ClientCut({ text = {} }, { text = {} }), "no IsTruncated: no claim")
+		end)
+
 		t:it("panels and callouts carry an eyebrow title and an inner area", function()
 			local _, env, ns = load()
 			local panel = ns.Widgets.Panel(env.CreateFrame("Frame"), "Active goals")

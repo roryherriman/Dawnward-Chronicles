@@ -113,7 +113,11 @@ function ReactionCard.Show(reactionId)
 	card.question:SetText(view.question)
 	-- The card grows with the question; a longer one is cut at three lines
 	-- (the Story section shows it whole).
-	local lines = ns.StoryView and ns.StoryView.WrapLines(view.question, "reading", L.question.size, L.questionW) or 2
+	-- Measured a little narrow (as the Chronicle does, 0.96) so a line the
+	-- client wraps sooner than the estimate still gets its room.
+	local lines = ns.StoryView and ns.StoryView.WrapLines(view.question, "reading", L.question.size,
+		L.questionW * 0.96) or 2
+	lines = math.min(lines, L.question.maxLines)
 	if card.question.SetMaxLines then card.question:SetMaxLines(L.question.maxLines) end
 	card:SetHeight(ReactionCard.Height(lines))
 	local record = view.record

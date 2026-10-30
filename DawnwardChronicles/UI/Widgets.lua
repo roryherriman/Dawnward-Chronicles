@@ -806,8 +806,15 @@ function Widgets.Chip(parent, text, tone, height)
 	function chip.SetChip(self, t, newTone)
 		self.tone = newTone or self.tone or "accent"
 		self.text = t or ""
+		-- Measure the text unconstrained: a width left from an earlier, shorter
+		-- text would make GetStringWidth report the cut width. 1.15.9 also has
+		-- GetUnboundedStringWidth (SimpleFontStringAPIDocumentation), which
+		-- ignores any width; it is preferred when present.
+		if self.maxWidth then self.label:SetWidth(0) end
 		self.label:SetText(self.text)
-		local w = self.label.GetStringWidth and self.label:GetStringWidth() or 0
+		local fs = self.label
+		local w = (fs.GetUnboundedStringWidth and fs:GetUnboundedStringWidth())
+			or (fs.GetStringWidth and fs:GetStringWidth()) or 0
 		if type(w) ~= "number" or w <= 0 then w = Style.TextWidth(self.text, "small") end
 		w = math.ceil(w)
 		local full = w + 2 * Widgets.CHIP_PAD
@@ -822,8 +829,23 @@ function Widgets.Chip(parent, text, tone, height)
 		self:SetWidth(math.max(full, self:GetHeight()))
 		if self.truncated then
 			Widgets.Tooltip(self, self.text)
+			if self.EnableMouse then self:EnableMouse(true) end
+			-- Hovering a cut chip inside a card keeps the card highlighted.
+			if not self.rowHoverHooked and self.HookScript then
+				self.rowHoverHooked = true
+				self:HookScript("OnEnter", function(c)
+					local row = c:GetParent()
+					if row and row.SetRowHover then row:SetRowHover(true) end
+				end)
+				self:HookScript("OnLeave", function(c)
+					local row = c:GetParent()
+					if row and row.SetRowHover then row:SetRowHover(false) end
+				end)
+			end
 		elseif self.tooltipHooked then
 			self.tooltipTitle, self.tooltipText = nil, nil
+			-- A chip that fits takes no mouse input, so it never steals the card's hover.
+			if self.EnableMouse then self:EnableMouse(false) end
 		end
 		Style.Repaint(self)
 	end
