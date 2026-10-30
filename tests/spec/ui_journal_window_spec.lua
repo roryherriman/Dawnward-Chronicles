@@ -205,6 +205,10 @@ return function(t, expect)
 			local row = ns.JournalView.section.rows[1]
 			expect.equal(row.vis.level, "private")
 			row.vis:GetScript("OnClick")(row.vis)
+			-- Publishing asks first, showing exactly what becomes public (#13).
+			expect.equal(env.DawnwardChroniclesDB.characters[CHAR].journal[1].visibility, "private")
+			local asked = mock.AcceptPopup()
+			expect.truthy(asked.text:find("Something happened", 1, true))
 			expect.equal(env.DawnwardChroniclesDB.characters[CHAR].journal[1].visibility, "public")
 			expect.equal(ns.JournalView.section.rows[1].vis.level, "public")
 		end)

@@ -222,8 +222,16 @@ local function buildCharacter()
 	})
 	wizard.chain.SetFields(wizard.inputs)
 	local note = panel(p, nil, 0, -346, BODY_WIDTH, 44, true)
-	paragraph(note.inner, 0, 2, INNER_WIDTH, "Everything starts Private. Nothing is sent to Total RP 3 unless you "
+	paragraph(note.inner, 0, 2, INNER_WIDTH - 150, "Everything starts Private. Nothing is sent to Total RP 3 unless you "
 		.. "choose to share it later.", "small")
+	-- A story the player already wrote (#23): its own window, saved only
+	-- when they choose Save and review there; this setup is not affected.
+	wizard.importStory = Widgets.Button(note.inner, "Import a story...", 140, 24)
+	wizard.importStory:SetPoint("TOPRIGHT", 0, 4)
+	wizard.importStory:SetScript("OnClick", function() ns.ImportWizard.Open({ from = "setup" }) end)
+	Widgets.Tooltip(wizard.importStory, "Import a story", "Already wrote a backstory, or have one in Total RP 3? "
+		.. "Paste or read it in; it is kept exactly as written, and you approve each piece before it becomes "
+		.. "part of your character.")
 end
 
 local function buildStory()

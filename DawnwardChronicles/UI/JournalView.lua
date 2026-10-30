@@ -567,9 +567,19 @@ local function create(parent)
 			row.chips[i]:Hide()
 		end
 		row.vis = Widgets.VisibilityButton(row, function(level)
-			local _, message = Actions.SetEntryVisibility(ns.ctx, row.entryId, level)
-			MainWindow.SetStatus(message)
-			MainWindow.Refresh()
+			local function apply()
+				local _, message = Actions.SetEntryVisibility(ns.ctx, row.entryId, level)
+				MainWindow.SetStatus(message)
+				MainWindow.Refresh()
+			end
+			-- Publishing is explicit (#13): show exactly what becomes public first.
+			local char = Actions.Character(ns.ctx)
+			local entry = char and ns.Journal.Find(char, row.entryId)
+			if level == "public" and entry and not ns.Journal.NeedsApproval(entry) then
+				Widgets.Confirm(ns.Journal.PublicPreview(entry), "Make Public", apply)
+			else
+				apply()
+			end
 		end)
 		if section.decorateRow then
 			section.decorateRow(row)

@@ -14,6 +14,8 @@
 --     player never set starts from the midpoint (10), private.
 --   * Manual adjustments are recorded in the same history, so it explains
 --     every value.
+--   * An axis the player locked (Core/AxisMeanings.lua) is never proposed
+--     a change.
 -- Class, race and faction are never inputs here.
 local _, ns = ...
 local Personality, StorySchema = ns.Personality, ns.StorySchema
@@ -115,6 +117,11 @@ end
 function Evolution.Propose(char, axis, delta, reason, decisionId, now)
 	if not Personality.AXIS_BY_ID[axis] or (delta ~= 1 and delta ~= -1) then
 		return nil, "invalid change"
+	end
+	-- The player's own rule (#21, Core/AxisMeanings.lua): a locked axis is
+	-- never proposed a change by story answers. Setting it by hand still works.
+	if ns.AxisMeanings.IsLocked(char, axis) then
+		return nil, "you locked this axis against story changes"
 	end
 	local story = char.story
 	if #Evolution.Pending(char) >= Evolution.MAX_PENDING then

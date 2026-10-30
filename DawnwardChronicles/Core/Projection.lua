@@ -42,6 +42,14 @@ end
 -- added; memories, arcs, goals, decisions and answers never are.
 function Projection.GetPublic(char)
 	local out = Projection.Filter(char, Privacy.PUBLIC_ONLY)
+	-- A public fact shares its statement, not where it came from: the quoted
+	-- source excerpt and source links stay private (#32 "no hidden metadata";
+	-- a fact approved from an imported story would otherwise carry the
+	-- original sentence along even after the player reworded it).
+	for _, fact in ipairs(out.facts) do
+		local p = fact.provenance
+		fact.provenance = type(p) == "table" and { origin = p.origin, interpreted = p.interpreted == true } or nil
+	end
 	out.stances = (char.story and ns.Identity) and ns.Identity.Public(char) or {}
 	return out
 end

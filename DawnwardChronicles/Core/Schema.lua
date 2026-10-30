@@ -181,6 +181,8 @@ function Schema.NewCharacter(now)
 		interpretationKeys = {},
 		facts = {},
 		personality = {},
+		-- Player-defined axis words, meanings and locks (#21, Core/AxisMeanings.lua).
+		axisMeanings = {},
 		wizard = {},
 		story = StorySchema.New(),
 	}
@@ -790,6 +792,7 @@ function Schema.NormalizeCharacter(raw, report)
 	char.journalKeys = normalizeJournalKeys(raw.journalKeys, report)
 	char.facts = normalizeFacts(raw.facts, report, usedIds)
 	char.personality = normalizePersonality(raw.personality)
+	char.axisMeanings = ns.AxisMeanings.Clean(raw.axisMeanings)
 	char.sources = normalizeSources(raw.sources, report)
 	char.interpretationKeys = normalizeInterpretationKeys(raw.interpretationKeys, report)
 	char.interpretations = normalizeInterpretations(raw.interpretations, char.interpretationKeys, report)
