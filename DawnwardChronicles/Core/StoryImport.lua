@@ -166,7 +166,14 @@ function StoryImport.AboutText(about, record)
 	end
 	local copy = about
 	if record and ns.TRP3AboutBlock then
-		copy = ns.TRP3AboutBlock.WithoutOwned(about, record)
+		-- Dawnward's own block is left out. When it cannot be separated (the
+		-- player edited it), nothing is imported rather than the whole text.
+		local reason
+		copy, reason = ns.TRP3AboutBlock.WithoutOwned(about, record)
+		if not copy then
+			return nil, "Dawnward's own section in your About page could not be separated from your text ("
+				.. tostring(reason) .. "). Copy the part you want and paste it instead."
+		end
 	end
 	local parts = {}
 	local function add(holder)

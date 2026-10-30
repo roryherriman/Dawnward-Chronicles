@@ -81,7 +81,8 @@ function ImportWizard.ReadTRP3()
 	if not deps or not Adapter then
 		return nil, "Total RP 3 is not available"
 	end
-	local about, err = Adapter.ReadSection(deps.env, "about")
+	-- Only on an audited Total RP 3 version (Integrations/TRP3/Adapter.lua).
+	local about, err = (Adapter.ReadAudited or Adapter.ReadSection)(deps.env, "about")
 	if not about then
 		return nil, err or "the About page could not be read"
 	end

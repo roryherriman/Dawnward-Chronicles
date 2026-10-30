@@ -47,6 +47,14 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 
   The manual `trp3 paste` text now carries every Public profile field.
 - **Multiplayer:** a two-client test procedure is in `docs/TRP3_INTEGRATION.md`. Multiplayer propagation is **not verified yet**.
+- **From the code review:**
+  - **Backups:** Total RP 3 backups always keep the state from before Dawnward's first write, and any value you handed over with "Use Dawnward's".
+  - **No altered values:** a value Total RP 3 would alter is never written, shortened, or used to clear a field.
+  - **Handing a field back:** this first removes a Dawnward value that is no longer Public, unless you choose to keep it.
+  - **Authorize:** it applies all your choices or none.
+  - **Reads and imports:** reading Total RP 3 for import needs an audited version, and an import that would be shortened is refused.
+  - **Less work:** updates to other players' profiles no longer trigger a sync.
+- **Undo answer** in Continuity review never makes anything Public again: a hidden side that was Public comes back as Private. A backup without secrets leaves out the text of answered findings.
 
 ### Story Director context and continuity (#20, #25, #42)
 - **Moments draw on your established story:**
