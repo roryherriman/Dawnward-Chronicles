@@ -241,6 +241,189 @@ return function(t, expect)
 			expect.truthy(section.growthNote:GetText():find("Automatic approval is on", 1, true))
 		end)
 
+		t:it("lays the moment card out without overlaps for any amount of content", function()
+			local _, _, ns = start()
+			local SV, L, Style = ns.StoryView, ns.StoryView.LAYOUT, ns.Style
+			local function check(m)
+				local l = SV.MomentLayout(m)
+				local label = string.format("q%d why%d rows%d", m.questionLines, #m.whyRows, #m.rows)
+				expect.truthy(l.fits, "fits: " .. label)
+				local y = 0
+				local function after(top, height, what)
+					expect.truthy(top >= y, what .. " starts below the previous block (" .. label .. ")")
+					y = top + height
+				end
+				if m.chips then after(l.chipsTop, L.chipH, "chips") end
+				after(l.questionTop, l.questionH, "question")
+				if #m.whyRows > 0 then after(l.whyTop, l.whyH, "why") end
+				for i, row in ipairs(l.rows) do
+					after(row.top, row.height, "row " .. i)
+					expect.truthy(row.height >= L.option.min, "an answer card is at least 52 high")
+				end
+				after(l.customLabelTop, L.customLabelH, "own-words label")
+				after(l.customTop, l.customH, "own-words field")
+				expect.truthy(l.customH >= Style.CONTROL.input, "the field is at least an input high")
+				after(l.buttonsTop, L.buttonH, "buttons")
+				expect.truthy(y <= L.contentH - 16, "the action row stays inside the card: " .. label)
+				return l
+			end
+			-- The mockup's moment: comfortable spacing and a 64 px field.
+			local mock = check({ chips = true, questionLines = 2, whyRows = { { lines = 1 }, { lines = 1 } },
+				rows = { 2, 2, 2 } })
+			expect.equal(mock.density, "comfortable")
+			expect.equal(mock.customH, 64)
+			expect.equal(mock.optionLines, 3, "answers are never cut in an ordinary moment")
+			-- Every combination up to the most a moment can hold.
+			for q = 1, 4 do
+				for nWhy = 0, 3 do
+					for whyLines = 1, 3 do
+						for nRows = 1, 4 do
+							for rowLines = 1, 3 do
+								local why, rows = {}, {}
+								for i = 1, nWhy do why[i] = { lines = whyLines, stacked = i == 2 } end
+								for i = 1, nRows do rows[i] = rowLines end
+								check({ chips = true, questionLines = q, whyRows = why, rows = rows })
+							end
+						end
+					end
+				end
+			end
+			for name, size in pairs({ question = L.question.size, why = L.why.size, answer = L.option.size,
+				hint = L.option.hint, row = L.rowText.size, meta = L.rowMeta, reason = L.reason.size,
+				note = L.note.size }) do
+				expect.truthy(size >= Style.MIN_TEXT, name .. " text is at least 13")
+			end
+		end)
+
+		t:it("draws numbered choice cards with round discs, hints that fit and a gold hover", function()
+			local mock, _, ns, section = start()
+			turnIn(mock, 50, "Cards")
+			ns.MainWindow.Refresh()
+			local L = ns.StoryView.LAYOUT
+			local theme = ns.Style.Current()
+			for _, b in ipairs(section.optionButtons) do
+				if b:IsShown() then
+					expect.truthy(b.key.ring and b.key.fill, "the number sits in a disc")
+					expect.equal(b.key.ring:GetWidth(), L.option.key)
+					expect.truthy(ns.Style.TextWidth(b.hint:GetText(), "small") <= L.optionTextW,
+						"hint fits on its line: " .. b.hint:GetText())
+					expect.truthy(b.tooltipText:find(b:GetText(), 1, true), "the whole answer is in the tooltip")
+				end
+			end
+			local a = section.optionButtons[1]
+			local before = a.bg.__color
+			a:GetScript("OnEnter")(a)
+			expect.equal(a.edges.top.__color[1], theme.accent[1], "hovered: gold edge")
+			expect.equal(a.key.fill.__color[1], theme.accent[1], "hovered: gold disc")
+			a:GetScript("OnLeave")(a)
+			expect.deepEqual(a.bg.__color, before, "leaving restores the card")
+			-- Two columns 8 apart, the cards' text column right of the disc.
+			local b = section.optionButtons[2]
+			local ax = offset(a, section.frame)
+			local bx = offset(b, section.frame)
+			expect.equal(bx - ax, L.colW + L.optionGap)
+		end)
+
+		t:it("keeps the action row on one line at the card's foot, Dismiss on the right", function()
+			local mock, _, ns, section = start()
+			turnIn(mock, 51, "Buttons")
+			ns.MainWindow.Refresh()
+			local L = ns.StoryView.LAYOUT
+			local row = { section.save, section.later, section.notNow, section.dismiss }
+			local _, y0 = offset(section.save, section.frame)
+			local right = 0
+			for i, b in ipairs(row) do
+				expect.equal(b:GetHeight(), ns.Style.CONTROL.standard)
+				expect.truthy(ns.Widgets.LabelFits(b:GetText(), b:GetWidth(), b:GetHeight(), b.variant), b:GetText())
+				local x, y = offset(b, section.frame)
+				expect.equal(y, y0, "one row")
+				expect.truthy(x >= right, "no overlap")
+				right = x + b:GetWidth() + (i < 3 and L.buttonGap or 0)
+			end
+			local dx = offset(section.dismiss, section.frame)
+			expect.equal(dx + section.dismiss:GetWidth(), L.pad + L.inner, "Dismiss ends at the card's inner edge")
+			local _, fy = offset(section.customArea.frame, section.frame)
+			expect.truthy(-fy + section.customArea.frame:GetHeight() < -y0, "the field ends above the buttons")
+			expect.equal(section.save.variant, "primary")
+			expect.equal(section.later.variant, "ghost")
+			expect.equal(section.notNow.variant, "ghost")
+			expect.equal(section.dismiss.variant, "danger")
+		end)
+
+		t:it("shows the player's own earlier answer on its own Last time line", function()
+			local _, env, ns, section = start()
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			local first = ns.Reactions.Consider(char, assert(ns.GameEvents.Record(char, "death",
+				{ at = 100, zone = "Duskwood", level = 25 }, 100)), 100, 100)
+			assert(ns.Decisions.Decide(char, first.id, { optionId = "careful" }, 101))
+			local later = 100 + 4 * 86400
+			assert(ns.Reactions.Consider(char, assert(ns.GameEvents.Record(char, "death",
+				{ at = later, zone = "Duskwood", level = 25 }, later)), later, later))
+			ns.MainWindow.Refresh()
+			local labels = {}
+			for _, row in ipairs(section.whyRows) do
+				if row.shown then labels[#labels + 1] = row.label:GetText() end
+			end
+			expect.equal(labels[1], "Why now:")
+			expect.equal(labels[#labels], "Last time:")
+			local echo = section.whyRows[#labels].text:GetText()
+			expect.equal(echo, "Morrow came back more careful.")
+			expect.falsy(section.whyRows[1].text:GetText():find("Last time", 1, true), "not repeated in Why now")
+			expect.truthy(section.context:GetText():find("Last time: Morrow came back more careful.", 1, true))
+			-- The well holds every row inside its own height.
+			local layout = section.layout
+			local last = layout.whyRows[#labels]
+			expect.truthy(last.top + ns.StoryView.TextHeight(last.lines, 14, 4) <= layout.whyH)
+		end)
+
+		t:it("keeps both side panels inside the content area with many moments and changes", function()
+			local mock, env, ns, section = start()
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			mock.Slash("story set frequency frequent")
+			local zones = { "Duskwood", "Westfall", "Redridge Mountains", "Darkshire", "Loch Modan", "Wetlands",
+				"Ashenvale" }
+			for i, zone in ipairs(zones) do
+				mock.zone = zone
+				char.story.pacing.playByCategory = {}
+				turnIn(mock, 60 + i, "Many " .. i)
+			end
+			ns.MainWindow.Refresh()
+			-- Two answers approved (reversible), two waiting for approval.
+			for _ = 1, 2 do
+				click(section.optionButtons[1])
+				click(section.changeRows[1].approve)
+			end
+			click(section.optionButtons[2])
+			section.index = 1
+			ns.MainWindow.Refresh()
+			click(section.optionButtons[3])
+			ns.MainWindow.Refresh()
+			local contentHeight = ns.MainWindow.ContentHeight()
+			local _, wy = offset(section.waitingPanel, section.frame)
+			local _, gy = offset(section.growthPanel, section.frame)
+			expect.truthy(-gy >= -wy + section.waitingPanel:GetHeight(), "growth starts below Also waiting")
+			expect.truthy(-gy + section.growthPanel:GetHeight() <= contentHeight,
+				"bottom at " .. (-gy + section.growthPanel:GetHeight()))
+			local rows = { section.growthNote }
+			for _, r in ipairs(section.changeRows) do rows[#rows + 1] = r end
+			for _, r in ipairs(section.appliedRows) do rows[#rows + 1] = r end
+			local y = 0
+			for _, r in ipairs(rows) do
+				if r:IsShown() and r ~= section.growthNote then
+					local _, ry = offset(r, section.growthPanel)
+					expect.truthy(-ry >= y, "rows do not overlap")
+					y = -ry + r:GetHeight()
+				end
+			end
+			-- Approvals keep priority; a waiting moment that has no room is
+			-- still counted and reachable with < >.
+			expect.truthy(section.changeRows[2]:IsShown())
+			expect.truthy(section.appliedRows[2]:IsShown())
+			expect.truthy(section.waitingRows[1]:IsShown())
+			expect.truthy(section.waitingNote:GetText():find("more: use < > above", 1, true),
+				section.waitingNote:GetText())
+		end)
+
 		t:it("explains an empty Story section", function()
 			local _, _, ns, section = start()
 			expect.truthy(section.body:IsShown())
@@ -266,6 +449,25 @@ return function(t, expect)
 			expect.falsy(card:IsShown())
 			expect.truthy(ns.MainWindow.IsShown())
 			expect.equal(ns.MainWindow.CurrentSection(), "story")
+		end)
+
+		t:it("grows with its question, keeps the meta line clear of Close and uses compact buttons", function()
+			local mock, _, ns = Boot.Start()
+			mock.Slash("set name Card")
+			turnIn(mock, 23, "Card Layout Quest")
+			mock.RunTimers()
+			local card = ns.ReactionCard.Frame()
+			local L = ns.ReactionCard.LAYOUT
+			local lines = ns.StoryView.WrapLines(card.question:GetText(), "reading", 16, L.questionW)
+			expect.equal(card:GetHeight(), ns.ReactionCard.Height(lines))
+			expect.truthy(ns.ReactionCard.Height(3) > ns.ReactionCard.Height(1))
+			expect.equal(ns.ReactionCard.Height(9), ns.ReactionCard.Height(3), "at most three lines")
+			for _, b in ipairs({ card.answer, card.later, card.dismiss }) do
+				expect.equal(b:GetHeight(), ns.Style.CONTROL.compact)
+				expect.truthy(ns.Widgets.LabelFits(b:GetText(), b:GetWidth(), b:GetHeight(), b.variant), b:GetText())
+			end
+			-- The meta line ends left of the close button.
+			expect.truthy(L.pad + card.meta:GetWidth() <= ns.ReactionCard.WIDTH - 10 - L.close)
 		end)
 
 		t:it("is never shown in combat and hides when combat starts", function()
