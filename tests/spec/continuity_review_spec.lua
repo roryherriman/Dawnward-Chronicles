@@ -189,6 +189,27 @@ return function(t, expect)
 			expect.truthy(err:find("no answer", 1, true))
 		end)
 
+		t:it("a secret answer hides a stance's private side only for its own public/private finding", function()
+			local ns, char = setup()
+			local stance = assert(ns.Identity.Add(char, { subject = "The Argent Dawn", persona = "Stands with them",
+				visibility = "public" }, 1))
+			ns.Facts.Add(char, { category = "belief", statement = "Never trusted the Argent Dawn",
+				subject = "The Argent Dawn", visibility = "public" }, nil, 2)
+			local before = ns.Util.DeepCopy(stance)
+			local f = kinds(ns, char).publicfact
+			local review = assert(ns.Continuity.Review(char, f.key, "secret", nil, 3))
+			expect.deepEqual(stance, before, "publicfact: the answer is recorded, nothing is hidden or marked")
+			expect.equal(review.undo, nil)
+			assert(ns.Continuity.Undo(char, f.key))
+			expect.deepEqual(stance, before)
+			-- The stance's own contradiction still hides its private side.
+			stance.conviction = "Doubts them"
+			local p = kinds(ns, char).persona
+			assert(ns.Continuity.Review(char, p.key, "secret", nil, 4))
+			expect.equal(stance.convictionVisibility, "secret")
+			expect.equal(stance.deliberate, true)
+		end)
+
 		t:it("cleans saved answers additively: message and undo kept, junk dropped", function()
 			local ns, char = setup()
 			char.story.reviews = {
@@ -316,6 +337,34 @@ return function(t, expect)
 			click(section.new)
 			expect.equal(section.reviewMode, "open")
 			expect.truthy(section.rows[1]:IsShown(), "the finding is open again")
+		end)
+
+		t:it("runs the continuity rules once per refresh, whatever the mode or search", function()
+			local mock, env, ns, section = start()
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			mock.Slash("stance add The Cenarion Circle; Loyal; Doubts its leaders")
+			ns.Memories.Add(char, { title = "The fire" }, "player", 1)
+			ns.Memories.Add(char, { title = "The fire" }, "player", 2)
+			local C = ns.Continuity
+			local findings, find, calls = C.Findings, C.Find, 0
+			C.Findings = function(...) calls = calls + 1; return findings(...) end
+			C.Find = function(...) calls = calls + 1; return find(...) end
+			local function runs(fn)
+				calls = 0
+				fn()
+				return calls
+			end
+			expect.equal(runs(function() ns.MainWindow.Refresh() end), 1, "the list and every tab count")
+			section.search:SetText("fire")
+			expect.equal(runs(function() section.search:GetScript("OnTextChanged")(section.search, true) end), 1,
+				"a search keystroke")
+			section.search:SetText("")
+			section.search:GetScript("OnTextChanged")(section.search, true)
+			expect.equal(runs(function() click(section.rows[1].examine) end), 1, "examining a finding")
+			expect.equal(section.reviewMode, "examine")
+			click(section.new)
+			expect.equal(runs(function() click(section.rows[1].examine); click(section.new) end), 2, "two refreshes")
+			C.Findings, C.Find = findings, find
 		end)
 
 		t:it("keeps the Examine button clear of the card's chip", function()

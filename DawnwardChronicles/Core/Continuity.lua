@@ -393,9 +393,10 @@ end
 --- The records behind a finding, side by side. Returns { finding, sides =
 -- { view, ... }, review = the answer if any } or nil, reason. Each view:
 -- { label, title, text, at, updatedAt, provenance, status, visibility,
--- list, id, part, editable, record, where, missing }. Read-only.
-function Continuity.Examine(char, key)
-	local finding = Continuity.Find(char, key)
+-- list, id, part, editable, record, where, missing }. Read-only. finding
+-- may be passed when the caller already has it (the rules are not run again).
+function Continuity.Examine(char, key, finding)
+	if not finding or finding.key ~= key then finding = Continuity.Find(char, key) end
 	if not finding then
 		return nil, "no continuity finding with that key"
 	end
@@ -426,9 +427,12 @@ function Continuity.Review(char, key, choice, note, now)
 	end
 	local review = RecordTypes.CleanReview({ key = key, choice = choice, note = note, at = now or 0,
 		message = finding.message })
-	-- "secret": hide the private side the player wants kept hidden, and
-	-- remember how it was, so the answer can be undone.
-	if choice == "secret" and finding.refs.identity then
+	-- "secret" on a stance's own public/private contradiction (kind
+	-- "persona") hides the private side the player wants kept hidden, and
+	-- remembers how it was, so the answer can be undone. On any other
+	-- finding (a public stance against a public fact, for example) it only
+	-- records the answer: nothing is hidden or marked deliberate.
+	if choice == "secret" and finding.kind == "persona" and finding.refs.identity then
 		local i = ns.Identity.Find(char, finding.refs.identity)
 		if i then
 			review.undo = { identity = i.id, convictionVisibility = i.convictionVisibility, deliberate = i.deliberate == true }
