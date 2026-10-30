@@ -23,7 +23,8 @@ ns.TRP3Ledger = Ledger
 
 Ledger.VERSION = 1
 Ledger.LIMITS = {
-	backups = 20,          -- section backups kept in total, oldest dropped first
+	backups = 20,          -- section backups kept in total, oldest unpinned dropped first
+	pinned = 4,            -- of those, at most this many pinned (see Ledger.Prune)
 	backupBytes = 65536,   -- a section too large to back up is never written
 	block = 4100,          -- bytes of an owned biography string (section cap plus separator, with margin)
 	ownedTraits = 8,       -- Dawnward-owned personality traits per profile
@@ -230,6 +231,9 @@ local function normalizeBackup(raw)
 		out.owner = normalizeOwner(raw.owner)
 	end
 	out.owners = normalizeOwners(raw.owners)
+	if raw.pin == "origin" or raw.pin == "reclaim" then
+		out.pin = raw.pin
+	end
 	return out
 end
 
@@ -297,9 +301,7 @@ function Ledger.Normalize(raw)
 			end
 		end
 		table.sort(out.backups, function(a, b) return a.id < b.id end)
-		while #out.backups > Ledger.LIMITS.backups do
-			table.remove(out.backups, 1)
-		end
+		Ledger.Prune(out)
 	end
 	out.nextBackupId = math.max(maxId + 1, Util.IsPositiveInteger(raw.nextBackupId) and raw.nextBackupId or 1)
 	if type(raw.log) == "table" then
@@ -362,11 +364,58 @@ function Ledger.AddBackup(ledger, profileId, section, data, meta, now)
 	end
 	backup.owners = normalizeOwners(Util.DeepCopy(meta and meta.owners))
 	ledger.nextBackupId = ledger.nextBackupId + 1
-	ledger.backups[#ledger.backups + 1] = backup
-	while #ledger.backups > Ledger.LIMITS.backups do
-		table.remove(ledger.backups, 1)
+	-- Pinning (Ledger.Prune): the state before Dawnward owned anything in
+	-- this section (no owners, or the first backup known for it) is kept
+	-- until a newer such state exists; so is the player's value replaced by
+	-- "Use Dawnward's" (meta.pin = "reclaim").
+	local owned = backup.owner ~= nil or backup.owners ~= nil
+	local known = Ledger.LatestBackup(ledger, profileId, section) ~= nil
+	if meta and meta.pin == "reclaim" then
+		backup.pin = "reclaim"
+	elseif not owned or not known then
+		backup.pin = "origin"
+		for _, other in ipairs(ledger.backups) do
+			if other.pin == "origin" and other.profileId == profileId and other.section == section then
+				other.pin = nil
+			end
+		end
 	end
+	ledger.backups[#ledger.backups + 1] = backup
+	Ledger.Prune(ledger)
 	return backup
+end
+
+--- Keeps the backup list bounded: at most LIMITS.backups in total and
+-- LIMITS.pinned pinned. The oldest unpinned backup goes first, so many
+-- automatic writes never push out the state before Dawnward's first write
+-- (or a value the player handed over with "Use Dawnward's"); beyond the
+-- pinned limit the oldest pinned one goes.
+function Ledger.Prune(ledger)
+	local list = ledger.backups
+	local pinned = 0
+	for _, b in ipairs(list) do
+		if b.pin then pinned = pinned + 1 end
+	end
+	for _, b in ipairs(list) do
+		if pinned <= Ledger.LIMITS.pinned then break end
+		if b.pin then
+			b.pin = nil
+			pinned = pinned - 1
+		end
+	end
+	while #list > Ledger.LIMITS.backups do
+		local removed = false
+		for i, b in ipairs(list) do
+			if not b.pin then
+				table.remove(list, i)
+				removed = true
+				break
+			end
+		end
+		if not removed then
+			table.remove(list, 1)
+		end
+	end
 end
 
 --- Decoded copy of a backup's section data.

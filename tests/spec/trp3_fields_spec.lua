@@ -422,4 +422,192 @@ return function(t, expect)
 			expect.deepEqual(w.fake.snapshot(), before)
 		end)
 	end)
+	t:describe("TRP3 review fixes (L2)", function()
+		t:it("pins the state before Dawnward's first write against many later writes (bounded)", function()
+			local w = world()
+			w.field("age", "1")
+			w.manage("age")
+			w.Sync.Run(w.deps)
+			for i = 2, 40 do
+				w.field("age", tostring(i))
+				expect.equal(w.Sync.Run(w.deps)[1].state, "written")
+			end
+			local backups = w.deps.ledger.backups
+			expect.equal(#backups, w.ns.TRP3Ledger.LIMITS.backups, "still bounded")
+			expect.equal(backups[1].pin, "origin")
+			expect.equal(w.ns.TRP3Ledger.BackupData(backups[1]).AG, nil, "the pre-Dawnward state survives")
+			local reloaded = assert(w.ns.TRP3Ledger.Normalize(w.ns.Util.DeepCopy(w.deps.ledger)))
+			expect.deepEqual(reloaded.backups, backups, "pins survive a reload")
+		end)
+
+		t:it("keeps the player's value replaced by Use Dawnward's in a pinned backup", function()
+			local w = world({ characteristics = { v = 3, FN = "Aelin", AG = "Ageless (mine)", PS = {} } })
+			w.field("age", "31")
+			w.manage("age")
+			w.Sync.Run(w.deps)
+			assert(w.Sync.Resolve(w.deps, "age", "reclaim"))
+			for i = 32, 70 do
+				w.field("age", tostring(i))
+				w.Sync.Run(w.deps)
+			end
+			local found
+			for _, b in ipairs(w.deps.ledger.backups) do
+				if b.pin == "reclaim" then found = b end
+			end
+			expect.truthy(found, "pinned reclaim backup kept")
+			expect.equal(w.ns.TRP3Ledger.BackupData(found).AG, "Ageless (mine)")
+			expect.truthy(#w.deps.ledger.backups <= w.ns.TRP3Ledger.LIMITS.backups)
+		end)
+
+		t:it("never writes a rewritten value and never clears an owned field because it is not writable", function()
+			local FieldPlan = Loader.WithTRP3().TRP3FieldPlan
+			expect.equal(FieldPlan.Check("Old Town"), "Old Town")
+			for _, bad in ipairs({ "Old  Town", " Old", "a|b", "two\nlines", string.rep("x", 101) }) do
+				local v, why = FieldPlan.Check(bad)
+				expect.equal(v, nil)
+				expect.truthy(type(why) == "string")
+			end
+			local w = world()
+			w.field("homeland", "Goldshire")
+			w.manage("homeland")
+			w.Sync.Run(w.deps)
+			w.field("homeland", "Old  Town")
+			local check = w.Sync.Check(w.deps, "fields")
+			expect.equal(check.state, "noop")
+			expect.truthy(check.notes[1]:find("extra spaces", 1, true))
+			local v = w.ch().v
+			w.Sync.Run(w.deps)
+			expect.equal(w.ch().BP, "Goldshire", "left untouched, not cleared or rewritten")
+			expect.equal(w.ch().v, v)
+			local rows = w.Sync.Differences(w.deps).rows
+			for _, row in ipairs(rows) do
+				if row.id == "homeland" then expect.truthy(row.unwritable) end
+			end
+			-- A fresh field with an unwritable value is not written either.
+			w.field("age", "3  1")
+			w.manage("age")
+			w.Sync.Run(w.deps)
+			expect.equal(w.ch().AG, nil)
+		end)
+
+		t:it("leaving Dawnward with a no-longer-Public value still shown asks to release or keep it", function()
+			local w = world()
+			w.field("age", "31")
+			w.manage("age")
+			w.Sync.Run(w.deps)
+			w.ns.Character.SetFieldVisibility(w.char(), "age", "private", 2) -- no run yet
+			local ok, message, risk = w.Sync.SetPolicy(w.deps, "age", "trp3")
+			expect.falsy(ok)
+			expect.truthy(risk and message:find("no longer your Public Age", 1, true), message)
+			expect.equal(w.ns.TRP3Ledger.Policy(w.deps.ledger.optIn[KEY], "age"), "dawnward", "unchanged")
+			assert(w.Sync.SetPolicy(w.deps, "age", "off", { release = true }))
+			expect.equal(w.ch().AG, nil, "removed before Dawnward let go")
+			expect.equal(w.ns.TRP3Ledger.Policy(w.deps.ledger.optIn[KEY], "age"), "off")
+
+			local k = world()
+			k.field("age", "31")
+			k.manage("age")
+			k.Sync.Run(k.deps)
+			k.ns.Character.SetFieldVisibility(k.char(), "age", "secret", 2)
+			assert(k.Sync.SetPolicy(k.deps, "age", "trp3", { keep = true }))
+			expect.equal(k.ch().AG, "31", "kept only when the player says so")
+
+			local a = world()
+			a.field("age", "31")
+			a.manage("age")
+			a.Sync.Run(a.deps)
+			a.ns.Character.SetFieldVisibility(a.char(), "age", "private", 2)
+			assert(a.Sync.Authorize(a.deps, { age = "trp3" }))
+			expect.equal(a.ch().AG, nil, "Authorize removes it first")
+		end)
+
+		t:it("clears field conflicts on keep, release and re-authorisation", function()
+			local w = world({ characteristics = { v = 3, FN = "Aelin", RA = "Half-elf", PS = {} } })
+			w.field("race", "Elf")
+			w.field("age", "31")
+			w.manage("race", "age")
+			w.Sync.Run(w.deps)
+			local record = w.deps.ledger.profiles[w.fake.profileId]
+			expect.truthy(record.fieldConflicts.race)
+			assert(w.Sync.Release(w.deps, "fields"))
+			expect.equal(record.fieldConflicts.race, nil)
+			for _, row in ipairs(w.Sync.Differences(w.deps).rows) do expect.equal(row.conflict, nil) end
+			-- Re-authorised after the player cleared TRP3's race: not paused.
+			w.ch().RA = nil
+			w.manage("race")
+			expect.equal(w.Sync.Run(w.deps)[1].state, "written")
+			expect.equal(w.ch().RA, "Elf")
+		end)
+
+		t:it("Authorize is all-or-nothing", function()
+			local d = world({ isDefault = true })
+			local ok = d.Sync.Authorize(d.deps, { race = "off", age = "dawnward" })
+			expect.falsy(ok)
+			expect.equal(d.deps.ledger.optIn[KEY], nil)
+			expect.falsy(d.Sync.Authorize(d.deps, { race = "off" }), "a link needs a non-default profile")
+			expect.equal(d.deps.ledger.optIn[KEY], nil)
+
+			local w = world()
+			assert(w.Sync.Authorize(w.deps, { about = "dawnward" }))
+			local before = w.ns.Util.DeepCopy(w.deps.ledger.optIn[KEY])
+			local real = w.Sync.ApplyPolicy
+			w.Sync.ApplyPolicy = function(deps, id, policy)
+				if id == "age" then error("boom") end
+				return real(deps, id, policy)
+			end
+			local refused, why = w.Sync.Authorize(w.deps, { race = "dawnward", age = "dawnward", traits = "dawnward" })
+			w.Sync.ApplyPolicy = real
+			expect.falsy(refused)
+			expect.truthy(why:find("nothing was changed", 1, true))
+			expect.deepEqual(w.deps.ledger.optIn[KEY], before, "earlier choices rolled back")
+		end)
+
+		t:it("reads for import only from an audited Total RP 3 version, and never shortens", function()
+			local u = world({ version = "3.5.3", characteristics = { v = 3, FN = "Aelin", RA = "Elf", PS = {} } })
+			local ok, message = u.ns.TRP3Commands.Import(u.ctx(), "race")
+			expect.falsy(ok)
+			expect.truthy(message:find("has not been audited", 1, true), message)
+			expect.equal(u.store:GetCharacter(KEY), nil)
+			local _, err = u.ns.TRP3Adapter.ReadAudited(u.fake.env, "about")
+			expect.truthy(err:find("audited", 1, true))
+
+			local long = string.rep("x", 150)
+			local w = world({ characteristics = { v = 3, FN = "Aelin", RA = long, PS = {} } })
+			local refused, why = w.ns.TRP3Commands.Import(w.ctx(), "race")
+			expect.falsy(refused)
+			expect.truthy(why:find("Copy the part you want by hand", 1, true))
+			expect.equal(w.store:GetCharacter(KEY), nil, "nothing written")
+		end)
+
+		t:it("WithoutOwned refuses instead of returning Dawnward's block as the player's text", function()
+			local w = world()
+			w.publicFact("origin", "Born in Stormwind")
+			w.manage("about")
+			w.Sync.Run(w.deps)
+			local record = w.deps.ledger.profiles[w.fake.profileId].about
+			local about = w.fake.profile.player.about
+			expect.equal(w.ns.TRP3AboutBlock.WithoutOwned(about, record).T1.TX, "Private about text")
+			about.T1.TX = about.T1.TX .. " (edited)"
+			local own, why = w.ns.TRP3AboutBlock.WithoutOwned(about, record)
+			expect.equal(own, nil)
+			expect.truthy(why:find("edited", 1, true))
+		end)
+
+		t:it("the page overview probes Total RP 3 once and reads each section once", function()
+			local w = world()
+			w.field("age", "31")
+			w.manage("age", "about", "traits")
+			local probes, reads = 0, 0
+			local Adapter = w.ns.TRP3Adapter
+			local probe, read = Adapter.Probe, Adapter.ReadSection
+			Adapter.Probe = function(...) probes = probes + 1; return probe(...) end
+			Adapter.ReadSection = function(...) reads = reads + 1; return read(...) end
+			local view = w.ns.TRP3Commands.Overview(w.deps)
+			Adapter.Probe, Adapter.ReadSection = probe, read
+			expect.equal(probes, 1)
+			expect.equal(reads, 2, "about and characteristics")
+			expect.equal(view.checks.fields.state, "ready")
+			expect.equal(w.deps.cache, nil, "the caller's deps are not cached")
+		end)
+	end)
 end

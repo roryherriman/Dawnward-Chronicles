@@ -75,7 +75,7 @@ A draft proposal is in [planning/living-character/trp3-upstream-proposal.md](pla
 
 ### Events
 - They come through the `TRP3_Addon` registry, via `TRP3_API.RegisterCallback(TRP3_Addon, event, fn)` **S**.
-- Callback argument positions differ between TRP3's own listeners and its comments. **Dawnward treats these events as hints only and never reads their arguments.**
+- Callback argument positions differ between TRP3's own listeners and its comments. **Dawnward treats these events as hints only.** Since v0.8 it looks at the arguments only to drop hints about other profiles: TRP3 fires `REGISTER_DATA_UPDATED` for every other player's profile it receives (`RegisterMain.lua` `saveInformation`), MSP senders, register list edits (no arguments) and companions. A hint counts only when one of its arguments is the player's own unit ID (`TRP3_API.globals.player_id`) or the active profile ID, matched by value, not position (`Adapter.IsOwnHint`).
 
 ### Exchange
 - The exchange is **pull-only**:
@@ -144,7 +144,7 @@ Removing the owned block (release) restores the player's text **byte for byte** 
 ### Transaction
 1. Plan against a **copy**. A **no-op writes nothing**: no backup, no version bump, no event.
 2. **Back up** the whole section (serialised) into the ledger.
-   - At most 20 backups are kept.
+   - At most 20 backups are kept in total. The oldest **unpinned** backup goes first. Pinned (at most 4): the state before Dawnward's first write in a section (no Dawnward content; kept until a newer such state exists), and the player's value saved when they choose "Use Dawnward's" on a field. So many automatic writes never push out the way back to the player's own profile.
    - A section too large to back up (over 64 KB serialised) is **never written**.
 3. Write the owned change: replace the live section's contents in place, as TRP3's editors do.
 4. Bump `v` by **two** steps.
@@ -211,7 +211,7 @@ Verified against the Total RP 3 source at tag **`3.4.1`** (commit `4c25cb0`): `C
 Facts that apply to every characteristics field below **S**:
 - They are top-level strings of `player.characteristics`. The characteristics editor writes them as `stEtN(strtrim(text))`, so an empty field is stored as `nil`, never `""`.
 - The editor boxes have no length limit (`letters="0"`).
-- `Utils.str.sanitize` strips colour, link, texture and line codes from them when **your own** profiles load (`cleanupMyProfiles`) and when another client receives them (`saveInformation`). Dawnward therefore only writes values that sanitising leaves unchanged: one line, no `|`, trimmed, at most 100 bytes (Dawnward's own short-field limit). A longer value is never shortened; it is not written.
+- `Utils.str.sanitize` strips colour, link, texture and line codes from them when **your own** profiles load (`cleanupMyProfiles`) and when another client receives them (`saveInformation`). Dawnward therefore only writes a value **exactly as it is**, and only if sanitising would leave it unchanged: one line, no `|`, no extra spaces, at most 100 bytes (`FieldPlan.Check`). A value that does not qualify is **not writable**: it is never rewritten or shortened, nothing is written, a field Dawnward already wrote is left untouched (never cleared because of it), and the reason is shown (page row, `trp3 preview`, `trp3 fields`).
 - The characteristics editor works on a draft (as for About); its Save copies the draft over the whole section. The existing editor guard covers them.
 - On the default profile, TRP3 wipes everything except `v`, `RA`, `CL`, `FN`, `IC`; Dawnward never writes the default profile anyway.
 
@@ -255,7 +255,9 @@ Stored per character **and** linked profile in `DawnwardChroniclesTRP3DB.optIn[c
 - **Writes** happen only while the field holds exactly the value Dawnward last wrote, or is empty and has never been written by Dawnward. If Total RP 3 already holds the player's own value, or the player (or another addon) changed Dawnward's value, that field is **paused** (`profiles[id].fieldConflicts`), nothing is overwritten, and the other fields keep updating. A field whose Dawnward value stops being Public is cleared in TRP3 (it was Dawnward's own value).
 - **Resolve:** **Keep yours** (`resolve <field> keep`) hands the field to Total RP 3; **Use Dawnward's** (`resolve <field> reclaim`) records TRP3's current value as Dawnward's, so the next run replaces it after a backup (the player's value stays in that backup).
 - **One character per profile** may manage each mapping; a second character's authorisation is refused, and **Authorize** is all-or-nothing.
-- Leaving `dawnward` for a field forgets Dawnward's ownership; TRP3 keeps its current value.
+- Leaving `dawnward` for a field forgets Dawnward's ownership; TRP3 keeps its current value. **Except** when TRP3 still shows the exact value Dawnward wrote and that value is no longer your Public value (`Sync.FieldRisk`): the command refuses until you choose `trp3 field <name> trp3|off release confirm` (remove it first, recommended) or `… keep confirm`; on the page, the row and the Authorize confirmation say it will be removed first, and Authorize removes it (guarded, backed-up write) before saving the choice.
+- Field conflicts are cleared when Dawnward stops managing the field (Keep yours, release, policy change, exact rollback) and when it is authorised again; the page shows conflicts only for fields Dawnward manages.
+- **Authorize is all-or-nothing:** every choice is validated first (write capability, a storable non-default profile, the shared-profile rule), then applied on a snapshot of the ledger that is restored if anything fails.
 
 ## First-time connection (Total RP 3 page, Mappings tab)
 
@@ -311,7 +313,9 @@ Nothing below is verified. Use two accounts (A writes, B observes), both on Clas
 - **A literal copy of Dawnward's section** pasted elsewhere in the same text field makes the block ambiguous. That's a conflict, never a guess. But if the player deletes Dawnward's section and keeps an identical copy of it, Dawnward treats the copy as its own. The same applies to a trait with Dawnward's labels and value.
 - **If a TRP3 editor was opened and the window closed without saving**, sync waits until the editor is cancelled or saved. That is deliberate.
 - **Simulation data is never published.** Turning simulation on pauses sync.
-- **Field values are not shortened or reformatted** beyond removing `|` and line breaks (which TRP3 would remove itself); a Dawnward value TRP3 would alter is not written.
+- **Field values are never shortened or reformatted.** A Dawnward value Total RP 3 would alter is "not writable" and left alone. **Import** is exact too: a TRP3 value longer than Dawnward's field (or with formatting Dawnward does not keep) is refused, not shortened.
+- **Reading for display or import** (differences, `trp3 import`, the story import) goes through `Adapter.ReadAudited`, which refuses an unaudited TRP3 version. `AboutBlock.WithoutOwned` returns nil plus a reason when Dawnward's section cannot be separated, so the player's "own text" never silently includes Dawnward's block.
+- **The Total RP 3 page** builds its view with one probe and one read per section (`TRP3Commands.Overview` caches them); a write never uses that cache.
 - **A field Dawnward wrote is cleared** in TRP3 when its Dawnward value stops being Public. If the player had chosen "Use Dawnward's" over their own value, their old value is only in the backup.
 - **An exact rollback** of the characteristics section stops managing both traits and fields; the safe rollback keeps the current policies.
 - **Homeland maps to TRP3's Birthplace.** If you use Homeland for where your character lives now, keep that mapping on Total RP 3 and type Residence yourself.

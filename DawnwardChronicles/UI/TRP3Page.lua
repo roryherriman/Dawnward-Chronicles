@@ -587,6 +587,10 @@ local function keepText(feature, check, view)
 		end
 		local record = check.profileId and view.ledgerProfiles and view.ledgerProfiles[check.profileId]
 		local own = ns.TRP3AboutBlock.WithoutOwned(section, record and record.about)
+		if not own then
+			return "Your own text is kept and never edited by Dawnward (Dawnward's section was changed in Total RP 3, "
+				.. "so it is not shown separately)."
+		end
 		local text
 		if own.TE == 1 then
 			text = own.T1 and own.T1.TX
@@ -863,6 +867,9 @@ local function fieldProposal(view, m)
 	end
 	local row = diffRow(view, m.id)
 	local current = row and row.trp3
+	if row and row.unwritable then
+		return "not writable: " .. excerpt(row.unwritable, 80)
+	end
 	if not public then
 		return "nothing Public to write"
 	elseif current == nil then
@@ -895,12 +902,17 @@ function TRP3Page.RowText(page, id)
 	name = m.label .. " → " .. m.trp3
 	local row = diffRow(view, id)
 	local conflict = view.fieldConflicts[id]
-	if policy == "off" then
+	local risk = view.risks and view.risks[id]
+	if staged and policy ~= "dawnward" and risk then
+		detail = "Dawnward's old value will be removed from TRP3 first (no longer Public)"
+	elseif policy == "off" then
 		detail = "Not synchronised"
 	elseif conflict then
 		detail = "Paused: " .. excerpt(conflict, 60)
 	elseif policy == "dawnward" and staged then
 		detail = fieldProposal(view, m)
+	elseif row and row.unwritable and policy == "dawnward" then
+		detail = "Not writable: " .. excerpt(row.unwritable, 60)
 	elseif row then
 		local mine = row.dawnward and ("\"" .. excerpt(row.dawnward, 22) .. "\"")
 			or (row.hidden and "not Public" or "empty")
@@ -979,6 +991,12 @@ function TRP3Page.AuthorizeText(page)
 				lines[#lines + 1] = "+ " .. itemLabel .. ": managed by Dawnward - " .. what
 			else
 				lines[#lines + 1] = "- " .. itemLabel .. ": " .. ns.TRP3Sync.POLICY_LABEL[policy]
+				local risk = view.risks and view.risks[id]
+				if risk then
+					lines[#lines + 1] = "  ! " .. plain(risk.reason) .. ". It will be removed from Total RP 3 first "
+						.. "(a backup is taken). To leave it showing, use /dawnward trp3 field " .. id .. " "
+						.. policy .. " keep confirm."
+				end
 			end
 		end
 	end

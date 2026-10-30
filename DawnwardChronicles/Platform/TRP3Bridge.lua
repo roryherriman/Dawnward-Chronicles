@@ -8,8 +8,9 @@
 --     change made in the window (Actions.withCharacter): profile fields,
 --     facts, personality values, approvals of story entries and changes,
 --     visibility, the Total RP 3 presentation style, policies;
---   * when Total RP 3 reports a profile switch or a profile edit (hints
---     only; each run re-reads everything; hints caused by Dawnward's own
+--   * when Total RP 3 reports a profile switch or an edit of the player's
+--     own active profile (hints only; each run re-reads everything; hints
+--     about other players' profiles and those caused by Dawnward's own
 --     write are ignored, so a write never triggers another run);
 --   * when combat ends, if a run was waiting for it.
 -- Requests are merged into one run a few seconds later, so a burst of
@@ -129,9 +130,16 @@ function Bridge.Request()
 end
 
 -- Total RP 3's own events are hints. While Dawnward itself writes, TRP3
--- fires REGISTER_DATA_UPDATED for that write; it is not a new change.
-local function onHint()
-	if not Bridge.flushing then
+-- fires REGISTER_DATA_UPDATED for that write; it is not a new change. TRP3
+-- also fires it for every other player's (and companion's) profile it
+-- receives; only hints about the player's own active profile count
+-- (Adapter.IsOwnHint), checked last so the common case stays cheap.
+local function onHint(name, ...)
+	local ctx = Bridge.ctx
+	if Bridge.flushing or pending or not ctx or not anyOptIn(ctx) then
+		return
+	end
+	if Adapter.IsOwnHint(_G, name, ...) then
 		Bridge.Request()
 	end
 end
