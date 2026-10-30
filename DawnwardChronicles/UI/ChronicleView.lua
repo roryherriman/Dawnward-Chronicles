@@ -265,7 +265,9 @@ end
 --- The Review tab's items for a mode: "open" (findings), "examine" (the
 -- sides of one finding, the finding, and the Explain card) or "answered".
 -- Returns items, or nil when an examined finding is no longer open. Pure.
-function ChronicleView.ReviewItems(char, mode, key)
+-- findings: the open findings when the caller has them (one run of the
+-- rules per refresh); otherwise they are computed here.
+function ChronicleView.ReviewItems(char, mode, key, findings)
 	if mode == "answered" then
 		local items = {}
 		for _, a in ipairs(ns.Continuity.Answered(char)) do
@@ -274,10 +276,10 @@ function ChronicleView.ReviewItems(char, mode, key)
 		return items
 	elseif mode == "examine" then
 		local open
-		for _, f in ipairs(ns.Continuity.Findings(char)) do
+		for _, f in ipairs(findings or ns.Continuity.Findings(char)) do
 			if f.key == key then open = f end
 		end
-		local view = open and ns.Continuity.Examine(char, key)
+		local view = open and ns.Continuity.Examine(char, key, open)
 		if not view then return nil end
 		local items = {}
 		for i = 1, 2 do
@@ -293,7 +295,7 @@ function ChronicleView.ReviewItems(char, mode, key)
 		items[#items + 1] = { reviewKind = "explain", key = key, finding = open }
 		return items
 	end
-	return ns.Continuity.Findings(char)
+	return findings or ns.Continuity.Findings(char)
 end
 
 --- Whether a record (or finding) matches a search, ignoring case. Private
@@ -923,13 +925,16 @@ local function create(parent)
 		local items = {}
 		if not char then return items end
 		if tabId == "review" then
+			-- The rules run once per refresh (Refresh sets reviewFindings);
+			-- tab counts, the list, an examined finding and search reuse them.
+			local findings = self.reviewFindings or ns.Continuity.Findings(char)
 			if shown then
-				local reviewItems = ChronicleView.ReviewItems(char, self.reviewMode, self.examineKey)
+				local reviewItems = ChronicleView.ReviewItems(char, self.reviewMode, self.examineKey, findings)
 				if reviewItems then return reviewItems end
 				-- The examined finding was answered or resolved: back to the list.
 				self.reviewMode, self.examineKey = "open", nil
 			end
-			return ns.Continuity.Findings(char)
+			return findings
 		end
 		if tabId == "places" then return ns.Places.List(char) end
 		local list = char.story[tabId] or {}
@@ -937,7 +942,16 @@ local function create(parent)
 		return items
 	end
 
+	-- Continuity's rules run once per refresh: the findings are kept for this
+	-- refresh only (records may change between refreshes) and reused for the
+	-- tab counts, the list, an examined finding and the search filter.
 	function section:Refresh(view)
+		self.reviewFindings = view.char and ns.Continuity.Findings(view.char) or nil
+		self:RefreshContent(view)
+		self.reviewFindings = nil
+	end
+
+	function section:RefreshContent(view)
 		local char = view.char
 		local spec = tabSpec(self.tab)
 		local now = ns.ctx and ns.ctx.now and ns.ctx.now() or nil
