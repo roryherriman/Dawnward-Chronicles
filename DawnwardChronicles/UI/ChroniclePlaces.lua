@@ -21,12 +21,16 @@ local ChroniclePlaces = {}
 ns.ChroniclePlaces = ChroniclePlaces
 
 -- Section units (the Chronicle content area is 772 x 588; this view starts
--- below the tabs).
+-- below the tabs, ChroniclePlaces.dc.html). The detail is laid out top to
+-- bottom from its content (DetailLayout): chips wrap, the note and the stat
+-- tiles grow with their text, and the tied memories take the room left
+-- above the actions.
 ChroniclePlaces.LAYOUT = {
-	top = 50, listWidth = 300, gap = 16, height = 538,
-	listPad = 8, rowHeight = 56, rowGap = 2, rows = 8, pagerHeight = 28,
-	detailPad = 20, statHeight = 62, statGap = 10, tied = 3, tiedHeight = 28, tiedGap = 6,
-	buttonHeight = 30, buttonGap = 8,
+	top = 54, listWidth = 300, gap = 16, height = 534,
+	listPad = 8, rowHeight = 54, rowGap = 4, rows = 8, pagerHeight = 30,
+	detailPad = 20, nameHeight = 34, subHeight = 20, eyebrowHeight = 16, chipGap = 8,
+	noteLine = 18, noteLines = 3, statMin = 70, statGap = 10, statPad = 12, statLabelLine = 16, statValueLine = 20,
+	tied = 4, tiedHeight = 36, tiedGap = 6, buttonHeight = 36, buttonGap = 8,
 }
 
 -- Icons (Classic has no line icons; small textures instead, see
@@ -118,58 +122,167 @@ end
 local IMPORTANCE = { "Ordinary", "Notable", "Defining" }
 local STATUS = { proposed = "Suggested", disputed = "Disputed", established = "Established" }
 
---- One tied memory's line: its title (or the start of its text) and a status. Pure.
-function ChroniclePlaces.MemoryLine(m)
+--- A tied memory's name (its title, or the start of its text) and status. Pure.
+function ChroniclePlaces.MemoryParts(m)
 	local name = m.title or (m.text and (#m.text > 48 and (m.text:sub(1, 45) .. "...") or m.text)) or "A memory"
 	local note = m.status == "established" and IMPORTANCE[m.importance or 1] or STATUS[m.status] or m.status
+	return name, note
+end
+
+--- One tied memory's line: its title (or the start of its text) and a status. Pure.
+function ChroniclePlaces.MemoryLine(m)
+	local name, note = ChroniclePlaces.MemoryParts(m)
 	return name .. "  ·  " .. note
 end
 
--- A selectable list row (a button painted like an entry card).
+ChroniclePlaces.ACTIONS = { "Write a memory here", "Unmark meaningful", "Set as homeland" }
+
+--- Widths of the three actions in inner (the longest label of each), with
+-- as much padding as fits (16 at most), never less than the button's own
+-- inset. Pure.
+function ChroniclePlaces.ActionWidths(inner, L)
+	L = L or ChroniclePlaces.LAYOUT
+	local text, total = {}, 0
+	for i, label in ipairs(ChroniclePlaces.ACTIONS) do
+		text[i] = math.ceil(Style.TextWidth(label, Widgets.ButtonFontStyle(L.buttonHeight)))
+		total = total + text[i]
+	end
+	local free = inner - total - L.buttonGap * (#text - 1)
+	local pad = math.max(Widgets.BUTTON.inset, math.min(16, math.floor(free / (2 * #text))))
+	local out = {}
+	for i, w in ipairs(text) do out[i] = w + 2 * pad end
+	return out
+end
+
+local function wrapLines(text, width, style)
+	return ns.ChronicleView.WrapLines(text, width, style)
+end
+
+--- Where the detail's parts go for its content, relative to the panel's
+-- top-left (y downwards): info = { chips = { text }, note, stats = { { label,
+-- value } }, tied = number of tied memories }. Returns the rectangles, the
+-- chip positions, the stat tiles' common height and how many tied memories
+-- fit above the actions (shown). Pure.
+function ChroniclePlaces.DetailLayout(info, width, L)
+	L = L or ChroniclePlaces.LAYOUT
+	local P = L.detailPad
+	local inner = width - 2 * P
+	local r = { inner = inner, chips = {} }
+	local y = P
+	r.name = { x = P, y = y, w = inner, h = L.nameHeight }
+	y = y + L.nameHeight + 4
+	r.sub = { x = P, y = y, w = inner, h = L.subHeight }
+	y = y + L.subHeight + 12
+	r.means = { x = P, y = y, w = inner, h = L.eyebrowHeight }
+	y = y + L.eyebrowHeight + 10
+	local x, chipH = 0, Widgets.CHIP_HEIGHT
+	for i, text in ipairs(info.chips or {}) do
+		local w = math.min(inner, ns.ChronicleView.ChipWidth(text))
+		if x > 0 and x + w > inner then x, y = 0, y + chipH + L.chipGap end
+		r.chips[i] = { x = P + x, y = y, w = w, h = chipH }
+		x = x + w + L.chipGap
+	end
+	y = y + chipH + 12
+	local noteLines = math.max(1, math.min(L.noteLines, wrapLines(info.note, inner, "meta")))
+	r.note = { x = P, y = y, w = inner, h = noteLines * L.noteLine, lines = noteLines }
+	y = y + r.note.h + 14
+	local statW = math.floor((inner - 2 * L.statGap) / 3)
+	local statH = L.statMin
+	local textW = statW - 2 * L.statPad
+	for _, stat in ipairs(info.stats or {}) do
+		local h = L.statPad + math.max(1, wrapLines(stat[1]:upper(), textW, "eyebrow")) * L.statLabelLine + 6
+			+ math.max(1, wrapLines(stat[2], textW, "reading")) * L.statValueLine + L.statPad
+		statH = math.max(statH, h)
+	end
+	r.stats = {}
+	for i = 1, 3 do
+		r.stats[i] = { x = P + (i - 1) * (statW + L.statGap), y = y, w = statW, h = statH }
+	end
+	y = y + statH + 18
+	r.tiedLabel = { x = P, y = y, w = inner, h = L.eyebrowHeight }
+	y = y + L.eyebrowHeight + 8
+	-- From the bottom: the actions, then the divider above them.
+	r.buttons = { x = P, y = L.height - P - L.buttonHeight, w = inner, h = L.buttonHeight }
+	r.divider = { x = P, y = r.buttons.y - 14, w = inner, h = 1 }
+	local room = r.divider.y - 8 - y
+	local moreH = 18
+	local step = L.tiedHeight + L.tiedGap
+	local n = info.tied or 0
+	local shown = math.min(n, L.tied, math.max(0, math.floor((room + L.tiedGap) / step)))
+	if shown < n then
+		-- Leave room for "and N more in Memories".
+		shown = math.min(shown, math.max(0, math.floor((room - moreH + L.tiedGap) / step)))
+	end
+	r.shown = shown
+	r.tied = {}
+	for i = 1, L.tied do
+		r.tied[i] = { x = P, y = y + (i - 1) * step, w = inner, h = L.tiedHeight }
+	end
+	r.more = { x = P, y = y + shown * step, w = inner, h = moreH }
+	r.tiedEmpty = { x = P, y = y, w = inner, h = 2 * L.noteLine }
+	return r
+end
+
+-- A selectable list row (a button painted like an entry card): an icon
+-- for the Homeland or a meaningful place, the name (17) over zone · kind
+-- (14, muted), the visits on the right. Hovering shows the full name and
+-- line, which a narrow list may cut.
 local function listRow(parent, L)
 	local row = CreateFrame("Button", nil, parent)
-	row:SetSize(L.listWidth - 2 * L.listPad, L.rowHeight)
+	local w = L.listWidth - 2 * L.listPad
+	row:SetSize(w, L.rowHeight)
 	row.bg = Style.Solid(row, "BACKGROUND")
 	row.bg:SetAllPoints(row)
 	row.edges = Style.Edge(row, "BORDER")
 	row.icon = row:CreateTexture(nil, "ARTWORK")
-	row.icon:SetSize(18, 18)
-	row.icon:SetPoint("TOPLEFT", 10, -19)
-	row.name = Widgets.Label(row, "GameFontHighlight", false, "body")
-	row.name:SetPoint("TOPLEFT", 38, -9)
-	row.name:SetWidth(L.listWidth - 2 * L.listPad - 38 - 70)
-	row.sub = Widgets.Label(row, "GameFontHighlightSmall", false, "muted")
-	row.sub:SetPoint("TOPLEFT", 38, -30)
-	row.sub:SetWidth(L.listWidth - 2 * L.listPad - 38 - 70)
-	row.visits = Widgets.Label(row, "GameFontHighlightSmall", false, "muted")
+	row.icon:SetSize(20, 20)
+	row.icon:SetPoint("LEFT", 12, 0)
+	row.name = Widgets.Label(row, "nav", false, "body")
+	row.name:SetPoint("TOPLEFT", 42, -8)
+	row.name:SetWidth(w - 42 - 72)
+	row.sub = Widgets.Label(row, "meta", false, "muted")
+	row.sub:SetPoint("TOPLEFT", 42, -30)
+	row.sub:SetWidth(w - 42 - 72)
+	row.visits = Widgets.Label(row, "meta", false, "muted")
 	row.visits:SetJustifyH("RIGHT")
-	row.visits:SetPoint("TOPRIGHT", -10, -20)
+	row.visits:SetPoint("RIGHT", -12, 0)
 	row.visits:SetWidth(64)
 	row:SetScript("OnEnter", function(self) self.hover = true; Style.Repaint(self) end)
 	row:SetScript("OnLeave", function(self) self.hover = nil; Style.Repaint(self) end)
+	Widgets.Tooltip(row, nil)
 	Style.Register(row, function(r, theme)
-		Style.Color(r.bg, theme.surfaceHover, (r.selected or r.hover) and 1 or 0)
-		r.edges:Paint(theme.border or theme.accent, r.selected and 1 or 0)
+		local tones = Style.Tones(theme)
+		Style.Color(r.bg, r.selected and theme.surfaceHover or tones.cardHover, (r.selected or r.hover) and 1 or 0)
+		r.edges:Paint(r.selected and (theme.border or theme.accent) or tones.selectedEdge,
+			(r.selected or r.hover) and 1 or 0)
 	end)
 	return row
 end
 
--- A stat tile: a small eyebrow over a value.
-local function statTile(parent, label)
+-- A stat tile: a small eyebrow (wrapping, as "Next return moment" does)
+-- over a value.
+local function statTile(parent, label, L)
 	local tile = CreateFrame("Frame", nil, parent)
 	tile.bg = Style.Solid(tile, "BACKGROUND", -1)
 	tile.bg:SetAllPoints(tile)
 	tile.edges = Style.Edge(tile, "BORDER")
-	tile.label = Widgets.Label(tile, nil, false, "eyebrow")
-	tile.label:SetPoint("TOPLEFT", 12, -10)
+	tile.label = Widgets.Label(tile, nil, true, "eyebrow")
+	tile.label:SetPoint("TOPLEFT", L.statPad, -L.statPad)
 	tile.label:SetText(label:upper())
-	tile.value = Widgets.Label(tile, "GameFontHighlight", true, "body")
-	tile.value:SetPoint("TOPLEFT", 12, -28)
+	tile.labelText = label
+	tile.value = Widgets.Label(tile, "reading", true, "body")
 	Style.Register(tile, function(t, theme)
-		Style.Color(t.bg, theme.surface)
+		Style.Color(t.bg, theme.background)
 		t.edges:Paint(theme.edge, 1)
 	end)
 	return tile
+end
+
+local function placeRect(region, rect)
+	region:ClearAllPoints()
+	region:SetPoint("TOPLEFT", rect.x, -rect.y)
+	region:SetWidth(rect.w)
+	if rect.h then region:SetHeight(rect.h) end
 end
 
 local function placeMemoryForm(place)
@@ -191,6 +304,8 @@ local function placeMemoryForm(place)
 	}
 end
 ChroniclePlaces.MemoryForm = placeMemoryForm
+
+ChroniclePlaces.STATS = { "Visits", "Last here", "Next return moment" }
 
 --- Builds the view inside parent. api = { act(fn), openForm(spec) }.
 function ChroniclePlaces.Create(parent, width, api)
@@ -217,84 +332,64 @@ function ChroniclePlaces.Create(parent, width, api)
 		end)
 		view.rows[i] = row
 	end
-	view.prev = Widgets.Button(list, "<", 26, 22, "ghost")
+	local pagerSize = Style.CONTROL.compact
+	view.prev = Widgets.Button(list, "<", pagerSize, pagerSize, "ghost")
 	view.prev:SetPoint("BOTTOMLEFT", L.listPad, L.listPad)
 	view.prev:SetScript("OnClick", function() view.page = view.page - 1; view.selected = nil; ns.MainWindow.Refresh() end)
 	Widgets.Tooltip(view.prev, "Previous page")
-	view.pageLabel = Widgets.Label(list, "GameFontHighlightSmall", false, "muted")
-	view.pageLabel:SetPoint("BOTTOM", 0, L.listPad + 5)
-	view.next = Widgets.Button(list, ">", 26, 22, "ghost")
+	view.pageLabel = Widgets.Label(list, "meta", false, "muted")
+	view.pageLabel:SetPoint("BOTTOM", 0, L.listPad + 7)
+	view.next = Widgets.Button(list, ">", pagerSize, pagerSize, "ghost")
 	view.next:SetPoint("BOTTOMRIGHT", -L.listPad, L.listPad)
 	view.next:SetScript("OnClick", function() view.page = view.page + 1; view.selected = nil; ns.MainWindow.Refresh() end)
 	Widgets.Tooltip(view.next, "Next page")
 
-	-- The detail panel.
+	-- The detail panel (placed from DetailLayout on every refresh).
 	local dw = width - L.listWidth - L.gap
-	local inner = dw - 2 * L.detailPad
 	local d = Widgets.Panel(f)
 	d:SetPoint("TOPLEFT", L.listWidth + L.gap, 0)
 	d:SetSize(dw, L.height)
 	view.detail = d
-	local P = L.detailPad
-	d.name = Widgets.Label(d, "GameFontNormalHuge", false, "body")
-	d.name:SetPoint("TOPLEFT", P, -P)
-	d.name:SetWidth(inner)
+	d.width = dw
+	d.name = Widgets.Label(d, "GameFontNormalHuge", false, "title")
+	d.nameHover = CreateFrame("Frame", nil, d)
+	Widgets.Tooltip(d.nameHover, nil)
 	d.sub = Widgets.Label(d, "GameFontHighlight", false, "muted")
-	d.sub:SetPoint("TOPLEFT", P, -P - 34)
-	d.sub:SetWidth(inner)
 	d.means = Widgets.Label(d, nil, false, "eyebrow")
-	d.means:SetPoint("TOPLEFT", P, -P - 64)
 	d.means:SetText("WHAT IT MEANS TO YOUR CHARACTER")
 	d.chips = {}
 	for i = 1, 3 do
 		d.chips[i] = Widgets.Chip(d, "", "accent")
 	end
-	d.note = Widgets.Label(d, "GameFontHighlightSmall", true, "muted")
-	d.note:SetPoint("TOPLEFT", P, -P - 112)
-	d.note:SetSize(inner, 30)
-	local statW = math.floor((inner - 2 * L.statGap) / 3)
+	d.note = Widgets.Label(d, "meta", true, "muted")
 	d.stats = {}
-	for i, label in ipairs({ "Visits", "Last here", "Next return moment" }) do
-		local tile = statTile(d, label)
-		tile:SetSize(statW, L.statHeight)
-		tile:SetPoint("TOPLEFT", P + (i - 1) * (statW + L.statGap), -P - 152)
-		tile.value:SetWidth(statW - 24)
-		d.stats[i] = tile
+	for i, label in ipairs(ChroniclePlaces.STATS) do
+		d.stats[i] = statTile(d, label, L)
 	end
 	d.tiedLabel = Widgets.Label(d, nil, false, "eyebrow")
-	d.tiedLabel:SetPoint("TOPLEFT", P, -P - 232)
 	d.tiedLabel:SetText("TIED MEMORIES")
 	for i = 1, L.tied do
 		local row = Widgets.Card(d)
-		row:SetSize(inner, L.tiedHeight)
-		row:SetPoint("TOPLEFT", P, -P - 252 - (i - 1) * (L.tiedHeight + L.tiedGap))
-		row.text = Widgets.Label(row, "GameFontHighlightSmall", false, "body")
-		row.text:SetPoint("LEFT", 10, 0)
-		row.text:SetWidth(inner - 20)
+		row.text = Widgets.Label(row, "GameFontHighlight", false, "body")
+		row.text:SetPoint("LEFT", 14, 0)
+		Widgets.Tooltip(row, nil)
 		view.tiedRows[i] = row
 	end
-	d.tiedEmpty = Widgets.Label(d, "GameFontHighlightSmall", true, "muted")
-	d.tiedEmpty:SetPoint("TOPLEFT", P, -P - 254)
-	d.tiedEmpty:SetWidth(inner)
+	d.tiedEmpty = Widgets.Label(d, "meta", true, "muted")
 	d.tiedEmpty:SetText("No memories are tied to this place yet. Write one here, and returning will recall it.")
-	d.more = Widgets.Label(d, "GameFontHighlightSmall", false, "muted")
-	d.more:SetPoint("TOPLEFT", P, -P - 252 - L.tied * (L.tiedHeight + L.tiedGap))
+	d.more = Widgets.Label(d, "meta", false, "muted")
 	d.divider = Widgets.Divider(d)
-	d.divider:SetPoint("BOTTOMLEFT", P, P + L.buttonHeight + 14)
-	d.divider:SetWidth(inner)
-	d.write = Widgets.Button(d, "Write a memory here", 150, L.buttonHeight, "primary")
-	d.write:SetPoint("BOTTOMLEFT", P, P)
-	d.mark = Widgets.Button(d, "Mark meaningful", 134, L.buttonHeight)
-	d.mark:SetPoint("LEFT", d.write, "RIGHT", L.buttonGap, 0)
-	d.homeland = Widgets.Button(d, "Set as homeland", 116, L.buttonHeight, "ghost")
-	d.homeland:SetPoint("LEFT", d.mark, "RIGHT", L.buttonGap, 0)
+	local widths = ChroniclePlaces.ActionWidths(dw - 2 * L.detailPad)
+	d.write = Widgets.Button(d, "Write a memory here", widths[1], L.buttonHeight, "primary")
+	d.mark = Widgets.Button(d, "Mark meaningful", widths[2], L.buttonHeight)
+	d.homeland = Widgets.Button(d, "Set as homeland", widths[3], L.buttonHeight, "ghost")
 	d.buttons = { d.write, d.mark, d.homeland }
 
 	-- Empty state: nothing logged yet.
 	view.empty = Widgets.Panel(f, "No places yet")
 	view.empty:SetPoint("TOPLEFT", 0, 0)
 	view.empty:SetSize(width, 120)
-	view.emptyText = Widgets.Label(view.empty.inner, "GameFontHighlight", true, "body")
+	view.emptyText = Widgets.Label(view.empty.inner, "reading", true, "reading")
 	view.emptyText:SetPoint("TOPLEFT", 0, 0)
 	view.emptyText:SetWidth(width - 2 * Widgets.PANEL_PAD)
 	view.emptyText:SetText("No places logged yet. Dawnward notes towns, inns and other places as you travel; "
@@ -306,20 +401,6 @@ function ChroniclePlaces.Create(parent, width, api)
 		local place = ns.Places.Entry(c, entry.zone, entry.subzone)
 		if not place then return nil, "that place is no longer logged" end
 		return place
-	end
-
-	local function placeChips(chips, list2, x0, y0)
-		local x = x0
-		for i, chip in ipairs(chips) do
-			local spec = list2[i]
-			chip:SetShown(spec ~= nil)
-			if spec then
-				chip:SetChip(spec[1], spec[2])
-				chip:ClearAllPoints()
-				chip:SetPoint("TOPLEFT", x, -y0)
-				x = x + chip:GetWidth() + 8
-			end
-		end
 	end
 
 	--- The places on the current page, and the selected one.
@@ -349,10 +430,13 @@ function ChroniclePlaces.Create(parent, width, api)
 				row.name:SetText(name)
 				row.sub:SetText(sub)
 				row.visits:SetText(ChroniclePlaces.VisitText(e.visits))
-				local icon = ns.Places.IsHomeland(char, e) and ChroniclePlaces.ICONS.homeland
+				local homeland = ns.Places.IsHomeland(char, e)
+				local icon = homeland and ChroniclePlaces.ICONS.homeland
 					or e.meaningful and ChroniclePlaces.ICONS.meaningful or nil
 				row.icon:SetShown(icon ~= nil)
 				if icon then row.icon:SetTexture(icon) end
+				Widgets.Tooltip(row, name, sub .. " · " .. ChroniclePlaces.VisitText(e.visits)
+					.. (homeland and "\nYour Homeland" or "") .. (e.meaningful and "\nMarked meaningful" or ""))
 				row.selected = e == selected or nil
 				Style.Repaint(row)
 			end
@@ -369,13 +453,11 @@ function ChroniclePlaces.Create(parent, width, api)
 	function view:ShowDetail(char, e)
 		local now = ns.ctx and ns.ctx.now and ns.ctx.now() or nil
 		local name = ChroniclePlaces.Lines(e)
-		d.name:SetText(name)
 		local parts = {}
 		if e.subzone then parts[#parts + 1] = e.zone end
 		parts[#parts + 1] = e.kind and ns.Places.KIND_LABELS[e.kind] or ChroniclePlaces.UNMAPPED
 		local first = ChroniclePlaces.ShortDate(e.first, now)
 		if first then parts[#parts + 1] = "first visited " .. (first == "Today" and "today" or first) end
-		d.sub:SetText(table.concat(parts, " · "))
 
 		local homeland = ns.Places.IsHomeland(char, e)
 		local tied = ChroniclePlaces.TiedMemories(char.story, e)
@@ -385,31 +467,87 @@ function ChroniclePlaces.Create(parent, width, api)
 		if e.meaningful then chips[#chips + 1] = { "Marked meaningful", "accent" } end
 		chips[#chips + 1] = { #tied == 0 and "No memories tied to it" or
 			string.format("%d memor%s tied to it", #tied, #tied == 1 and "y" or "ies"), "muted" }
-		placeChips(d.chips, chips, L.detailPad, L.detailPad + 84)
 
 		local field = char.fields and char.fields.homeland
+		local note
 		if homeland and field then
-			d.note:SetText(string.format("Your Homeland field reads \"%s\" and stays %s. Setting a homeland never "
+			note = string.format("Your Homeland field reads \"%s\" and stays %s. Setting a homeland never "
 				.. "changes its visibility.", field.value, ns.Themes.VISIBILITY_LABELS[field.visibility]
-				or field.visibility))
+				or field.visibility)
 		else
-			d.note:SetText("Set as homeland writes this place into your Homeland field; the field's visibility "
-				.. "stays as it is. Only you decide what a place means.")
+			note = "Set as homeland writes this place into your Homeland field; the field's visibility "
+				.. "stays as it is. Only you decide what a place means."
 		end
-
-		d.stats[1].value:SetText(tostring(e.visits or 0))
-		d.stats[2].value:SetText(ChroniclePlaces.ShortDate(e.last, now) or "Unknown")
 		local play = ns.NarrativeClock.Current(char, ns.ctx)
-		d.stats[3].value:SetText(ChroniclePlaces.ReturnText(ns.Places.ReturnCheck(char, e, e.kind, play)))
+		local values = { tostring(e.visits or 0), ChroniclePlaces.ShortDate(e.last, now) or "Unknown",
+			ChroniclePlaces.ReturnText(ns.Places.ReturnCheck(char, e, e.kind, play)) }
 
-		for i, row in ipairs(self.tiedRows) do
-			local m = tied[i]
-			row:SetShown(m ~= nil)
-			if m then row.text:SetText(ChroniclePlaces.MemoryLine(m)) end
+		local chipTexts, stats = {}, {}
+		for i, c in ipairs(chips) do chipTexts[i] = c[1] end
+		for i, label in ipairs(ChroniclePlaces.STATS) do stats[i] = { label, values[i] } end
+		local r = ChroniclePlaces.DetailLayout({ chips = chipTexts, note = note, stats = stats, tied = #tied }, d.width)
+		self.layout = r
+
+		placeRect(d.name, r.name)
+		d.name:SetText(name)
+		placeRect(d.nameHover, r.name)
+		Widgets.Tooltip(d.nameHover, name, table.concat(parts, " · "))
+		placeRect(d.sub, r.sub)
+		d.sub:SetText(table.concat(parts, " · "))
+		placeRect(d.means, r.means)
+		for i, chip in ipairs(d.chips) do
+			local spec, at = chips[i], r.chips[i]
+			chip:SetShown(spec ~= nil)
+			if spec then
+				chip:SetMaxWidth(at.w)
+				chip:SetChip(spec[1], spec[2])
+				chip:ClearAllPoints()
+				chip:SetPoint("TOPLEFT", at.x, -at.y)
+			end
 		end
+		placeRect(d.note, r.note)
+		if d.note.SetMaxLines then d.note:SetMaxLines(r.note.lines) end
+		d.note:SetText(note)
+		for i, tile in ipairs(d.stats) do
+			local at = r.stats[i]
+			placeRect(tile, at)
+			tile.label:SetWidth(at.w - 2 * L.statPad)
+			local labelLines = math.max(1, wrapLines(tile.labelText:upper(), at.w - 2 * L.statPad, "eyebrow"))
+			tile.value:ClearAllPoints()
+			tile.value:SetPoint("TOPLEFT", L.statPad, -(L.statPad + labelLines * L.statLabelLine + 6))
+			tile.value:SetWidth(at.w - 2 * L.statPad)
+			tile.value:SetText(values[i])
+		end
+		placeRect(d.tiedLabel, r.tiedLabel)
+
+		local muted = Style.Current().muted
+		local hexMuted = string.format("%02x%02x%02x", math.floor(muted[1] * 255 + 0.5),
+			math.floor(muted[2] * 255 + 0.5), math.floor(muted[3] * 255 + 0.5))
+		for i, row in ipairs(self.tiedRows) do
+			local m = i <= r.shown and tied[i] or nil
+			row:SetShown(m ~= nil)
+			if m then
+				placeRect(row, r.tied[i])
+				row.text:SetWidth(r.tied[i].w - 28)
+				local mname, mnote = ChroniclePlaces.MemoryParts(m)
+				row.text:SetText(string.format("%s  |cff%s·  %s|r", mname, hexMuted, mnote))
+				-- The memory whole on hover: its title and text.
+				Widgets.Tooltip(row, m.title or mname, m.text)
+			end
+		end
+		placeRect(d.tiedEmpty, r.tiedEmpty)
 		d.tiedEmpty:SetShown(#tied == 0)
-		d.more:SetShown(#tied > L.tied)
-		d.more:SetText(string.format("and %d more in Memories", #tied - L.tied))
+		placeRect(d.more, r.more)
+		d.more:SetShown(#tied > r.shown)
+		d.more:SetText(string.format("and %d more in Memories", #tied - r.shown))
+		placeRect(d.divider, r.divider)
+
+		local x = r.buttons.x
+		for _, b in ipairs(d.buttons) do
+			b:ClearAllPoints()
+			b:SetPoint("TOPLEFT", x, -r.buttons.y)
+			x = x + b:GetWidth() + L.buttonGap
+		end
 
 		local label = name
 		d.write:SetScript("OnClick", function() api.openForm(placeMemoryForm(e)) end)
