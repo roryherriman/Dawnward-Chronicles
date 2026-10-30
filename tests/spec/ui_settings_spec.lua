@@ -58,9 +58,9 @@ return function(t, expect)
 			local shadow = ns.Themes.Get("shadowbound")
 			expect.equal(frame.background.__color[1], shadow.background[1])
 			expect.truthy(panel.themeDescription:GetText():find("Shadowbound"))
-			-- Every themed control follows: a button's fill is the theme's surface.
+			-- Every themed control follows: a default (secondary) button is filled with the raised colour.
 			expect.equal(panel.done.bg.__color[1], shadow.accent[1], "primary button")
-			expect.equal(panel.guide.bg.__color[1], shadow.surface[1], "default button")
+			expect.equal(panel.guide.bg.__color[1], shadow.surfaceHover[1], "default button")
 		end)
 
 		t:it("starts new characters on Classic Dawnward, and keeps the v0.2 themes selectable", function()

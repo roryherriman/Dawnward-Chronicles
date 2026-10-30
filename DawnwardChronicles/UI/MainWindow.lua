@@ -23,30 +23,52 @@ MainWindow.STRATA = "MEDIUM"
 -- Sizes in UI units: the approved 1100 x 720 design. On screens with less
 -- room (a large UI scale or a small resolution) the window scales itself
 -- down to fit both ways (Style.FitScale).
+-- Every value is the approved Main.dc.html one (rail padding 20/18/16,
+-- portrait 116 with a 2 px ring, navigation 44 high with 4 between, header
+-- at 22 with the 36 px close button, content 772 wide).
 MainWindow.LAYOUT = {
 	width = 1100,
 	height = 720,
-	borderInset = 4,
+	borderInset = 1,      -- the 1 px gold frame line
 	railWidth = 272,
 	railPad = 18,
 	wordmarkTop = 20,
-	portraitTop = 52,
-	portraitSize = 112,
-	nameTop = 182,        -- name block top (name, title, identity line)
-	navTop = 292,         -- first navigation button top
+	wordmarkHeight = 18,
+	portraitTop = 56,
+	portraitSize = 116,   -- outer diameter of the gold ring
+	ringWidth = 2,
+	ringGap = 4,          -- dark gap between the ring and the portrait
+	badgeHeight = 22,     -- level badge, overlapping the ring's bottom by 14
+	badgeDrop = 8,
+	nameTop = 190,        -- name block top (name, title, identity line, chips)
+	nameLines = 2,
+	identityGap = 4,
+	chipGap = 10,         -- identity line to the homeland and privacy chips
+	navTop = 344,         -- first navigation button top
 	navHeight = 44,
 	navGap = 4,
+	navIconSize = 20,
+	navIconLeft = 14,
+	navLabelLeft = 46,
+	navBadge = 22,
 	tabCount = 4,
-	trp3Bottom = 58,      -- Total RP 3 status line, above the bottom edge
+	trp3Bottom = 56,      -- Total RP 3 status line, above the bottom edge
+	trp3Height = 18,
+	statusDot = 8,
 	railButtonHeight = 30,
+	railButtonGap = 8,
 	railButtonBottom = 16,
 	pad = 28,             -- content column side padding
 	headerTop = 22,       -- eyebrow top, below the top edge
+	eyebrowHeight = 18,
+	titleGap = 2,
+	titleHeight = 38,     -- Cinzel 28
 	iconSize = 36,
 	contentTop = 96,      -- content area top, below the top edge
 	contentBottom = 36,   -- content area bottom, above the bottom edge
 	statusBottom = 10,
 	statusHeight = 20,
+	grip = 16,
 }
 
 --- Pure layout maths: rectangles relative to the window's bottom-left corner.
@@ -110,28 +132,32 @@ function MainWindow.ComputeLayout(L)
 	r.rail = { left = L.borderInset, right = L.railWidth, bottom = L.borderInset, top = L.height - L.borderInset }
 	local railLeft, railRight = L.railPad, L.railWidth - L.railPad
 	local centre = L.railWidth / 2
-	r.wordmark = { left = railLeft, right = railRight, bottom = L.height - L.wordmarkTop - 18,
+	r.wordmark = { left = railLeft, right = railRight, bottom = L.height - L.wordmarkTop - L.wordmarkHeight,
 		top = L.height - L.wordmarkTop }
 	r.portrait = { left = centre - L.portraitSize / 2, right = centre + L.portraitSize / 2,
 		bottom = L.height - L.portraitTop - L.portraitSize, top = L.height - L.portraitTop }
+	local badgeWidth = 40
+	r.levelBadge = { left = centre - badgeWidth / 2, right = centre + badgeWidth / 2,
+		bottom = r.portrait.bottom - L.badgeDrop, top = r.portrait.bottom - L.badgeDrop + L.badgeHeight }
 	r.name = { left = railLeft, right = railRight, bottom = L.height - L.navTop + 12, top = L.height - L.nameTop }
 	r.tabs = {}
 	for i = 1, L.tabCount do
 		local top = L.height - L.navTop - (i - 1) * (L.navHeight + L.navGap)
-		r.tabs[i] = { left = railLeft - 4, right = railRight + 4, bottom = top - L.navHeight, top = top }
+		r.tabs[i] = { left = railLeft, right = railRight, bottom = top - L.navHeight, top = top }
 	end
-	local half = (railRight - railLeft - 8) / 2
+	local half = (railRight - railLeft - L.railButtonGap) / 2
 	r.help = { left = railLeft, right = railLeft + half, bottom = L.railButtonBottom,
 		top = L.railButtonBottom + L.railButtonHeight }
 	r.gear = { left = railRight - half, right = railRight, bottom = L.railButtonBottom,
 		top = L.railButtonBottom + L.railButtonHeight }
-	r.trp3 = { left = railLeft, right = railRight, bottom = L.trp3Bottom, top = L.trp3Bottom + 18 }
+	r.trp3 = { left = railLeft + 4, right = railRight - 4, bottom = L.trp3Bottom, top = L.trp3Bottom + L.trp3Height }
 	-- The content column.
 	local left, right = L.railWidth + L.pad, L.width - L.pad
 	local top = L.height - L.headerTop
 	r.close = { left = right - L.iconSize, right = right, bottom = top - L.iconSize, top = top }
-	r.eyebrow = { left = left, right = r.close.left - 12, bottom = top - 14, top = top }
-	r.title = { left = left, right = r.close.left - 12, bottom = top - 50, top = top - 18 }
+	r.eyebrow = { left = left, right = r.close.left - 12, bottom = top - L.eyebrowHeight, top = top }
+	local titleTop = r.eyebrow.bottom - L.titleGap
+	r.title = { left = left, right = r.close.left - 12, bottom = titleTop - L.titleHeight, top = titleTop }
 	r.content = { left = left, right = right, bottom = L.contentBottom, top = L.height - L.contentTop }
 	r.status = { left = left, right = right, bottom = L.statusBottom, top = L.statusBottom + L.statusHeight }
 	return r
@@ -161,16 +187,20 @@ local function setStatus(text)
 	end
 end
 
--- Rail navigation buttons: icon, label, optional count badge.
+-- Rail navigation buttons (Main.dc.html .navbtn): icon, label, optional
+-- count badge. Selected: a filled panel (raised colour) with a 1 px gold
+-- edge and bright gold text; hovered: half that fill; otherwise quiet text.
+-- tab.underline is the selected fill (the selection marker callers test).
 local function paintTab(tab, theme)
+	local tones = Style.Tones(theme)
 	local on = tab.selected
-	Style.Color(tab.bg, theme.surfaceHover, on and 1 or (tab.hover and 0.6 or 0))
-	tab.edges:Paint(theme.border or theme.ornament, on and 1 or 0)
+	Style.Color(tab.bg, theme.surfaceHover, (not on and tab.hover) and 0.5 or 0)
+	tab.edges:Paint(theme.border, on and 1 or 0)
 	tab.underline:SetShown(on and true or false)
-	Style.Color(tab.underline, theme.accent)
-	Style.TextColor(tab.label, (on or tab.hover) and theme.accent or theme.text)
+	Style.Color(tab.underline, theme.surfaceHover)
+	Style.TextColor(tab.label, on and tones.accentBright or (tab.hover and theme.text or tones.navText))
 	if tab.icon then
-		local tint = (on or tab.hover) and theme.accent or theme.muted
+		local tint = on and tones.accentBright or (tab.hover and theme.text or tones.navText)
 		tab.icon:SetVertexColor(tint[1], tint[2], tint[3])
 	end
 	Style.Color(tab.badgeBg, theme.accent)
@@ -246,6 +276,9 @@ local function makeView(theme, char)
 	}
 end
 
+MainWindow.TRP3_HELP = "Optional. Open the Total RP 3 page to see its status, preview what would be shared "
+	.. "and manage sync."
+
 --- The Total RP 3 line in the rail: availability only (read-only). Pure.
 function MainWindow.TRP3Line(status)
 	if type(status) ~= "table" or not status.installed then
@@ -256,6 +289,103 @@ function MainWindow.TRP3Line(status)
 	end
 	local profile = status.profile and status.profile.name
 	return profile and ("Total RP 3 · profile \"" .. profile .. "\"") or ("Total RP 3 " .. (status.version or ""))
+end
+
+--- color lightened just enough to read at 4.5:1 on background (class
+-- colours such as the Shaman's blue are too dark on the navy rail). Pure.
+function MainWindow.ReadableColor(color, background)
+	local c = color
+	for step = 1, 10 do
+		if Themes.Contrast(c, background) >= 4.5 then return c end
+		c = Style.Lighten(color, step * 0.1)
+	end
+	return c
+end
+
+local function hexOf(color)
+	return string.format("%02x%02x%02x", math.floor(color[1] * 255 + 0.5), math.floor(color[2] * 255 + 0.5),
+		math.floor(color[3] * 255 + 0.5))
+end
+
+--- The identity line under the name: "Human · Paladin · she/her", the class
+-- in its class colour (made readable on the rail) as the design shows it.
+-- Pure apart from the game identity passed in.
+function MainWindow.IdentityLine(game, char, railColor)
+	local line = ns.Showcase.IdentityLine(game, char)
+	if game.className and game.classColor and railColor then
+		local color = MainWindow.ReadableColor(game.classColor, railColor)
+		local coloured = "|cff" .. hexOf(color) .. game.className .. "|r"
+		local s, e = line:find(game.className, 1, true)
+		if s then line = line:sub(1, s - 1) .. coloured .. line:sub(e + 1) end
+	end
+	return line
+end
+
+--- The homeland chip's text: the Homeland profile field, or nil. Pure.
+function MainWindow.HomelandOf(char)
+	local field = char and char.fields and char.fields.homeland
+	local value = field and field.value
+	return type(value) == "string" and value ~= "" and value or nil
+end
+
+--- The privacy chip under the identity: how much of the profile is Public,
+-- from the profile fields' own visibility. nil when no field is set (there
+-- is nothing to summarise). Returns { text, tone, tooltip }. Pure.
+function MainWindow.PrivacySummary(char)
+	if not (char and char.fields) then return nil end
+	local set, public = 0, 0
+	for _, entry in pairs(char.fields) do
+		local value = entry.value
+		if value ~= nil and value ~= "" then
+			set = set + 1
+			if entry.visibility == "public" then public = public + 1 end
+		end
+	end
+	if set == 0 then return nil end
+	local fields = set == 1 and "field" or "fields"
+	if public == 0 then
+		return { text = "Private", tone = "private", tooltip = "None of your " .. set .. " profile " .. fields
+			.. " is Public, so nothing from your profile is shared." }
+	end
+	local shared = "may be shared (share exports, and Total RP 3 if you turned sync on)."
+	if public == set then
+		return { text = "Public", tone = "public", tooltip = "All " .. set .. " profile " .. fields .. " are Public: they "
+			.. shared }
+	end
+	return { text = public .. " of " .. set .. " public", tone = "public", tooltip = public .. " of your " .. set
+		.. " profile fields are Public: only those " .. shared }
+end
+
+-- Lays out the homeland and privacy chips, centred under the identity line
+-- and never wider than the rail.
+local function layoutChips(char)
+	local L = layout
+	local width = L.railWidth - 2 * L.railPad
+	local homeland, privacy = MainWindow.HomelandOf(char), MainWindow.PrivacySummary(char)
+	local chips, gap = {}, 6
+	local privacyChip, homeChip = frame.privacyChip, frame.homelandChip
+	privacyChip:SetShown(privacy ~= nil)
+	if privacy then
+		privacyChip:SetChip(privacy.text, privacy.tone)
+		Widgets.Tooltip(privacyChip, "Profile visibility", privacy.tooltip)
+	end
+	homeChip:SetShown(homeland ~= nil)
+	if homeland then
+		local room = width - (privacy and (privacyChip:GetWidth() + gap) or 0)
+		homeChip.maxWidth = room
+		homeChip:SetChip(homeland, "accent")
+		chips[#chips + 1] = homeChip
+	end
+	if privacy then chips[#chips + 1] = privacyChip end
+	local total = 0
+	for i, chip in ipairs(chips) do total = total + chip:GetWidth() + (i > 1 and gap or 0) end
+	local x = -total / 2
+	for _, chip in ipairs(chips) do
+		chip:ClearAllPoints()
+		chip:SetPoint("TOPLEFT", frame.chipRow, "TOP", x, 0)
+		x = x + chip:GetWidth() + gap
+	end
+	frame.chipRow.total = total
 end
 
 -- The rail's character block, from the profile and the game's own data.
@@ -269,9 +399,18 @@ local function refreshIdentity(char)
 	frame.charName:SetText(name)
 	local title = char and char.fields.title and char.fields.title.value
 	frame.charTitle:SetText(title or "")
-	frame.charLine:SetText(ns.Showcase.IdentityLine(game, char))
+	frame.charLine:SetText(MainWindow.IdentityLine(game, char, Style.Current().panel))
 	frame.level:SetText(game.level and tostring(game.level) or "")
 	frame.levelBadge:SetShown(game.level ~= nil)
+	layoutChips(char)
+	-- Cut short (a very long name or title): the full text on hover.
+	local cut = (frame.charName.IsTruncated and frame.charName:IsTruncated())
+		or (frame.charTitle.IsTruncated and frame.charTitle:IsTruncated())
+	frame.identityHover.tooltipTitle = cut and name or nil
+	frame.identityHover.tooltipText = cut and title or nil
+	-- Mouse input only while there is something to show, so the name area
+	-- still drags the window otherwise.
+	frame.identityHover:EnableMouse(cut and true or false)
 end
 
 local function refreshRail(char)
@@ -283,7 +422,12 @@ local function refreshRail(char)
 		tab.badgeBg:SetShown(count > 0)
 	end
 	local status = ctx().trp3Status and ctx().trp3Status() or nil
-	frame.trp3:SetText(MainWindow.TRP3Line(status))
+	local line = MainWindow.TRP3Line(status)
+	frame.trp3:SetText(line)
+	frame.trp3Dot.active = type(status) == "table" and status.loaded and true or nil
+	Style.Repaint(frame.trp3Dot)
+	frame.trp3Link.tooltipTitle = "Total RP 3"
+	frame.trp3Link.tooltipText = line .. "\n" .. MainWindow.TRP3_HELP
 end
 
 --- Re-reads data and redraws the visible parts. Cheap when hidden.
@@ -338,9 +482,9 @@ local function showSection(id)
 		end
 	end
 	setStatus("")
-	if appliedTheme then
-		tabColors()
-	end
+	-- Mark the selection now: also on the very first open, before the
+	-- character's theme has been applied (it used to show no selection).
+	tabColors()
 	MainWindow.Refresh()
 end
 
@@ -371,9 +515,7 @@ function MainWindow.ToggleSettings()
 	end
 	MainWindow.settings.frame:Show()
 	setStatus("")
-	if appliedTheme then
-		tabColors()
-	end
+	tabColors()
 	MainWindow.Refresh()
 end
 
@@ -487,29 +629,29 @@ local function buildTab(index, def, r)
 	local tab = CreateFrame("Button", nil, frame)
 	Widgets.Place(tab, frame, r.tabs[index])
 	tab.id = def.id
+	local L = layout
 	tab.bg = Widgets.Solid(tab, "BACKGROUND")
 	tab.bg:SetAllPoints(tab)
 	tab.edges = Style.Edge(tab, "BORDER")
-	-- Selection marker (kept under its v0.6 name for callers and tests).
-	tab.underline = Widgets.Solid(tab, "ARTWORK")
-	tab.underline:SetWidth(3)
-	tab.underline:SetPoint("TOPLEFT", 1, -8)
-	tab.underline:SetPoint("BOTTOMLEFT", 1, 8)
+	-- Selection marker (kept under its v0.6 name for callers and tests): the
+	-- selected item's filled panel, inside its gold edge.
+	tab.underline = Widgets.Solid(tab, "BACKGROUND", 1)
+	tab.underline:SetAllPoints(tab)
 	if def.icon then
 		tab.icon = tab:CreateTexture(nil, "ARTWORK")
-		tab.icon:SetSize(22, 22)
-		tab.icon:SetPoint("LEFT", 14, 0)
+		tab.icon:SetSize(L.navIconSize, L.navIconSize)
+		tab.icon:SetPoint("LEFT", L.navIconLeft, 0)
 		tab.icon:SetTexture(def.icon)
 		tab.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 		if tab.icon.SetDesaturated then tab.icon:SetDesaturated(true) end
 	end
-	tab.label = tab:CreateFontString(nil, "OVERLAY", Style.Font("GameFontHighlight"))
-	tab.label:SetPoint("LEFT", def.icon and 46 or 16, 0)
+	tab.label = tab:CreateFontString(nil, "OVERLAY", Style.FontFor("nav"))
+	tab.label:SetPoint("LEFT", def.icon and L.navLabelLeft or 16, 0)
 	tab.label:SetText(def.label)
-	tab.badgeBg = Widgets.Solid(tab, "ARTWORK")
-	tab.badgeBg:SetSize(24, 20)
-	tab.badgeBg:SetPoint("RIGHT", -12, 0)
-	tab.badge = tab:CreateFontString(nil, "OVERLAY", Style.Font("GameFontHighlightSmall"))
+	-- Count badge: a round gold disc (a pill for two digits) with dark text.
+	tab.badgeBg = Style.Disc(tab, "ARTWORK", 0, L.navBadge)
+	tab.badgeBg:SetPoint("RIGHT", -L.navIconLeft, 0)
+	tab.badge = tab:CreateFontString(nil, "OVERLAY", Style.FontFor("badge"))
 	tab.badge:SetPoint("CENTER", tab.badgeBg, "CENTER", 0, 0)
 	tab.badgeBg:Hide()
 	tab:SetScript("OnClick", function() showSection(def.id) end)
@@ -529,46 +671,118 @@ local function buildRail(r)
 	frame.railLine:SetPoint("BOTTOMLEFT", layout.railWidth, layout.borderInset)
 	Style.Register(frame.railLine, function(t, theme) Style.Color(t, theme.edge) end)
 
+	-- Wordmark: a small gold jewel (a square turned 45 degrees; the design's
+	-- four-point star needs vector art) and DAWNWARD in Cinzel.
+	frame.jewel = Widgets.Solid(frame, "ARTWORK")
+	frame.jewel:SetSize(8, 8)
+	local jewelY = -(layout.wordmarkTop + layout.wordmarkHeight / 2)
+	frame.jewel:SetPoint("CENTER", frame, "TOPLEFT", r.wordmark.left + 12, jewelY)
+	if frame.jewel.SetRotation then frame.jewel:SetRotation(math.pi / 4) end
+	Style.Register(frame.jewel, function(t, theme) Style.Color(t, theme.accent) end)
 	frame.wordmark = Widgets.Label(frame, nil, false, "eyebrow")
-	Widgets.Place(frame.wordmark, frame, r.wordmark)
+	Widgets.SetTextRole(frame.wordmark, "accent")
+	Widgets.Place(frame.wordmark, frame, { left = r.wordmark.left + 26, right = r.wordmark.right,
+		bottom = r.wordmark.bottom, top = r.wordmark.top })
+	frame.wordmark:SetJustifyV("MIDDLE")
 	frame.wordmark:SetText("DAWNWARD")
-	frame.portrait = ns.Showcase.Portrait(frame, layout.portraitSize)
+
+	-- Portrait: the game's round portrait inside a 2 px gold ring with a dark
+	-- gap, drawn as masked discs (ring, gap, portrait well). Where masks are
+	-- not available, the Showcase portrait keeps its tinted tracking ring.
+	local L = layout
+	frame.portrait = ns.Showcase.Portrait(frame, L.portraitSize)
 	Widgets.Place(frame.portrait, frame, r.portrait)
+	local ring = {}
+	ring.outer = Style.Disc(frame.portrait, "BACKGROUND", 0, L.portraitSize)
+	ring.gap = Style.Disc(frame.portrait, "BACKGROUND", 1, L.portraitSize - 2 * L.ringWidth)
+	ring.well = Style.Disc(frame.portrait, "BACKGROUND", 2, L.portraitSize - 2 * (L.ringWidth + L.ringGap))
+	for _, disc in pairs(ring) do disc:SetPoint("CENTER", frame.portrait, "CENTER", 0, 0) end
+	ring.round = ring.outer.round and ring.gap.round and ring.well.round
+	for _, key in ipairs({ "outer", "gap", "well" }) do ring[key]:SetShown(ring.round and true or false) end
+	if ring.round and frame.portrait.ring then frame.portrait.ring:Hide() end
+	Style.Register(ring, function(rg, theme)
+		Style.Color(rg.outer, theme.accent)
+		Style.Color(rg.gap, theme.panel)
+		Style.Color(rg.well, theme.surfaceHover)
+	end)
+	frame.portraitRing = ring
+
+	-- Level badge: a pill on the ring's bottom edge (a square badge where
+	-- round shapes are not available).
 	frame.levelBadge = CreateFrame("Frame", nil, frame)
-	frame.levelBadge:SetSize(34, 20)
-	frame.levelBadge:SetPoint("TOP", frame.portrait, "BOTTOM", 0, 8)
-	frame.levelBadge.bg = Style.Fill(frame.levelBadge, "background", "BACKGROUND")
+	Widgets.Place(frame.levelBadge, frame, r.levelBadge)
+	frame.levelBadge:SetSize(r.levelBadge.right - r.levelBadge.left, L.badgeHeight)
+	if frame.levelBadge.SetFrameLevel and frame.portrait.GetFrameLevel then
+		local level = frame.portrait:GetFrameLevel()
+		if type(level) == "number" then frame.levelBadge:SetFrameLevel(level + 2) end
+	end
+	frame.levelBadge.bg = Widgets.Solid(frame.levelBadge, "BACKGROUND")
 	frame.levelBadge.bg:SetAllPoints(frame.levelBadge)
 	frame.levelBadge.edges = Style.Edge(frame.levelBadge, "BORDER")
-	Style.Register(frame.levelBadge.edges, function(e, theme) e:Paint(theme.border or theme.ornament, 1) end)
-	frame.level = Widgets.Label(frame.levelBadge, "GameFontHighlightSmall", false, "accent")
+	frame.levelBadge.pill = Style.Pill(frame.levelBadge, L.badgeHeight)
+	Style.Register(frame.levelBadge, function(b, theme)
+		if b.pill then
+			b.pill:Paint(theme.background, theme.border)
+			b.bg:Hide()
+			b.edges:SetShown(false)
+		else
+			Style.Color(b.bg, theme.background)
+			b.edges:Paint(theme.border, 1)
+		end
+	end)
+	frame.level = Widgets.Label(frame.levelBadge, "badge", false, "accent")
+	Widgets.SetTextRole(frame.level, "accentBright")
 	frame.level:SetPoint("CENTER", 0, 0)
 	frame.level:SetJustifyH("CENTER")
 
-	local width = layout.railWidth - 2 * layout.railPad
-	frame.charName = Widgets.Label(frame, "GameFontHighlightLarge", true, "body")
-	frame.charName:SetPoint("TOP", frame, "TOPLEFT", layout.railWidth / 2, -layout.nameTop)
+	-- Name (Cinzel 21, at most two lines), title (one line, warm gold),
+	-- race · class · pronouns (14, muted, class in its colour), then the
+	-- homeland and privacy chips.
+	local width = L.railWidth - 2 * L.railPad
+	frame.charName = Widgets.Label(frame, "railName", true, "body")
+	frame.charName:SetPoint("TOP", frame, "TOPLEFT", L.railWidth / 2, -L.nameTop)
 	frame.charName:SetWidth(width)
 	frame.charName:SetJustifyH("CENTER")
-	frame.charTitle = Widgets.Label(frame, "GameFontHighlight", true, "accent")
-	frame.charTitle:SetPoint("TOP", frame.charName, "BOTTOM", 0, -4)
+	if frame.charName.SetMaxLines then frame.charName:SetMaxLines(L.nameLines) end
+	frame.charTitle = Widgets.Label(frame, "GameFontHighlight", false, "body")
+	Widgets.SetTextRole(frame.charTitle, "label")
+	frame.charTitle:SetPoint("TOP", frame.charName, "BOTTOM", 0, -L.identityGap)
 	frame.charTitle:SetWidth(width)
 	frame.charTitle:SetJustifyH("CENTER")
-	frame.charLine = Widgets.Label(frame, "GameFontHighlightSmall", true, "muted")
-	frame.charLine:SetPoint("TOP", frame.charTitle, "BOTTOM", 0, -4)
+	frame.charLine = Widgets.Label(frame, "meta", false, "muted")
+	frame.charLine:SetPoint("TOP", frame.charTitle, "BOTTOM", 0, -L.identityGap)
 	frame.charLine:SetWidth(width)
 	frame.charLine:SetJustifyH("CENTER")
+	frame.chipRow = CreateFrame("Frame", nil, frame)
+	frame.chipRow:SetSize(width, Widgets.CHIP_HEIGHT)
+	frame.chipRow:SetPoint("TOP", frame.charLine, "BOTTOM", 0, -L.chipGap)
+	frame.homelandChip = Widgets.Chip(frame.chipRow, "", "accent")
+	frame.homelandChip:SetBase("panel")
+	frame.privacyChip = Widgets.Chip(frame.chipRow, "", "private")
+	frame.privacyChip:SetBase("panel")
+	-- Hover area over the name and title: the full text when either is cut.
+	frame.identityHover = CreateFrame("Frame", nil, frame)
+	frame.identityHover:SetPoint("TOPLEFT", frame.charName, "TOPLEFT", 0, 0)
+	frame.identityHover:SetPoint("BOTTOMRIGHT", frame.charTitle, "BOTTOMRIGHT", 0, 0)
+	Widgets.Tooltip(frame.identityHover, nil)
 
+	-- Total RP 3 status: a dot and one line, which opens the Total RP 3 page
+	-- (Settings → Total RP 3).
+	frame.trp3Dot = Style.Disc(frame, "ARTWORK", 0, L.statusDot)
+	frame.trp3Dot:SetPoint("LEFT", frame, "BOTTOMLEFT", r.trp3.left, (r.trp3.bottom + r.trp3.top) / 2)
+	Style.Register(frame.trp3Dot, function(t, theme)
+		Style.Color(t, t.active and theme.accent or Style.Tones(theme).dot)
+	end)
 	frame.trp3 = Widgets.Label(frame, "GameFontHighlightSmall", false, "muted")
-	Widgets.Place(frame.trp3, frame, r.trp3)
-	-- The status line opens the Total RP 3 page (Settings → Total RP 3).
+	Widgets.Place(frame.trp3, frame, { left = r.trp3.left + L.statusDot + 8, right = r.trp3.right,
+		bottom = r.trp3.bottom, top = r.trp3.top })
+	frame.trp3:SetJustifyV("MIDDLE")
 	frame.trp3Link = CreateFrame("Button", nil, frame)
 	Widgets.Place(frame.trp3Link, frame, r.trp3)
 	frame.trp3Link:SetScript("OnClick", function()
 		if ns.SettingsPanel and ns.SettingsPanel.OpenPage then ns.SettingsPanel.OpenPage("trp3") end
 	end)
-	Widgets.Tooltip(frame.trp3Link, "Total RP 3", "Optional. Open the Total RP 3 page to see its status, "
-		.. "preview what would be shared and manage sync.")
+	Widgets.Tooltip(frame.trp3Link, "Total RP 3", MainWindow.TRP3_HELP)
 	frame.help = Widgets.Button(frame, "Guide", r.help.right - r.help.left, layout.railButtonHeight, "ghost")
 	Widgets.Place(frame.help, frame, r.help)
 	frame.help:SetScript("OnClick", function()
@@ -599,7 +813,9 @@ local function build()
 	frame:RegisterForDrag("LeftButton")
 	frame:SetScript("OnDragStart", frame.StartMoving)
 	frame:SetScript("OnDragStop", savePosition)
-	Style.Chrome(frame, "background")
+	-- The gold frame line and the top-left ornament; the bottom-right corner
+	-- holds the resize grip, which takes the ornament's place there.
+	Style.Chrome(frame, "background", { corners = { "TOPLEFT" } })
 	frame.background = frame.chrome.fill
 	-- The content column reads on the window ground; the rail on the panel colour.
 	frame.contentWell = Style.Fill(frame, "background", "BACKGROUND", -7)
