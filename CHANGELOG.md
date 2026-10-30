@@ -12,7 +12,7 @@ Every release entry has a **Verified** line naming the highest test level reache
 
 A feature is never called "tested" or "compatible" in this file unless it reached L3 or L4.
 
-## [Unreleased]: 0.8.0-dev (pre-playthrough milestone, in progress)
+## [Unreleased]: 0.8.0-dev (pre-playthrough candidate)
 
 **Verified: L2** (mocked). Nothing in this section has been tested in game yet.
 
