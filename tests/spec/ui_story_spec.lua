@@ -528,24 +528,37 @@ return function(t, expect)
 	end)
 
 	t:describe("story settings (L2)", function()
-		t:it("cycle buttons change preferences through the same actions", function()
+		t:it("segmented controls show every option and change preferences through the same actions", function()
 			local mock, env, ns = Boot.Start()
 			mock.Slash("set name A")
 			mock.Slash("")
 			ns.MainWindow.ToggleSettings()
 			local panel = ns.SettingsPanel.panel
-			local moments = panel.storyButtons[1]
-			expect.equal(moments:GetText(), "Moments: Normal  ›", "the current value, and that a click moves on")
-			expect.truthy(moments.tooltipText:find("[Normal]", 1, true), "every option, the current one marked")
-			expect.truthy(moments.tooltipText:find("Click to switch", 1, true))
-			click(moments)
+			local moments = panel.storyRows[1]
+			local function option(row, value)
+				for _, b in ipairs(row.control.buttons) do
+					if b.segmentId == value then return b end
+				end
+			end
+			local labels = {}
+			for i, b in ipairs(moments.control.buttons) do labels[i] = b:GetText() end
+			expect.deepEqual(labels, { "Rare", "Normal", "Frequent", "Off" }, "every option is visible")
+			expect.equal(moments.control.selected, "normal", "the value in use is selected")
+			expect.truthy(option(moments, "normal").selected)
+			expect.truthy(moments.hover.tooltipText:find("[Normal]", 1, true), "every option, the current one marked")
+			click(option(moments, "frequent"))
 			local prefs = env.DawnwardChroniclesDB.characters[CHAR].story.prefs
 			expect.equal(prefs.frequency, "frequent")
-			expect.equal(moments:GetText(), "Moments: Frequent  ›")
-			expect.truthy(moments.tooltipText:find("[Frequent]", 1, true))
-			local quests = panel.storyButtons[#panel.storyButtons]
-			click(quests)
+			expect.truthy(option(moments, "frequent").selected)
+			expect.falsy(option(moments, "normal").selected)
+			expect.truthy(moments.hover.tooltipText:find("[Frequent]", 1, true))
+			local quests
+			for _, row in ipairs(panel.storyRows) do
+				if row.setting.tracking == "quest" then quests = row end
+			end
+			click(option(quests, false))
 			expect.equal(prefs.tracking.quest, false)
+			expect.truthy(option(quests, false).selected)
 		end)
 	end)
 end

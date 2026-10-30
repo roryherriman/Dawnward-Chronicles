@@ -187,4 +187,88 @@ return function(t, expect)
 			expect.equal(w.fitScale, 1, "never scaled up")
 		end)
 	end)
+
+	t:describe("setup wizard v0.8: hierarchy and spacing (SetupWizard.dc.html)", function()
+		local function topOf(widget)
+			for _, p in ipairs(widget.__points or {}) do
+				if p[1] == "TOPLEFT" then return p[#p] end
+			end
+		end
+
+		t:it("the rail: round 26 px badges, 44 px steps, and a mode eyebrow that never reaches the steps", function()
+			local mock, _, ns = start()
+			mock.Slash("")
+			local w = wizard(ns)
+			local L = ns.SetupWizard.LAYOUT
+			for _, step in ipairs(w.steps) do
+				expect.equal(step:GetHeight(), 44)
+				expect.equal(step.badge:GetWidth(), L.badge)
+			end
+			-- Each mode's eyebrow fits two lines of the rail (Cinzel 13, 16 px lines).
+			local eyebrowWidth = L.rail - 48
+			for _, text in ipairs({ "FIRST-TIME SETUP", "PREVIEW · TEST MODE", "SIMULATION · PREVIEW ONLY",
+				"READ-ONLY · NOTHING SAVED" }) do
+				expect.truthy(ns.Style.TextWidth(text, "eyebrow") <= 2 * eyebrowWidth, text)
+			end
+			expect.truthy(L.top + 26 + 2 * 16 <= L.stepsTop, "two eyebrow lines end above the first step")
+			-- Badge states: current gold, done gold-tinted with the check, future edged.
+			ns.SetupWizard.Go(3)
+			local theme = ns.Style.Current()
+			expect.equal(w.steps[3].badgeBg.__color[1], theme.accent[1])
+			expect.truthy(w.steps[1].check:IsShown())
+			expect.equal(w.steps[5].badgeRing.__color[1], ns.Style.Tones(theme).edgeStrong[1])
+		end)
+
+		t:it("the header: Cinzel stage title, a one-line subtitle, a 36 px close", function()
+			local mock, _, ns = start()
+			mock.Slash("")
+			local w = wizard(ns)
+			expect.equal(w.close:GetWidth(), 36)
+			for _, subtitle in pairs(ns.SetupWizard.SUBTITLES) do
+				expect.truthy(ns.Style.TextWidth(subtitle, "body") <= w.subtitle:GetWidth(), subtitle)
+			end
+			local L = ns.SetupWizard.LAYOUT
+			expect.truthy(L.top + 60 + 18 <= L.bodyTop, "subtitle above the body")
+		end)
+
+		t:it("Character: fields, hints and errors never overlap, and the stage fits above the footer", function()
+			local mock, _, ns = start()
+			mock.Slash("")
+			ns.SetupWizard.Go(2)
+			local L = ns.SetupWizard.LAYOUT
+			local name, pronouns = input(ns, "name"), input(ns, "pronouns")
+			expect.equal(name:GetHeight(), ns.Style.CONTROL.input)
+			-- Row 1: the label 22 above the input, the hint (or error) below; row 2's label after that.
+			local hintBottom = -topOf(name) + name:GetHeight() + 4 + 17
+			expect.truthy(hintBottom <= -topOf(pronouns) - 22, "row 1's hint ends above row 2's label")
+			local summary = input(ns, "summary").anchorRegion
+			local errorBottom = -topOf(summary) + summary:GetHeight() + 3 + 17
+			local note = wizard(ns).privateNote
+			expect.truthy(errorBottom <= -topOf(note), "the long field's error line ends above the note")
+			expect.truthy(-topOf(note) + note:GetHeight() <= L.height - L.bodyTop - L.footer - 8, "fits the body")
+			-- Hints are one line in their column.
+			expect.truthy(ns.Style.TextWidth(name.hint:GetText(), "small") <= name:GetWidth())
+		end)
+
+		t:it("footer and cycle labels fit their buttons", function()
+			local mock, _, ns = start()
+			mock.Slash("")
+			local w = wizard(ns)
+			local fits = ns.Widgets.LabelFits
+			for _, page in ipairs(ns.Onboarding.PAGES) do
+				expect.truthy(fits("Next: " .. page.title, w.next:GetWidth(), w.next:GetHeight()))
+			end
+			expect.truthy(fits("Save choices", w.next:GetWidth(), w.next:GetHeight()))
+			expect.truthy(fits(w.discard:GetText(), w.discard:GetWidth(), w.discard:GetHeight()))
+			expect.truthy(fits(w.later:GetText(), w.later:GetWidth(), w.later:GetHeight()))
+			for _, b in ipairs(w.cycles) do
+				for _, v in ipairs(b.spec.values) do
+					-- Room is kept on the right for the chevron.
+					expect.truthy(fits(v[2], b:GetWidth() - 24, b:GetHeight(), "choice"), v[2])
+				end
+				expect.truthy(b.chevron:GetText() ~= "")
+			end
+			expect.truthy(fits(w.importStory:GetText(), w.importStory:GetWidth(), w.importStory:GetHeight()))
+		end)
+	end)
 end

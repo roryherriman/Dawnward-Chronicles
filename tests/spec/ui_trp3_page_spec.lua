@@ -219,8 +219,14 @@ return function(t, expect)
 			local page = open(ns)
 			expect.truthy(page.backupRows[1]:IsShown())
 			expect.truthy(page.backupRows[1].name:GetText():find("#1 About", 1, true))
-			expect.truthy(page.backupRows[1].date:GetText():find("%d%d%d%d, %d%d:%d%d"), "the full date, on its own line")
-			expect.equal(page.backupRows[1].date.__points[1][1], "BOTTOMLEFT", "under the name, not beside it")
+			-- v0.8 (the design's backup list): one row, the short date at the right in its own column, so the
+			-- name and the date never crowd each other; the full date is the row's tooltip.
+			local backupRow = page.backupRows[1]
+			expect.truthy(backupRow.date:GetText():find("^%d+ %a%a%a$"), backupRow.date:GetText())
+			expect.equal(backupRow.date.__points[1][1], "RIGHT")
+			expect.truthy(8 + backupRow.name:GetWidth() + 8 + backupRow.date:GetWidth() + 8 <= backupRow:GetWidth(),
+				"name and date columns do not overlap")
+			expect.truthy(backupRow.tooltipText:find("%d%d%d%d, %d%d:%d%d"), "the full date on hover")
 			expect.truthy(page.rollback:IsEnabled())
 			click(page.backupRows[1])
 			-- v0.8: the exact restore is a separate button that names the risk;
@@ -278,24 +284,96 @@ return function(t, expect)
 			local _, _, ns = start()
 			local page = open(ns)
 			local L = ns.MainWindow.LAYOUT
-			local pageHeight = L.height - L.contentTop - L.contentBottom - 78
+			local pageHeight = L.height - L.contentTop - L.contentBottom - ns.SettingsPanel.LAYOUT.pageTop
 			local cardH = page.card:GetHeight()
 			expect.equal(-top(page.card) + cardH, pageHeight, "card ends at the bottom of the page")
 			for _, w in ipairs({ page.keep, page.preview, page.hidden }) do
 				expect.truthy(-top(w) + w:GetHeight() <= cardH - 46, "above the button row")
 			end
 			expect.truthy(page.conflict:GetHeight() + ns.TRP3Page.GAP + page.backups:GetHeight() <= cardH)
-			expect.truthy(page.card:GetWidth() + ns.TRP3Page.GAP + ns.TRP3Page.RIGHT_WIDTH + 20
-				<= ns.MainWindow.ContentWidth())
+			expect.equal(page.card:GetWidth() + ns.TRP3Page.COLUMN_GAP + ns.TRP3Page.RIGHT_WIDTH,
+				ns.MainWindow.ContentWidth(), "the two columns fill the content width")
 			expect.truthy(page.approve:GetWidth() + page.notNow:GetWidth() + page.toggle:GetWidth() + 8 + 28
 				< page.card:GetWidth(), "the three actions do not overlap")
 			-- Mappings: every row and the note stay above the Authorize row.
 			local last = page.mapRows[#page.mapRows]
-			expect.truthy(-top(last) + last:GetHeight() + 4 + 3 * 12 <= cardH - 36 - 6, "rows fit")
+			expect.truthy(-top(last) + last:GetHeight() + 4 + ns.TRP3Page.LINE <= cardH - 14 - page.authorize:GetHeight(),
+				"rows and the one-line note stay above the Authorize row")
 			local r = page.mapRows[1]
 			expect.truthy(r.name:GetWidth() + ns.TRP3Page.IMPORT_WIDTH + ns.TRP3Page.SELECTOR_WIDTH + 12
 				<= r:GetWidth(), "row text, Import and the selector do not overlap")
 			expect.truthy(page.authorize:GetWidth() + page.resetChoices:GetWidth() + 8 + 28 < page.card:GetWidth())
+		end)
+
+		t:it("v0.8 layout: every Mappings selector item fits \"Dawnward\", and the right column's labels fit", function()
+			local _, _, ns = start()
+			local page = open(ns)
+			for _, r in ipairs(page.mapRows) do
+				for _, b in ipairs(r.selector.buttons) do
+					expect.truthy(ns.Widgets.LabelFits(b:GetText(), b:GetWidth(), b:GetHeight(), "segment"),
+						r.id .. ": " .. b:GetText() .. " in " .. b:GetWidth())
+					expect.truthy(b:GetWidth() >= 74, "the shell pass measured ~74 px for Dawnward")
+				end
+				if r.import then
+					expect.truthy(ns.Widgets.LabelFits("Import", r.import:GetWidth(), r.import:GetHeight()))
+				end
+				expect.equal(r.detail:GetWidth(), r:GetWidth(), "the detail line runs the full row width")
+			end
+			for _, b in ipairs({ page.keepYours, page.reclaim, page.rollback, page.exact, page.copy, page.approve,
+				page.notNow, page.authorize, page.resetChoices }) do
+				expect.truthy(ns.Widgets.LabelFits(b:GetText(), b:GetWidth(), b:GetHeight()), b:GetText())
+			end
+			for _, text in ipairs({ "Stop syncing biography", "Enable syncing biography…", "Enable syncing traits…" }) do
+				expect.truthy(ns.Widgets.LabelFits(text, page.toggle:GetWidth(), page.toggle:GetHeight()), text)
+			end
+			expect.equal(page.approve:GetHeight(), ns.Style.CONTROL.standard)
+		end)
+
+		t:it("v0.8 layout: the strip's columns hold the design's values, and the chips do not crowd the title", function()
+			local _, _, ns = start()
+			local page = open(ns)
+			local values = { "Installed · 3.4.1 · supported", "\"Kyssarra (RP)\" · this character only",
+				"On for Biography · off for Traits" }
+			for i, v in ipairs(values) do
+				expect.truthy(ns.Style.TextWidth(v, "body") <= page.columns[i]:GetWidth(), v)
+			end
+			local W = page.columnWidths
+			expect.truthy(16 + W[1] + W[2] + W[3] + 12 + page.experimental:GetWidth() + 16 <= page.width)
+			-- The nav and the state chip share the top row of the card.
+			expect.truthy(18 + 3 * 92 + 12 + ns.Style.TextWidth("Needs your approval", "small") + 20
+				<= page.leftWidth - 18)
+			expect.equal(ns.TRP3Page.STATE_CHIP.ready[2], "waiting", "needs-you chips are amber, as the design")
+		end)
+
+		t:it("v0.8 layout: the Biography boxes stack without overlapping, above the action row", function()
+			local _, _, ns = start()
+			local page = open(ns)
+			local boxes = { page.keep, page.preview, page.hidden }
+			for i = 2, #boxes do
+				expect.truthy(-top(boxes[i]) >= -top(boxes[i - 1]) + boxes[i - 1]:GetHeight() + 4, "gap between boxes")
+			end
+			local actionTop = page.mainHeight - 14 - ns.TRP3Page.ACTION_HEIGHT
+			expect.truthy(-top(page.hidden) + page.hidden:GetHeight() + 6 <= actionTop - 8, "above the rule")
+			expect.truthy(28 + ns.TRP3Page.PREVIEW_LINES * 16 + 8 <= page.preview:GetHeight(), "preview lines fit")
+			-- The two never-shared paragraphs fit their two lines each.
+			local w = page.innerWidth - 20
+			expect.truthy(ns.Style.TextWidth(ns.TRP3Page.UNSUPPORTED_TEXT, "meta") <= 2 * w)
+			expect.truthy(ns.Style.TextWidth(ns.TRP3Page.EXPLAIN.about, "meta") <= 2 * page.innerWidth)
+			expect.truthy(ns.Style.TextWidth(ns.TRP3Page.EXPLAIN.traits, "meta") <= 2 * page.innerWidth)
+			expect.truthy(ns.Style.TextWidth(ns.TRP3Page.MAPPINGS_EXPLAIN, "meta") <= 2 * page.innerWidth)
+			-- Right column: the callout and the backups stay inside the page.
+			expect.truthy(page.conflict:GetHeight() + ns.TRP3Page.GAP + page.backups:GetHeight() <= page.mainHeight)
+		end)
+
+		t:it("v0.8 look: the preview box uses the Public chip's colours, and the plain boxes the input well", function()
+			local _, _, ns = start()
+			local page = open(ns)
+			local theme = ns.Style.Current()
+			local fill, edge = ns.Widgets.ChipColors(ns.Themes.VISIBILITY_COLORS.public, theme, theme.surface)
+			expect.equal(page.preview.bg.__color[1], fill[1])
+			expect.equal(page.preview.edges.top.__color[2], edge[2])
+			expect.equal(page.keep.bg.__color[1], ns.Style.Tones(theme).field[1])
+			expect.equal(page.hidden.bg.__color[3], ns.Style.Tones(theme).field[3])
 		end)
 
 		t:it("the chat commands still behave as before after the refactor", function()

@@ -436,4 +436,58 @@ return function(t, expect)
 			expect.deepEqual(fake.snapshot(), before)
 		end)
 	end)
+
+	t:describe("story import: the window's v0.8 layout (L2)", function()
+		local function start()
+			local mock, env, ns2 = Boot.Start()
+			mock.Slash("set name Aelin")
+			mock.Slash("")
+			ns2.ImportWizard.Open({ from = "settings" })
+			return mock, env, ns2, ns2.ImportWizard.Frame()
+		end
+		local function click(b) b:GetScript("OnClick")(b) end
+		local function topOf(widget)
+			for _, p in ipairs(widget.__points or {}) do
+				if p[1] == "TOPLEFT" then return p[#p] end
+			end
+		end
+
+		t:it("the split choice shows both options, the one in use selected, and a click picks one", function()
+			local _, _, ns2, w = start()
+			expect.equal(#w.mode.buttons, 2)
+			expect.equal(w.mode.selected, ns2.StoryImport.DEFAULT_MODE)
+			for _, b in ipairs(w.mode.buttons) do
+				expect.truthy(ns2.Widgets.LabelFits(b:GetText(), b:GetWidth(), b:GetHeight(), "segment"), b:GetText())
+				if b.segmentId ~= w.modeValue then
+					click(b)
+					expect.equal(w.modeValue, b.segmentId)
+					expect.equal(w.mode.selected, b.segmentId)
+				end
+			end
+		end)
+
+		t:it("both pages fit between the header and the footer, with 36 px controls", function()
+			local _, _, ns2, w = start()
+			local L = ns2.ImportWizard.LAYOUT
+			local body = L.height - L.bodyTop - L.footer
+			expect.truthy(-topOf(w.textNote) + w.textNote:GetHeight() <= body, "text page")
+			expect.truthy(-topOf(w.reviewNote) + w.reviewNote:GetHeight() <= body, "review page")
+			-- The statement's error line ends above the category row.
+			local errorBottom = -topOf(w.statement) + w.statement:GetHeight() + 3 + 17
+			expect.truthy(errorBottom <= -topOf(w.category), "error line above Category")
+			for _, b in ipairs({ w.readTRP3, w.loadSaved, w.approve, w.skip, w.later, w.previous, w.primary,
+				w.secondary }) do
+				expect.equal(b:GetHeight(), ns2.Style.CONTROL.standard)
+			end
+			for _, text in ipairs({ "Save and review", "Done", "Review waiting (99)", "Back to text", "Close",
+				"Read from Total RP 3", "Load saved story", "Previous" }) do
+				local b = (text == "Save and review" or text == "Done") and w.primary or w.secondary
+				if text == "Read from Total RP 3" then b = w.readTRP3 end
+				if text == "Load saved story" then b = w.loadSaved end
+				if text == "Previous" then b = w.previous end
+				expect.truthy(ns2.Widgets.LabelFits(text, b:GetWidth(), b:GetHeight()), text)
+			end
+			expect.equal(w.close:GetWidth(), 36)
+		end)
+	end)
 end

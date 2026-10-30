@@ -34,11 +34,18 @@ TRP3Page.FEATURES = {
 }
 local FEATURE_LABEL = { about = "Biography", traits = "Traits", fields = "Profile fields", mappings = "Mappings" }
 
-TRP3Page.MAP_ROW_HEIGHT = 34
+-- Layout (v0.8, proposed-trp3-sync.png / TRP3Sync.dc.html). The page fills
+-- the settings page: the summary strip on top, then the feature card on the
+-- left and the right column (conflict callout, backups) 16 px beside it.
+-- Mapping rows are two lines: the name with its selector and Import on the
+-- first, the detail across the full width on the second. Each selector item
+-- is wide enough for "Dawnward" in bold 14 (about 74 px with its insets).
+TRP3Page.MAP_ROW_HEIGHT = 37
 TRP3Page.MAP_ROW_GAP = 2
-TRP3Page.MAP_TOP = 112
-TRP3Page.SELECTOR_WIDTH = 162
-TRP3Page.IMPORT_WIDTH = 54
+TRP3Page.MAP_TOP = 116
+TRP3Page.SELECTOR_WIDTH = 240
+TRP3Page.SELECTOR_HEIGHT = 20
+TRP3Page.IMPORT_WIDTH = 60
 
 -- Selector choices per mapping: the biography and traits are on or off;
 -- a field is managed by Dawnward, by Total RP 3, or not synchronised.
@@ -46,17 +53,23 @@ TRP3Page.BLOCK_CHOICES = { { id = "dawnward", label = "Dawnward" }, { id = "off"
 TRP3Page.FIELD_CHOICES = { { id = "dawnward", label = "Dawnward" }, { id = "trp3", label = "TRP3" },
 	{ id = "off", label = "Off" } }
 
-TRP3Page.MAPPINGS_EXPLAIN = "Only Public information, never over your own Total RP 3 text. Nothing changes "
-	.. "until you Authorize."
+TRP3Page.MAPPINGS_EXPLAIN = "Choose who keeps each part up to date. Only Public information is written, never "
+	.. "over your own Total RP 3 text, and nothing changes until you Authorize."
 
 TRP3Page.RIGHT_WIDTH = 258
-TRP3Page.GAP = 12
-TRP3Page.SUMMARY_HEIGHT = 54
-TRP3Page.PREVIEW_LINES = 6
+TRP3Page.GAP = 12          -- between the callout and the backups
+TRP3Page.COLUMN_GAP = 16   -- between the feature card and the right column
+TRP3Page.STRIP_GAP = 12    -- below the summary strip
+TRP3Page.SUMMARY_HEIGHT = 62
+TRP3Page.CARD_PAD = 18
+TRP3Page.PREVIEW_LINES = 4
 TRP3Page.REASON_CHARS = 150
 TRP3Page.BACKUP_ROWS = 3
-TRP3Page.BACKUP_ROW_HEIGHT = 36
-TRP3Page.BACKUPS_HEIGHT = 256
+TRP3Page.BACKUP_ROW_HEIGHT = 30
+TRP3Page.BACKUPS_HEIGHT = 254
+TRP3Page.CONFLICT_HEIGHT = 172
+TRP3Page.ACTION_HEIGHT = 36   -- Approve and write, Not now, Stop syncing
+TRP3Page.LINE = 17            -- one line of 14 px text
 
 -- Chip text and tone per Sync.Check state (labels follow the command's
 -- STATE_LABEL: off, waiting, blocked, conflict, up to date, has changes).
@@ -66,7 +79,7 @@ TRP3Page.STATE_CHIP = {
 	blocked = { "Blocked", "danger" },
 	conflict = { "Conflict", "danger" },
 	noop = { "Up to date", "public" },
-	ready = { "Needs your approval", "accent" },
+	ready = { "Needs your approval", "waiting" },
 }
 local TITLE_PHRASE = {
 	off = "sync is off", deferred = "waiting", blocked = "blocked", conflict = "conflict",
@@ -84,9 +97,11 @@ TRP3Page.EXPLAIN = {
 		.. "traits you made yourself are never changed.",
 }
 
-TRP3Page.UNSUPPORTED_TEXT = "Title, race, class, age and homeland are written only if you hand them to "
-	.. "Dawnward on the Mappings tab; name, pronouns and the other fields never. Only Public facts, stances and "
-	.. "defining moments go into the biography block, and Public personality axes into traits."
+TRP3Page.UNSUPPORTED_TEXT = "Title, race, class, age and homeland: only if you hand them over on Mappings; "
+	.. "name, pronouns and the other fields never."
+TRP3Page.UNSUPPORTED_DETAIL = "Only Public facts, stances and defining moments go into the biography block, and "
+	.. "Public personality axes into traits. Title, race, class, age and homeland are written only if you hand them "
+	.. "to Dawnward on the Mappings tab; name, pronouns and the other fields never."
 
 TRP3Page.BACKUP_NOTE = "A backup is taken before every write, and each write is read back and undone at once if "
 	.. "anything differs. Older backups: /dawnward trp3 backups."
@@ -239,217 +254,280 @@ local function act(fn)
 	return message
 end
 
-local function label(parent, role, wrap)
-	return Widgets.Label(parent, nil, wrap, role)
+-- A label in a Dawnward style (default "meta", 14) with a colour role.
+local function label(parent, role, wrap, style)
+	local fs = Widgets.Label(parent, style or "meta", wrap, ns.Style.TEXT[role] and role or nil)
+	if role and not ns.Style.TEXT[role] then
+		Widgets.SetTextRole(fs, role) -- a derived tone (navText, ...)
+	end
+	return fs
 end
 
-local function box(parent, tone)
+-- A paragraph capped at maxLines (the full text belongs in a tooltip).
+local function paragraph(parent, role, width, maxLines, style)
+	local fs = label(parent, role, true, style)
+	fs:SetWidth(width)
+	fs:SetMaxLines(maxLines)
+	return fs
+end
+
+-- One line that never wraps; the client cuts it with "..." when too long.
+local function oneLine(parent, role, width, style)
+	local fs = label(parent, role, false, style)
+	fs:SetWidth(width)
+	return fs
+end
+
+-- A hover area over a region, for the full text of a shortened one.
+local function hoverOver(parent, region)
+	local h = CreateFrame("Frame", nil, parent)
+	h:SetAllPoints(region)
+	return h
+end
+
+local Style = ns.Style
+local WHITE = { 1, 1, 1 }
+
+-- The design's two diff boxes, painted from shared tones (no local tint):
+--   "plain" (kept text, never shared): the input well and the track edge
+--   "add"   (what would be written, Public only): the Public chip's fill and
+--           edge (Widgets.ChipColors), the same colours as a Public chip
+local function box(parent, kind)
 	local f = CreateFrame("Frame", nil, parent)
-	f.bg = ns.Style.Solid(f, "BACKGROUND", -1)
+	f.bg = Style.Solid(f, "BACKGROUND", -1)
 	f.bg:SetAllPoints(f)
-	f.edges = ns.Style.Edge(f, "BORDER")
-	f.tone = tone
-	ns.Style.Register(f, function(b, theme)
-		if b.tone == "add" then
-			ns.Style.Color(b.bg, ns.Themes.VISIBILITY_COLORS.public, 0.10)
-			b.edges:Paint(ns.Themes.VISIBILITY_COLORS.public, 0.45)
+	f.edges = Style.Edge(f, "BORDER")
+	f.kind = kind or "plain"
+	Style.Register(f, function(b, theme)
+		if b.kind == "add" then
+			local fill, edge = Widgets.ChipColors(ns.Themes.VISIBILITY_COLORS.public, theme, theme.surface)
+			Style.Color(b.bg, fill)
+			b.edges:Paint(edge, 1)
 		else
-			ns.Style.Color(b.bg, theme.background)
-			b.edges:Paint(theme.edge, 1)
+			local tones = Style.Tones(theme)
+			Style.Color(b.bg, tones.field)
+			b.edges:Paint(tones.track, 1)
 		end
 	end)
 	return f
 end
 
+--- The colour of the text inside the "add" box: the Public colour, lighter
+-- (the design's #BFE9D5 on #132820). Pure.
+function TRP3Page.AddTextColor()
+	return Style.Mix(ns.Themes.VISIBILITY_COLORS.public, WHITE, 0.35)
+end
+
+-- The conflict callout in the design's amber ("needs you"): a warm dark fill,
+-- the waiting chip's edge and an amber title. Local until Widgets.Callout
+-- takes a tone (proposal in docs/design/audit/settings-setup-trp3.md).
+local function paintAmber(callout)
+	local amber = ns.Themes.STATUS_COLORS.waiting
+	Style.Register(callout, function(p, theme)
+		local _, edge = Widgets.ChipColors(amber, theme, theme.surface)
+		Style.Color(p.bg, Style.Mix(theme.background, amber, 0.05))
+		p.edges:Paint(edge, 1)
+	end)
+	if callout.glow then callout.glow:Hide() end
+	Style.Register(callout.title, function(fs) Style.TextColor(fs, amber) end)
+end
+
 --- Builds the page inside parent (the settings page frame). Returns page.
 function TRP3Page.Build(parent, width, height)
 	local page = { frame = parent, feature = nil, backupRows = {} }
-	local inset = 10
-	local W = width - 2 * inset
-	local leftW = W - TRP3Page.RIGHT_WIDTH - TRP3Page.GAP
-	local mainTop = -(TRP3Page.SUMMARY_HEIGHT + 10)
-	local mainH = height - TRP3Page.SUMMARY_HEIGHT - 10
+	local W = width
+	local leftW = W - TRP3Page.RIGHT_WIDTH - TRP3Page.COLUMN_GAP
+	local mainTop = -(TRP3Page.SUMMARY_HEIGHT + TRP3Page.STRIP_GAP)
+	local mainH = height - TRP3Page.SUMMARY_HEIGHT - TRP3Page.STRIP_GAP
+	local P = TRP3Page.CARD_PAD
+	local LINE = TRP3Page.LINE
+	page.width, page.height, page.leftWidth, page.mainHeight = W, height, leftW, mainH
 
 	-- Summary strip: TRP3 · linked profile · sync, plus "Experimental".
 	local strip = Widgets.Panel(parent)
-	strip:SetPoint("TOPLEFT", inset, 0)
+	strip:SetPoint("TOPLEFT", 0, 0)
 	strip:SetSize(W, TRP3Page.SUMMARY_HEIGHT)
 	page.strip = strip
-	local colW = { 220, 270, W - 14 - 490 }
-	local x = 14
-	page.columns = {}
+	page.experimental = Widgets.Chip(strip, "Experimental", "muted")
+	page.experimental:SetPoint("RIGHT", -16, 0)
+	Widgets.Tooltip(page.experimental, "Experimental", "Writing to Total RP 3 uses its internals with no official "
+		.. "support. It is off unless you turn it on, per character and per profile.")
+	local chipW = page.experimental:GetWidth()
+	local colW = { 188, 240 }
+	colW[3] = W - 32 - colW[1] - colW[2] - chipW - 12
+	page.columnWidths = colW
+	local x = 16
+	page.columns, page.columnHovers = {}, {}
 	for i, title in ipairs({ "Total RP 3", "Linked profile", "Sync" }) do
 		local head = Widgets.Label(strip, "GameFontNormalSmall", false, "eyebrow")
-		head:SetPoint("TOPLEFT", x, -10)
+		head:SetPoint("TOPLEFT", x, -12)
 		head:SetText(title:upper())
-		local value = label(strip, "body", false)
-		value:SetPoint("TOPLEFT", x, -26)
-		value:SetWidth(colW[i] - 12)
+		local value = oneLine(strip, "body", colW[i] - 18, "body")
+		value:SetPoint("TOPLEFT", x, -31)
 		page.columns[i] = value
+		page.columnHovers[i] = hoverOver(strip, value)
 		if i < 3 then
 			local rule = Widgets.Divider(strip)
 			rule:SetSize(1, 34)
-			rule:SetPoint("TOPLEFT", x + colW[i] - 8, -10)
+			rule:SetPoint("TOPLEFT", x + colW[i] - 9, -14)
 		end
 		x = x + colW[i]
 	end
-	-- The header cells double as hover targets for details.
-	page.trp3Hover = CreateFrame("Frame", nil, strip)
-	page.trp3Hover:SetPoint("TOPLEFT", 0, 0)
-	page.trp3Hover:SetSize(colW[1], TRP3Page.SUMMARY_HEIGHT)
-	page.experimental = Widgets.Chip(strip, "Experimental", "muted")
-	page.experimental:SetPoint("TOPRIGHT", -10, -6)
-	Widgets.Tooltip(page.experimental, "Experimental", "Writing to Total RP 3 uses its internals with no official "
-		.. "support. It is off unless you turn it on, per character and per profile.")
+	-- The first column doubles as the hover target for version details.
+	page.trp3Hover = page.columnHovers[1]
 
 	-- Left: one feature at a time.
 	local card = Widgets.Panel(parent)
-	card:SetPoint("TOPLEFT", inset, mainTop)
+	card:SetPoint("TOPLEFT", 0, mainTop)
 	card:SetSize(leftW, mainH)
 	page.card = card
-	local innerW = leftW - 28
+	local innerW = leftW - 2 * P
+	page.innerWidth = innerW
 
 	-- Shown instead of the feature view when Total RP 3 is not available.
 	page.absent = CreateFrame("Frame", nil, card)
 	page.absent:SetAllPoints(card)
 	page.absentTitle = Widgets.Label(page.absent, "GameFontNormalLarge", false, "title")
-	page.absentTitle:SetPoint("TOPLEFT", 14, -16)
+	page.absentTitle:SetPoint("TOPLEFT", P, -18)
 	page.absentTitle:SetText("Total RP 3 is optional")
-	page.absentText = label(page.absent, "body", true)
-	page.absentText:SetPoint("TOPLEFT", 14, -46)
+	page.absentText = label(page.absent, "reading", true, "reading")
+	page.absentText:SetPoint("TOPLEFT", P, -50)
 	page.absentText:SetWidth(innerW)
 	page.absentStatus = label(page.absent, "muted", true)
-	page.absentStatus:SetPoint("TOPLEFT", 14, -150)
+	page.absentStatus:SetPoint("TOPLEFT", P, -170)
 	page.absentStatus:SetWidth(innerW)
 
 	local body = CreateFrame("Frame", nil, card)
 	body:SetAllPoints(card)
 	page.body = body
 
-	page.nav = Widgets.Segmented(body, TRP3Page.FEATURES, 288, 22, function(id)
+	page.nav = Widgets.Segmented(body, TRP3Page.FEATURES, 3 * 92, Style.CONTROL.compact, function(id)
 		page.feature = id
 		MainWindow.Refresh()
 	end)
-	page.nav.buttons[1]:SetPoint("TOPLEFT", 14, -12)
+	page.nav.buttons[1]:SetPoint("TOPLEFT", P, -16)
 	page.chip = Widgets.Chip(body, "", "muted")
-	page.chip:SetPoint("TOPRIGHT", -14, -13)
+	page.chip:SetPoint("TOPRIGHT", -P, -19)
+	page.chip:SetMaxWidth(innerW - 3 * 92 - 12)
 
 	page.title = Widgets.Label(body, "GameFontNormalLarge", false, "title")
-	page.title:SetPoint("TOPLEFT", 14, -42)
+	page.title:SetPoint("TOPLEFT", P, -58)
 	page.title:SetWidth(innerW)
-	page.explain = label(body, "muted", true)
-	page.explain:SetPoint("TOPLEFT", 14, -66)
-	page.explain:SetWidth(innerW)
-	page.reasons = label(body, "small", true)
-	page.reasons:SetPoint("TOPLEFT", 14, -96)
-	page.reasons:SetWidth(innerW)
-	-- Long guard reasons are shortened on the page; the full text is here.
+	page.explain = paragraph(body, "muted", innerW, 2)
+	page.explain:SetPoint("TOPLEFT", P, -86)
+	page.reasons = oneLine(body, "body", innerW)
+	page.reasons:SetPoint("TOPLEFT", P, -122)
+	-- The status line is one line on the page; the full text is here.
 	page.reasonsHover = CreateFrame("Frame", nil, body)
-	page.reasonsHover:SetPoint("TOPLEFT", 14, -96)
-	page.reasonsHover:SetSize(innerW, 28)
+	page.reasonsHover:SetPoint("TOPLEFT", P, -122)
+	page.reasonsHover:SetSize(innerW, LINE)
 
-	page.keep = box(body)
-	page.keep:SetPoint("TOPLEFT", 14, -128)
-	page.keep:SetSize(innerW, 34)
-	page.keepText = label(page.keep, "small", true)
-	page.keepText:SetPoint("TOPLEFT", 10, -6)
-	page.keepText:SetWidth(innerW - 20)
+	page.keep = box(body, "plain")
+	page.keep:SetPoint("TOPLEFT", P, -146)
+	page.keep:SetSize(innerW, 2 * LINE + 8)
+	page.keepText = paragraph(page.keep, "navText", innerW - 20, 2)
+	page.keepText:SetPoint("TOPLEFT", 10, -4)
 
 	page.preview = box(body, "add")
-	page.preview:SetPoint("TOPLEFT", 14, -168)
-	page.preview:SetSize(innerW, 118)
+	page.preview:SetPoint("TOPLEFT", P, -194)
+	page.preview:SetSize(innerW, 28 + TRP3Page.PREVIEW_LINES * 16 + 8)
 	page.previewHead = Widgets.Label(page.preview, "GameFontNormalSmall", false, "eyebrow")
-	page.previewHead:SetPoint("TOPLEFT", 10, -8)
-	page.previewHead:SetText("EXACTLY WHAT WOULD BE WRITTEN · PUBLIC ONLY")
-	page.copy = Widgets.Button(page.preview, "Copy text", 90, 20, "ghost")
-	page.copy:SetPoint("TOPRIGHT", -6, -4)
+	page.previewHead:SetPoint("TOPLEFT", 10, -9)
+	page.previewHead:SetText("WHAT WOULD BE WRITTEN · PUBLIC ONLY")
+	Style.Register(page.previewHead, function(fs) Style.TextColor(fs, ns.Themes.VISIBILITY_COLORS.public) end)
+	page.copy = Widgets.Button(page.preview, "Copy text", 92, 24, "ghost")
+	page.copy:SetPoint("TOPRIGHT", -5, -4)
 	Widgets.Tooltip(page.copy, "Copy text", "Show this text (public facts only) to paste into Total RP 3 "
 		.. "yourself. Same as /dawnward trp3 paste. Nothing is written.")
 	page.copy:SetScript("OnClick", function()
 		Commands.Execute(ns.ctx, "trp3 paste")
 	end)
-	page.previewText = label(page.preview, "small", true)
-	page.previewText:SetPoint("TOPLEFT", 10, -28)
-	page.previewText:SetWidth(innerW - 20)
+	page.previewText = paragraph(page.preview, nil, innerW - 20, TRP3Page.PREVIEW_LINES)
+	page.previewText:SetPoint("TOPLEFT", 10, -30)
+	Style.Register(page.previewText, function(fs) Style.TextColor(fs, TRP3Page.AddTextColor()) end)
 
-	page.hidden = box(body)
-	page.hidden:SetPoint("TOPLEFT", 14, -292)
-	page.hidden:SetSize(innerW, 104)
+	page.hidden = box(body, "plain")
+	page.hidden:SetPoint("TOPLEFT", P, -300)
+	page.hidden:SetSize(innerW, 100)
 	local hiddenHead = Widgets.Label(page.hidden, "GameFontNormalSmall", false, "eyebrow")
-	hiddenHead:SetPoint("TOPLEFT", 10, -8)
+	hiddenHead:SetPoint("TOPLEFT", 10, -9)
 	hiddenHead:SetText("NEVER SHARED")
-	page.hiddenText = label(page.hidden, "small", true)
-	page.hiddenText:SetPoint("TOPLEFT", 10, -24)
-	page.hiddenText:SetWidth(innerW - 20)
-	page.unsupported = label(page.hidden, "muted", true)
-	page.unsupported:SetPoint("TOPLEFT", 10, -58)
-	page.unsupported:SetWidth(innerW - 20)
+	page.hiddenText = paragraph(page.hidden, "navText", innerW - 20, 2)
+	page.hiddenText:SetPoint("TOPLEFT", 10, -28)
+	page.unsupported = paragraph(page.hidden, "muted", innerW - 20, 2)
+	page.unsupported:SetPoint("TOPLEFT", 10, -64)
 	page.unsupported:SetText(TRP3Page.UNSUPPORTED_TEXT)
+	page.hiddenHover = hoverOver(page.hidden, page.hidden)
+	Widgets.Tooltip(page.hiddenHover, "Never shared", TRP3Page.UNSUPPORTED_DETAIL)
 
+	local A = TRP3Page.ACTION_HEIGHT
 	local rule = Widgets.Divider(body)
-	rule:SetPoint("BOTTOMLEFT", 14, 44)
-	rule:SetPoint("BOTTOMRIGHT", -14, 44)
-	page.approve = Widgets.Button(body, "Approve and write", 150, 26, "primary")
-	page.approve:SetPoint("BOTTOMLEFT", 14, 10)
-	page.notNow = Widgets.Button(body, "Not now", 84, 26, "ghost")
+	rule:SetPoint("BOTTOMLEFT", P, 14 + A + 8)
+	rule:SetPoint("BOTTOMRIGHT", -P, 14 + A + 8)
+	page.actionRule = rule
+	page.approve = Widgets.Button(body, "Approve and write", 150, A, "primary")
+	page.approve:SetPoint("BOTTOMLEFT", P, 14)
+	page.notNow = Widgets.Button(body, "Not now", 90, A, "ghost")
 	page.notNow:SetPoint("LEFT", page.approve, "RIGHT", 8, 0)
-	page.toggle = Widgets.Button(body, "", 196, 26, "danger")
-	page.toggle:SetPoint("BOTTOMRIGHT", -14, 10)
+	page.toggle = Widgets.Button(body, "", 194, A, "danger")
+	page.toggle:SetPoint("BOTTOMRIGHT", -P, 14)
 
 	-- Mappings view (first-time connection, ownership, differences).
 	page.map = CreateFrame("Frame", nil, body)
 	page.map:SetAllPoints(body)
-	page.mapExplain = label(page.map, "muted", true)
-	page.mapExplain:SetPoint("TOPLEFT", 14, -66)
-	page.mapExplain:SetWidth(innerW)
+	page.mapExplain = paragraph(page.map, "muted", innerW, 2)
+	page.mapExplain:SetPoint("TOPLEFT", P, -58)
 	page.mapExplain:SetText(TRP3Page.MAPPINGS_EXPLAIN)
-	page.sharedWarn = label(page.map, "small", true)
-	page.sharedWarn:SetPoint("TOPLEFT", 14, -84)
-	page.sharedWarn:SetWidth(innerW)
+	page.sharedWarn = oneLine(page.map, "body", innerW)
+	page.sharedWarn:SetPoint("TOPLEFT", P, -96)
+	page.sharedWarnHover = hoverOver(page.map, page.sharedWarn)
 	page.staged = {}
 	page.mapRows = {}
-	local detailW = innerW - TRP3Page.SELECTOR_WIDTH - TRP3Page.IMPORT_WIDTH - 12
+	local S, I = TRP3Page.SELECTOR_WIDTH, TRP3Page.IMPORT_WIDTH
+	local nameW = innerW - S - I - 12
 	for i, id in ipairs(ns.TRP3Ledger.MAPPINGS) do
 		local row = CreateFrame("Frame", nil, page.map)
 		row:SetSize(innerW, TRP3Page.MAP_ROW_HEIGHT)
-		row:SetPoint("TOPLEFT", 14, -(TRP3Page.MAP_TOP + (i - 1) * (TRP3Page.MAP_ROW_HEIGHT + TRP3Page.MAP_ROW_GAP)))
+		row:SetPoint("TOPLEFT", P, -(TRP3Page.MAP_TOP + (i - 1) * (TRP3Page.MAP_ROW_HEIGHT + TRP3Page.MAP_ROW_GAP)))
 		row.id = id
 		row.block = ns.TRP3Ledger.BLOCK_FEATURES[id] == true
-		row.name = label(row, "body", false)
+		if i > 1 then
+			row.rule = Widgets.Divider(row)
+			row.rule:SetPoint("TOPLEFT", 0, TRP3Page.MAP_ROW_GAP)
+			row.rule:SetPoint("TOPRIGHT", 0, TRP3Page.MAP_ROW_GAP)
+		end
+		row.name = oneLine(row, "body", nameW, "body")
 		row.name:SetPoint("TOPLEFT", 0, -1)
-		row.name:SetWidth(detailW)
-		row.detail = label(row, "muted", false)
-		row.detail:SetPoint("TOPLEFT", 0, -19)
-		row.detail:SetWidth(detailW)
+		-- The detail runs the full width under the name and the selector.
+		row.detail = oneLine(row, "muted", innerW)
+		row.detail:SetPoint("TOPLEFT", 0, -20)
 		row.hover = CreateFrame("Frame", nil, row)
 		row.hover:SetPoint("TOPLEFT", 0, 0)
-		row.hover:SetSize(detailW, TRP3Page.MAP_ROW_HEIGHT)
+		row.hover:SetSize(nameW, TRP3Page.MAP_ROW_HEIGHT)
 		local choices = row.block and TRP3Page.BLOCK_CHOICES or TRP3Page.FIELD_CHOICES
-		row.selector = Widgets.Segmented(row, choices, TRP3Page.SELECTOR_WIDTH, 20, function(policy)
+		row.selector = Widgets.Segmented(row, choices, S, TRP3Page.SELECTOR_HEIGHT, function(policy)
 			TRP3Page.Stage(page, id, policy)
 		end)
-		row.selector.buttons[1]:SetPoint("TOPRIGHT", row, "TOPRIGHT",
-			-(TRP3Page.SELECTOR_WIDTH - math.floor(TRP3Page.SELECTOR_WIDTH / #choices)), 0)
+		row.selector.buttons[1]:SetPoint("TOPLEFT", row, "TOPLEFT", innerW - S, 0)
 		if not row.block then
-			row.import = Widgets.Button(row, "Import", TRP3Page.IMPORT_WIDTH, 20, "ghost")
-			row.import:SetPoint("TOPRIGHT", row, "TOPRIGHT", -(TRP3Page.SELECTOR_WIDTH + 6), 0)
+			row.import = Widgets.Button(row, "Import", I, TRP3Page.SELECTOR_HEIGHT, "ghost")
+			row.import:SetPoint("TOPLEFT", row, "TOPLEFT", innerW - S - 6 - I, 0)
 			row.import:SetScript("OnClick", function() TRP3Page.AskImport(page, id) end)
 		end
 		page.mapRows[i] = row
 	end
-	page.unsupportedNote = label(page.map, "muted", true)
-	page.unsupportedNote:SetPoint("TOPLEFT", 14, -(TRP3Page.MAP_TOP + #ns.TRP3Ledger.MAPPINGS
-		* (TRP3Page.MAP_ROW_HEIGHT + TRP3Page.MAP_ROW_GAP) + 4))
-	page.unsupportedNote:SetWidth(innerW)
+	local rowsEnd = TRP3Page.MAP_TOP + #ns.TRP3Ledger.MAPPINGS * (TRP3Page.MAP_ROW_HEIGHT + TRP3Page.MAP_ROW_GAP)
+		- TRP3Page.MAP_ROW_GAP
+	page.unsupportedNote = oneLine(page.map, "muted", innerW)
+	page.unsupportedNote:SetPoint("TOPLEFT", P, -(rowsEnd + 4))
 	page.unsupportedNote:SetText(TRP3Page.UnsupportedText())
-	page.unsupportedHover = CreateFrame("Frame", nil, page.map)
-	page.unsupportedHover:SetAllPoints(page.unsupportedNote)
+	page.unsupportedHover = hoverOver(page.map, page.unsupportedNote)
 	local reasons = {}
 	for _, u in ipairs(ns.TRP3FieldPlan.UNSUPPORTED) do reasons[#reasons + 1] = u.label .. ": " .. u.reason .. "." end
 	Widgets.Tooltip(page.unsupportedHover, "Not synchronised automatically", table.concat(reasons, "\n"))
-	page.authorize = Widgets.Button(page.map, "Authorize…", 150, 26, "primary")
-	page.authorize:SetPoint("BOTTOMLEFT", 14, 10)
-	page.resetChoices = Widgets.Button(page.map, "Reset choices", 110, 26, "ghost")
+	page.authorize = Widgets.Button(page.map, "Authorize…", 150, Style.CONTROL.compact, "primary")
+	page.authorize:SetPoint("BOTTOMLEFT", P, 14)
+	page.resetChoices = Widgets.Button(page.map, "Reset choices", 120, Style.CONTROL.compact, "ghost")
 	page.resetChoices:SetPoint("LEFT", page.authorize, "RIGHT", 8, 0)
 	page.authorize:SetScript("OnClick", function() TRP3Page.AskAuthorize(page) end)
 	page.resetChoices:SetScript("OnClick", function()
@@ -457,39 +535,43 @@ function TRP3Page.Build(parent, width, height)
 		MainWindow.SetStatus("Choices reset. Nothing was changed.")
 		MainWindow.Refresh()
 	end)
-	page.featureWidgets = { page.explain, page.reasons, page.reasonsHover, page.keep, page.preview, page.hidden,
-		page.approve, page.notNow, page.toggle, rule }
+	page.featureWidgets = { page.title, page.explain, page.reasons, page.reasonsHover, page.keep, page.preview,
+		page.hidden, page.approve, page.notNow, page.toggle, rule }
 
 	-- Right column: conflict callout (only when there is one), backups.
-	local rightX = inset + leftW + TRP3Page.GAP
+	local RW = TRP3Page.RIGHT_WIDTH
+	local rightX = leftW + TRP3Page.COLUMN_GAP
+	local colInner = RW - 2 * Widgets.PANEL_PAD
 	page.conflict = Widgets.Callout(parent, "Conflict")
 	page.conflict:SetPoint("TOPLEFT", rightX, mainTop)
-	page.conflict:SetSize(TRP3Page.RIGHT_WIDTH, 150)
-	page.conflictText = label(page.conflict.inner, "small", true)
+	page.conflict:SetSize(RW, TRP3Page.CONFLICT_HEIGHT)
+	paintAmber(page.conflict)
+	page.conflictText = paragraph(page.conflict.inner, "reading", colInner, 5)
 	page.conflictText:SetPoint("TOPLEFT", 0, 0)
-	page.conflictText:SetWidth(TRP3Page.RIGHT_WIDTH - 28)
-	local half = math.floor((TRP3Page.RIGHT_WIDTH - 28 - 6) / 2)
-	page.keepYours = Widgets.Button(page.conflict.inner, "Keep yours", half, 24)
+	page.conflictHover = hoverOver(page.conflict.inner, page.conflictText)
+	local half = math.floor((colInner - 6) / 2)
+	page.keepYours = Widgets.Button(page.conflict.inner, "Keep yours", half, Style.CONTROL.compact)
 	page.keepYours:SetPoint("BOTTOMLEFT", 0, 0)
-	page.reclaim = Widgets.Button(page.conflict.inner, "Use Dawnward's", half, 24, "ghost")
+	page.reclaim = Widgets.Button(page.conflict.inner, "Use Dawnward's", colInner - half - 6, Style.CONTROL.compact,
+		"ghost")
 	page.reclaim:SetPoint("LEFT", page.keepYours, "RIGHT", 6, 0)
 
-	-- Each backup is a two-line row: what it is, then when, so the name and
-	-- the date never crowd each other in the narrow column.
+	-- Each backup is one selectable row: what it is on the left, the short
+	-- date on the right (the design's "About · before last write   27 Oct");
+	-- the full name and date are its tooltip.
 	page.backups = Widgets.Panel(parent, "Backups")
-	page.backups:SetSize(TRP3Page.RIGHT_WIDTH, TRP3Page.BACKUPS_HEIGHT)
-	local rowW = TRP3Page.RIGHT_WIDTH - 28
+	page.backups:SetSize(RW, TRP3Page.BACKUPS_HEIGHT)
+	local rowH = TRP3Page.BACKUP_ROW_HEIGHT
 	for i = 1, TRP3Page.BACKUP_ROWS do
-		local row = Widgets.Button(page.backups.inner, "", rowW, TRP3Page.BACKUP_ROW_HEIGHT, "choice")
-		row:SetPoint("TOPLEFT", 0, -(i - 1) * (TRP3Page.BACKUP_ROW_HEIGHT + 4))
-		row.name = label(row, "small", false)
-		row.name:SetPoint("TOPLEFT", 10, -4)
-		row.name:SetPoint("TOPRIGHT", -10, -4)
-		row.name:SetJustifyH("LEFT")
-		row.date = label(row, "muted", false)
-		row.date:SetPoint("BOTTOMLEFT", 10, 4)
-		row.date:SetPoint("BOTTOMRIGHT", -10, 4)
-		row.date:SetJustifyH("LEFT")
+		local row = Widgets.Button(page.backups.inner, "", colInner, rowH, "choice")
+		row:SetPoint("TOPLEFT", 0, -(i - 1) * (rowH + 4))
+		row.date = oneLine(row, "muted", 52, "small")
+		row.date:SetPoint("RIGHT", -8, 0)
+		row.date:SetJustifyH("RIGHT")
+		row.date:SetJustifyV("MIDDLE")
+		row.name = oneLine(row, "body", colInner - 8 - 52 - 16)
+		row.name:SetPoint("LEFT", 8, 0)
+		row.name:SetJustifyV("MIDDLE")
 		Widgets.Tooltip(row, "Backup", "")
 		row:SetScript("OnClick", function(self)
 			page.selectedBackup = self.backupId
@@ -497,22 +579,22 @@ function TRP3Page.Build(parent, width, height)
 		end)
 		page.backupRows[i] = row
 	end
-	page.noBackups = label(page.backups.inner, "muted", true)
+	page.noBackups = paragraph(page.backups.inner, "muted", colInner, 3)
 	page.noBackups:SetPoint("TOPLEFT", 0, 0)
-	page.noBackups:SetWidth(rowW)
 	page.noBackups:SetText("No backups yet. Dawnward takes one before its first write.")
-	local rollW = math.floor((rowW - 6) * 0.55)
-	page.rollback = Widgets.Button(page.backups.inner, "Roll back…", rollW, 24)
-	page.rollback:SetPoint("TOPLEFT", 0, -(TRP3Page.BACKUP_ROWS * (TRP3Page.BACKUP_ROW_HEIGHT + 4) + 6))
-	page.exact = Widgets.Button(page.backups.inner, "Exact restore…", rowW - rollW - 6, 24, "ghost")
+	local listH = TRP3Page.BACKUP_ROWS * (rowH + 4) - 4
+	local rollW = math.floor((colInner - 6) / 2)
+	page.rollback = Widgets.Button(page.backups.inner, "Roll back…", rollW, Style.CONTROL.compact)
+	page.rollback:SetPoint("TOPLEFT", 0, -(listH + 8))
+	page.exact = Widgets.Button(page.backups.inner, "Exact restore…", colInner - rollW - 6, Style.CONTROL.compact,
+		"ghost")
 	page.exact:SetPoint("LEFT", page.rollback, "RIGHT", 6, 0)
 	Widgets.Tooltip(page.rollback, "Roll back (safe)", "Restores your own text from the backup; Dawnward's part is "
 		.. "rebuilt from what is Public now. Same as /dawnward trp3 rollback [#] confirm.")
 	Widgets.Tooltip(page.exact, "Exact restore", "Restores the section exactly as it was, including Dawnward "
 		.. "content that may no longer be Public. Same as /dawnward trp3 rollback [#] exact confirm.")
-	page.backupNote = label(page.backups.inner, "muted", true)
+	page.backupNote = paragraph(page.backups.inner, "muted", colInner, 4, "small")
 	page.backupNote:SetPoint("TOPLEFT", page.rollback, "BOTTOMLEFT", 0, -8)
-	page.backupNote:SetWidth(rowW)
 	page.backupNote:SetText(TRP3Page.BACKUP_NOTE)
 
 	-- Actions: the same functions as /dawnward trp3 ... ----------------------------
@@ -693,6 +775,8 @@ function TRP3Page.Refresh(page)
 	Widgets.Tooltip(page.trp3Hover, "Total RP 3", summary.versionNote
 		and ("This version: " .. summary.versionNote .. ". Dawnward writes only to Total RP 3 versions it has "
 			.. "audited; any other version is status only.") or "Detected Total RP 3 status (read-only).")
+	Widgets.Tooltip(page.columnHovers[2], "Linked profile", summary.profile)
+	Widgets.Tooltip(page.columnHovers[3], "Sync", summary.sync)
 
 	local available = view ~= nil
 	page.absent:SetShown(not available)
@@ -740,6 +824,8 @@ function TRP3Page.Refresh(page)
 		page.conflict:SetTitle("Conflict on " .. (fieldMap and fieldMap.label or FEATURE_LABEL[page.conflictFeature]))
 		page.conflictText:SetText(excerpt(reason or "Total RP 3 changed since Dawnward last wrote", 120)
 			.. ". Nothing will be overwritten until you choose.")
+		Widgets.Tooltip(page.conflictHover, page.conflict.title:GetText(), plain(reason or
+			"Total RP 3 changed since Dawnward last wrote") .. ". Nothing will be overwritten until you choose.")
 	end
 	page.backups:ClearAllPoints()
 	if page.conflictFeature then
@@ -761,7 +847,7 @@ function TRP3Page.Refresh(page)
 			local when = b.at and b.at > 0 and date("%d %b %Y, %H:%M", b.at) or "Date unknown"
 			row:SetText("")
 			row.name:SetText(name)
-			row.date:SetText(when)
+			row.date:SetText(TRP3Page.ShortDate(b.at))
 			Widgets.Tooltip(row, name, when .. ". Select it, then Roll back… to restore it.")
 			row:SetSelected(page.selectedBackup == b.id)
 			if page.selectedBackup == b.id then selectedSeen = true end
@@ -795,6 +881,8 @@ function TRP3Page.Refresh(page)
 		TRP3Page.RefreshMappings(page, view)
 		return
 	end
+	Widgets.Tooltip(page.hiddenHover, "Never shared", TRP3Page.HiddenText(TRP3Page.HiddenCounts(realChar()))
+		.. "\n\n" .. TRP3Page.UNSUPPORTED_DETAIL)
 	local check = view.checks[feature]
 	local optedIn = view.bound and view.policies[feature] == "dawnward"
 	local chip = TRP3Page.STATE_CHIP[check.state] or { check.state, "muted" }
@@ -827,13 +915,27 @@ function TRP3Page.Refresh(page)
 	end
 end
 
+--- "27 Oct" for a backup row ("?" when unknown); the full date is its tooltip.
+function TRP3Page.ShortDate(at)
+	if type(at) ~= "number" or at <= 0 then return "?" end
+	return tostring(tonumber(date("%d", at))) .. " " .. date("%b", at)
+end
+
+--- Paints a line as a warning (the design's amber) or as plain text.
+function TRP3Page.SetWarning(fs, on)
+	fs.warning = on and true or nil
+	ns.Style.Register(fs, function(f, theme)
+		ns.Style.TextColor(f, f.warning and ns.Themes.STATUS_COLORS.waiting or theme.text)
+	end)
+end
+
 --- Mappings ------------------------------------------------------------------
 
 --- The unsupported-fields note (names only; FieldPlan.UNSUPPORTED, with the
 -- reasons, is its tooltip). Pure.
 function TRP3Page.UnsupportedText()
-	return "Never written by Dawnward: first and last name, short title, pronouns, faith, occupation, appearance, "
-		.. "summary, Currently and RP status, other characteristics (hover for why). Copy text pastes them yourself."
+	return "Never written (hover for why): first and last name, short title, pronouns, faith, occupation, "
+		.. "appearance, summary, Currently and RP status, other characteristics. Copy text pastes them yourself."
 end
 
 --- The policy shown for a mapping: the staged choice, else the saved one.
@@ -934,6 +1036,8 @@ function TRP3Page.RefreshMappings(page, view)
 		next(page.staged) and "accent" or "muted")
 	page.title:SetText("Mappings: who keeps each part up to date")
 	local shared = view.probe.profile and view.probe.profile.sharedWith
+	local warns = (shared and shared > 0) or not view.probe.experimental.allowed
+	TRP3Page.SetWarning(page.sharedWarn, warns)
 	if shared and shared > 0 then
 		page.sharedWarn:SetText("Warning: this Total RP 3 profile is shared with "
 			.. plural(shared, "other character", "other characters")
@@ -945,17 +1049,21 @@ function TRP3Page.RefreshMappings(page, view)
 		page.sharedWarn:SetText("Profile \"" .. plain(view.probe.profile and view.probe.profile.name or "?")
 			.. "\" is used by this character only.")
 	end
+	Widgets.Tooltip(page.sharedWarnHover, warns and "Before you authorize" or "Linked profile",
+		page.sharedWarn:GetText())
 	for _, row in ipairs(page.mapRows) do
 		local name, detail = TRP3Page.RowText(page, row.id)
 		row.name:SetText(name)
 		row.detail:SetText(detail)
 		row.selector:Select(TRP3Page.Shown(page, row.id))
 		local m = ns.TRP3FieldPlan.BY_ID[row.id]
-		Widgets.Tooltip(row.hover, name, m and ("Total RP 3 field " .. m.key .. " (MSP " .. m.msp .. "). "
+		local about = m and ("Total RP 3 field " .. m.key .. " (MSP " .. m.msp .. "). "
 			.. (m.risk == "high" and "Players usually write this themselves in Total RP 3; it stays managed by "
 				.. "Total RP 3 unless you choose otherwise. " or "")
 			.. "Dawnward writes it only from your Public " .. m.label .. ", only while Total RP 3 still holds the "
-			.. "value Dawnward last wrote.") or TRP3Page.EXPLAIN[row.id])
+			.. "value Dawnward last wrote.") or TRP3Page.EXPLAIN[row.id]
+		-- The detail line may be cut on the page; the tooltip has it whole.
+		Widgets.Tooltip(row.hover, name, detail .. "\n\n" .. about)
 		if row.import then
 			local diff = diffRow(view, row.id)
 			row.import:SetEnabled(diff ~= nil and diff.importable == true)
