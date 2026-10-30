@@ -45,6 +45,9 @@ function AtlasProbe.Here()
 	local info = data.mapId and AtlasProbe.probe.mapInfo(data.mapId)
 	data.mapName = info and info.name
 	data.parentMapId = info and info.parentMapID
+	if data.subzone and not data.areaId then
+		data.candidateId = Atlas.Candidate(data.subzone, AtlasProbe.probe.areaName)
+	end
 	return data
 end
 
@@ -69,8 +72,16 @@ Commands.Register("atlas", function(ctx, rest)
 			out(ctx, string.format("  area %d, %s (%s evidence)", here.areaId,
 				ns.Places.KIND_LABELS[ns.Places.AreaKind(c.id, here.mapId, here.areaId)] or "?",
 				Atlas.Level(c.id, "areas", here.areaId)))
+		elseif here.candidateId then
+			out(ctx, string.format("  candidate area %d: the name is confirmed by the client, but not where it lies "
+				.. "or what it is. It is logged as a visit, not classified. /dawnward atlas export records this map "
+				.. "as evidence for #48.", here.candidateId))
 		elseif here.subzone then
 			out(ctx, "  this subzone has no verified area ID: it is logged as a visit, not classified.")
+		end
+		if here.rawZone then
+			out(ctx, "  the client named this building as the zone (" .. here.rawZone .. "); Dawnward records it as a "
+				.. "place inside " .. tostring(here.zone) .. ".")
 		end
 		out(ctx, "More: /dawnward atlas verify | atlas scan <from> <to> | atlas export")
 	elseif word == "verify" then

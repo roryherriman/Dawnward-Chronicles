@@ -29,6 +29,9 @@
 -- Nothing here infers birthplace, home, upbringing, loyalty or feelings.
 -- A place matters to a character only when the player says so (Mark) or
 -- links an established memory to it.
+--
+-- Interiors and spacing (#48 data issues A and B) are normalised once, in
+-- Places.NormalizeLocation, before anything is logged.
 local _, ns = ...
 local Util = ns.Util
 
@@ -162,14 +165,62 @@ function Places.AreasIn(client, mapId)
 	return out
 end
 
+-- Surrounding spaces never matter in a place name (#48 data issue B): the
+-- client's own AreaTable has names that end in a space, for example
+-- 1997 "Bloodvenom Post " (owner's in-game scan, 2026-10-28,
+-- tools/atlas/evidence), and saved place keys are trimmed on load.
+local function bare(name)
+	if type(name) ~= "string" then
+		return nil
+	end
+	name = Util.Trim(name)
+	return name ~= "" and name or nil
+end
+Places.Bare = bare
+
+-- Enum.UIMapType.Zone (Blizzard_APIDocumentationGenerated/MapConstantsDocumentation.lua,
+-- classic_era 1.15.9.70576). Written as a number: Enum is not read elsewhere.
+Places.ZONE_MAP_TYPE = 3
+
+--- Location text as Dawnward records it. Returns zone, subzone, interior.
+-- * Names are trimmed (data issue B, above), so the same place is never
+--   logged twice under two spellings.
+-- * Data issue A (#48): inside some buildings the client reports the
+--   building as the zone. In Lion's Pride Inn, GetRealZoneText() returned
+--   "Lion's Pride Inn" and GetSubZoneText() nothing, while
+--   C_Map.GetBestMapForUnit("player") was 1429, Elwynn Forest (owner's
+--   atlas export, Classic Era 1.15.9.70576, 2026-10-28). So when there is no
+--   subzone and the zone text differs from the name of the zone-type uiMap
+--   the player is on (mapInfo from C_Map.GetMapInfo), the map's name becomes
+--   the zone and the building the subzone; interior is then true. Without a
+--   zone-type map (a continent, a dungeon map, no map at all) the text is
+--   kept as the client gave it. Places logged before this keep their names.
+function Places.NormalizeLocation(zone, subzone, mapInfo)
+	zone, subzone = bare(zone), bare(subzone)
+	if not zone then
+		return nil, nil, false
+	end
+	if subzone == zone then subzone = nil end
+	local mapName = type(mapInfo) == "table" and mapInfo.mapType == Places.ZONE_MAP_TYPE and bare(mapInfo.name) or nil
+	if not subzone and mapName and mapName ~= zone then
+		return mapName, zone, true
+	end
+	return zone, subzone, false
+end
+
 --- The AreaTable ID of the client's subzone text, or nil. areaName(id)
 -- returns the client's localised name for an area (C_Map.GetAreaInfo).
+-- Names compare without surrounding spaces (data issue B), and only IDs
+-- mapped inside the observed uiMap are tried, so a name the client uses for
+-- several areas (data issue C: "Southshore" is 271 and 2369) can never pick
+-- an ID from another zone.
 function Places.ResolveArea(client, mapId, subzone, areaName)
-	if type(subzone) ~= "string" or subzone == "" or type(areaName) ~= "function" then
+	subzone = bare(subzone)
+	if not subzone or type(areaName) ~= "function" then
 		return nil
 	end
 	for _, id in ipairs(Places.AreasIn(client, mapId)) do
-		if areaName(id) == subzone then
+		if bare(areaName(id)) == subzone then
 			return id
 		end
 	end

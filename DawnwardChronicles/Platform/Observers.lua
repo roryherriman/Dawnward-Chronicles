@@ -22,6 +22,13 @@
 --                       a snapshot; the first reading is a silent baseline
 --   PLAYER_GUILD_UPDATE GetGuildInfo("player") with IsInGuild(): guild
 --                       changes; inconclusive readings are ignored
+--   C_Map.GetMapInfo    the uiMap's name and type, to tell a building the
+--                       client reports as the zone from the zone (Core/Places)
+--   ENCOUNTER_START, ENCOUNTER_END, BOSS_KILL   unverified probe only, see below
+--
+-- Quests (#11): only QUEST_TURNED_IN records one, so an abandoned quest, or a
+-- reward panel closed without turning in, never does. The key is the quest
+-- ID, so a relog, a /reload or a repeated event cannot record it twice.
 -- Character context: UnitLevel, UnitClass, UnitRace, UnitFactionGroup.
 -- Nothing here parses chat text or the combat log.
 local _, ns = ...
@@ -56,7 +63,7 @@ function Observers.Context()
 	local _, raceToken = call(UnitRace, "player")
 	local faction = call(UnitFactionGroup, "player")
 	return {
-		zone = zone, subzone = subzone, level = call(UnitLevel, "player"),
+		zone = ns.Places.Bare(zone), subzone = ns.Places.Bare(subzone), level = call(UnitLevel, "player"),
 		class = classToken, race = raceToken, faction = faction,
 	}
 end
@@ -166,8 +173,22 @@ local function areaName(id)
 	return areaNames[id] or nil
 end
 
+local mapInfos = {} -- uiMapID -> { name, mapType } (C_Map.GetMapInfo), per session
+
+local function mapInfo(id)
+	if not id then return nil end
+	if mapInfos[id] == nil then
+		local info = type(C_Map) == "table" and call(C_Map.GetMapInfo, id) or nil
+		mapInfos[id] = type(info) == "table" and { name = info.name, mapType = info.mapType } or false
+	end
+	return mapInfos[id] or nil
+end
+
 --- The player's location: zone and subzone text, the uiMapID, and the
--- subzone's area ID when it resolves through Core/Places' mapping.
+-- subzone's area ID when it resolves through Core/Places' mapping. Names
+-- are trimmed, and a building the client reports as the zone becomes a
+-- subzone of the uiMap's zone (Places.NormalizeLocation; rawZone keeps the
+-- client's own zone text when that happens).
 function Observers.Location()
 	local data = Observers.Context()
 	if not clientId then
@@ -176,6 +197,10 @@ function Observers.Location()
 	data.client = clientId
 	local mapId = type(C_Map) == "table" and call(C_Map.GetBestMapForUnit, "player") or nil
 	data.mapId = type(mapId) == "number" and mapId or nil
+	local rawZone = data.zone
+	local interior
+	data.zone, data.subzone, interior = ns.Places.NormalizeLocation(data.zone, data.subzone, mapInfo(data.mapId))
+	data.rawZone = interior and rawZone or nil
 	data.areaId = ns.Places.ResolveArea(clientId, data.mapId, data.subzone, areaName)
 	return data
 end
@@ -205,8 +230,37 @@ local function observeLocation(ctx, onQueued)
 	end
 end
 
+-- Encounter probe (#11, dungeon completion). ENCOUNTER_START,
+-- ENCOUNTER_END (encounterID, encounterName, difficultyID, groupSize,
+-- success) and BOSS_KILL (encounterID, encounterName) are defined for
+-- Classic Era 1.15.9.70576 (Blizzard_APIDocumentationGenerated/
+-- EncounterInfoDocumentation.lua), but no Blizzard Classic Era UI code
+-- registers them (grep of the classic_era interface source), so whether
+-- they fire for Classic dungeon and raid bosses is unverified. Until an
+-- in-game run shows they do, they are only noted for this session (shown by
+-- /dawnward dev story status): nothing is saved, nothing becomes an event or
+-- a memory, and nothing is asked. Evidence level: unverified.
+-- Kept in ctx.encounters (session only, at most ENCOUNTER_LIMIT).
+Observers.ENCOUNTER_LIMIT = 10
+
+local function noteEncounter(ctx, event, id, name, success)
+	ctx.encounters = ctx.encounters or {}
+	local list = ctx.encounters
+	list[#list + 1] = { event = event, id = type(id) == "number" and id or nil,
+		name = type(name) == "string" and ns.Util.CleanText(name, 100) or nil,
+		success = type(success) == "number" and success or nil, at = call(time) }
+	while #list > Observers.ENCOUNTER_LIMIT do
+		table.remove(list, 1)
+	end
+end
+
 -- Events that compare snapshots or produce several records.
 Observers.SPECIAL = {
+	ENCOUNTER_START = function(ctx, _, id, name) noteEncounter(ctx, "ENCOUNTER_START", id, name) end,
+	ENCOUNTER_END = function(ctx, _, id, name, _, _, success)
+		noteEncounter(ctx, "ENCOUNTER_END", id, name, success)
+	end,
+	BOSS_KILL = function(ctx, _, id, name) noteEncounter(ctx, "BOSS_KILL", id, name) end,
 	UPDATE_FACTION = function(ctx, onQueued)
 		for _, made in ipairs(Actions.ObserveStandings(ctx, Observers.ReadFactions(), Observers.Context())) do
 			notify(onQueued, made.reaction, made.outcome)

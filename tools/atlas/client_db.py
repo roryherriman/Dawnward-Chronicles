@@ -17,12 +17,13 @@ continents, which usually means a later expansion or an instance.
 Usage:
   python tools/atlas/client_db.py inspect <file> [<file> ...]      header report (JSON)
   python tools/atlas/client_db.py areatable <areatable.dbc> [--out report.json]
-  python tools/atlas/client_db.py selftest
+  python tools/atlas/client_db.py selftest    (also checks the SHA-256 of the in-game evidence files)
 
 Nothing is downloaded and no file is modified. Unknown formats (such as
 .scn) are reported by their first bytes only.
 """
 
+import hashlib
 import json
 import re
 import struct
@@ -31,6 +32,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ATLAS_LUA = ROOT / "DawnwardChronicles" / "Core" / "Atlas.lua"
+# Owner-run in-game evidence, kept verbatim (Core/Atlas.lua, Atlas.EVIDENCE).
+EVIDENCE_DIR = ROOT / "tools" / "atlas" / "evidence"
 
 # Map (continent) IDs of the Classic world. Anything else in AreaTable is
 # an instance, a battleground, a test map, or a later expansion's world.
@@ -187,6 +190,20 @@ def build_wdbc(records, strings):
     return bytes(out + block)
 
 
+def check_evidence():
+    """Every Atlas.EVIDENCE file exists and has the SHA-256 published in #48."""
+    text = ATLAS_LUA.read_text(encoding="utf-8")
+    block = text[text.index("Atlas.EVIDENCE = {"):]
+    block = block[:block.index("\n}\n")]
+    entries = re.findall(r'file = "([^"]+)".*?sha256 = "([0-9a-f]{64})"', block, re.S)
+    assert len(entries) == 2, entries
+    for name, digest in entries:
+        data = (EVIDENCE_DIR / name).read_bytes()
+        got = hashlib.sha256(data).hexdigest()
+        assert got == digest, f"{name}: sha256 {got}, expected {digest}"
+    return len(entries)
+
+
 def selftest():
     data = build_wdbc([
         [87, 0, 12, 0, ("s", "Goldshire"), 0],
@@ -209,7 +226,8 @@ def selftest():
         raise AssertionError("truncated file accepted")
     except ValueError:
         pass
-    print("client_db selftest: ok")
+    files = check_evidence()
+    print(f"client_db selftest: ok (evidence files: {files} verified)")
 
 
 def main(argv):
