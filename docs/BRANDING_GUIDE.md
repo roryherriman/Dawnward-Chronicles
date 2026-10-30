@@ -24,7 +24,8 @@ Sources: `assets/branding/concepts/`.
 | Square mark / avatar | `svg/dawnward-mark-dark.svg`, `…-light.svg`; PNG 1024, 512, 400, 256, 128, 64 (`png/dawnward-icon-*.png`) |
 | Favicon | `svg/favicon.svg`, `png/favicon-32.png`, `png/favicon-16.png`, `png/apple-touch-icon-180.png` |
 | Social preview (GitHub) | `png/social-preview-1280x640.png` |
-| Wide banner (CurseForge description or header) | `png/curseforge-banner-1920x480.png` |
+| Wide banner (CurseForge description, 850 × 213) | `png/curseforge-banner-850x213.png`, recomposed from the vector lockup for the smaller size |
+| Wide banner (large, 1920 × 480) | `png/curseforge-banner-1920x480.png` |
 | Preview sheet | `previews/branding-preview.png` |
 
 Check each platform's current image requirements at upload time. The sizes here are common choices, not confirmed requirements.

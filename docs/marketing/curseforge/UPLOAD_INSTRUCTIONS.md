@@ -18,7 +18,7 @@ The project already exists and is **unlisted** (owner-confirmed): https://www.cu
 2. Check how it looks at small sizes on the preview page.
 
 ## 4. Header image (only if #49 is approved)
-1. Upload `assets/branding/png/curseforge-banner-1920x480.png` to the project's images.
+1. Upload `assets/branding/png/curseforge-banner-850x213.png` to the project's images. It is sized for the description column, so the logo and tagline stay sharp. The 1920 × 480 original is still available for larger placements.
 2. Copy its URL into the first line of the description, replacing `BANNER_URL_AFTER_UPLOAD`.
 
 ## 5. Do not

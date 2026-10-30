@@ -191,7 +191,8 @@ def render_pngs():
         jobs.append({"svg": str(source), "out": str(OUT / f"png/dawnward-{name}.png"), "width": width, "height": 280})
     for html, out, w, h in (("social-preview.html", "png/social-preview-1280x640.png", 1280, 640),
                             ("preview-sheet.html", "previews/branding-preview.png", 1200, 1700),
-                            ("curseforge-banner.html", "png/curseforge-banner-1920x480.png", 1920, 480)):
+                            ("curseforge-banner.html", "png/curseforge-banner-1920x480.png", 1920, 480),
+                            ("curseforge-banner-850.html", "png/curseforge-banner-850x213.png", 850, 213)):
         source = OUT / "templates" / html
         if source.exists():
             jobs.append({"html": str(source), "out": str(OUT / out), "width": w, "height": h})
