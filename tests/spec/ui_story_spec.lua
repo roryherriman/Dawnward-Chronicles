@@ -330,11 +330,14 @@ return function(t, expect)
 			ns.MainWindow.ToggleSettings()
 			local panel = ns.SettingsPanel.panel
 			local moments = panel.storyButtons[1]
-			expect.equal(moments:GetText(), "Moments: normal")
+			expect.equal(moments:GetText(), "Moments: Normal  ›", "the current value, and that a click moves on")
+			expect.truthy(moments.tooltipText:find("[Normal]", 1, true), "every option, the current one marked")
+			expect.truthy(moments.tooltipText:find("Click to switch", 1, true))
 			click(moments)
 			local prefs = env.DawnwardChroniclesDB.characters[CHAR].story.prefs
 			expect.equal(prefs.frequency, "frequent")
-			expect.equal(moments:GetText(), "Moments: frequent")
+			expect.equal(moments:GetText(), "Moments: Frequent  ›")
+			expect.truthy(moments.tooltipText:find("[Frequent]", 1, true))
 			local quests = panel.storyButtons[#panel.storyButtons]
 			click(quests)
 			expect.equal(prefs.tracking.quest, false)

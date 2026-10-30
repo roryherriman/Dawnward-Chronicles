@@ -50,6 +50,16 @@ Showcase.BAR_HEIGHT = 56 -- the control bar under the model
 Showcase.MODEL_WIDTH = 330 -- the model card in the showcase view
 Showcase.GAP = 18
 
+-- Seconds between attempts after SetUnit fails (about 8 s in all).
+Showcase.RETRY_DELAYS = { 0.1, 0.3, 0.6, 1, 2, 4 }
+-- What the chip on the model card says for each state.
+Showcase.MODE_LABELS = {
+	live = "Live model",
+	loading = "Loading the live model...",
+	choice = "Portrait (your choice)",
+	unavailable = "Portrait: live model not available",
+}
+
 Showcase.FALLBACK_NOTE = "If the model can't be shown (for example while the character is still loading), "
 	.. "your portrait takes its place."
 
@@ -252,6 +262,92 @@ function Showcase.Model(parent, width, height)
 		if f.modelShown then f:Zoom((delta or 0) * Showcase.ZOOM_STEP) end
 	end)
 
+	-- Loading the model. Blizzard's own panels set the unit on a model frame
+	-- that is already shown (PaperDollFrame.lua: CharacterModelFrame:SetUnit(
+	-- "player", false) on PLAYER_ENTERING_WORLD and UNIT_MODEL_CHANGED;
+	-- DressUpFrames.lua: ShowUIPanel, then SetUnit). A model frame that is
+	-- hidden cannot load, so this frame is never hidden while a load may be
+	-- wanted: when the portrait is showing, the model is only made
+	-- transparent. SetUnit can also fail while the frame or the character is
+	-- not ready yet (the first frame after the window opens, a loading
+	-- screen), so a failure is retried a few times (RETRY_DELAYS, about 8 s
+	-- in all) before the portrait is shown; it is tried again whenever the
+	-- showcase reopens, gear changes, after a loading screen, or when the
+	-- player asks. A token cancels retries that are no longer wanted.
+	f.attempts, f.token, f.state = 0, 0, nil
+
+	local function setModelVisible(on)
+		f.model:Show()
+		if f.model.SetAlpha then f.model:SetAlpha(on and 1 or 0) end
+		f.model:EnableMouse(on and true or false)
+		if f.model.EnableMouseWheel then f.model:EnableMouseWheel(on and true or false) end
+	end
+
+	local function show(state)
+		f.state = state
+		local live = state == "live"
+		f.modelShown = live
+		f.fallbackReason = (not live) and state or nil
+		setModelVisible(live)
+		f.fallback:SetShown(not live)
+		if live then
+			if f.model.SetRotation then f.model:SetRotation(f.rotation) end
+			if f.model.SetPortraitZoom then f.model:SetPortraitZoom(f.zoom) end
+		else
+			stopDrag()
+			f.fallback.Update()
+		end
+		f.chip:SetChip(Showcase.MODE_LABELS[state], live and "accent" or "muted")
+		f.UpdateControls()
+		if f.onUpdate then f.onUpdate() end
+	end
+
+	--- One SetUnit call. Returns ok. Records the result for diagnostics.
+	function f.TryModel()
+		f.attempts = f.attempts + 1
+		if not f.model.SetUnit then
+			f.lastResult = "SetUnit is not available"
+			return false
+		end
+		f.model:Show()
+		-- blend false, as the character frame does: show the model at once.
+		local called, result = pcall(f.model.SetUnit, f.model, "player", false)
+		f.lastResult = called and tostring(result) or ("error: " .. tostring(result))
+		-- SetUnit returns success in 1.15.9; only an error or an explicit
+		-- false counts as a failure.
+		return called and result ~= false
+	end
+
+	local function attempt(token)
+		if token ~= f.token or f.preferPortrait or not f:IsVisible() then return end
+		if f.TryModel() then
+			show("live")
+			return
+		end
+		local delay = Showcase.RETRY_DELAYS[f.attempts]
+		if delay and type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+			if f.state ~= "loading" then show("loading") end
+			C_Timer.After(delay, function() attempt(token) end)
+		else
+			show("unavailable")
+		end
+	end
+
+	--- Shows the model, or the portrait when the player chose it or the model
+	-- cannot be loaded. Every call starts a fresh set of attempts, so an
+	-- earlier failure never stops a later try.
+	function f.Update()
+		f.token = f.token + 1
+		f.attempts = 0
+		if f.preferPortrait then
+			if f.model.ClearModel then f.model:ClearModel() end
+			show("choice")
+			return
+		end
+		attempt(f.token)
+	end
+	f.Retry = f.Update
+
 	--- The player's choice: the portrait instead of the model.
 	function f.SetPreferPortrait(_, on)
 		on = on and true or false
@@ -260,49 +356,37 @@ function Showcase.Model(parent, width, height)
 		if f:IsVisible() then f.Update() end
 	end
 
-	--- Shows the model, or the portrait when the model is not available or
-	-- the player chose it. fallbackReason: nil, "choice" or "unavailable".
-	function f.Update()
-		local ok = false
-		if not f.preferPortrait then
-			-- SetUnit returns success in 1.15.9; only an error or an explicit
-			-- false counts as a failure.
-			if f.model.SetUnit then
-				local called, result = pcall(f.model.SetUnit, f.model, "player")
-				ok = called and result ~= false
-			end
-		elseif f.model.ClearModel then
-			f.model:ClearModel()
-		end
-		f.modelShown = ok
-		f.fallbackReason = (not ok) and (f.preferPortrait and "choice" or "unavailable") or nil
-		f.model:SetShown(ok)
-		f.fallback:SetShown(not ok)
-		if ok then
-			if f.model.SetRotation then f.model:SetRotation(f.rotation) end
-			if f.model.SetPortraitZoom then f.model:SetPortraitZoom(f.zoom) end
-			f.chip:SetChip("Live model", "accent")
-		else
-			stopDrag()
-			f.fallback.Update()
-			f.chip:SetChip(f.preferPortrait and "Portrait" or "Portrait: model unavailable", "muted")
-		end
-		f.UpdateControls()
-		if f.onUpdate then f.onUpdate() end
+	--- What the showcase knows about the model, for /dawnward dev showcase.
+	function f.Diagnostics()
+		local w, h = f.model:GetWidth(), f.model:GetHeight()
+		local can = f.model.CanSetUnit and call(f.model.CanSetUnit, f.model, "player")
+		local file = f.model.GetModelFileID and call(f.model.GetModelFileID, f.model)
+		return {
+			"Showcase: " .. Showcase.MODE_LABELS[f.state or "loading"] .. (f.preferPortrait and " (portrait chosen)" or ""),
+			"  visible: " .. tostring(f:IsVisible() and true or false) .. ", model frame shown: "
+				.. tostring(f.model:IsShown() and true or false) .. ", size: " .. string.format("%dx%d", w or 0, h or 0),
+			"  attempts this time: " .. f.attempts .. ", last SetUnit result: " .. tostring(f.lastResult or "none"),
+			"  CanSetUnit(\"player\"): " .. tostring(can) .. ", model file: " .. tostring(file),
+		}
 	end
 
 	f:SetScript("OnShow", function()
 		f:RegisterEvent("UNIT_MODEL_CHANGED")
+		f:RegisterEvent("PLAYER_ENTERING_WORLD")
 		f.Update()
 	end)
 	f:SetScript("OnHide", function()
 		f:UnregisterEvent("UNIT_MODEL_CHANGED")
+		f:UnregisterEvent("PLAYER_ENTERING_WORLD")
+		f.token = f.token + 1 -- cancels pending retries
 		stopDrag()
 		-- Nothing is rendered while the journal is closed.
 		if f.model.ClearModel then f.model:ClearModel() end
 	end)
-	f:SetScript("OnEvent", function(_, _, unit)
-		if unit == "player" and f:IsVisible() then f.Update() end
+	f:SetScript("OnEvent", function(_, event, unit)
+		if (event == "PLAYER_ENTERING_WORLD" or unit == "player") and f:IsVisible() and not f.preferPortrait then
+			f.Update()
+		end
 	end)
 	return f
 end
@@ -405,26 +489,37 @@ function Showcase.View(parent, width, height, opts)
 	v.note.text = Widgets.Label(v.note, "GameFontHighlightSmall", true, "muted")
 	v.note.text:SetPoint("TOPLEFT", Widgets.PANEL_PAD, -12)
 	v.note.text:SetWidth(innerWidth)
-	v.note.toggle = Widgets.Button(v.note, "Show portrait instead", 170, 22)
+	v.note.toggle = Widgets.Button(v.note, "Show portrait instead", 190, 22)
 	v.note.toggle:SetScript("OnClick", function()
-		local on = not v.model.preferPortrait
+		local m = v.model
+		if not m.preferPortrait and m.state == "unavailable" then
+			-- The player chose the live model; it just failed: try again.
+			m.Retry()
+			return
+		end
+		local on = not m.preferPortrait
 		-- A refused save (read-only data) leaves the view as it was.
 		if opts.onPreferPortrait and not opts.onPreferPortrait(on) then return end
-		v.model:SetPreferPortrait(on)
+		m:SetPreferPortrait(on)
 		v.UpdateNote()
 	end)
 
+	--- The note and the toggle always say what is showing and how to change it.
 	function v.UpdateNote()
 		local m = v.model
-		local note = Showcase.FALLBACK_NOTE
-		if m.fallbackReason == "unavailable" then
-			note = "The model could not be shown just now, so your portrait is shown instead. It is tried again "
-				.. "when your gear changes or the showcase reopens."
-		elseif m.fallbackReason == "choice" then
+		local note, button = Showcase.FALLBACK_NOTE, "Show portrait instead"
+		if m.state == "unavailable" then
+			note = "The live model could not be loaded just now, so your portrait is shown. It is tried again "
+				.. "when the showcase reopens, your gear changes, or you ask."
+			button = "Try the live model again"
+		elseif m.state == "loading" then
+			note = "Loading your live model. Your portrait is shown until it is ready."
+		elseif m.preferPortrait then
 			note = "You chose to show your portrait instead of the live model."
+			button = "Show the live model"
 		end
 		v.note.text:SetText(note)
-		v.note.toggle:SetText(m.preferPortrait and "Show the live model" or "Show portrait instead")
+		v.note.toggle:SetText(button)
 		local h = v.note.text:GetStringHeight()
 		v.note.toggle:ClearAllPoints()
 		v.note.toggle:SetPoint("TOPLEFT", Widgets.PANEL_PAD, -(12 + h + 8))
@@ -506,4 +601,21 @@ function Showcase.View(parent, width, height, opts)
 		if v:IsVisible() then ns.MainWindow.Refresh() end
 	end)
 	return v
+end
+
+-- /dawnward dev showcase (development builds only): what the model card knows
+-- about the live model, for checking it in game. Read-only.
+if ns.SetupCommands and ns.SetupCommands.DEV_AREAS then
+	ns.SetupCommands.DEV_AREAS.showcase = {
+		usage = "dev showcase",
+		run = function(ctx)
+			local section = ns.CharacterView and ns.CharacterView.section
+			local model = section and section.showcase
+			if not model then
+				ctx.print("Showcase: not opened yet this session. Open Character, then Showcase.")
+				return
+			end
+			for _, line in ipairs(model.Diagnostics()) do ctx.print(line) end
+		end,
+	}
 end

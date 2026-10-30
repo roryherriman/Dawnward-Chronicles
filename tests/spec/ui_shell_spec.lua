@@ -144,22 +144,114 @@ return function(t, expect)
 			expect.falsy(showcase.__events.UNIT_MODEL_CHANGED)
 		end)
 
-		t:it("falls back to the portrait when the model cannot be shown", function()
+		-- Runs queued retries until none are left (bounded).
+		local function drain(mock)
+			for _ = 1, 20 do
+				if mock.RunTimers() == 0 then return end
+			end
+		end
+
+		t:it("falls back to the portrait when the model cannot be loaded, after retrying", function()
 			local mock, _, ns = open()
 			mock.modelFails = true
 			local showcase, section = showcaseOf(ns)
+			expect.equal(showcase.state, "loading", "a failure is retried before giving up")
+			expect.truthy(showcase.chip.label:GetText():find("Loading", 1, true))
+			expect.truthy(showcase.fallback:IsShown(), "the portrait is shown meanwhile")
+			drain(mock)
+			expect.equal(showcase.attempts, #ns.Showcase.RETRY_DELAYS + 1)
 			expect.falsy(showcase.modelShown)
 			expect.truthy(showcase.fallback:IsShown())
 			expect.equal(showcase.fallback.portrait.__portrait, "player")
 			expect.equal(showcase.fallbackReason, "unavailable")
-			expect.truthy(showcase.chip.label:GetText():find("Portrait", 1, true))
-			expect.truthy(section.showcaseView.note.text:GetText():find("could not be shown", 1, true))
+			expect.equal(showcase.chip.label:GetText(), "Portrait: live model not available")
+			expect.truthy(section.showcaseView.note.text:GetText():find("could not be loaded", 1, true))
+			expect.equal(section.showcaseView.note.toggle:GetText(), "Try the live model again")
 			expect.falsy(showcase.zoomIn:IsEnabled(), "no zoom on the portrait")
+			expect.truthy(showcase.model:IsShown(), "the model frame stays shown so it can load later")
+			expect.equal(showcase.model:GetAlpha(), 0, "only made transparent")
 			-- Tried again when the gear changes.
 			mock.modelFails = false
 			showcase:GetScript("OnEvent")(showcase, "UNIT_MODEL_CHANGED", "player")
 			expect.truthy(showcase.modelShown)
 			expect.equal(showcase.model.__unit, "player")
+			expect.equal(showcase.model:GetAlpha(), 1)
+			expect.equal(showcase.chip.label:GetText(), "Live model")
+		end)
+
+		t:it("recovers by itself when the model loads on a later attempt", function()
+			local mock, _, ns = open()
+			mock.modelFails = 2 -- the first two calls fail (window just opened)
+			local showcase = showcaseOf(ns)
+			expect.equal(showcase.state, "loading")
+			drain(mock)
+			expect.equal(showcase.state, "live")
+			expect.truthy(showcase.modelShown)
+			expect.equal(showcase.model.__blend, false, "shown at once, as the character frame does")
+			expect.equal(#mock.timers, 0, "no retry left once it loaded")
+		end)
+
+		t:it("an earlier failure never stops the player asking for the live model again", function()
+			local mock, _, ns = open()
+			mock.modelFails = true
+			local showcase, section = showcaseOf(ns)
+			drain(mock)
+			expect.equal(showcase.state, "unavailable")
+			local toggle = section.showcaseView.note.toggle
+			mock.modelFails = false
+			click(toggle) -- "Try the live model again"
+			expect.equal(showcase.state, "live")
+			expect.equal(toggle:GetText(), "Show portrait instead")
+		end)
+
+		t:it("switches portrait to live model and back as often as asked", function()
+			local mock, _, ns = open()
+			local showcase, section = showcaseOf(ns)
+			local toggle = section.showcaseView.note.toggle
+			for _ = 1, 3 do
+				click(toggle)
+				expect.equal(showcase.state, "choice")
+				expect.equal(showcase.chip.label:GetText(), "Portrait (your choice)")
+				expect.equal(showcase.model:GetAlpha(), 0)
+				click(toggle)
+				expect.equal(showcase.state, "live", "the hidden-model bug: live again after the portrait")
+				expect.equal(showcase.model.__unit, "player")
+				expect.equal(showcase.chip.label:GetText(), "Live model")
+			end
+			expect.equal(#mock.timers, 0)
+		end)
+
+		t:it("stops retrying when the showcase closes, and tries afresh when it reopens", function()
+			local mock, _, ns = open()
+			mock.modelFails = true
+			local showcase = showcaseOf(ns)
+			showcase:Hide()
+			local calls = mock.setUnitCalls
+			drain(mock)
+			expect.equal(mock.setUnitCalls, calls, "no attempts while closed")
+			mock.modelFails = false
+			showcase:Show()
+			expect.equal(showcase.state, "live")
+		end)
+
+		t:it("tries again after a loading screen", function()
+			local mock, _, ns = open()
+			mock.modelFails = true
+			local showcase = showcaseOf(ns)
+			drain(mock)
+			mock.modelFails = false
+			showcase:GetScript("OnEvent")(showcase, "PLAYER_ENTERING_WORLD")
+			expect.equal(showcase.state, "live")
+		end)
+
+		t:it("reports what it knows for /dawnward dev showcase", function()
+			local mock, _, ns = open()
+			local showcase = showcaseOf(ns)
+			local lines = table.concat(showcase.Diagnostics(), "\n")
+			expect.truthy(lines:find("Live model", 1, true))
+			expect.truthy(lines:find("last SetUnit result: true", 1, true))
+			local out = mock.Slash("dev showcase")
+			expect.truthy(out:find("Showcase: Live model", 1, true))
 		end)
 
 		t:it("zooms within Blizzard's model range, with the buttons and the mouse wheel", function()
@@ -212,8 +304,13 @@ return function(t, expect)
 			showcase:Hide()
 			showcase:Show()
 			expect.falsy(showcase.modelShown)
-			local _, _, ns2 = Boot.Start({ savedVariables = { DawnwardChroniclesDB = env.DawnwardChroniclesDB } })
+			local mock2, _, ns2 = Boot.Start({ savedVariables = { DawnwardChroniclesDB = env.DawnwardChroniclesDB } })
 			expect.truthy(ns2.Actions.ShowcasePortrait(ns2.ctx))
+			mock2.Slash("")
+			local after = showcaseOf(ns2)
+			expect.equal(after.state, "choice", "after /reload the portrait choice still shows")
+			click(ns2.CharacterView.section.showcaseView.note.toggle)
+			expect.equal(after.state, "live", "and the live model can be asked for again")
 			click(toggle)
 			expect.truthy(showcase.modelShown)
 			expect.equal(env.DawnwardChroniclesDB.ui.showcase, nil, "the default leaves no trace")

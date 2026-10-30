@@ -28,7 +28,9 @@ TRP3Page.GAP = 12
 TRP3Page.SUMMARY_HEIGHT = 54
 TRP3Page.PREVIEW_LINES = 6
 TRP3Page.REASON_CHARS = 150
-TRP3Page.BACKUP_ROWS = 4
+TRP3Page.BACKUP_ROWS = 3
+TRP3Page.BACKUP_ROW_HEIGHT = 36
+TRP3Page.BACKUPS_HEIGHT = 256
 
 -- Chip text and tone per Sync.Check state (labels follow the command's
 -- STATE_LABEL: off, waiting, blocked, conflict, up to date, has changes).
@@ -61,7 +63,7 @@ TRP3Page.UNSUPPORTED_TEXT = "Not written by Dawnward: name, title, pronouns and 
 	.. "and Public personality axes into traits."
 
 TRP3Page.BACKUP_NOTE = "A backup is taken before every write, and each write is read back and undone at once if "
-	.. "anything differs."
+	.. "anything differs. Older backups: /dawnward trp3 backups."
 
 -- WoW reads "|" as an escape code; show player text literally.
 local function plain(s)
@@ -375,14 +377,23 @@ function TRP3Page.Build(parent, width, height)
 	page.reclaim = Widgets.Button(page.conflict.inner, "Use Dawnward's", half, 24, "ghost")
 	page.reclaim:SetPoint("LEFT", page.keepYours, "RIGHT", 6, 0)
 
+	-- Each backup is a two-line row: what it is, then when, so the name and
+	-- the date never crowd each other in the narrow column.
 	page.backups = Widgets.Panel(parent, "Backups")
-	page.backups:SetSize(TRP3Page.RIGHT_WIDTH, 240)
+	page.backups:SetSize(TRP3Page.RIGHT_WIDTH, TRP3Page.BACKUPS_HEIGHT)
 	local rowW = TRP3Page.RIGHT_WIDTH - 28
 	for i = 1, TRP3Page.BACKUP_ROWS do
-		local row = Widgets.Button(page.backups.inner, "", rowW, 22, "choice")
-		row:SetPoint("TOPLEFT", 0, -(i - 1) * 24)
+		local row = Widgets.Button(page.backups.inner, "", rowW, TRP3Page.BACKUP_ROW_HEIGHT, "choice")
+		row:SetPoint("TOPLEFT", 0, -(i - 1) * (TRP3Page.BACKUP_ROW_HEIGHT + 4))
+		row.name = label(row, "small", false)
+		row.name:SetPoint("TOPLEFT", 10, -4)
+		row.name:SetPoint("TOPRIGHT", -10, -4)
+		row.name:SetJustifyH("LEFT")
 		row.date = label(row, "muted", false)
-		row.date:SetPoint("RIGHT", -8, 0)
+		row.date:SetPoint("BOTTOMLEFT", 10, 4)
+		row.date:SetPoint("BOTTOMRIGHT", -10, 4)
+		row.date:SetJustifyH("LEFT")
+		Widgets.Tooltip(row, "Backup", "")
 		row:SetScript("OnClick", function(self)
 			page.selectedBackup = self.backupId
 			MainWindow.Refresh()
@@ -394,7 +405,7 @@ function TRP3Page.Build(parent, width, height)
 	page.noBackups:SetWidth(rowW)
 	page.noBackups:SetText("No backups yet. Dawnward takes one before its first write.")
 	page.rollback = Widgets.Button(page.backups.inner, "Roll back…", rowW, 24)
-	page.rollback:SetPoint("TOPLEFT", 0, -(TRP3Page.BACKUP_ROWS * 24 + 6))
+	page.rollback:SetPoint("TOPLEFT", 0, -(TRP3Page.BACKUP_ROWS * (TRP3Page.BACKUP_ROW_HEIGHT + 4) + 6))
 	page.backupNote = label(page.backups.inner, "muted", true)
 	page.backupNote:SetPoint("TOPLEFT", page.rollback, "BOTTOMLEFT", 0, -8)
 	page.backupNote:SetWidth(rowW)
@@ -634,9 +645,13 @@ function TRP3Page.Refresh(page)
 		row:SetShown(b ~= nil)
 		row.backupId = b and b.id or nil
 		if b then
-			row:SetText("#" .. b.id .. " " .. (b.section == "about" and "About" or "Traits") .. " · "
-				.. plain(b.reason or ""))
-			row.date:SetText(b.at and b.at > 0 and date("%d %b", b.at) or "")
+			local name = "#" .. b.id .. " " .. (b.section == "about" and "About" or "Traits") .. " · "
+				.. plain(b.reason or "")
+			local when = b.at and b.at > 0 and date("%d %b %Y, %H:%M", b.at) or "Date unknown"
+			row:SetText("")
+			row.name:SetText(name)
+			row.date:SetText(when)
+			Widgets.Tooltip(row, name, when .. ". Select it, then Roll back… to restore it.")
 			row:SetSelected(page.selectedBackup == b.id)
 			if page.selectedBackup == b.id then selectedSeen = true end
 		end

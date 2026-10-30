@@ -50,6 +50,58 @@ MainWindow.LAYOUT = {
 }
 
 --- Pure layout maths: rectangles relative to the window's bottom-left corner.
+--- Resizing (bottom-right handle) -------------------------------------------------
+-- The window keeps its approved 1100 x 720 layout and is resized by scaling
+-- it (Frame:SetScale), the way Blizzard's own scalable panels work. Every
+-- section is laid out once in UI units, so scaling keeps the proportions,
+-- hierarchy and spacing of the approved design exactly; a native size
+-- change would need every screen to lay itself out again for each size.
+-- The trade-off is that text grows and shrinks with the window, so the
+-- smallest scale (MIN_SCALE) is chosen to keep it readable.
+MainWindow.MIN_SCALE = 0.7  -- body text stays at about 10.5 UI units or more
+MainWindow.MAX_SCALE = 1.4
+MainWindow.FIT_MARGIN = 40  -- UI units kept free around the window
+
+--- The largest scale at which the window fits the screen. Pure.
+function MainWindow.FitLimit(parentW, parentH)
+	local L = MainWindow.LAYOUT
+	local m = MainWindow.FIT_MARGIN
+	if type(parentW) ~= "number" or type(parentH) ~= "number" or parentW <= 0 or parentH <= 0 then
+		return 1
+	end
+	return math.min((parentW - m) / L.width, (parentH - m) / L.height)
+end
+
+--- The scale to use: the player's chosen scale (nil = the design's own
+-- size, 1), kept between MIN_SCALE and MAX_SCALE, and never larger than the
+-- screen allows. On a screen too small even for MIN_SCALE, fitting wins.
+-- Pure.
+function MainWindow.EffectiveScale(chosen, parentW, parentH)
+	local scale = type(chosen) == "number" and chosen or 1
+	scale = math.max(MainWindow.MIN_SCALE, math.min(MainWindow.MAX_SCALE, scale))
+	return math.min(scale, MainWindow.FitLimit(parentW, parentH))
+end
+
+--- The scale for a drag of the resize handle: the window's top-left corner
+-- stays where it is (left, top in UIParent units) and the bottom-right
+-- corner follows the cursor (cx, cy). Kept inside the limits and inside the
+-- screen from that corner. Pure.
+function MainWindow.DragScale(left, top, cx, cy, parentW, parentH)
+	local L = MainWindow.LAYOUT
+	local byWidth = (cx - left) / L.width
+	local byHeight = (top - cy) / L.height
+	local scale = math.max(byWidth, byHeight)
+	scale = math.max(MainWindow.MIN_SCALE, math.min(MainWindow.MAX_SCALE, scale))
+	-- Never past the right or bottom edge of the screen.
+	if type(parentW) == "number" and parentW > 0 then
+		scale = math.min(scale, (parentW - left) / L.width)
+	end
+	if type(top) == "number" then
+		scale = math.min(scale, top / L.height)
+	end
+	return math.min(scale, MainWindow.FitLimit(parentW, parentH))
+end
+
 function MainWindow.ComputeLayout(L)
 	local r = {}
 	r.background = { left = L.borderInset, right = L.width - L.borderInset,
@@ -325,15 +377,27 @@ function MainWindow.ToggleSettings()
 	MainWindow.Refresh()
 end
 
+local function parentSize()
+	return UIParent.GetWidth and UIParent:GetWidth(), UIParent.GetHeight and UIParent:GetHeight()
+end
+
+--- Sets the window's scale (from the player's saved choice) and position.
+-- A frame's point offsets are in its own (scaled) units, so a position saved
+-- at another scale is converted.
 local function restorePosition()
+	local pw, ph = parentSize()
+	local scale = MainWindow.EffectiveScale(ctx() and Actions.WindowScale(ctx()), pw, ph)
+	frame:SetScale(scale)
 	frame:ClearAllPoints()
 	local position = ctx() and Actions.WindowPosition(ctx())
 	if position then
-		frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", position.left, position.top)
+		local factor = (position.scale or scale) / scale
+		frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", position.left * factor, position.top * factor)
 	else
 		frame:SetPoint("CENTER")
 	end
 end
+MainWindow.RestorePosition = function() if frame then restorePosition() end end
 
 local function savePosition()
 	frame:StopMovingOrSizing()
@@ -342,7 +406,80 @@ local function savePosition()
 		frame:SetUserPlaced(false)
 	end
 	if ctx() then
-		Actions.SaveWindowPosition(ctx(), frame:GetLeft(), frame:GetTop())
+		Actions.SaveWindowPosition(ctx(), frame:GetLeft(), frame:GetTop(), frame:GetScale())
+	end
+end
+
+--- The resize handle in the bottom-right corner: the chat frame's own size
+-- grabber art (FloatingChatFrame.xml, UI-ChatIM-SizeGrabber), tinted gold.
+-- Work happens only while the button is held (an OnUpdate set on mouse down
+-- and removed on mouse up), and only when the cursor has moved.
+local function buildResizeHandle()
+	local grip = CreateFrame("Button", nil, frame)
+	grip:SetSize(16, 16)
+	grip:SetPoint("BOTTOMRIGHT", -6, 6)
+	grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+	grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+	grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+	Style.Register(grip, function(g, theme)
+		for _, tex in ipairs({ g:GetNormalTexture(), g:GetPushedTexture() }) do
+			if tex and tex.SetVertexColor then tex:SetVertexColor(theme.ornament[1], theme.ornament[2], theme.ornament[3]) end
+		end
+	end)
+	Widgets.Tooltip(grip, "Resize", "Drag to make the window larger or smaller. Settings → General → "
+		.. "Reset window size returns it to its design size.")
+	local level = frame.GetFrameLevel and frame:GetFrameLevel()
+	if type(level) == "number" and grip.SetFrameLevel then grip:SetFrameLevel(level + 20) end
+
+	local drag
+	local function cursor()
+		local x, y = GetCursorPosition()
+		local s = UIParent:GetEffectiveScale()
+		return x / s, y / s
+	end
+	local function step()
+		local cx, cy = cursor()
+		if drag.cx == cx and drag.cy == cy then return end
+		drag.cx, drag.cy = cx, cy
+		local pw, ph = parentSize()
+		local scale = MainWindow.DragScale(drag.left, drag.top, cx, cy, pw, ph)
+		if math.abs(scale - frame:GetScale()) < 0.002 then return end
+		frame:SetScale(scale)
+		frame:ClearAllPoints()
+		frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", drag.left / scale, drag.top / scale)
+	end
+	local function stop()
+		grip:SetScript("OnUpdate", nil)
+		if not drag then return end
+		drag = nil
+		if ctx() then Actions.SaveWindowScale(ctx(), frame:GetScale()) end
+		savePosition()
+	end
+	grip:SetScript("OnMouseDown", function()
+		local scale = frame:GetScale()
+		drag = { left = frame:GetLeft() * scale, top = frame:GetTop() * scale }
+		grip:SetScript("OnUpdate", step)
+	end)
+	grip:SetScript("OnMouseUp", stop)
+	grip:SetScript("OnHide", stop)
+	frame.resizeHandle = grip
+	return grip
+end
+
+--- Settings → General → Reset window size.
+function MainWindow.ResetSize()
+	if ctx() then Actions.SaveWindowScale(ctx(), nil) end
+	if frame then
+		local left, top = frame:GetLeft(), frame:GetTop()
+		local old = frame:GetScale()
+		local pw, ph = parentSize()
+		local scale = MainWindow.EffectiveScale(nil, pw, ph)
+		frame:SetScale(scale)
+		if left and top then
+			frame:ClearAllPoints()
+			frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left * old / scale, top * old / scale)
+		end
+		savePosition()
 	end
 end
 
@@ -502,6 +639,14 @@ local function build()
 		MainWindow.guide = MainWindow.createGuide(frame.content)
 	end
 
+	buildResizeHandle()
+	-- A new UI scale or resolution: fit the window to the screen again.
+	frame:RegisterEvent("UI_SCALE_CHANGED")
+	frame:RegisterEvent("DISPLAY_SIZE_CHANGED")
+	frame:SetScript("OnEvent", function()
+		if frame:IsShown() then restorePosition() end
+	end)
+
 	frame:SetScript("OnHide", function()
 		for _, def in ipairs(sections) do
 			if def.instance and def.instance.OnHide then
@@ -528,8 +673,6 @@ function MainWindow.Show(force)
 		build()
 	end
 	restorePosition()
-	frame:SetScale(Style.FitScale(layout.height, UIParent.GetHeight and UIParent:GetHeight(), nil,
-		layout.width, UIParent.GetWidth and UIParent:GetWidth()))
 	frame:Show()
 	frame:Raise()
 	showSection(currentSection)

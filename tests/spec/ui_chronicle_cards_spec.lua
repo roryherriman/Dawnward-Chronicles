@@ -152,4 +152,17 @@ return function(t, expect)
 			expect.falsy(view.rows[3]:IsShown())
 		end)
 	end)
+	t:describe("Chronicle card titles", function()
+		t:it("shows a long goal title whole on hover", function()
+			local _, char, ns, section = start()
+			local long = "Find the missing courier somewhere between Goldshire and the Stonefield farm before the rains"
+			assert(ns.Goals.Add(char, { title = long }, NOW))
+			for _, b in ipairs(section.tabButtons) do
+				if b.tabId == "goals" then click(b) end
+			end
+			local row = section.rows[1]
+			expect.truthy(row.titleHover:IsShown())
+			expect.equal(row.titleHover.tooltipTitle, long)
+		end)
+	end)
 end

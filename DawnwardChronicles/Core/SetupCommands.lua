@@ -59,7 +59,7 @@ Commands.Register("setup", function(ctx)
 end)
 
 local DEV_USAGE = "Developer commands: /dawnward dev setup | dev setup status | dev setup reset | "
-	.. "dev story status | dev story simulate [place]"
+	.. "dev story status | dev story simulate [place] | dev showcase"
 
 -- Other developer areas register here: DEV_AREAS[name] = { usage, run(ctx, rest) }
 -- (Core/StoryDiagnostics.lua adds "story"). They share the build gate below.

@@ -39,6 +39,16 @@ ChronicleView.TABS = {
 	{ id = "review", label = "Review", noun = { "finding", "findings" }, search = "Search findings", width = 86 },
 }
 ChronicleView.REVIEW_CHOICES = { "growth", "unreliable", "secret", "correction", "ignore" }
+-- How each answer reads on its button, and what it means (tooltip).
+ChronicleView.REVIEW_LABELS = { growth = "Growth", unreliable = "Unreliable", secret = "Secret",
+	correction = "Correct it", ignore = "Ignore" }
+ChronicleView.REVIEW_HELP = {
+	growth = "Your character changed: both records stay true for their time.",
+	unreliable = "Your character believes something that is not so.",
+	secret = "Deliberate: it stays, and its private side stays hidden.",
+	correction = "A mistake you will fix yourself. Nothing is changed for you.",
+	ignore = "Not a problem. The finding is set aside.",
+}
 
 -- Layout in section units (the v0.7 content area is 772 x 588, the mockup's
 -- main column). Tabs on top, a toolbar (New, search, count, pager) below
@@ -55,7 +65,7 @@ ChronicleView.ROWS = ChronicleView.LAYOUT.cols * ChronicleView.LAYOUT.gridRows
 
 -- Button widths by label (the rest: 64). Long enough for each label.
 ChronicleView.BUTTON_WIDTHS = { Accept = 68, Edit = 56, Dispute = 68, Remove = 72, Turn = 58, Steps = 60,
-	growth = 58, unreliable = 72, secret = 58, correction = 76, ignore = 56 }
+	Growth = 62, Unreliable = 78, Secret = 58, ["Correct it"] = 76, Ignore = 56 }
 
 --- Rectangles of one card's parts, relative to its top-left corner (y grows
 -- downwards), with x, y, w, h. opts: { title, meta, progress } say which
@@ -553,6 +563,12 @@ local function create(parent)
 		row.date = Widgets.Label(row, "GameFontHighlightSmall", false, "muted")
 		row.date:SetJustifyH("RIGHT")
 		row.title = Widgets.Label(row, "GameFontHighlightLarge", false, "body")
+		-- One line, so a long title is cut with "..."; hovering shows it whole.
+		row.titleHover = CreateFrame("Frame", nil, row)
+		Widgets.Tooltip(row.titleHover, "", nil)
+		-- Hovering the title still highlights its card.
+		row.titleHover:HookScript("OnEnter", function() row:SetRowHover(true) end)
+		row.titleHover:HookScript("OnLeave", function() row:SetRowHover(false) end)
 		row.meta = Widgets.Label(row, "GameFontHighlightSmall", false, "muted")
 		row.text = Widgets.Label(row, "GameFontHighlight", true, "body")
 		row.progress = Widgets.ProgressBar(row, L.cardWidth - 2 * L.cardPad, 4)
@@ -685,7 +701,13 @@ local function create(parent)
 		place(row.date, rects.date)
 		row.date:SetText(content.date or "")
 		row.title:SetShown(content.title ~= nil)
-		if content.title then place(row.title, rects.title); row.title:SetText(content.title) end
+		row.titleHover:SetShown(content.title ~= nil)
+		if content.title then
+			place(row.title, rects.title)
+			row.title:SetText(content.title)
+			place(row.titleHover, rects.title)
+			Widgets.Tooltip(row.titleHover, content.title, content.meta)
+		end
 		row.meta:SetShown(content.meta ~= nil)
 		if content.meta then place(row.meta, rects.meta); row.meta:SetText(content.meta) end
 		place(row.text, rects.text)
@@ -794,11 +816,16 @@ local function create(parent)
 				if self.tab == "review" then
 					local list = {}
 					for _, choice in ipairs(ChronicleView.REVIEW_CHOICES) do
-						list[#list + 1] = { choice, function()
+						list[#list + 1] = { ChronicleView.REVIEW_LABELS[choice], function()
 							act(function(c, now2) return ns.Continuity.Review(c, item.key, choice, nil, now2) end)
 						end }
 					end
 					fill(row, list)
+					-- Answers are real buttons (filled, with an edge), each explained.
+					for b, choice in ipairs(ChronicleView.REVIEW_CHOICES) do
+						row.actions[b]:SetVariant("default")
+						Widgets.Tooltip(row.actions[b], ChronicleView.REVIEW_LABELS[choice], ChronicleView.REVIEW_HELP[choice])
+					end
 					row.onVisibility = nil
 					layoutChips(row, content.chips, false)
 				else

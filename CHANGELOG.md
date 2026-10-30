@@ -12,6 +12,30 @@ Every release entry has a **Verified** line naming the highest test level reache
 
 A feature is never called "tested" or "compatible" in this file unless it reached L3 or L4.
 
+## [Unreleased]: 0.7.1-dev (fixes from the first in-game inspection)
+
+**Verified: L2** (mocked). The fixes below answer the owner's first in-game inspection of v0.7. None is confirmed in game yet; see part T of [`docs/TESTING.md`](docs/TESTING.md).
+
+### Fixed
+- **Character Showcase live model:** the model never appeared ("Portrait: model unavailable"), and switching back from the portrait did not work.
+  - **Cause:** after a failed load, and in portrait mode, the model frame was hidden. Every later attempt then ran on a hidden model frame, which cannot load, so one failure or one visit to the portrait blocked the live model for good.
+  - **Now:** the model frame stays shown (the portrait mode only makes it transparent). A failed load is retried for about 8 s, and again on reopening, on a gear change and after a loading screen. "Try the live model again" is always available.
+  - **Mode:** the chip says which mode is showing (Live model, Loading, Portrait by choice, Portrait because the model is unavailable).
+  - **Diagnostics:** `/dawnward dev showcase` reports what the client returned.
+- **Chronicle → Review:** the answers are real buttons with readable labels and an explanation each.
+- **Chronicle cards:** a title cut short shows in full on hover.
+- **Settings → Total RP 3:** backups are two-line rows (name, then the full date), no longer crowded.
+- **Settings → Story:** each button shows its current value in words, with a "›" for "click for the next option"; the tooltip lists every option and marks the current one.
+
+### Added
+- **Resizable window:** a gold grip in the bottom-right corner.
+  - **How it resizes:** it scales the whole window, keeping the approved layout's proportions, between 0.7 (still readable) and 1.4, never beyond the screen.
+  - **Persistence:** the size is remembered across `/reload` and logout, and the window is re-fitted when the UI scale or resolution changes.
+  - **Reset:** Settings → General → Reset window size.
+
+### Saved data
+- Additive and cleaned on load: `ui.windowScale`, `ui.position.scale`.
+
 ## [Unreleased]: 0.7.0-dev (approved visual direction, gameplay time)
 
 **Verified: L2** (mocked). Not tested in game yet; see parts Q, R and S of [`docs/TESTING.md`](docs/TESTING.md). Design: [`docs/design/UI_DESIGN_V07.md`](docs/design/UI_DESIGN_V07.md). Builds on 0.6.0-dev below, which is also unreleased.

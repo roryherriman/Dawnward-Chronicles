@@ -98,12 +98,27 @@ function Methods:EnableMouse(on) self.__mouse = on and true or false end
 function Methods:IsMouseEnabled() return self.__mouse == true end
 function Methods:GetFont() return self.__font and self.__font.file, self.__font and self.__font.height end
 function Methods:SetFontObject(font) self.__fontObject = font end
--- Models: SetUnit succeeds unless mock.modelFails is set.
-function Methods:SetUnit(unit)
-	if self.__mock.modelFails then return false end
+-- Models: SetUnit fails on a model frame that is not visible (a hidden
+-- model cannot load), and while mock.modelFails is set: true fails every
+-- call, a number fails that many calls and then counts down.
+function Methods:SetUnit(unit, blend)
+	self.__mock.setUnitCalls = (self.__mock.setUnitCalls or 0) + 1
+	self.__blend = blend
+	local fails = self.__mock.modelFails
+	if type(fails) == "number" then
+		if fails > 0 then
+			self.__mock.modelFails = fails - 1
+			return false
+		end
+	elseif fails then
+		return false
+	end
+	if not self:IsVisible() then return false end
 	self.__unit = unit
 	return true
 end
+function Methods:SetAlpha(a) self.__alpha = a end
+function Methods:GetAlpha() return self.__alpha or 1 end
 function Methods:ClearModel() self.__unit = nil end
 function Methods:SetRotation(r) self.__rotation = r end
 function Methods:GetRotation() return self.__rotation or 0 end
@@ -144,6 +159,17 @@ function Methods:GetLeft() return self.__left or 100 end
 function Methods:GetTop() return self.__top or 600 end
 function Methods:GetCenter() return self.__cx or 500, self.__cy or 400 end
 function Methods:GetEffectiveScale() return 1 end
+function Methods:SetScale(scale) self.__scale = scale end
+function Methods:GetScale() return self.__scale or 1 end
+-- Button state textures (resize handle).
+for _, state in ipairs({ "Normal", "Highlight", "Pushed" }) do
+	Methods["Set" .. state .. "Texture"] = function(self, file)
+		local tex = self.__mock.newFrame("Texture", nil, self)
+		tex.__texture = file
+		self["__" .. state] = tex
+	end
+	Methods["Get" .. state .. "Texture"] = function(self) return self["__" .. state] end
+end
 function Methods:SetTextColor(r, g, b) self.__textColor = { r, g, b } end
 function Methods:SetFontString(fs) self.__fontString = fs end
 function Methods:GetFontString()
@@ -276,7 +302,7 @@ function Mock.new(opts)
 		C_AddOns = {
 			GetAddOnMetadata = function(name, field)
 				if name == "DawnwardChronicles" and field == "Version" then
-					return opts.version or "0.7.0-dev"
+					return opts.version or "0.7.1-dev"
 				end
 				return nil
 			end,

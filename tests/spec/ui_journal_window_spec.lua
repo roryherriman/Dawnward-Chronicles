@@ -125,7 +125,7 @@ return function(t, expect)
 			local frame = ns.MainWindow.GetFrame()
 			frame.__left, frame.__top = 222, 555
 			frame:GetScript("OnDragStop")(frame)
-			expect.deepEqual(env.DawnwardChroniclesDB.ui.position, { left = 222, top = 555 })
+			expect.deepEqual(env.DawnwardChroniclesDB.ui.position, { left = 222, top = 555, scale = 1 })
 			mock.Slash("")
 			mock.Slash("")
 			local point = frame.__points[#frame.__points]
