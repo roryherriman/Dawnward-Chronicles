@@ -37,6 +37,7 @@ StorySchema.LIMITS = {
 	decisions = 500,
 	changes = 300,
 	recentTemplates = 6,
+	asked = 40,       -- (v0.7.x) questions asked, for repetition control (Core/Reactions.lua)
 	questZones = 300,
 	text = 300,       -- bytes: titles, phrases, reasons
 	custom = 1000,    -- bytes: a custom player response
@@ -71,6 +72,7 @@ StorySchema.DEFAULT_PREFS = {
 	trp3Style = "neutral",
 	places = "on",       -- location moments: on, fewer or off
 	pace = "standard",   -- narrative day length in play (Core/NarrativeClock.lua): brisk, standard, slow
+	repeatDays = 3,      -- (v0.7.x) narrative days before the same question about the same situation (0-14; 0 off)
 	tracking = { quest = true, levelup = true, death = true, reputation = true, zone = true, instance = true,
 		guild = true, place = true },
 }
@@ -127,7 +129,8 @@ function StorySchema.New()
 		baselines = {},
 		nextId = 1,
 		prefs = StorySchema.NewPrefs(),
-		pacing = { lastNoticeAt = 0, lastByCategory = {}, playByCategory = {}, recentTemplates = {}, questZones = {} },
+		pacing = { lastNoticeAt = 0, lastByCategory = {}, playByCategory = {}, recentTemplates = {}, questZones = {},
+			asked = {} },
 		clock = ns.NarrativeClock.Clean(nil),
 		observed = StorySchema.NewObserved(),
 		memories = {},
@@ -354,6 +357,7 @@ local function cleanPrefs(raw)
 	if StorySchema.TRP3_STYLES[raw.trp3Style] then prefs.trp3Style = raw.trp3Style end
 	if StorySchema.PLACE_PROMPTS[raw.places] then prefs.places = raw.places end
 	if ns.NarrativeClock.PACES[raw.pace] then prefs.pace = raw.pace end
+	prefs.repeatDays = smallInt(raw.repeatDays, 0, 14) or prefs.repeatDays
 	for _, flag in ipairs({ "drafts", "flavor", "card" }) do
 		if type(raw[flag]) == "boolean" then prefs[flag] = raw[flag] end
 	end
@@ -368,7 +372,8 @@ local function cleanPrefs(raw)
 end
 
 local function cleanPacing(raw)
-	local pacing = { lastNoticeAt = 0, lastByCategory = {}, playByCategory = {}, recentTemplates = {}, questZones = {} }
+	local pacing = { lastNoticeAt = 0, lastByCategory = {}, playByCategory = {}, recentTemplates = {}, questZones = {},
+		asked = {} }
 	if type(raw) ~= "table" then
 		return pacing
 	end
@@ -390,6 +395,20 @@ local function cleanPacing(raw)
 			if clean and #pacing.recentTemplates < StorySchema.LIMITS.recentTemplates then
 				pacing.recentTemplates[#pacing.recentTemplates + 1] = clean
 			end
+		end
+	end
+	-- (v0.7.x, additive) questions asked: { t = template, s = subject, p = play }.
+	-- Anything unusable is dropped; a missing list starts empty, so an upgrade
+	-- never suppresses (or asks) anything it would not have before.
+	if type(raw.asked) == "table" then
+		for _, a in ipairs(raw.asked) do
+			if type(a) == "table" and key(a.t) and text(a.s, 200) == a.s and type(a.p) == "number"
+				and ts(a.p) == a.p then
+				pacing.asked[#pacing.asked + 1] = { t = a.t, s = a.s, p = a.p }
+			end
+		end
+		while #pacing.asked > StorySchema.LIMITS.asked do
+			table.remove(pacing.asked, 1)
 		end
 	end
 	if type(raw.questZones) == "table" then

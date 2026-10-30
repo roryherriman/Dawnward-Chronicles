@@ -90,6 +90,7 @@ function StoryView.ContextText(presentation)
 	if presentation.why and #presentation.why > 0 then
 		parts[#parts + 1] = "Why now: " .. table.concat(presentation.why, "; ")
 	end
+	if presentation.echo then parts[#parts + 1] = "Last time: " .. presentation.echo end
 	return table.concat(parts, "  -  ")
 end
 
@@ -183,7 +184,12 @@ function StoryView.WhyLines(presentation, memories)
 	if presentation.context then
 		text = text and (text .. " " .. presentation.context) or presentation.context
 	end
-	if text then lines[#lines + 1] = { label = "Why now:", text = text .. "." } end
+	if text then
+		text = text .. "."
+		-- The player's own earlier answer about the same situation (Director.Echo).
+		if presentation.echo then text = text .. " Last time: " .. presentation.echo .. "." end
+		lines[#lines + 1] = { label = "Why now:", text = text }
+	end
 	if memories and #memories > 0 then
 		local quoted = {}
 		for i, title in ipairs(memories) do quoted[i] = "\226\128\156" .. title .. "\226\128\157" end
