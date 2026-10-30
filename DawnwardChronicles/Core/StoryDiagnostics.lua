@@ -176,6 +176,22 @@ function StoryDiagnostics.ClockLines(ctx, char, play)
 	return lines
 end
 
+--- Encounter events seen this session (Platform/Observers' unverified
+-- probe, #11). Nothing here was recorded or saved.
+function StoryDiagnostics.EncounterLines(ctx)
+	local list = ctx.encounters or {}
+	if #list == 0 then
+		return { "Encounter events this session: none seen (whether ENCOUNTER_END or BOSS_KILL fire on Classic Era "
+			.. "is unverified; nothing is recorded from them)." }
+	end
+	local lines = { "Encounter events this session (unverified probe; nothing recorded):" }
+	for _, e in ipairs(list) do
+		lines[#lines + 1] = string.format("  %s %s %s%s", e.event, tostring(e.id or "?"), e.name or "?",
+			e.success and (" success=" .. e.success) or "")
+	end
+	return lines
+end
+
 --- Lines for /dawnward dev story status.
 function StoryDiagnostics.StatusLines(ctx)
 	local now = ctx.now()
@@ -223,6 +239,7 @@ function StoryDiagnostics.StatusLines(ctx)
 	end
 	add(cooldownLine(char, play))
 	add(string.format("Waiting moments: %d.", #Reactions.List(char, now, play)))
+	for _, line in ipairs(StoryDiagnostics.EncounterLines(ctx)) do add(line) end
 	local last = ctx.lastLocation
 	if not last then
 		add("Last arrival this session: none observed yet.")
