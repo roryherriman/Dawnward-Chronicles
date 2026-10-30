@@ -10,6 +10,10 @@
 --                1.15.9.70576; not re-checked since)
 --   in-game      the running client returned the expected name for the ID
 --                (owner-reported, with the date)
+-- Candidates (Atlas.CANDIDATES) are a separate list: their names are
+-- confirmed by the in-game scan, but not where they lie or what they are,
+-- so they stay out of the place mapping and Atlas.Level calls them
+-- unverified.
 -- Expected names are the enUS client's. A different name on a localised
 -- client is reported as such, never treated as a failure of the ID.
 -- Nothing here claims WoW Forever compatibility (issue #24 decides that).
@@ -104,12 +108,133 @@ Atlas.EXPECTED = {
 	},
 }
 
--- Owner-reported in-game confirmations (Classic Era 1.15.9, enUS):
--- id -> date. See docs/COMPATIBILITY.md, "L3 results ... (owner-reported)".
-Atlas.CONFIRMED = {
-	maps = { [1429] = "2026-10-26" },          -- Elwynn Forest
-	areas = { [9] = "2026-10-26", [87] = "2026-10-26" }, -- Northshire Valley, Goldshire
+-- Owner-run in-game evidence (Classic Era 1.15.9.70576, enUS), kept
+-- verbatim in tools/atlas/evidence/ with the SHA-256 published in #48
+-- (tools/atlas/client_db.py selftest checks both):
+--   export  /dawnward atlas export, 2026-10-28 (manual test M17): all 17
+--           maps and 49 areas below matched the client's names, 66/0/0
+--   scan    /dawnward atlas scan 1 5000, 2026-10-28 (M18): 1,081 area IDs
+--           and names. It has no parent maps, so it confirms names only
+Atlas.EVIDENCE = {
+	export = { file = "classic_era_70576_atlas_export.txt", date = "2026-10-28",
+		sha256 = "14ea7de6a4bc4e27d1934ac3d430cf9e9d765ceb3c7ebd3eea9957825a8ff668" },
+	scan = { file = "classic_era_70576_atlas_scan_1-5000.txt", date = "2026-10-28",
+		sha256 = "76d0959d352d9b52c7b10ff2caba9393708960f775bf849361ceff26b0400cb3" },
 }
+
+-- Owner-reported in-game confirmations (Classic Era 1.15.9, enUS):
+-- id -> date. 2026-10-26: seen while playing (docs/COMPATIBILITY.md,
+-- "L3 results ... (owner-reported)"); 2026-10-28: the atlas export above.
+-- Listed one by one on purpose: a new EXPECTED entry is never confirmed
+-- by default.
+do
+	local EXPORT = "2026-10-28"
+	local maps, areas = { [1429] = "2026-10-26" }, { [9] = "2026-10-26", [87] = "2026-10-26" }
+	for _, id in ipairs({ 1411, 1412, 1413, 1420, 1426, 1432, 1433, 1436, 1437, 1438, 1453, 1454, 1455, 1456, 1457,
+		1458 }) do
+		maps[id] = EXPORT
+	end
+	for _, id in ipairs({ 23, 24, 34, 59, 62, 63, 64, 69, 77, 107, 108, 109, 131, 132, 153, 154, 155, 156, 159, 165,
+		186, 188, 219, 220, 221, 222, 256, 257, 358, 362, 363, 364, 365, 367, 380, 803, 916, 918, 1001, 1002, 1296,
+		1297, 2101, 2104, 2117, 2119, 2979 }) do
+		areas[id] = EXPORT
+	end
+	Atlas.CONFIRMED = { maps = maps, areas = areas }
+end
+
+-- Candidate settlements outside the starting zones (#48 analysis,
+-- 2026-10-28). Each ID and name is confirmed by the in-game scan, exactly
+-- as the client spells it (1997 and 1998 end in a space: data issue B).
+-- Their parent map, kind and faction relevance are NOT verified, so they
+-- are never classified, never prompt, and never change what Dawnward
+-- records: Core/Places does not read this list. /dawnward atlas names a
+-- candidate when you stand in it and shows the uiMap the client reports,
+-- which is the evidence needed to promote it (add it to Places.DATA with
+-- that map, then to EXPECTED and, once seen, CONFIRMED).
+-- shared lists the other IDs the scan gives the same name (data issue C:
+-- the Old Hillsbrad Foothills copies), so a name alone never picks the ID.
+Atlas.CANDIDATES = {
+	-- Eastern Kingdoms
+	[42] = { name = "Darkshire" }, [35] = { name = "Booty Bay" }, [117] = { name = "Grom'gol Base Camp" },
+	[99] = { name = "Rebel Camp" }, [75] = { name = "Stonard" }, [144] = { name = "Thelsamar" },
+	[925] = { name = "Algaz Station" }, [150] = { name = "Menethil Harbor" },
+	[271] = { name = "Southshore", shared = { 2369 } }, [272] = { name = "Tarren Mill", shared = { 2368 } },
+	[320] = { name = "Refuge Pointe" }, [321] = { name = "Hammerfall" }, [348] = { name = "Aerie Peak" },
+	[3317] = { name = "Revantusk Village" }, [340] = { name = "Kargath" }, [1446] = { name = "Thorium Point" },
+	[2418] = { name = "Morgan's Vigil" }, [1438] = { name = "Nethergarde Keep" }, [228] = { name = "The Sepulcher" },
+	[233] = { name = "Ambermill" }, [3197] = { name = "Chillwind Camp" }, [2268] = { name = "Light's Hope Chapel" },
+	-- Kalimdor
+	[392] = { name = "Ratchet" }, [378] = { name = "Camp Taurajo" }, [442] = { name = "Auberdine" },
+	[415] = { name = "Astranaar" }, [431] = { name = "Splintertree Post" }, [2897] = { name = "Zoram'gar Outpost" },
+	[460] = { name = "Sun Rock Retreat" }, [467] = { name = "Stonetalon Peak" }, [484] = { name = "Freewind Post" },
+	[489] = { name = "Thalanaar" }, [608] = { name = "Nijel's Point" }, [2408] = { name = "Shadowprey Village" },
+	[513] = { name = "Theramore Isle" }, [496] = { name = "Brackenwall Village" }, [1099] = { name = "Camp Mojache" },
+	[1116] = { name = "Feathermoon Stronghold" }, [976] = { name = "Gadgetzan" }, [977] = { name = "Steamwheedle Port" },
+	[541] = { name = "Marshal's Refuge" }, [1237] = { name = "Valormok" }, [2255] = { name = "Everlook" },
+	[1997] = { name = "Bloodvenom Post " }, [1998] = { name = "Talonbranch Glade " },
+	[2479] = { name = "Emerald Sanctuary" }, [3425] = { name = "Cenarion Hold" }, [702] = { name = "Rut'theran Village" },
+	-- An inn inside a settlement: needs the same interior check as Lion's Pride Inn first.
+	[403] = { name = "Shady Rest Inn" },
+}
+
+--- The candidate whose client name is this subzone, or nil: id, entry.
+-- areaName(id) is the client's name (C_Map.GetAreaInfo). Only candidates
+-- are tried, and a match is reported, never recorded.
+function Atlas.Candidate(subzone, areaName)
+	local want = ns.Places.Bare(subzone)
+	if not want or type(areaName) ~= "function" then
+		return nil
+	end
+	local ids = {}
+	for k in pairs(Atlas.CANDIDATES) do ids[#ids + 1] = k end
+	table.sort(ids)
+	for _, id in ipairs(ids) do
+		if ns.Places.Bare(areaName(id)) == want then
+			return id, Atlas.CANDIDATES[id]
+		end
+	end
+	return nil
+end
+
+-- Area IDs never to be classified (#48 analysis, buckets by name plus a
+-- short review list). 133 of the 1,081 scanned IDs fall in these buckets;
+-- battlegrounds are left out here because Dawnward never records them as
+-- places (IsInInstance), except Arathi Basin's generic names, which must
+-- never match a farm or mine elsewhere.
+Atlas.QUARANTINE = {
+	patterns = { "unused", "delete me", "not used", "%*%*%*on map dungeon%*%*%*" },
+	seas = { ["The Great Sea"] = true, ["The Veiled Sea"] = true, ["The Forbidding Sea"] = true, ["South Seas"] = true },
+	ids = {
+		-- test or development
+		[22] = "test", [81] = "test", [82] = "test", [83] = "test", [84] = "test", [151] = "test", [876] = "test",
+		[1218] = "test", [2877] = "test",
+		-- unreleased or odd: review before any use
+		[21] = "review", [30] = "review", [32] = "review", [616] = "review", [676] = "review", [1397] = "review",
+		[2366] = "review", [2367] = "review", [3459] = "review",
+		-- Arathi Basin's generic names
+		[3420] = "battleground", [3421] = "battleground", [3422] = "battleground", [3423] = "battleground",
+		[3424] = "battleground",
+	},
+}
+
+--- Why an area must never be classified ("unused", "test", "review",
+-- "battleground", "sea"), or nil.
+function Atlas.Quarantined(id, name)
+	local q = Atlas.QUARANTINE
+	if q.ids[id] then
+		return q.ids[id]
+	end
+	local lower = type(name) == "string" and name:lower() or ""
+	for _, pattern in ipairs(q.patterns) do
+		if lower:find(pattern) then
+			return "unused"
+		end
+	end
+	if q.seas[ns.Places.Bare(name) or ""] then
+		return "sea"
+	end
+	return nil
+end
 
 -- Names seen in game that have no verified ID yet. Logged as visits, never
 -- classified, until an ID is confirmed.
@@ -188,6 +313,15 @@ function Atlas.Report(client, here, verify, scan)
 			tostring(here.zone), tostring(here.subzone), tostring(here.mapId), tostring(here.mapName),
 			tostring(here.parentMapId), tostring(here.areaId), here.areaId and Atlas.Level(client.id, "areas",
 			here.areaId) or "-")
+		if here.rawZone then
+			lines[#lines + 1] = string.format("here-raw: the client's zone text was %q (an interior, recorded as a "
+				.. "subzone)", here.rawZone)
+		end
+		if here.candidateId then
+			lines[#lines + 1] = string.format("candidate: area %d %q in uiMap %s (name confirmed by the scan; this "
+				.. "map is the parent evidence)", here.candidateId, Atlas.CANDIDATES[here.candidateId].name,
+				tostring(here.mapId))
+		end
 	end
 	if verify then
 		local c = verify.counts

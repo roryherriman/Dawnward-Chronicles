@@ -280,14 +280,26 @@ No coordinates are read or stored. Subzone names are never compared with English
 - The quest tag (`GetQuestLogTitle` third return) is localised text, so it is not used.
 - Repeatable quests are recorded once per character (the key is the quest ID).
 - Achievements exist as an API but are not part of Classic Era play, so they are not used.
-- Encounter events (`ENCOUNTER_END`, `BOSS_KILL`) are defined, but whether they fire for Classic dungeon bosses is unverified, so boss detection is not built yet.
+- Encounter events (`ENCOUNTER_END`, `BOSS_KILL`) are defined, but whether they fire for Classic dungeon bosses is unverified, so boss and dungeon-completion events are not built. Since v0.7.1 a session-only probe notes them (nothing is recorded), so an in-game run can settle it.
 - The combat log is not read (cost, and the restriction risk).
 - Factions under a collapsed header in the reputation panel are not listed by `GetFactionInfo`; their snapshot simply waits until they are listed again.
 - Zone and instance "first visits" are the first ones Dawnward recorded, not necessarily the character's first ever (the client keeps no such history).
 - Standing names in story text use English fallbacks for now (localisation is planned).
 
+## Client APIs for verified events and calm moments (#11, #14, #48, v0.7.1)
+
+Checked on 2026-10-30 against `Gethe/wow-ui-source`, branch `classic_era`, **1.15.9 (70576)** (commit `4192ac6`). **Source-verified, not yet tested in game.**
+
+| API or event | Used for | Source evidence | Classic Era | Forever |
+|---|---|---|---|---|
+| `C_Map.GetMapInfo(uiMapID)` `.name`, `.mapType` (3 = `Enum.UIMapType.Zone`) | A building the client reports as the zone (data issue A) is recorded as a place inside the uiMap's zone | `MapDocumentation.lua`; `MapConstantsDocumentation.lua` (`UIMapType`, `Zone` = 3) | S, not L3 | — |
+| `UnitIsAFK("player")`, `PLAYER_FLAGS_CHANGED` (unit) | No story notice while AFK; a waiting one is checked again when the player is back | `UnitDocumentation.lua`; `Classic/FriendsFrame.lua` registers `PLAYER_FLAGS_CHANGED` | S, not L3 (the narrative clock already uses both, L2) | — |
+| `IsInInstance()` (2nd return `"party"`/`"raid"`) | No story notice inside a dungeon or raid; it waits until the instance is left | Classic UI code (already used for instance entries) | S, not L3 | — |
+| `UISpecialFrames` | Escape hides the reaction card (the moment keeps waiting) | Classic UI code; used by the copy window since v0.1 | S, not L3 | — |
+| `ENCOUNTER_START`, `ENCOUNTER_END` (encounterID, encounterName, difficultyID, groupSize, success), `BOSS_KILL` (encounterID, encounterName) | **Unverified probe only:** noted for the session and shown by `/dawnward dev story status`. Nothing is saved, recorded or asked | `EncounterInfoDocumentation.lua` defines them. **No Blizzard Classic Era UI code registers them**, so whether they fire for Classic bosses is unknown | S (defined only), not L3 | — |
+
 ## Planned APIs (not used yet)
 
 | API or event | Planned for |
 |---|---|
-| `ENCOUNTER_END` / `BOSS_KILL`, `IsInInstance`, `GetInstanceInfo` | Dungeon and boss moments, after an in-game probe confirms they fire (issue #11) |
+| `ENCOUNTER_END` / `BOSS_KILL` as story events | Dungeon and boss moments, once the session probe (`/dawnward dev story status`) shows them firing in game (issue #11) |
