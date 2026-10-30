@@ -112,8 +112,8 @@ Commands.Register("arc", function(ctx, rest)
 		for _, a in ipairs(list) do
 			out(ctx, line(a, string.format("%s (%s, %s, %d turning points)", a.title, a.kind, a.state, #a.turningPoints)))
 		end
-		out(ctx, "arc add <title> | accept|dispute|vis|remove <#> | state <#> active|paused|concluded|abandoned | "
-			.. "rename <#> <title> | turn <#> <note>")
+		out(ctx, "arc add <title> | accept|reject|dispute|vis|remove <#> | state <#> "
+			.. "active|paused|concluded|abandoned | rename <#> <title> | turn <#> <note>")
 		return
 	elseif sub == "add" then
 		run(ctx, function(c, now) return Arcs.Add(c, { title = args }, "player", now) end,
@@ -131,6 +131,9 @@ Commands.Register("arc", function(ctx, rest)
 		run(ctx, function(c, now) return Arcs.SetState(c, n, state, now) end, "Arc #" .. n .. " is now " .. state .. ".")
 	elseif sub == "rename" then
 		run(ctx, function(c, now) return Arcs.Rename(c, n, tail, now) end, "Renamed arc #" .. n .. ".")
+	elseif sub == "reject" then
+		run(ctx, function(c, now) return Arcs.Reject(c, n, now) end,
+			"Rejected suggested arc #" .. n .. ". Its theme will not be suggested again.")
 	elseif sub == "turn" then
 		run(ctx, function(c, now) return Arcs.AddTurningPoint(c, n, tail, nil, now) end,
 			"Added a turning point to arc #" .. n .. ".")
