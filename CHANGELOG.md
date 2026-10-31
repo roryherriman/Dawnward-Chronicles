@@ -12,7 +12,25 @@ Every release entry has a **Verified** line naming the highest test level reache
 
 A feature is never called "tested" or "compatible" in this file unless it reached L3 or L4.
 
-## [Unreleased]: 0.8.0-dev (pre-playthrough candidate)
+## [Unreleased]: 0.9.0-dev (first login, complete Total RP 3 profile)
+
+**Verified: L2** (mocked). Nothing in this section has been tested in game yet.
+
+### First login and setup
+- **Setup opens by itself on a new character's first login.**
+  - **When:** a few seconds after the world is ready. There is no need to open Dawnward first.
+  - **Waits for a safe moment:** never during combat, the intro cinematic, a movie or a loading screen. It waits and opens when that ends, giving up quietly after about five minutes.
+  - **Only once:** it is remembered per character (`Name-Realm`), so it never opens by itself again. If setup is left unfinished, later logins offer to **resume** it (once per session) with every answer kept. A finished setup, or an established character, is never asked again.
+  - **Never** in simulation mode or on read-only data.
+- **Simpler stages:** Welcome, Character, Story, Appearance, **Total RP 3** (only when Total RP 3 is installed), Finish. The routine Privacy stage is gone.
+  - **Story** now starts with your backstory: import the story you already wrote, kept word for word.
+  - **Total RP 3:** shows the active profile, and connects it once on Finish (the single authorisation). You can choose to keep what you already wrote in Total RP 3, or let Dawnward replace it (a backup is kept). Total RP 3 stays optional; nothing is sent before Finish.
+- **New characters use the profile model:** their profile details (fields, family, history, facts, personality, a stance's public persona, the biography) start **Public**, so nothing has to be sorted item by item. The journal, story answers and private convictions stay Private. Any item can still be made Private or Secret.
+- **Older characters are never published silently.** `/dawnward publish` previews, per category, what is Private, Secret and Public, and switches the character only when you confirm the categories to publish. Secret items never change.
+- **The biography has its own visibility** (Public under the profile model). Only while it is Public does its text reach share exports and Total RP 3.
+- **Developer status** (`/dawnward dev setup status`) also reports the publication model and whether setup has opened by itself; `dev setup reset confirm` forgets that too.
+
+## 0.8.0-dev (pre-playthrough candidate)
 
 **Verified: L2** (mocked). Nothing in this section has been tested in game yet.
 

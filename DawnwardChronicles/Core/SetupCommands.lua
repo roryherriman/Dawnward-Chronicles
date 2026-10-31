@@ -32,6 +32,11 @@ function SetupCommands.StatusLines(ctx)
 		lines[#lines + 1] = "Setup: not complete."
 	end
 	lines[#lines + 1] = "Current wizard version: " .. Onboarding.VERSION .. "."
+	lines[#lines + 1] = "Publication model: " .. (char and ns.Privacy.ProfileModel(char)
+		and "profile (new profile details start Public)" or "original (everything starts Private)") .. "."
+	local seen = Actions.SetupSeen(ctx)
+	lines[#lines + 1] = seen and "Opened by itself once already; later logins offer to resume an unfinished setup."
+		or "Not opened by itself yet."
 	local draft = Actions.SetupDraft(ctx)
 	if draft then
 		local page = Onboarding.PAGES[draft.page]
@@ -45,7 +50,7 @@ function SetupCommands.StatusLines(ctx)
 	elseif wizard.done then
 		lines[#lines + 1] = "The wizard will not open by itself again."
 	else
-		lines[#lines + 1] = "New character: the wizard opens the next time Dawnward is opened."
+		lines[#lines + 1] = "New character: the wizard opens after entering the world, or when Dawnward is opened."
 	end
 	return lines
 end
@@ -56,6 +61,49 @@ Commands.Register("setup", function(ctx)
 	else
 		out(ctx, "The setup wizard opens in the game window.")
 	end
+end)
+
+--- /dawnward publish: the one-time move to the profile publication model
+-- for a character created before v0.9 (Core/Publication.lua). Without
+-- "confirm" it only previews; "publish <categories> confirm" makes the
+-- Private items of those categories Public (Secret items never change);
+-- "publish none confirm" switches the model without publishing anything.
+Commands.Register("publish", function(ctx, rest)
+	local char = Actions.Character(ctx)
+	if char and ns.Privacy.ProfileModel(char) then
+		out(ctx, "This character already uses the profile model: new profile details start Public. Change any "
+			.. "item's visibility in the window.")
+		return
+	end
+	local words, confirm = {}, false
+	for word in (rest or ""):lower():gmatch("[^%s,]+") do
+		if word == "confirm" then confirm = true else words[#words + 1] = word end
+	end
+	local choices = {}
+	for _, word in ipairs(words) do
+		if word == "all" then
+			for id in pairs(ns.Publication.CATEGORY_IDS) do choices[id] = true end
+		elseif word ~= "none" and not ns.Publication.CATEGORY_IDS[word] then
+			local ids = {}
+			for _, c in ipairs(ns.Publication.CATEGORIES) do ids[#ids + 1] = c.id end
+			out(ctx, "Unknown category '" .. word .. "'. Use: " .. table.concat(ids, ", ") .. ", all or none.")
+			return
+		elseif word ~= "none" then
+			choices[word] = true
+		end
+	end
+	if not confirm then
+		out(ctx, "The profile model: new profile details start Public, ready for Total RP 3. Nothing changes "
+			.. "until you confirm. Secret items never become Public.")
+		for _, line in ipairs(char and ns.Publication.PreviewLines(char, choices) or {}) do
+			out(ctx, "  " .. line)
+		end
+		out(ctx, "Switch: /dawnward publish <categories|all|none> confirm   (for example: publish fields,biography "
+			.. "confirm)")
+		return
+	end
+	local _, message = Actions.TransitionPublication(ctx, choices)
+	out(ctx, message)
 end)
 
 local DEV_USAGE = "Developer commands: /dawnward dev setup | dev setup status | dev setup reset | "

@@ -27,7 +27,7 @@ function Character.SetField(char, key, value, now)
 	local existing = char.fields[key]
 	char.fields[key] = {
 		value = cleaned,
-		visibility = existing and existing.visibility or Privacy.DEFAULT,
+		visibility = existing and existing.visibility or Privacy.DefaultFor(char, "field"),
 	}
 	touch(char, now)
 	return true
@@ -82,7 +82,7 @@ function Character.AddItem(char, listName, values, now)
 	if #char[listName] >= spec.limit then
 		return nil, listName .. " is full (limit " .. spec.limit .. ")"
 	end
-	local item = { visibility = Privacy.DEFAULT }
+	local item = { visibility = Privacy.DefaultFor(char, listName) }
 	local hasContent = false
 	for fieldName, fieldSpec in pairs(spec.fields) do
 		local raw = values[fieldName]

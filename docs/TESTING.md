@@ -805,3 +805,28 @@ Do this after part U. For each screen:
 - Scroll bars keep the stock Blizzard style.
 - Localised clients are untested.
 - Nothing has been tested on WoW Forever.
+
+### v0.9 in-game checklist (L3): first login and the complete Total RP 3 profile
+
+Build: **0.9.0-dev**. Everything below has passed mocked tests (L2) only. Turn on Lua errors (`/console scriptErrors 1`) first and report every error with its text.
+
+**Before you start:**
+- Close the game. Back up `Interface\AddOns\DawnwardChronicles` and `WTF\Account\<account>\SavedVariables\DawnwardChronicles*.lua` and `totalRP3*.lua` (with their `.bak` files).
+- For every Total RP 3 step, use a **spare, non-default Total RP 3 profile**.
+
+#### Part W: first login and setup (automated: `tests/spec/first_login_spec.lua`, `publication_spec.lua`)
+
+| # | Steps | Pass when |
+|---|---|---|
+| W1 | Create a brand-new character and enter the world. Do **not** type anything | After the intro cinematic, and a few seconds after the world appears, the setup wizard opens by itself (eyebrow "FIRST-TIME SETUP"). Not during the cinematic or the loading screen |
+| W2 | On W1's character, check the step rail | Welcome, Character, Story, Appearance, Total RP 3 (only with Total RP 3 installed), Finish. **No Privacy stage.** "STEP n OF m" counts only the stages shown |
+| W3 | Close the wizard at the Story stage (X), `/reload` | It does **not** open by itself again. A chat line says setup is unfinished, and a dialog asks "Continue setting up …?". **Resume** opens it on Story with your answers kept |
+| W4 | Log out and back in (W3 still unfinished) | The offer appears again (once per session); nothing opens by itself |
+| W5 | Enter combat (attack a training dummy or a critter) on a second new character right as you enter the world | The wizard waits; it opens a few seconds after combat ends |
+| W6 | Finish setup with a Name and Homeland | The journal opens. Character tab: Name and Homeland are **Public** (no classification needed). Write a journal entry: it is **Private** |
+| W7 | `/reload`, log out and in | The wizard never opens by itself again; `/dawnward dev setup status` says "Setup: complete (wizard version 2…)" and "Publication model: profile" |
+| W8 | On your established v0.8 character, log in | Nothing opens. Its items keep their visibility. `/dawnward publish` previews counts per category and changes nothing |
+| W9 | `/dawnward publish fields,biography confirm` on W8's character | Only Private profile fields and the biography become Public; Secret ones stay Secret; the journal is unchanged |
+| W10 | A character on another realm with the same name | Gets its own first-login wizard; the first character's choice does not carry over |
+| W11 | Total RP 3 stage, default TRP3 profile active | "Cannot connect right now: … default profile …"; the choice is disabled; Finish completes setup without connecting |
+| W12 | Total RP 3 stage, spare profile active, Connect, Keep | Finish: chat confirms the authorisation; a few seconds later Dawnward writes (part X). Your own TRP3 text is untouched |

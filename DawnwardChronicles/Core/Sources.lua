@@ -4,7 +4,7 @@
 -- cleaned or truncated. StripTags, Paragraphs and Sentences are display
 -- helpers; they return new strings and never change what is stored.
 local _, ns = ...
-local Schema, Util = ns.Schema, ns.Util
+local Schema, Util, Privacy = ns.Schema, ns.Util, ns.Privacy
 
 local Sources = {}
 ns.Sources = Sources
@@ -40,11 +40,36 @@ function Sources.Capture(char, kind, text, meta, now)
 	sources.nextId = sources.nextId + 1
 	sources.versions[#sources.versions + 1] = version
 	sources.current = version.id
+	-- The biography's visibility is chosen once, when it is first stored
+	-- (Public under the profile model, otherwise Private); later versions
+	-- keep the player's choice.
+	if sources.visibility == nil then
+		sources.visibility = Privacy.DefaultFor(char, "biography")
+	end
 	Schema.RotateSources(sources)
 	if now then
 		char.updatedAt = now
 	end
 	return version, "stored"
+end
+
+--- Who may see the biography (the current version's text).
+function Sources.Visibility(char)
+	return Privacy.Normalize(char.sources.visibility)
+end
+
+function Sources.SetVisibility(char, level, now)
+	if not Privacy.IsValid(level) then
+		return nil, "visibility must be public, private or secret"
+	end
+	if not Sources.Current(char) then
+		return nil, "there is no biography yet"
+	end
+	char.sources.visibility = level
+	if now then
+		char.updatedAt = now
+	end
+	return true
 end
 
 function Sources.Get(char, id)

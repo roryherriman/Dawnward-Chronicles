@@ -253,6 +253,31 @@ function TRP3Commands.Approve(deps, feature)
 	return Sync.RunFeature(deps, feature)
 end
 
+--- The single authorisation of the v0.9 first-time setup ("Connect"):
+-- every mapping becomes managed by Dawnward for the active profile, through
+-- Sync.Authorize (all-or-nothing, every guard and the shared-profile rule
+-- apply). opts.existing == "replace": where Total RP 3 already holds the
+-- player's own text, Dawnward may take it over on its first write, after a
+-- pinned backup (Sync.Authorize's adopt); "keep" leaves it untouched and
+-- pauses those items until the player chooses. Nothing is written here:
+-- the normal debounced run writes. Returns ok, message.
+function TRP3Commands.ConnectAll(ctx, opts)
+	opts = opts or {}
+	local deps = ctx.trp3Deps and ctx.trp3Deps()
+	if not deps then
+		return nil, "Total RP 3 sync is not available"
+	end
+	local choices = {}
+	for _, id in ipairs(Ledger.MAPPINGS) do
+		choices[id] = "dawnward"
+	end
+	local ok, message = Sync.Authorize(deps, choices, { adopt = opts.existing == "replace" })
+	if ok and ctx.trp3RequestSync then
+		ctx.trp3RequestSync()
+	end
+	return ok, message
+end
+
 --- Warning shown before a feature is switched on (chat adds how to confirm).
 function TRP3Commands.EnableWarning(feature)
 	local m = FieldPlan.BY_ID[feature]
