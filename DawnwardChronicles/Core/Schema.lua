@@ -60,6 +60,17 @@ Schema.FIELDS = {
 	{ key = "appearance", kind = "long", label = "Appearance" },
 	{ key = "summary", kind = "long", label = "Summary" },
 	{ key = "motivation", kind = "long", label = "Motivation" },
+	-- v0.9: details with a matching Total RP 3 field (docs/TRP3_INTEGRATION.md,
+	-- "Field mappings"). Additive: an older build drops them on load.
+	{ key = "firstName", kind = "short", label = "First name" },
+	{ key = "lastName", kind = "short", label = "Last name" },
+	{ key = "honorific", kind = "short", label = "Title prefix" },
+	{ key = "eyes", kind = "short", label = "Eye colour" },
+	{ key = "height", kind = "short", label = "Height" },
+	{ key = "weight", kind = "short", label = "Build" },
+	{ key = "residence", kind = "short", label = "Residence" },
+	{ key = "relationship", kind = "short", label = "Relationship status" },
+	{ key = "allegiance", kind = "short", label = "Allegiance" },
 }
 
 Schema.FIELD_BY_KEY = {}

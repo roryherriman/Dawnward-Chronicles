@@ -14,15 +14,18 @@
 -- Unchanged content writes nothing, so versions never churn.
 --
 -- Features (one transaction each): "about" (Dawnward's biography block),
--- "traits" (Dawnward's personality traits) and "fields" (every profile
--- field mapping the player handed to Dawnward, FieldPlan.lua). A field in
--- conflict is paused on its own; the other fields still update.
+-- "traits" (Dawnward's personality traits), "fields" (every profile
+-- field mapping the player handed to Dawnward, FieldPlan.lua) and, since
+-- v0.9, "misc" (Dawnward's entries in TRP3's additional-information list,
+-- MiscPlan.lua). A field or entry in conflict is paused on its own; the
+-- others still update.
 --
 -- deps: { env, ledger, ledgerReadOnly?, store, characterKey, now(), inCombat() }
 local _, ns = ...
 local Util, Projection, Ledger, Adapter, AboutBlock, TraitPlan, FieldPlan, Presentation, VersionProfiles =
 	ns.Util, ns.Projection, ns.TRP3Ledger, ns.TRP3Adapter, ns.TRP3AboutBlock, ns.TRP3TraitPlan, ns.TRP3FieldPlan,
 	ns.TRP3Presentation, ns.TRP3VersionProfiles
+local MiscPlan = ns.TRP3MiscPlan
 
 local Sync = {}
 ns.TRP3Sync = Sync
@@ -49,16 +52,43 @@ Sync.FEATURES = {
 		label = "profile fields",
 		plan = function(section, record, public, extra)
 			local desired, unwritable = FieldPlan.Desired(public)
-			return FieldPlan.Plan(section, record, desired, extra.policies, extra.paused, unwritable)
+			return FieldPlan.Plan(section, record, desired, extra.policies, extra.paused, unwritable,
+				{ defaults = extra.defaults, adopt = extra.adopt })
+		end,
+		planned = "characteristics",
+	},
+	misc = {
+		section = "characteristics",
+		label = "additional information",
+		plan = function(section, record, public, extra)
+			local desired, unwritable = MiscPlan.Desired(public)
+			return MiscPlan.Plan(section, record, desired, extra.policies, extra.paused, unwritable,
+				{ names = extra.names, adopt = extra.adopt })
 		end,
 		planned = "characteristics",
 	},
 }
-Sync.ORDER = { "about", "traits", "fields" }
+Sync.ORDER = { "about", "traits", "fields", "misc" }
 
 -- The features stored in one TRP3 section (a backup covers all of them).
-local SECTION_FEATURES = { about = { "about" }, characteristics = { "traits", "fields" } }
+local SECTION_FEATURES = { about = { "about" }, characteristics = { "traits", "fields", "misc" } }
 Sync.SECTION_FEATURES = SECTION_FEATURES
+
+-- Features made of per-item mappings (one policy and one conflict per
+-- field or entry), and the planner that knows their mappings.
+local ROW_FEATURES = { fields = FieldPlan, misc = MiscPlan }
+Sync.ROW_FEATURES = ROW_FEATURES
+
+--- The mapping for an item id, and the row feature it belongs to.
+local function mappingOf(id)
+	if FieldPlan.BY_ID[id] then
+		return FieldPlan.BY_ID[id], "fields"
+	elseif MiscPlan.BY_ID[id] then
+		return MiscPlan.BY_ID[id], "misc"
+	end
+	return nil
+end
+Sync.MappingOf = mappingOf
 
 local function deepEqual(a, b)
 	if a == b then return true end
@@ -85,6 +115,8 @@ end
 function Sync.FeatureOn(entry, feature)
 	if feature == "fields" then
 		return entry ~= nil and Ledger.AnyFieldManaged(entry)
+	elseif feature == "misc" then
+		return entry ~= nil and Ledger.AnyMiscManaged(entry)
 	end
 	return Ledger.Policy(entry, feature) == "dawnward"
 end
@@ -96,7 +128,8 @@ local featureOn = Sync.FeatureOn
 -- RP 3 (only the given ids, or all of them).
 local function disableForProfile(deps, profileId, feature, fieldIds)
 	local record = deps.ledger.profiles[profileId]
-	if feature == "fields" and record and record.fieldConflicts then
+	local rowPlan = ROW_FEATURES[feature]
+	if rowPlan and record and record.fieldConflicts then
 		for id in pairs(record.fieldConflicts) do
 			if not fieldIds or fieldIds[id] then
 				record.fieldConflicts[id] = nil
@@ -105,8 +138,8 @@ local function disableForProfile(deps, profileId, feature, fieldIds)
 	end
 	for _, entry in pairs(deps.ledger.optIn) do
 		if entry.profileId == profileId then
-			if feature == "fields" then
-				for _, m in ipairs(FieldPlan.MAPPINGS) do
+			if rowPlan then
+				for _, m in ipairs(rowPlan.MAPPINGS) do
 					if (not fieldIds or fieldIds[m.id]) and Ledger.Policy(entry, m.id) == "dawnward" then
 						Ledger.SetPolicy(entry, m.id, "trp3")
 					end
@@ -200,8 +233,10 @@ end
 -- "dawnward" when planning a release (remove everything Dawnward owns).
 local function fieldPolicies(entry)
 	local out = {}
-	for _, m in ipairs(FieldPlan.MAPPINGS) do
-		out[m.id] = Ledger.Policy(entry, m.id)
+	for _, plan in pairs(ROW_FEATURES) do
+		for _, m in ipairs(plan.MAPPINGS) do
+			out[m.id] = Ledger.Policy(entry, m.id)
+		end
 	end
 	return out
 end
@@ -255,11 +290,16 @@ function Sync.Check(deps, feature, publicOverride, fieldScope)
 			if not fieldScope[id] then policies[id] = "off" end
 		end
 	end
+	-- The one-time takeover ("Replace it with Dawnward's", v0.9 setup) for
+	-- this feature, and what Total RP 3 filled in by itself.
+	local adopt = entry and entry.adopt and entry.adopt[feature] == true or nil
 	local plan = spec.plan(section, record[feature], public,
-		{ policies = policies, paused = record.fieldConflicts })
+		{ policies = policies, paused = record.fieldConflicts, adopt = adopt,
+			defaults = FieldPlan.GameDefaults(deps.env), names = MiscPlan.PresetNames(deps.env) })
 	result.plan = plan
+	result.adopt = adopt
 	result.notes = {}
-	if feature == "fields" then
+	if ROW_FEATURES[feature] then
 		for _, row in ipairs(plan.rows) do
 			if row.state == "conflict" then
 				result.reasons[#result.reasons + 1] = row.reason
@@ -320,15 +360,15 @@ function Sync.RunFeature(deps, feature, publicOverride, fieldScope)
 	local check = Sync.Check(deps, feature, publicOverride, fieldScope)
 	local now = deps.now()
 	local fieldNote = ""
-	if feature == "fields" and check.plan then
+	if ROW_FEATURES[feature] and check.plan then
 		local added = pauseFields(deps, Ledger.Profile(deps.ledger, check.profileId), check.plan.conflicts, now)
 		if #added > 0 then
 			fieldNote = " Paused (your version is kept): " .. table.concat(added, "; ") .. "."
 		end
 	end
 	if check.state == "conflict" then
-		if feature == "fields" then
-			return { feature = feature, state = "conflict", message = "Total RP 3 profile field sync paused: "
+		if ROW_FEATURES[feature] then
+			return { feature = feature, state = "conflict", message = "Total RP 3 " .. spec.label .. " sync paused: "
 				.. table.concat(check.reasons, "; ") .. ". Your version is kept. Choose on the Total RP 3 page, or "
 				.. "/dawnward trp3 resolve <field> keep|reclaim." }
 		end
@@ -375,17 +415,23 @@ function Sync.RunFeature(deps, feature, publicOverride, fieldScope)
 
 	if check.plan.record then
 		profileRecord[feature] = Util.DeepCopy(check.plan.record)
-		if feature ~= "fields" then
+		if not ROW_FEATURES[feature] then
 			profileRecord[feature].at = now
 		end
 	else
 		profileRecord[feature] = nil
 	end
+	-- The one-time takeover is used up by the first successful write.
+	local entry = optIn(deps)
+	if check.adopt and entry and entry.adopt then
+		entry.adopt[feature] = nil
+		if not next(entry.adopt) then entry.adopt = nil end
+	end
 	Ledger.Log(deps.ledger, now, feature .. ": " .. check.plan.action
 		.. (check.plan.changes and #check.plan.changes > 0 and (" " .. table.concat(check.plan.changes, ", ")) or "")
 		.. " (version " .. version .. ", backup #" .. backup.id .. ")")
 	return { feature = feature, state = "written", message = "Updated your Total RP 3 " .. spec.label
-		.. " (" .. ((feature == "fields" and table.concat(check.plan.changes, ", ")) or check.plan.action)
+		.. " (" .. ((ROW_FEATURES[feature] and table.concat(check.plan.changes, ", ")) or check.plan.action)
 		.. "). Other players see it the next time their Total RP 3 checks your profile." .. fieldNote }
 end
 
@@ -408,7 +454,7 @@ function Sync.MappingLabel(id)
 	if Sync.FEATURES[id] then
 		return Sync.FEATURES[id].label
 	end
-	local m = FieldPlan.BY_ID[id]
+	local m = mappingOf(id)
 	return m and m.label or tostring(id)
 end
 
@@ -424,13 +470,13 @@ end
 -- value (made Private or Secret, cleared, or changed). Forgetting ownership
 -- then would leave it published for good. Returns { value, reason } or nil.
 function Sync.FieldRisk(deps, id)
-	local m = FieldPlan.BY_ID[id]
+	local m, feature = mappingOf(id)
 	local entry = optIn(deps)
 	if not m or not entry then
 		return nil
 	end
 	local record = deps.ledger.profiles[entry.profileId]
-	local owned = record and record.fields and record.fields[id]
+	local owned = record and record[feature] and record[feature][id]
 	if not owned then
 		return nil
 	end
@@ -439,7 +485,14 @@ function Sync.FieldRisk(deps, id)
 		return nil
 	end
 	local section = readSection(deps, "characteristics")
-	if not section or section[m.key] ~= owned.value then
+	if not section then
+		return nil
+	end
+	if feature == "fields" then
+		if section[m.key] ~= owned.value then
+			return nil
+		end
+	elseif not MiscPlan.WithoutOwned(section, { [id] = owned }) then
 		return nil
 	end
 	local char = realCharacter(deps)
@@ -447,21 +500,22 @@ function Sync.FieldRisk(deps, id)
 	if stored and stored.visibility == "public" and stored.value == owned.value then
 		return nil
 	end
-	return { value = owned.value, reason = "Total RP 3 still shows \"" .. owned.value .. "\" as your " .. m.trp3
+	return { value = owned.value, reason = "Total RP 3 still shows \"" .. tostring(FieldPlan.Display(m, owned.value))
+		.. "\" as your " .. m.trp3
 		.. ", which Dawnward wrote but which is no longer your Public " .. m.label }
 end
 
 --- Removes Dawnward's value of one field from Total RP 3 (a guarded,
 -- backed-up write), without changing its policy. Returns ok, message.
 function Sync.ReleaseField(deps, id)
-	local m = FieldPlan.BY_ID[id]
+	local m, feature = mappingOf(id)
 	if not m then
 		return nil, "unknown field"
 	end
 	local public = publicOf(deps)
 	public.fields = Util.DeepCopy(public.fields or {})
 	public.fields[m.source] = nil
-	local result = Sync.RunFeature(deps, "fields", public, { [id] = true })
+	local result = Sync.RunFeature(deps, feature, public, { [id] = true })
 	if result.state == "written" or result.state == "noop" then
 		return true, "Removed Dawnward's " .. m.trp3 .. " from Total RP 3."
 	end
@@ -474,7 +528,7 @@ end
 -- with the value still shown. Returns ok, message (or nil, message, risk).
 function Sync.SetPolicy(deps, id, policy, opts)
 	opts = opts or {}
-	if FieldPlan.BY_ID[id] and policy ~= "dawnward" and Ledger.POLICIES[policy] and not deps.ledgerReadOnly then
+	if mappingOf(id) and policy ~= "dawnward" and Ledger.POLICIES[policy] and not deps.ledgerReadOnly then
 		local risk = Sync.FieldRisk(deps, id)
 		if risk then
 			if opts.release then
@@ -520,12 +574,13 @@ function Sync.ApplyPolicy(deps, id, policy)
 			deps.ledger.optIn[deps.characterKey] = entry
 		end
 		Ledger.SetPolicy(entry, id, policy)
-		if FieldPlan.BY_ID[id] then
+		local _, rowFeature = mappingOf(id)
+		if rowFeature then
 			local record = deps.ledger.profiles[entry.profileId]
 			if record then
-				if record.fields then
-					record.fields[id] = nil
-					if not next(record.fields) then record.fields = nil end
+				if record[rowFeature] then
+					record[rowFeature][id] = nil
+					if not next(record[rowFeature]) then record[rowFeature] = nil end
 				end
 				if record.fieldConflicts then record.fieldConflicts[id] = nil end
 			end
@@ -724,11 +779,12 @@ function Sync.Differences(deps)
 	for _, m in ipairs(FieldPlan.MAPPINGS) do
 		local policy = Ledger.Policy(bound and entry or nil, m.id)
 		if policy ~= "off" then
-			local trp3 = section[m.key]
+			-- Shown as the player reads them (a relationship number as its word).
+			local trp3 = FieldPlan.Display(m, section[m.key])
 			trp3 = type(trp3) == "string" and trp3 ~= "" and trp3 or nil
 			local stored = char and char.fields[m.source]
 			local row = { id = m.id, label = m.label, trp3Label = m.trp3, policy = policy, trp3 = trp3,
-				dawnward = public[m.id], hidden = stored ~= nil and stored.visibility ~= "public",
+				dawnward = FieldPlan.Display(m, public[m.id]), hidden = stored ~= nil and stored.visibility ~= "public",
 				conflict = policy == "dawnward" and record and record.fieldConflicts
 					and record.fieldConflicts[m.id] or nil,
 				unwritable = unwritable[m.id] }
@@ -737,6 +793,24 @@ function Sync.Differences(deps)
 			-- Dawnward holds (Public or not); the value itself is not shown
 			-- when the Dawnward side is hidden.
 			row.importable = trp3 ~= nil and (stored == nil or stored.value ~= trp3)
+			view.rows[#view.rows + 1] = row
+		end
+	end
+	-- Additional-information entries (v0.9): the same comparison, never
+	-- importable (Total RP 3 holds them as a list, not one field).
+	local misc, miscUnwritable = MiscPlan.Desired(publicOf(deps))
+	for _, m in ipairs(MiscPlan.MAPPINGS) do
+		local policy = Ledger.Policy(bound and entry or nil, m.id)
+		if policy ~= "off" then
+			local found = MiscPlan.Find(section, m)
+			local trp3 = found[1] and type(found[1].value) == "string" and found[1].value ~= "" and found[1].value or nil
+			local stored = char and char.fields[m.source]
+			local row = { id = m.id, label = m.label, trp3Label = m.trp3, policy = policy, trp3 = trp3,
+				dawnward = misc[m.id], hidden = stored ~= nil and stored.visibility ~= "public",
+				conflict = policy == "dawnward" and record and record.fieldConflicts
+					and record.fieldConflicts[m.id] or nil,
+				unwritable = miscUnwritable[m.id], importable = false }
+			row.differ = row.trp3 ~= row.dawnward
 			view.rows[#view.rows + 1] = row
 		end
 	end
@@ -820,6 +894,15 @@ function Sync.RollbackPreview(deps, backupId)
 			end
 		end
 	end
+	if owners.misc then
+		local desired = MiscPlan.Desired(public)
+		for _, m in ipairs(MiscPlan.MAPPINGS) do
+			local o = owners.misc[m.id]
+			if o and desired[m.id] ~= o.value then
+				items[#items + 1] = m.label .. ": " .. o.value
+			end
+		end
+	end
 	local preview = { backup = backup, items = items, ownPossible = true }
 	-- "Your own text only" needs Dawnward's old part to be separable.
 	if backup.section == "about" then
@@ -838,6 +921,12 @@ function Sync.RollbackPreview(deps, backupId)
 		end
 		if preview.ownPossible and owners.fields then
 			local ok, why = FieldPlan.WithoutOwned(data, owners.fields)
+			if not ok then
+				preview.ownPossible, preview.ownReason = false, why
+			end
+		end
+		if preview.ownPossible and owners.misc then
+			local ok, why = MiscPlan.WithoutOwned(data, owners.misc)
 			if not ok then
 				preview.ownPossible, preview.ownReason = false, why
 			end
@@ -925,6 +1014,13 @@ local function ownOnly(deps, inputs)
 		end
 		data = stripped
 	end
+	if owners.misc then
+		local stripped, why = MiscPlan.WithoutOwned(data, owners.misc)
+		if not stripped then
+			return nil, "Dawnward's additional information in that backup cannot be separated (" .. why .. ")"
+		end
+		data = stripped
+	end
 	if featureOn(entry, "traits") then
 		local plan = TraitPlan.Plan(data, nil, TraitPlan.Desired(public))
 		if plan.action ~= "conflict" then
@@ -933,8 +1029,19 @@ local function ownOnly(deps, inputs)
 	end
 	if featureOn(entry, "fields") then
 		local desired, unwritable = FieldPlan.Desired(public)
-		local plan = FieldPlan.Plan(data, nil, desired, fieldPolicies(entry), {}, unwritable)
+		local plan = FieldPlan.Plan(data, nil, desired, fieldPolicies(entry), {}, unwritable,
+			{ defaults = FieldPlan.GameDefaults(deps.env) })
 		data, newOwners.fields, conflicts = plan.characteristics, plan.record, plan.conflicts
+	end
+	if featureOn(entry, "misc") then
+		local desired, unwritable = MiscPlan.Desired(public)
+		local plan = MiscPlan.Plan(data, nil, desired, fieldPolicies(entry), {}, unwritable,
+			{ names = MiscPlan.PresetNames(deps.env) })
+		data, newOwners.misc = plan.characteristics, plan.record
+		for id, reason in pairs(plan.conflicts) do
+			conflicts = conflicts or {}
+			conflicts[id] = reason
+		end
 	end
 	return data, newOwners, conflicts
 end
@@ -991,7 +1098,7 @@ function Sync.Rollback(deps, backupId, mode)
 	end
 	for _, feature in ipairs(SECTION_FEATURES[backup.section]) do
 		record[feature] = Util.DeepCopy(newOwners[feature])
-		if feature == "fields" then
+		if ROW_FEATURES[feature] then
 			record.fieldConflicts = {}
 		else
 			record.conflicts[feature] = nil
@@ -1027,7 +1134,7 @@ end
 -- current Total RP 3 value as the one Dawnward last wrote, so the next sync
 -- replaces it with Dawnward's Public value (after a backup).
 function Sync.Resolve(deps, feature, choice)
-	if not Sync.FEATURES[feature] and not FieldPlan.BY_ID[feature] then
+	if not Sync.FEATURES[feature] and not mappingOf(feature) then
 		return nil, "unknown feature '" .. tostring(feature) .. "' (use about, traits or a field such as race)"
 	end
 	if choice ~= "keep" and choice ~= "reclaim" then
@@ -1036,39 +1143,52 @@ function Sync.Resolve(deps, feature, choice)
 	local probe = Adapter.Probe(deps.env)
 	local id = probe.profile and probe.profile.id
 	local record = id and deps.ledger.profiles[id]
-	local m = FieldPlan.BY_ID[feature]
+	local m, rowFeature = mappingOf(feature)
 	if m then
 		if not record or not record.fieldConflicts or not record.fieldConflicts[feature] then
 			return nil, "there is no conflict to resolve for " .. m.label .. " on this profile"
 		end
 		if choice == "keep" then
 			record.fieldConflicts[feature] = nil
-			if record.fields then record.fields[feature] = nil end
-			disableForProfile(deps, id, "fields", { [feature] = true })
+			if record[rowFeature] then record[rowFeature][feature] = nil end
+			disableForProfile(deps, id, rowFeature, { [feature] = true })
 			return true, "Kept your " .. m.trp3 .. ". Total RP 3 manages it now; Dawnward will not write it."
 		end
 		local section, err = Adapter.ReadSection(deps.env, "characteristics")
 		if not section then
 			return nil, err
 		end
-		local current = section[m.key]
-		if current ~= nil and (type(current) ~= "string" or FieldPlan.Clean(current) ~= current) then
-			return nil, "Total RP 3's " .. m.trp3 .. " holds formatting Dawnward cannot track; clear it in Total RP 3 "
-				.. "first"
+		local current
+		if rowFeature == "fields" then
+			current = section[m.key]
+			if current ~= nil and not FieldPlan.IsOwnedValue(m, current) then
+				return nil, "Total RP 3's " .. m.trp3 .. " holds formatting Dawnward cannot track; clear it in Total "
+					.. "RP 3 first"
+			end
+		else
+			local found = MiscPlan.Find(section, m)
+			if #found > 1 then
+				return nil, "Total RP 3 has more than one " .. m.trp3 .. " entry; remove the extra one first"
+			end
+			current = found[1] and found[1].value
+			if current ~= nil and (type(current) ~= "string" or FieldPlan.Clean(current) ~= current) then
+				return nil, "Total RP 3's " .. m.trp3 .. " holds formatting Dawnward cannot track; clear it in Total "
+					.. "RP 3 first"
+			end
 		end
 		-- Keep the player's value safe for good (a pinned backup) before
 		-- Dawnward is allowed to replace it.
 		local backup, berr = Ledger.AddBackup(deps.ledger, id, "characteristics", section,
 			{ reason = "your " .. m.trp3 .. " before Use Dawnward's", characterKey = deps.characterKey,
-				ownerFeature = "fields", owner = record.fields, owners = ownersOf(record, "characteristics"),
+				ownerFeature = rowFeature, owner = record[rowFeature], owners = ownersOf(record, "characteristics"),
 				pin = "reclaim" }, deps.now())
 		if not backup then
 			return nil, berr
 		end
 		record.fieldConflicts[feature] = nil
-		record.fields = record.fields or {}
-		record.fields[feature] = current and { value = current } or nil
-		if not next(record.fields) then record.fields = nil end
+		record[rowFeature] = record[rowFeature] or {}
+		record[rowFeature][feature] = current and { value = current } or nil
+		if not next(record[rowFeature]) then record[rowFeature] = nil end
 		return true, "Dawnward will write its Public " .. m.label .. " to Total RP 3 on the next sync (a backup is "
 			.. "taken first, so a rollback can bring yours back)."
 	end

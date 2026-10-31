@@ -345,7 +345,7 @@ function TRP3Commands.Import(ctx, id, level)
 	if not section then
 		return nil, "Nothing was imported: " .. tostring(err) .. "."
 	end
-	local value = section[m.key]
+	local value = FieldPlan.Display(m, section[m.key])
 	if type(value) ~= "string" or value == "" then
 		return nil, "Total RP 3 has no " .. m.trp3 .. " to import"
 	end
@@ -400,7 +400,14 @@ function TRP3Commands.PublicPreview(char)
 	local fieldValues = FieldPlan.Desired(public)
 	for _, m in ipairs(FieldPlan.MAPPINGS) do
 		if fieldValues[m.id] then
-			fields[#fields + 1] = { id = m.id, label = m.label, trp3 = m.trp3, value = fieldValues[m.id] }
+			fields[#fields + 1] = { id = m.id, label = m.label, trp3 = m.trp3,
+				value = FieldPlan.Display(m, fieldValues[m.id]) }
+		end
+	end
+	local miscValues = ns.TRP3MiscPlan.Desired(public)
+	for _, m in ipairs(ns.TRP3MiscPlan.MAPPINGS) do
+		if miscValues[m.id] then
+			fields[#fields + 1] = { id = m.id, label = m.label, trp3 = m.trp3, value = miscValues[m.id] }
 		end
 	end
 	return { about = AboutBlock.Compose(public), traits = traits, fields = fields }
@@ -450,9 +457,9 @@ function TRP3Commands.Overview(deps)
 	-- Fields that would still show a value Dawnward wrote but that is no
 	-- longer Public, if they stopped being managed (Sync.FieldRisk).
 	view.risks = {}
-	for _, m in ipairs(FieldPlan.MAPPINGS) do
-		if view.policies[m.id] == "dawnward" then
-			view.risks[m.id] = Sync.FieldRisk(deps, m.id)
+	for _, id in ipairs(Ledger.MAPPINGS) do
+		if Sync.MappingOf(id) and view.policies[id] == "dawnward" then
+			view.risks[id] = Sync.FieldRisk(deps, id)
 		end
 	end
 	return view

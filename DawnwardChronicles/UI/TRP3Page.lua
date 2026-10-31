@@ -483,15 +483,24 @@ function TRP3Page.Build(parent, width, height)
 	page.sharedWarnHover = hoverOver(page.map, page.sharedWarn)
 	page.staged = {}
 	page.mapRows = {}
+	page.mapPage = 1
 	local S, I = TRP3Page.SELECTOR_WIDTH, TRP3Page.IMPORT_WIDTH
 	local nameW = innerW - S - I - 12
+	-- v0.9: more mappings than fit at once, so the rows are paged; the
+	-- page size follows the card's height (rows, the one-line note and the
+	-- Authorize row; TRP3Page.MapPageSize).
+	local perPage = TRP3Page.MapPageSize(mainH)
+	page.mapPerPage = perPage
 	for i, id in ipairs(ns.TRP3Ledger.MAPPINGS) do
+		local slot = (i - 1) % perPage
 		local row = CreateFrame("Frame", nil, page.map)
 		row:SetSize(innerW, TRP3Page.MAP_ROW_HEIGHT)
-		row:SetPoint("TOPLEFT", P, -(TRP3Page.MAP_TOP + (i - 1) * (TRP3Page.MAP_ROW_HEIGHT + TRP3Page.MAP_ROW_GAP)))
+		row:SetPoint("TOPLEFT", P, -(TRP3Page.MAP_TOP + slot * (TRP3Page.MAP_ROW_HEIGHT + TRP3Page.MAP_ROW_GAP)))
 		row.id = id
+		row.slot = slot
+		row.mapPage = math.floor((i - 1) / perPage) + 1
 		row.block = ns.TRP3Ledger.BLOCK_FEATURES[id] == true
-		if i > 1 then
+		if slot > 0 then
 			row.rule = Widgets.Divider(row)
 			row.rule:SetPoint("TOPLEFT", 0, TRP3Page.MAP_ROW_GAP)
 			row.rule:SetPoint("TOPRIGHT", 0, TRP3Page.MAP_ROW_GAP)
@@ -509,15 +518,15 @@ function TRP3Page.Build(parent, width, height)
 			TRP3Page.Stage(page, id, policy)
 		end)
 		row.selector.buttons[1]:SetPoint("TOPLEFT", row, "TOPLEFT", innerW - S, 0)
-		if not row.block then
+		if ns.TRP3FieldPlan.BY_ID[id] then
 			row.import = Widgets.Button(row, "Import", I, TRP3Page.SELECTOR_HEIGHT, "ghost")
 			row.import:SetPoint("TOPLEFT", row, "TOPLEFT", innerW - S - 6 - I, 0)
 			row.import:SetScript("OnClick", function() TRP3Page.AskImport(page, id) end)
 		end
 		page.mapRows[i] = row
 	end
-	local rowsEnd = TRP3Page.MAP_TOP + #ns.TRP3Ledger.MAPPINGS * (TRP3Page.MAP_ROW_HEIGHT + TRP3Page.MAP_ROW_GAP)
-		- TRP3Page.MAP_ROW_GAP
+	local rowsEnd = TRP3Page.MAP_TOP + math.min(perPage, #ns.TRP3Ledger.MAPPINGS)
+		* (TRP3Page.MAP_ROW_HEIGHT + TRP3Page.MAP_ROW_GAP) - TRP3Page.MAP_ROW_GAP
 	page.unsupportedNote = oneLine(page.map, "muted", innerW)
 	page.unsupportedNote:SetPoint("TOPLEFT", P, -(rowsEnd + 4))
 	page.unsupportedNote:SetText(TRP3Page.UnsupportedText())
@@ -535,6 +544,25 @@ function TRP3Page.Build(parent, width, height)
 		MainWindow.SetStatus("Choices reset. Nothing was changed.")
 		MainWindow.Refresh()
 	end)
+	-- The pager (right of the Authorize row): ‹ Page n of m ›.
+	page.mapPages = math.ceil(#ns.TRP3Ledger.MAPPINGS / perPage)
+	page.mapNext = Widgets.Button(page.map, "\226\128\186", 30, Style.CONTROL.compact, "ghost")
+	page.mapNext:SetPoint("BOTTOMRIGHT", -P, 14)
+	page.mapPrev = Widgets.Button(page.map, "\226\128\185", 30, Style.CONTROL.compact, "ghost")
+	page.mapPrev:SetPoint("RIGHT", page.mapNext, "LEFT", -86, 0)
+	page.mapPageLabel = oneLine(page.map, "muted", 80, "small")
+	page.mapPageLabel:SetPoint("RIGHT", page.mapNext, "LEFT", -4, 0)
+	page.mapPageLabel:SetJustifyH("CENTER")
+	page.mapPrev:SetScript("OnClick", function()
+		page.mapPage = math.max(1, page.mapPage - 1)
+		MainWindow.Refresh()
+	end)
+	page.mapNext:SetScript("OnClick", function()
+		page.mapPage = math.min(page.mapPages, page.mapPage + 1)
+		MainWindow.Refresh()
+	end)
+	Widgets.Tooltip(page.mapPrev, "Previous", "The previous mappings.")
+	Widgets.Tooltip(page.mapNext, "Next", "More mappings.")
 	page.featureWidgets = { page.title, page.explain, page.reasons, page.reasonsHover, page.keep, page.preview,
 		page.hidden, page.approve, page.notNow, page.toggle, rule }
 
@@ -810,15 +838,15 @@ function TRP3Page.Refresh(page)
 				end
 			end
 		end
-		for _, m in ipairs(ns.TRP3FieldPlan.MAPPINGS) do
-			if not page.conflictFeature and view.fieldConflicts[m.id] then
-				page.conflictFeature = m.id
+		for _, id in ipairs(ns.TRP3Ledger.MAPPINGS) do
+			if not page.conflictFeature and ns.TRP3Sync.MappingOf(id) and view.fieldConflicts[id] then
+				page.conflictFeature = id
 			end
 		end
 	end
 	page.conflict:SetShown(page.conflictFeature ~= nil)
 	if page.conflictFeature then
-		local fieldMap = ns.TRP3FieldPlan.BY_ID[page.conflictFeature]
+		local fieldMap = ns.TRP3Sync.MappingOf(page.conflictFeature)
 		local reason = fieldMap and view.fieldConflicts[page.conflictFeature]
 			or view.checks[page.conflictFeature].reasons[1]
 		page.conflict:SetTitle("Conflict on " .. (fieldMap and fieldMap.label or FEATURE_LABEL[page.conflictFeature]))
@@ -934,8 +962,8 @@ end
 --- The unsupported-fields note (names only; FieldPlan.UNSUPPORTED, with the
 -- reasons, is its tooltip). Pure.
 function TRP3Page.UnsupportedText()
-	return "Never written (hover for why): first and last name, short title, pronouns, faith, occupation, "
-		.. "appearance, summary, Currently and RP status, other characteristics. Copy text pastes them yourself."
+	return "Never written (hover for why): Currently, OOC and RP status, icon and colours, walk-up and music. "
+		.. "They stay yours in Total RP 3."
 end
 
 --- The policy shown for a mapping: the staged choice, else the saved one.
@@ -982,10 +1010,17 @@ local function fieldProposal(view, m)
 	return "Total RP 3 has your own value: paused until you choose, never overwritten"
 end
 
+--- How many mapping rows fit on one page of a card mainH high: the rows,
+-- the one-line note under them and the Authorize row (14 + 30 + 8). Pure.
+function TRP3Page.MapPageSize(mainH)
+	local free = mainH - TRP3Page.MAP_TOP - 4 - TRP3Page.LINE - (14 + Style.CONTROL.compact + 8)
+	return math.max(1, math.floor((free + TRP3Page.MAP_ROW_GAP) / (TRP3Page.MAP_ROW_HEIGHT + TRP3Page.MAP_ROW_GAP)))
+end
+
 --- One mapping row's text: name line and detail line. Pure (from view).
 function TRP3Page.RowText(page, id)
 	local view = page.view
-	local m = ns.TRP3FieldPlan.BY_ID[id]
+	local m = ns.TRP3Sync.MappingOf(id)
 	local policy = TRP3Page.Shown(page, id)
 	local staged = page.staged[id] ~= nil
 	local name, detail
@@ -1051,13 +1086,19 @@ function TRP3Page.RefreshMappings(page, view)
 	end
 	Widgets.Tooltip(page.sharedWarnHover, warns and "Before you authorize" or "Linked profile",
 		page.sharedWarn:GetText())
+	page.mapPage = math.max(1, math.min(page.mapPage or 1, page.mapPages))
+	page.mapPageLabel:SetText(string.format("Page %d of %d", page.mapPage, page.mapPages))
+	page.mapPrev:SetEnabled(page.mapPage > 1)
+	page.mapNext:SetEnabled(page.mapPage < page.mapPages)
 	for _, row in ipairs(page.mapRows) do
+		row:SetShown(row.mapPage == page.mapPage)
 		local name, detail = TRP3Page.RowText(page, row.id)
 		row.name:SetText(name)
 		row.detail:SetText(detail)
 		row.selector:Select(TRP3Page.Shown(page, row.id))
-		local m = ns.TRP3FieldPlan.BY_ID[row.id]
-		local about = m and ("Total RP 3 field " .. m.key .. " (MSP " .. m.msp .. "). "
+		local m = ns.TRP3Sync.MappingOf(row.id)
+		local where = m and (m.key and ("Total RP 3 field " .. m.key) or "Total RP 3 additional information")
+		local about = m and (where .. (m.msp and (" (MSP " .. m.msp .. "). ") or ". ")
 			.. (m.risk == "high" and "Players usually write this themselves in Total RP 3; it stays managed by "
 				.. "Total RP 3 unless you choose otherwise. " or "")
 			.. "Dawnward writes it only from your Public " .. m.label .. ", only while Total RP 3 still holds the "
@@ -1084,7 +1125,7 @@ function TRP3Page.AuthorizeText(page)
 	for _, id in ipairs(ns.TRP3Ledger.MAPPINGS) do
 		local policy = page.staged[id]
 		if policy then
-			local m = ns.TRP3FieldPlan.BY_ID[id]
+			local m = ns.TRP3Sync.MappingOf(id)
 			local itemLabel = m and m.label or FEATURE_LABEL[id]
 			if policy == "dawnward" then
 				local what

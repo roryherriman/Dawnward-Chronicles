@@ -16,12 +16,15 @@
 --
 -- Pure Lua: normalisation follows the same rules as Core/Schema.lua.
 local _, ns = ...
-local Util, Serializer, FieldPlan = ns.Util, ns.Serializer, ns.TRP3FieldPlan
+local Util, Serializer, FieldPlan, MiscPlan = ns.Util, ns.Serializer, ns.TRP3FieldPlan, ns.TRP3MiscPlan
 
 local Ledger = {}
 ns.TRP3Ledger = Ledger
 
-Ledger.VERSION = 1
+-- 2 (v0.9): additional-information entries (misc) and the full-profile About
+-- record (slots, frames, mode). An older build sees a newer ledger and
+-- pauses sync instead of misreading it (and duplicating content).
+Ledger.VERSION = 2
 Ledger.LIMITS = {
 	backups = 20,          -- section backups kept in total, oldest unpinned dropped first
 	pinned = 4,            -- of those, at most this many pinned (see Ledger.Prune)
@@ -34,7 +37,7 @@ Ledger.LIMITS = {
 }
 
 Ledger.SECTIONS = { about = true, characteristics = true }
-Ledger.FEATURES = { about = true, traits = true, fields = true }
+Ledger.FEATURES = { about = true, traits = true, fields = true, misc = true }
 
 -- Ownership policies. "dawnward": Dawnward writes it automatically (set
 -- only by an explicit authorisation). "trp3": Total RP 3 manages it and
@@ -44,6 +47,9 @@ Ledger.POLICIES = { dawnward = true, trp3 = true, off = true }
 -- Every mapping with a policy: the two block features, then each field.
 Ledger.MAPPINGS = { "about", "traits" }
 for _, m in ipairs(FieldPlan.MAPPINGS) do
+	Ledger.MAPPINGS[#Ledger.MAPPINGS + 1] = m.id
+end
+for _, m in ipairs(MiscPlan.MAPPINGS) do
 	Ledger.MAPPINGS[#Ledger.MAPPINGS + 1] = m.id
 end
 Ledger.MAPPING_SET = {}
@@ -77,6 +83,16 @@ end
 --- True when any field mapping is managed by Dawnward.
 function Ledger.AnyFieldManaged(entry)
 	for _, m in ipairs(FieldPlan.MAPPINGS) do
+		if Ledger.Policy(entry, m.id) == "dawnward" then
+			return true
+		end
+	end
+	return false
+end
+
+--- True when any additional-information mapping is managed by Dawnward.
+function Ledger.AnyMiscManaged(entry)
+	for _, m in ipairs(MiscPlan.MAPPINGS) do
 		if Ledger.Policy(entry, m.id) == "dawnward" then
 			return true
 		end
@@ -159,11 +175,26 @@ local function normalizeFields(raw)
 	end
 	local out = {}
 	for id, owned in pairs(raw) do
-		if FieldPlan.BY_ID[id] and type(owned) == "table" then
-			local value = FieldPlan.Clean(owned.value)
-			if value and value == owned.value then
-				out[id] = { value = value }
+		local m = FieldPlan.BY_ID[id]
+		if m and type(owned) == "table" then
+			if FieldPlan.IsOwnedValue(m, owned.value) then
+				out[id] = { value = owned.value }
 			end
+		end
+	end
+	return next(out) and out or nil
+end
+
+-- { [miscId] = { value } }: the exact value Dawnward last wrote per entry.
+local function normalizeMisc(raw)
+	if type(raw) ~= "table" then
+		return nil
+	end
+	local out = {}
+	for id, owned in pairs(raw) do
+		if MiscPlan.BY_ID[id] and type(owned) == "table" and type(owned.value) == "string"
+			and FieldPlan.Clean(owned.value) == owned.value then
+			out[id] = { value = owned.value }
 		end
 	end
 	return next(out) and out or nil
@@ -177,6 +208,7 @@ local function normalizeProfile(raw)
 	out.about = normalizeAbout(raw.about)
 	out.traits = normalizeTraits(raw.traits)
 	out.fields = normalizeFields(raw.fields)
+	out.misc = normalizeMisc(raw.misc)
 	if type(raw.conflicts) == "table" then
 		for feature in pairs(Ledger.BLOCK_FEATURES) do
 			out.conflicts[feature] = shortText(raw.conflicts[feature])
@@ -186,11 +218,15 @@ local function normalizeProfile(raw)
 		for id in pairs(FieldPlan.BY_ID) do
 			out.fieldConflicts[id] = shortText(raw.fieldConflicts[id])
 		end
+		for id in pairs(MiscPlan.BY_ID) do
+			out.fieldConflicts[id] = shortText(raw.fieldConflicts[id])
+		end
 	end
 	return out
 end
 
-local OWNER_NORMALIZERS = { about = normalizeAbout, traits = normalizeTraits, fields = normalizeFields }
+local OWNER_NORMALIZERS = { about = normalizeAbout, traits = normalizeTraits, fields = normalizeFields,
+	misc = normalizeMisc }
 
 -- { [feature] = owner record } saved with a backup (all features of its section).
 local function normalizeOwners(raw)

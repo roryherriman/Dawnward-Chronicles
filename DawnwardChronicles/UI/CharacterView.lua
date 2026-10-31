@@ -36,6 +36,9 @@ CharacterView.NOTHING_PUBLIC = "Nothing is public yet. Use a field's visibility 
 CharacterView.GROUPS = {
 	{ id = "identity", title = "Identity", keys = { "name", "title", "pronouns", "race", "class", "age" } },
 	{ id = "background", title = "Background & biography", keys = { "homeland", "faith", "occupation", "appearance" } },
+	-- v0.9: the details Total RP 3 shows on its characteristics page.
+	{ id = "details", title = "Details", keys = { "firstName", "lastName", "honorific", "eyes", "height", "weight",
+		"residence", "relationship", "allegiance" } },
 	-- The long texts carry their own labels (mockup: SUMMARY, MOTIVATION cards), so
 	-- this group shows no heading of its own.
 	{ id = "words", title = "Summary & motivation", heading = false, keys = { "summary", "motivation" } },
