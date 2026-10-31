@@ -121,6 +121,24 @@ return function(t, expect)
 			expect.equal(fake.profile.player.about.T1.TX, "Private about text", "only Dawnward's content moved")
 		end)
 
+		t:it("fits every Overview label, status line and button inside the card", function()
+			local _, _, ns = start()
+			local page = open(ns)
+			for _, seg in ipairs(page.overviewChoices) do
+				for _, b in ipairs(seg.buttons) do
+					expect.truthy(ns.Widgets.LabelFits(b:GetText(), b:GetWidth(), b:GetHeight(), "segment"),
+						seg.key .. ": " .. b:GetText())
+				end
+			end
+			expect.truthy(page.connectAll:GetWidth() + page.previewProfile:GetWidth() + 8 + 2 * 18
+				<= page.card:GetWidth(), "the two buttons do not overlap")
+			expect.truthy(ns.Style.TextWidth(page.overviewTitle:GetText(), "title") + 12 + page.switchModel:GetWidth()
+				+ 2 * 18 <= page.card:GetWidth(), "the switch button sits beside the title")
+			local lastRow = 88 + 8 * ns.TRP3Page.OVERVIEW_ROW + 10 + 3 * (ns.TRP3Page.SELECTOR_HEIGHT + 10)
+			expect.truthy(lastRow <= page.card:GetHeight() - 14 - ns.Style.CONTROL.compact - 8,
+				"choices stay above the buttons")
+		end)
+
 		t:it("previews everything it would publish without writing", function()
 			local mock, _, ns, fake = start()
 			newCharacter(mock, ns)

@@ -137,6 +137,8 @@ Style.FONTS = {
 	{ name = "DawnwardFontRailName", file = "display", size = 21, fallback = "GameFontHighlightLarge",
 		style = "railName" },
 	{ name = "DawnwardFontDay", file = "display", size = 24, fallback = "GameFontNormalLarge", style = "day" },
+	-- The setup wizard's stage heading (SetupWizard.dc.html h1: Cinzel 26).
+	{ name = "DawnwardFontStage", file = "display", size = 26, fallback = "GameFontNormalHuge", style = "stage" },
 	{ name = "DawnwardFontButton", file = "bold", size = 15, fallback = "GameFontHighlight", style = "button" },
 	{ name = "DawnwardFontButtonSmall", file = "bold", size = 14, fallback = "GameFontHighlightSmall",
 		style = "buttonSmall" },

@@ -33,6 +33,33 @@ return function(t, expect)
 			expect.truthy(elapsed < 20, string.format("took %.2fs", elapsed))
 		end)
 
+		t:it("planning a 16 KB biography About page in every template stays cheap (v0.9)", function()
+			local ns = Loader.WithTRP3()
+			local char = ns.Schema.NewCharacter(1)
+			ns.Publication.Adopt(char, 1)
+			local paragraph = "A paragraph of the story that goes on for a while, with names and places in it. "
+			local parts = {}
+			for i = 1, 180 do
+				parts[#parts + 1] = (i % 20 == 1) and ("# Chapter " .. i) or paragraph
+			end
+			local text = table.concat(parts, "\n"):sub(1, ns.Schema.FOUNDATION.bioBytes)
+			assert(ns.Sources.Capture(char, "paste", text, nil, 2))
+			for i = 1, 60 do
+				ns.Facts.Add(char, { category = "event", statement = "Something that happened, number " .. i })
+			end
+			local public = ns.Projection.GetPublic(char)
+			local started = os.clock()
+			for _ = 1, 20 do
+				for template = 1, 3 do
+					local about = { v = 1, TE = template, T1 = { TX = "Mine." }, T2 = {}, T3 = { PH = {}, PS = {}, HI = {} } }
+					local plan = ns.TRP3AboutDoc.Plan(about, nil, ns.TRP3AboutDoc.Build(public), {})
+					assert(plan.action == "insert", plan.reason)
+				end
+			end
+			local elapsed = os.clock() - started
+			expect.truthy(elapsed < 5, string.format("60 plans took %.2fs", elapsed))
+		end)
+
 		t:it("a burst of UPDATE_FACTION and zone events never schedules more than one check", function()
 			local mock = Boot.Start()
 			mock.Slash("set name A")
