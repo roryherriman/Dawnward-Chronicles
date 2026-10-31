@@ -1,16 +1,22 @@
--- The first-time setup wizard (v0.6 rules, v0.7 look): Welcome, Character,
--- Story, Privacy, Appearance, Finish. Rules (docs/design/UI_DESIGN_V06.md,
--- section 5):
+-- The first-time setup wizard (v0.6 rules, v0.7 look, v0.9 stages):
+-- Welcome, Character, Story, Appearance, Total RP 3 (only when Total RP 3
+-- is installed), Finish. Rules (docs/design/UI_DESIGN_V06.md, section 5,
+-- and docs/design/UI_DESIGN_V09.md):
 --
---   * it opens by itself only for a genuinely new character, once per
---     session, when the player opens Dawnward (MainWindow.BeforeShow)
+--   * it opens by itself after a genuinely new character first enters the
+--     world (Platform/SetupLaunch.lua), and otherwise once per session when
+--     a new character opens Dawnward (MainWindow.BeforeShow)
 --   * values are kept while moving between pages; what the player changed
 --     is saved as a draft on every step and on close, so it resumes where
 --     it was left (only changed keys are kept and applied, so settings
 --     changed elsewhere meanwhile are never undone)
 --   * nothing is written to the character, and setup is not marked
---     complete, until Finish; Finish never clears an existing value and
---     never writes to Total RP 3
+--     complete, until Finish; Finish never clears an existing value
+--   * v0.9: no routine privacy step. A new character's details start
+--     Public (the profile model, Core/Publication.lua). The Total RP 3
+--     stage is the single authorisation: with "Connect" chosen, Finish
+--     links the active Total RP 3 profile (ConnectAll); nothing is sent
+--     before Finish, and the sync's own guards still apply to every write
 --   * test mode (/dawnward dev setup) is a clearly marked preview: no
 --     draft, no completion, and choices are saved only on "Save choices"
 --   * in simulation mode or on read-only data it is a preview that cannot
@@ -18,8 +24,8 @@
 --
 -- Layout (docs/design/mockups/first-time-setup.png, v0.7): an 820 x 600
 -- dialog in the main window's design language. A left step rail lists the
--- six stages (done / current / upcoming; click one to go there), the right
--- side shows "STEP n OF 6", the stage title and subtitle, the stage's
+-- stages (done / current / upcoming; click one to go there), the right
+-- side shows "STEP n OF m", the stage title and subtitle, the stage's
 -- grouped panels, and a footer with Set up later, Back and Next. The step
 -- numbers sit in round badges (Style.Disc; square where the client has no
 -- masks) and the done mark is the game's own check texture. Sizes follow
@@ -57,20 +63,23 @@ SetupWizard.CHECK_TEXTURE = "Interface\\Buttons\\UI-CheckBox-Check"
 
 -- Subtitles under each stage's title (the mockup's one-line explanations).
 SetupWizard.SUBTITLES = {
-	welcome = "A private chronicle of your character. This takes about two minutes.",
+	welcome = "Where your character is created and grows. This takes about two minutes.",
 	character = "Fill in what you know. Anything left empty can be added later.",
-	story = "Choose how often Dawnward asks about what happens on your travels.",
-	privacy = "Everything you add starts Private. Here is what each level means.",
+	story = "Bring in your backstory, and choose how often Dawnward asks about your travels.",
 	appearance = "Choose how this character's journal looks.",
+	trp3 = "Connect once; Dawnward keeps your Total RP 3 profile up to date.",
 	finish = "Review your choices. Finish saves them for this character.",
 }
 
--- What each visibility level means (the Privacy stage's chips).
-SetupWizard.PRIVACY_LEVELS = {
-	{ "public", "May be shared: share exports and, only if you turn sync on later, Total RP 3." },
-	{ "private", "Only you. Included in your personal backups. Everything starts here." },
-	{ "secret", "Only you. Left out of backups unless you ask for it." },
-}
+-- What connecting does (the Total RP 3 stage).
+SetupWizard.TRP3_NOTE = "Connecting writes your name, titles, race, class, other details, your backstory (as the "
+	.. "About text) and personality to the active Total RP 3 profile, and keeps them in step as your character "
+	.. "grows. A backup is taken before every write, and any write can be rolled back from Settings > Total RP 3. "
+	.. "Anything you make Private in Dawnward is never sent. Nothing is sent before Finish."
+
+-- The Character stage's note (v0.9: the profile model; no classification).
+SetupWizard.PROFILE_NOTE = "This is your character's profile. If you connect Total RP 3, it is what other "
+	.. "players see. Keep any detail to yourself later with its Private button."
 
 local wizard           -- the frame and its parts, built once
 local autoShown = {}   -- characters the wizard opened for by itself this session
@@ -181,20 +190,6 @@ local function fieldBox(parent, field, x, y, width, height, hint)
 	return input
 end
 
--- The Character stage's privacy note uses the Private chip's colours
--- (SetupWizard.dc.html: #1B2436 fill, #3A4D73 edge, #C9D6F0 text).
-function SetupWizard.PrivateNoteText()
-	return Style.Mix(Themes.VISIBILITY_COLORS.private, { 1, 1, 1 }, 0.25)
-end
-
-function SetupWizard.PaintPrivateNote(note)
-	Style.Register(note, function(p, theme)
-		local fill, edge = Widgets.ChipColors(Themes.VISIBILITY_COLORS.private, theme, theme.background)
-		Style.Color(p.bg, fill)
-		p.edges:Paint(edge, 1)
-	end)
-end
-
 --- Pages ---------------------------------------------------------------------------
 
 local function buildWelcome()
@@ -203,11 +198,11 @@ local function buildWelcome()
 	paragraph(a.inner, 0, 0, INNER_WIDTH, "Dawnward Chronicles keeps a living chronicle of your character: what "
 		.. "happens on their travels, the choices you make about it, and who they slowly become.")
 	local b = panel(p, "Alongside Total RP 3", 0, -114, BODY_WIDTH, 100)
-	paragraph(b.inner, 0, 0, INNER_WIDTH, "It complements Total RP 3 rather than replacing it. Total RP 3 is your "
-		.. "public profile; Dawnward is your character's private story.")
+	paragraph(b.inner, 0, 0, INNER_WIDTH, "Dawnward is where your character develops; Total RP 3, if you use it, is "
+		.. "where the world sees them. Connect it once and Dawnward keeps it up to date.")
 	local c = panel(p, "This setup", 0, -228, BODY_WIDTH, 100)
-	paragraph(c.inner, 0, 0, INNER_WIDTH, "Everything is optional, everything starts private, and you can change "
-		.. "any of it later in Settings. Close it at any time: your answers are kept.", "muted")
+	paragraph(c.inner, 0, 0, INNER_WIDTH, "Everything is optional, and you can change any of it later in Settings. "
+		.. "Close it at any time: your answers are kept.", "muted")
 	paragraph(p, 0, -346, BODY_WIDTH, "Next: who your character is.", "accent")
 end
 
@@ -250,16 +245,14 @@ local function buildCharacter()
 		onEscape = function() SetupWizard.Close() end,
 	})
 	wizard.chain.SetFields(wizard.inputs)
-	-- The privacy note in the Private chip's colours (the design's lock note).
+	-- The profile note (v0.9): what these details are for. No privacy
+	-- classification here; a detail can be made Private later.
 	local note = panel(p, nil, 0, -346, BODY_WIDTH, 46)
-	SetupWizard.PaintPrivateNote(note)
-	wizard.privateNote = note
-	wizard.privateNoteText = paragraph(note.inner, 0, 0, INNER_WIDTH - 160, "Everything starts Private. Nothing is "
-		.. "sent to Total RP 3 unless you choose to share it later.", "small")
-	wizard.privateNoteText:SetPoint("TOPLEFT", 0, 3)
-	Style.Register(wizard.privateNoteText, function(fs) Style.TextColor(fs, SetupWizard.PrivateNoteText()) end)
+	wizard.profileNote = note
+	wizard.profileNoteText = paragraph(note.inner, 0, 0, INNER_WIDTH - 160, SetupWizard.PROFILE_NOTE, "small")
+	wizard.profileNoteText:SetPoint("TOPLEFT", 0, 3)
 	-- A story the player already wrote (#23): its own window, saved only
-	-- when they choose Save and review there; this setup is not affected.
+	-- when they choose Save there; this setup is not affected.
 	wizard.importStory = Widgets.Button(note.inner, "Import a story...", 150, Style.CONTROL.compact)
 	wizard.importStory:SetPoint("RIGHT", 0, 0)
 	wizard.importStory:SetScript("OnClick", function() ns.ImportWizard.Open({ from = "setup" }) end)
@@ -270,44 +263,45 @@ end
 
 local function buildStory()
 	local p = pageFrame("story")
+	-- The backstory (v0.9): the complete story, kept word for word; with
+	-- Total RP 3 connected it becomes the profile's About text.
+	local bio = panel(p, "Backstory", 0, 0, BODY_WIDTH, 86)
+	wizard.storyState = paragraph(bio.inner, 0, 0, INNER_WIDTH - 170, "", "small")
+	wizard.storyImport = Widgets.Button(bio.inner, "Import a story...", 156, Style.CONTROL.compact)
+	wizard.storyImport:SetPoint("TOPRIGHT", 0, 2)
+	wizard.storyImport:SetScript("OnClick", function() ns.ImportWizard.Open({ from = "setup" }) end)
+	Widgets.Tooltip(wizard.storyImport, "Import a story", "Paste your character's whole backstory, or read it from "
+		.. "Total RP 3. It is kept exactly as written, paragraphs and all.")
+	local top = -100
 	local qH = 36 + #Onboarding.PREFS * L.cycleRow + 4
-	local q = panel(p, "Story questions", 0, 0, BODY_WIDTH, qH)
+	local q = panel(p, "Story questions", 0, top, BODY_WIDTH, qH)
 	for i, pref in ipairs(Onboarding.PREFS) do
 		cycleRow(q.inner, -(i - 1) * L.cycleRow, pref, INNER_WIDTH)
 	end
-	local about = panel(p, "How it works", 0, -(qH + 14), BODY_WIDTH, 112)
-	paragraph(about.inner, 0, 0, INNER_WIDTH, "When something worth remembering happens, Dawnward may ask a quiet "
-		.. "question about it, never in combat.", "body")
-	paragraph(about.inner, 0, -40, INNER_WIDTH, "Questions are weighted: your homeland and the places, people and "
-		.. "goals you care about matter most. Ordinary travel is logged quietly.", "muted")
+	paragraph(p, 0, top - qH - 10, BODY_WIDTH, "Dawnward may ask a quiet question when something worth remembering "
+		.. "happens, never in combat. Your homeland and the places, people and goals you care about matter most.",
+		"muted")
 end
 
-local function buildPrivacy()
-	local p = pageFrame("privacy")
-	local levels = panel(p, "Who sees what", 0, 0, BODY_WIDTH, 36 + #SetupWizard.PRIVACY_LEVELS * 34 + 6)
-	wizard.privacyChips = {}
-	for i, level in ipairs(SetupWizard.PRIVACY_LEVELS) do
-		local y = -(i - 1) * 34
-		local chip = Widgets.Chip(levels.inner, Themes.VISIBILITY_LABELS[level[1]], level[1])
-		chip:SetPoint("TOPLEFT", 0, y)
-		chip.level = level[1]
-		wizard.privacyChips[i] = chip
-		paragraph(levels.inner, 84, y - 3, INNER_WIDTH - 84, level[2], "small")
-	end
-
-	-- Total RP 3: status only. Setup never publishes anything to it.
-	local trp3 = panel(p, "Total RP 3 (optional)", 0, -150, BODY_WIDTH, 150)
-	wizard.trp3Chip = Widgets.Chip(trp3.inner, "Not installed", "muted")
+local function buildTRP3()
+	local p = pageFrame("trp3")
+	local status = panel(p, "Your Total RP 3 profile", 0, 0, BODY_WIDTH, 112)
+	wizard.trp3Chip = Widgets.Chip(status.inner, "Total RP 3", "muted")
 	wizard.trp3Chip:SetPoint("TOPLEFT", 0, 0)
-	wizard.trp3 = Widgets.Label(trp3.inner, "GameFontHighlightSmall", true, "muted")
+	wizard.trp3 = Widgets.Label(status.inner, "GameFontHighlightSmall", true, "body")
 	wizard.trp3:SetPoint("TOPLEFT", 0, -28)
 	wizard.trp3:SetWidth(INNER_WIDTH)
-	wizard.trp3Note = paragraph(trp3.inner, 0, -48, INNER_WIDTH, "Setup never publishes anything to Total RP 3 "
-		.. "and does not turn sync on. If you want it later, /dawnward trp3 help explains how: it shares only "
-		.. "what you made Public, backs up first and can be rolled back.")
+	wizard.trp3Warn = Widgets.Label(status.inner, "GameFontHighlightSmall", true, "danger")
+	wizard.trp3Warn:SetPoint("TOPLEFT", 0, -50)
+	wizard.trp3Warn:SetWidth(INNER_WIDTH)
 
-	paragraph(p, 0, -316, BODY_WIDTH, "Dawnward never sends chat, emotes or whispers, and uses no internet or AI.",
-		"muted")
+	local choicesH = 36 + #Onboarding.TRP3_CHOICES * L.cycleRow + 4
+	local choices = panel(p, "Connection", 0, -126, BODY_WIDTH, choicesH)
+	wizard.trp3Cycles = {}
+	for i, choice in ipairs(Onboarding.TRP3_CHOICES) do
+		wizard.trp3Cycles[choice.key] = cycleRow(choices.inner, -(i - 1) * L.cycleRow, choice, INNER_WIDTH)
+	end
+	wizard.trp3Note = paragraph(p, 0, -126 - choicesH - 10, BODY_WIDTH, SetupWizard.TRP3_NOTE, "muted")
 end
 
 local function buildAppearance()
@@ -372,8 +366,8 @@ local function buildPages()
 	buildWelcome()
 	buildCharacter()
 	buildStory()
-	buildPrivacy()
 	buildAppearance()
+	buildTRP3()
 	buildFinish()
 end
 
@@ -469,6 +463,25 @@ local function buildRail()
 	wizard.railNote:SetWidth(L.rail - 48)
 end
 
+-- Places the visible stages in order and numbers them 1..m; a stage that
+-- does not apply this time (Total RP 3 not installed) is hidden.
+local function layoutRail()
+	local position = {}
+	for n, index in ipairs(wizard.visible) do
+		position[index] = n
+	end
+	for i, step in ipairs(wizard.steps) do
+		local n = position[i]
+		step:SetShown(n ~= nil)
+		if n then
+			step:ClearAllPoints()
+			step:SetPoint("TOPLEFT", 16, -L.stepsTop - (n - 1) * (L.step + L.stepGap))
+			step.num:SetText(tostring(n))
+		end
+	end
+	wizard.position = position
+end
+
 --- Frame -------------------------------------------------------------------------------
 
 local function build()
@@ -519,7 +532,7 @@ local function build()
 	wizard.next:SetScript("OnClick", function() SetupWizard.Next() end)
 	wizard.back = Widgets.Button(wizard, "Back", 96, L.button)
 	wizard.back:SetPoint("RIGHT", wizard.next, "LEFT", -10, 0)
-	wizard.back:SetScript("OnClick", function() SetupWizard.Go(wizard.page - 1) end)
+	wizard.back:SetScript("OnClick", function() SetupWizard.Back() end)
 	wizard.discard = Widgets.Button(wizard, "Close preview", 130, L.button)
 	wizard.discard:SetPoint("RIGHT", wizard.back, "LEFT", -10, 0)
 	wizard.discard:SetScript("OnClick", function() SetupWizard.Close() end)
@@ -573,6 +586,21 @@ local function pageIndex(id)
 	end
 end
 
+-- The visible stage after (step 1) or before (step -1) page index i, or nil.
+local function neighbour(i, step)
+	local n = wizard.position[i]
+	local target = n and wizard.visible[n + step]
+	return target
+end
+
+-- A page index that is visible: i itself, else the next visible one, else the last.
+local function visibleFrom(i)
+	for _, index in ipairs(wizard.visible) do
+		if index >= i then return index end
+	end
+	return wizard.visible[#wizard.visible]
+end
+
 --- Inline validation of the Character stage: a field longer than its limit
 -- is marked and named beneath it (rather than silently cut short). Returns
 -- the first invalid input, or nil when everything fits.
@@ -589,19 +617,47 @@ function SetupWizard.Validate()
 	return first
 end
 
--- The Total RP 3 status chip: installed or not, nothing more. Read only.
-local function trp3Status()
+-- Whether Total RP 3 is installed (the stage is shown only then). Read only.
+local function trp3Installed()
+	local status = ns.ctx.trp3Status and ns.ctx.trp3Status()
+	return type(status) == "table" and not status.error and (status.installed or status.loaded) and true or false
+end
+
+--- What the Total RP 3 stage shows: { chip, tone, line, warn, connectable }.
+-- The installed state comes from the same status read as everywhere else
+-- (ctx.trp3Status); the active profile from the adapter's probe, read only.
+function SetupWizard.TRP3View()
+	local view = { chip = "Not installed", tone = "muted", line = "Total RP 3 is not installed. Dawnward works "
+		.. "fully without it.", connectable = false }
 	local status = ns.ctx.trp3Status and ns.ctx.trp3Status()
 	if type(status) ~= "table" then
-		return "Status unavailable", "muted"
+		return view
 	end
 	if status.error then
-		return "Could not be read", "danger"
+		view.chip, view.tone, view.line = "Could not be read", "danger", "Total RP 3 could not be read safely."
+		return view
 	end
-	if status.loaded then
-		return "Installed", "accent"
+	if not status.loaded then
+		if status.installed then
+			view.chip = "Installed, not loaded"
+			view.line = "Total RP 3 is installed but not loaded. Enable it at the character screen to connect it."
+		end
+		return view
 	end
-	return status.installed and "Installed, not loaded" or "Not installed", "muted"
+	view.chip, view.tone = "Total RP 3 " .. tostring(status.version or ""), "accent"
+	local probe = ns.TRP3Adapter and ns.TRP3Adapter.Probe(_G)
+	local profile = probe and probe.profile
+	view.line = profile and profile.name and ("Active profile: " .. tostring(profile.name)) or "Active profile: unknown"
+	if profile and profile.sharedWith and profile.sharedWith > 0 then
+		view.line = view.line .. string.format(" (also used by %d other character%s; they would show the same)",
+			profile.sharedWith, profile.sharedWith == 1 and "" or "s")
+	end
+	view.connectable = probe ~= nil and probe.experimental.allowed == true
+	if not view.connectable then
+		view.warn = "Cannot connect right now: " .. (probe and table.concat(probe.experimental.reasons, "; ")
+			or "Total RP 3 could not be read") .. ". You can connect later in Settings > Total RP 3."
+	end
+	return view
 end
 
 local function refreshIdentity()
@@ -619,13 +675,15 @@ end
 --- Redraws the current page from the values.
 function SetupWizard.Refresh()
 	if not wizard then return end
-	local count = #Onboarding.PAGES
+	local count = #wizard.visible
 	local page = Onboarding.PAGES[wizard.page]
-	wizard.stepLabel:SetText(string.format("STEP %d OF %d", wizard.page, count))
+	local at = wizard.position[wizard.page] or 1
+	wizard.stepLabel:SetText(string.format("STEP %d OF %d", at, count))
 	wizard.title:SetText(page.title)
 	wizard.subtitle:SetText(SetupWizard.SUBTITLES[page.id] or "")
 	for i, step in ipairs(wizard.steps) do
-		step.state = i < wizard.page and "done" or i == wizard.page and "current" or "future"
+		local n = wizard.position[i]
+		step.state = n and (n < at and "done" or n == at and "current") or "future"
 		Style.Repaint(step)
 	end
 	for id, frame in pairs(wizard.pages) do
@@ -646,16 +704,34 @@ function SetupWizard.Refresh()
 	end
 	if page.id == "character" then
 		refreshIdentity()
-	elseif page.id == "privacy" then
-		local text, tone = trp3Status()
-		wizard.trp3Chip:SetChip("Total RP 3: " .. text, tone)
-		local status = ns.ctx.trp3Status and ns.ctx.trp3Status()
-		wizard.trp3:SetText(ns.Commands.Trp3Lines(status)[1] or "Total RP 3: not detected")
+	elseif page.id == "story" then
+		local current = Actions.Character(ns.ctx) and ns.Sources.Current(Actions.Character(ns.ctx))
+		wizard.storyState:SetText(current and string.format("Your backstory is saved word for word (%d paragraphs). "
+			.. "Import again to replace it; earlier versions are kept.", #ns.Sources.Paragraphs(current.text))
+			or "No backstory yet. Import the story you already wrote, or add it later from the Character tab.")
+	elseif page.id == "trp3" then
+		local view = SetupWizard.TRP3View()
+		wizard.trp3View = view
+		wizard.trp3Chip:SetChip(view.chip, view.tone)
+		wizard.trp3:SetText(view.line)
+		wizard.trp3Warn:SetText(view.warn or "")
+		for _, b in pairs(wizard.trp3Cycles) do
+			b:SetEnabled(view.connectable)
+		end
+		if not view.connectable then
+			wizard.trp3Cycles.trp3:SetText("Not available now")
+		end
+		wizard.trp3Cycles.trp3Existing:SetEnabled(view.connectable and wizard.values.trp3 == "connect")
 	end
-	local last = wizard.page == count
+	local last = wizard.page == wizard.visible[count]
 	if last then
 		local lines = Onboarding.Summary(wizard.values)
 		local nFields = #Onboarding.FIELDS
+		local trp3Line = Onboarding.TRP3Summary(wizard.values, wizard.trp3Shown)
+		if trp3Line and not SetupWizard.CanConnect() then
+			trp3Line = "Total RP 3: not connected now (connect later in Settings > Total RP 3)"
+		end
+		if trp3Line then lines[#lines + 1] = trp3Line end
 		wizard.summary:SetText(table.concat(lines, "\n", 1, nFields))
 		wizard.choices:SetText(table.concat(lines, "\n", nFields + 1, #lines))
 		local blocked = wizard.simulation and "Simulation mode is on, so setup cannot be saved. Turn simulation "
@@ -664,17 +740,21 @@ function SetupWizard.Refresh()
 			.. "been changed."
 		wizard.finishNote:SetText(blocked or wizard.test and "Preview: Save choices applies these choices "
 			.. "to this character without changing its setup status. Close preview discards them."
-			or "Finish saves only what you changed here and never clears a detail you already had. Nothing is "
-			.. "shared and nothing is sent to Total RP 3.")
+			or (SetupWizard.WillConnect() and "Finish saves your choices and connects Total RP 3: your Public "
+				.. "details, backstory and personality are written there after a backup. Nothing you already had "
+				.. "in Dawnward is cleared."
+				or "Finish saves only what you changed here and never clears a detail you already had. Nothing is "
+				.. "sent to Total RP 3."))
 	end
 	wizard.railNote:SetText(wizard.test and "Preview: nothing is kept when you close it. Choices are saved only "
 		.. "with Save choices."
 		or wizard.readOnly and "Preview only: nothing can be saved this session."
 		or "Your answers are kept if you close this. Nothing is saved to your profile until you choose Finish.")
-	wizard.back:SetEnabled(wizard.page > 1)
+	wizard.back:SetEnabled(neighbour(wizard.page, -1) ~= nil)
 	wizard.later:SetShown(not wizard.test)
 	wizard.discard:SetShown(wizard.test and last or false)
-	wizard.next:SetText(not last and ("Next: " .. Onboarding.PAGES[wizard.page + 1].title)
+	local following = neighbour(wizard.page, 1)
+	wizard.next:SetText(following and ("Next: " .. Onboarding.PAGES[following].title)
 		or wizard.test and "Save choices" or "Finish")
 	wizard.next:SetEnabled(not (last and wizard.readOnly))
 end
@@ -686,10 +766,20 @@ local function focusPage()
 	end
 end
 
+--- Whether Finish will connect Total RP 3 (the stage was shown, the
+-- player chose Connect, and connecting is possible now).
+function SetupWizard.CanConnect()
+	return wizard.trp3Shown and (wizard.trp3View == nil or wizard.trp3View.connectable) or false
+end
+
+function SetupWizard.WillConnect()
+	return SetupWizard.CanConnect() and wizard.values.trp3 == "connect" and not wizard.test
+end
+
 --- Goes to page n (values kept; the draft is saved).
 function SetupWizard.Go(n)
 	collect()
-	wizard.page = math.max(1, math.min(n, #Onboarding.PAGES))
+	wizard.page = visibleFrom(math.max(1, math.min(n, #Onboarding.PAGES)))
 	saveDraft()
 	SetupWizard.Refresh()
 	focusPage()
@@ -712,10 +802,19 @@ end
 
 --- Next (or, on the last page, Finish / Save choices).
 function SetupWizard.Next()
-	if wizard.page < #Onboarding.PAGES then
-		SetupWizard.Step(wizard.page + 1)
+	local following = neighbour(wizard.page, 1)
+	if following then
+		SetupWizard.Step(following)
 	else
 		SetupWizard.Finish()
+	end
+end
+
+--- Back to the previous visible stage.
+function SetupWizard.Back()
+	local previous = neighbour(wizard.page, -1)
+	if previous then
+		SetupWizard.Go(previous)
 	end
 end
 
@@ -754,7 +853,12 @@ function SetupWizard.Open(opts)
 	wizard.readOnly = ctx.store:ReadOnlyReason() ~= nil or wizard.simulation
 	wizard.initial, wizard.edited = initial, edited
 	wizard.finished = false
-	wizard.values, wizard.page = values, page
+	wizard.trp3Shown = trp3Installed()
+	wizard.trp3View = nil
+	wizard.visible = Onboarding.VisiblePages(wizard.trp3Shown)
+	layoutRail()
+	wizard.values = values
+	wizard.page = visibleFrom(page)
 	-- At most two lines in the rail; the rail note says what the mode means.
 	wizard.eyebrow:SetText(wizard.test and "PREVIEW · TEST MODE"
 		or wizard.simulation and "SIMULATION · PREVIEW ONLY"
@@ -784,7 +888,9 @@ function SetupWizard.Finish()
 	end
 	collect()
 	if wizard.readOnly then return end
-	local ok, message = Actions.CompleteSetup(ns.ctx, wizard.values, { test = wizard.test, only = wizard.edited })
+	local connect = SetupWizard.WillConnect()
+	local ok, message = Actions.CompleteSetup(ns.ctx, wizard.values, { test = wizard.test, only = wizard.edited,
+		trp3Shown = connect })
 	if not ok then
 		wizard.finishNote:SetText(message)
 		return
@@ -837,6 +943,10 @@ end
 -- had already been shown). Saved data is not touched.
 function SetupWizard.SkipAutoLaunchThisSession(key)
 	autoShown[key] = true
+end
+
+function SetupWizard.WasAutoShown(key)
+	return autoShown[key] == true
 end
 
 --- MainWindow.BeforeShow: opens the wizard instead of the journal the first

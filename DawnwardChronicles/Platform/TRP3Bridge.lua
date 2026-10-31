@@ -149,7 +149,8 @@ Bridge.OnHint = onHint
 function Bridge.Attach(ctx)
 	Bridge.ctx = ctx
 	ctx.trp3Deps = function() return deps(ctx) end
-	ctx.trp3 = { Command = TRP3Commands.Command, StatusLines = TRP3Commands.StatusLines }
+	ctx.trp3 = { Command = TRP3Commands.Command, StatusLines = TRP3Commands.StatusLines,
+		ConnectAll = TRP3Commands.ConnectAll }
 	ctx.trp3RequestSync = Bridge.Request
 	ctx.formatTime = function(t) return date("%Y-%m-%d %H:%M", t) end
 	Adapter.Listen(_G, onHint)

@@ -245,7 +245,7 @@ function StoryImport.Propose(char, version, mode, now)
 				sourceVersion = version.hash,
 				ref = piece.ref,
 				excerpt = piece.text,
-				visibility = Privacy.DEFAULT,
+				visibility = Privacy.DefaultFor(char, "fact"),
 			}, now)
 			if item then
 				result.proposed = result.proposed + 1
@@ -298,7 +298,7 @@ function StoryImport.Approve(char, key, edits, now)
 		return nil, "that piece is no longer waiting"
 	end
 	edits = edits or {}
-	local visibility = edits.visibility or Privacy.DEFAULT
+	local visibility = edits.visibility or item.visibility or Privacy.DefaultFor(char, "fact")
 	if not Privacy.IsValid(visibility) then
 		return nil, "visibility must be public, private or secret"
 	end

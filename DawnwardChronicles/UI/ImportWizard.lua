@@ -44,9 +44,9 @@ ImportWizard.SUBTITLES = {
 	review = "Approve what is true for your character, edit it first if you like, or skip it.",
 }
 ImportWizard.TEXT_NOTE = "Saved word for word, line breaks and all. Dawnward splits it into sentences (or "
-	.. "paragraphs) by simple rules; it never rewrites or invents. Approved pieces start Private. Nothing is "
-	.. "sent to Total RP 3."
-ImportWizard.REVIEW_NOTE = "Approve adds this to your character's canon (Private unless you choose). Skip "
+	.. "paragraphs) by simple rules; it never rewrites or invents. With Total RP 3 connected, the whole story "
+	.. "becomes your profile's About text while it is Public."
+ImportWizard.REVIEW_NOTE = "Approve adds this to your character's canon, with the visibility shown below. Skip "
 	.. "means it is not suggested again. Later keeps it waiting. Your saved story is never changed."
 ImportWizard.MODE_LABELS = { sentence = "Split: by sentence", paragraph = "Split: by paragraph" }
 ImportWizard.MODES = { { id = "sentence", label = "By sentence" }, { id = "paragraph", label = "By paragraph" } }

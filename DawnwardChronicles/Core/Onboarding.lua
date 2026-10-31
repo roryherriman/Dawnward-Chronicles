@@ -1,29 +1,52 @@
--- First-time setup (v0.6): the onboarding state, the rule for when the
--- wizard opens by itself, draft cleaning, and applying the choices. Pure:
--- UI/SetupWizard.lua draws the pages, Core/Actions.lua saves.
+-- First-time setup (v0.6, reworked in v0.9): the onboarding state, the
+-- rules for when the wizard opens by itself, draft cleaning, and applying
+-- the choices. Pure: UI/SetupWizard.lua draws the pages, Core/Actions.lua
+-- saves, Platform/SetupLaunch.lua opens it after login.
 --
 -- Saved state (additive; schema stays 5):
 --   char.wizard                      { done, version, doneAt } once Finish is chosen
 --   db.ui.wizardDrafts[characterKey] { page, values } while unfinished
+--   db.ui.setupSeen[characterKey]    when the wizard first opened by itself
 -- Drafts live account-wide by character key, so an unfinished wizard never
 -- creates a character record (and never starts story recording) early.
--- Nothing here writes to Total RP 3 or changes visibility.
+--
+-- v0.9 (docs/design/UI_DESIGN_V09.md): the routine Privacy stage is gone.
+-- A character set up with this wizard uses the profile publication model
+-- (Core/Publication.lua): its profile details start Public. Total RP 3 is
+-- one optional stage, shown only when Total RP 3 is installed; connecting
+-- there is the single authorisation (Integrations/TRP3/Commands.lua,
+-- ConnectAll). Nothing is written to Total RP 3 before Finish.
 local _, ns = ...
 local Util = ns.Util
 
 local Onboarding = {}
 ns.Onboarding = Onboarding
 
-Onboarding.VERSION = 1
+-- 2: v0.9 (the profile model, the Total RP 3 stage). A character finished
+-- with version 1 keeps its original publication model.
+Onboarding.VERSION = 2
 Onboarding.MAX_DRAFTS = 50
+Onboarding.MAX_SEEN = 200
 Onboarding.PAGES = {
 	{ id = "welcome", title = "Welcome" },
 	{ id = "character", title = "Character" },
 	{ id = "story", title = "Story" },
-	{ id = "privacy", title = "Privacy" },
 	{ id = "appearance", title = "Appearance" },
+	{ id = "trp3", title = "Total RP 3", optional = true },
 	{ id = "finish", title = "Finish" },
 }
+
+--- The stages shown this time: { index into PAGES, ... }. The Total RP 3
+-- stage appears only when Total RP 3 is installed.
+function Onboarding.VisiblePages(trp3Installed)
+	local out = {}
+	for i, page in ipairs(Onboarding.PAGES) do
+		if not page.optional or trp3Installed then
+			out[#out + 1] = i
+		end
+	end
+	return out
+end
 
 -- Profile fields the wizard asks for (keys of Schema.FIELDS), with limits.
 Onboarding.FIELDS = {
@@ -45,6 +68,16 @@ Onboarding.PREFS = {
 		{ false, "Chat line only" } } },
 	{ key = "approval", label = "Personality changes", values = { { "ask", "Ask me first" },
 		{ "auto", "Apply at once (still reversible)" } } },
+}
+
+-- Total RP 3 choices on its stage: connect this character's profile now
+-- (the one authorisation), and what to do where Total RP 3 already has the
+-- player's own text (keep it; or let Dawnward take over, after a backup).
+Onboarding.TRP3_CHOICES = {
+	{ key = "trp3", label = "Connect", values = { { "connect", "Connect and keep it up to date" },
+		{ "later", "Not now (nothing is sent)" } } },
+	{ key = "trp3Existing", label = "Existing profile", values = { { "keep", "Keep what I already wrote there" },
+		{ "replace", "Replace it with Dawnward's (a backup is kept)" } } },
 }
 
 local function validPref(pref, value)
@@ -90,6 +123,11 @@ function Onboarding.CleanDraft(raw)
 			values[pref.key] = rawValues[pref.key]
 		end
 	end
+	for _, choice in ipairs(Onboarding.TRP3_CHOICES) do
+		if validPref(choice, rawValues[choice.key]) then
+			values[choice.key] = rawValues[choice.key]
+		end
+	end
 	if ns.Themes.IsValid(rawValues.theme) then values.theme = rawValues.theme end
 	if type(rawValues.minimap) == "boolean" then values.minimap = rawValues.minimap end
 	return {
@@ -97,6 +135,29 @@ function Onboarding.CleanDraft(raw)
 			and page or 1,
 		values = values,
 	}
+end
+
+--- Cleans the account's "first opened by itself" record (characterKey ->
+-- timestamp), keeping the newest MAX_SEEN.
+function Onboarding.CleanSeen(raw)
+	local entries = {}
+	if type(raw) ~= "table" then
+		return {}
+	end
+	for key, at in pairs(raw) do
+		if type(key) == "string" and key ~= "" and #key <= 100 and timestamp(at) then
+			entries[#entries + 1] = { key = key, at = at }
+		end
+	end
+	table.sort(entries, function(a, b)
+		if a.at ~= b.at then return a.at > b.at end
+		return a.key < b.key
+	end)
+	local out = {}
+	for i = 1, math.min(#entries, Onboarding.MAX_SEEN) do
+		out[entries[i].key] = entries[i].at
+	end
+	return out
 end
 
 --- Cleans the account's drafts table (characterKey -> draft), at most MAX_DRAFTS.
@@ -168,6 +229,18 @@ function Onboarding.ShouldAutoLaunch(char, now)
 	return not Onboarding.IsComplete(char) and not Onboarding.IsEstablished(char, now)
 end
 
+--- What to do when a character enters the world (v0.9). seenAt: when the
+-- wizard first opened by itself for this character (nil = never). Returns
+--   "open"   a genuinely new character that has never seen it: open it
+--   "offer"  it opened before and setup is unfinished: offer to resume
+--   "none"   setup is complete, or the character is established
+function Onboarding.LoginAction(char, seenAt, now)
+	if not Onboarding.ShouldAutoLaunch(char, now) then
+		return "none"
+	end
+	return seenAt and "offer" or "open"
+end
+
 --- Starting values: the character's saved data where it exists (never
 -- blanked), otherwise safe defaults. suggestedName (the in-game name) only
 -- fills an empty name, as a suggestion the player can change.
@@ -186,6 +259,8 @@ function Onboarding.DefaultValues(char, suggestedName, minimapShown)
 	end
 	values.theme = char and ns.Themes.IsValid(char.theme) and char.theme or ns.Themes.DEFAULT
 	values.minimap = minimapShown ~= false
+	values.trp3 = "connect"
+	values.trp3Existing = "keep"
 	return values
 end
 
@@ -228,6 +303,13 @@ function Onboarding.Apply(char, values, now, opts)
 	return changed
 end
 
+--- Whether this Finish starts the profile publication model: a new
+-- character (nothing of its own yet), not a re-run on an established one,
+-- which keeps its model until the player chooses the transition.
+function Onboarding.StartsProfileModel(char, now)
+	return char ~= nil and not ns.Privacy.ProfileModel(char) and not Onboarding.IsEstablished(char, now)
+end
+
 local function labelOf(pref, value)
 	for _, v in ipairs(pref.values) do
 		if v[1] == value then return v[2] end
@@ -255,4 +337,17 @@ function Onboarding.Summary(values)
 	lines[#lines + 1] = "Theme: " .. ns.Themes.Get(values.theme).name
 	lines[#lines + 1] = "Minimap button: " .. (values.minimap == false and "hidden" or "shown")
 	return lines
+end
+
+--- The Total RP 3 line of the review (nil when the stage was not shown).
+function Onboarding.TRP3Summary(values, shown)
+	if not shown then
+		return nil
+	end
+	if values.trp3 ~= "connect" then
+		return "Total RP 3: not connected (nothing is sent; connect later in Settings > Total RP 3)"
+	end
+	return "Total RP 3: connect and keep it up to date"
+		.. (values.trp3Existing == "replace" and "; replace what is already there (a backup is kept)"
+			or "; keep what you already wrote there")
 end

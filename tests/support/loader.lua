@@ -49,6 +49,7 @@ Loader.CORE = {
 	"Core/People.lua",
 	"Core/Timeline.lua",
 	"Core/Projection.lua",
+	"Core/Publication.lua",
 	"Core/Serializer.lua",
 	"Core/Transfer.lua",
 	"Core/Store.lua",

@@ -43,7 +43,7 @@ function Personality.Set(char, axisId, value, now)
 	if entry then
 		entry.value = value
 	else
-		entry = { value = value, visibility = Privacy.DEFAULT }
+		entry = { value = value, visibility = Privacy.DefaultFor(char, "personality") }
 		char.personality[axisId] = entry
 	end
 	entry.updatedAt = now or 0

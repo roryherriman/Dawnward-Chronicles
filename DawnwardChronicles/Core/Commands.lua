@@ -26,7 +26,8 @@ local SHOW_LIMIT = 180 -- bytes of long text shown per line in chat
 
 local HELP = {
 	"Dawnward Chronicles: /dawnward (or /dwc) opens and closes the journal.",
-	"  setup   (first-time setup: name, story moments, privacy, appearance) | guide   (help)",
+	"  setup   (first-time setup: name, backstory, story moments, appearance, Total RP 3) | guide   (help)",
+	"  publish   (one-time switch of an older character to the profile model; previews first)",
 	"  status | show [public] | fields | trp3 | theme [neutral|silverhand|arcane] | minimap [show|hide]",
 	"  journal list | journal add <text> | journal edit <#> <text> | journal vis <#> <level>",
 	"  journal remove <#> confirm",

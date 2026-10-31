@@ -51,6 +51,13 @@ function Projection.GetPublic(char)
 		fact.provenance = type(p) == "table" and { origin = p.origin, interpreted = p.interpreted == true } or nil
 	end
 	out.stances = (char.story and ns.Identity) and ns.Identity.Public(char) or {}
+	-- The biography (v0.9): the current version's text, exactly as stored,
+	-- only when the player made the biography itself Public. Earlier
+	-- versions and where it came from are never included.
+	local current = char.sources and ns.Sources and ns.Sources.Current(char)
+	if current and ns.Sources.Visibility(char) == Privacy.PUBLIC then
+		out.biography = { text = current.text, hash = current.hash }
+	end
 	return out
 end
 

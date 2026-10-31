@@ -53,8 +53,9 @@ function Facts.Count(char)
 end
 
 -- Validates values for a new fact. Returns category, statement, subject,
--- visibility or nil plus a reason.
-local function validate(values)
+-- visibility or nil plus a reason. fallback: the visibility when none is
+-- given (the character's default, Privacy.DefaultFor).
+local function validate(values, fallback)
 	if not Facts.IsRegistered(values.category) then
 		return nil, "unknown category '" .. tostring(values.category) .. "' (use " .. Facts.CategoryList() .. ")"
 	end
@@ -62,7 +63,7 @@ local function validate(values)
 	if not statement then
 		return nil, "the statement is empty"
 	end
-	local visibility = values.visibility or Privacy.DEFAULT
+	local visibility = values.visibility or fallback or Privacy.DEFAULT
 	if not Privacy.IsValid(visibility) then
 		return nil, "visibility must be public, private or secret"
 	end
@@ -73,7 +74,7 @@ local function insert(char, values, provenance, now)
 	if #char.facts >= Schema.FOUNDATION.facts then
 		return nil, Facts.FULL_MESSAGE
 	end
-	local category, statement, subject, visibility = validate(values)
+	local category, statement, subject, visibility = validate(values, Privacy.DefaultFor(char, "fact"))
 	if not category then
 		return nil, statement
 	end

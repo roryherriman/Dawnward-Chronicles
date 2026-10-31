@@ -41,6 +41,8 @@ local WOW_READ = {
 	"Minimap", "GetCursorPosition",
 	-- v0.6 keyboard navigation (Shift+Tab)
 	"IsShiftKeyDown", "GetTime", "UnitIsAFK", "RAID_CLASS_COLORS", "SetPortraitTexture", "CreateFont", "GetLocale",
+	-- v0.9 first-login setup (Platform/SetupLaunch.lua)
+	"InCinematic",
 }
 
 files["DawnwardChronicles/Platform/"] = {

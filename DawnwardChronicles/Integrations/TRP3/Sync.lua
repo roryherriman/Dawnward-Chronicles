@@ -581,8 +581,12 @@ end
 
 --- Applies several policies at once (the first-time connection's
 -- "Authorize"). Every "dawnward" choice is checked before anything is
--- saved, so a refusal changes nothing. Returns ok, message.
-function Sync.Authorize(deps, choices)
+-- saved, so a refusal changes nothing. opts.adopt (v0.9 setup, "Replace it
+-- with Dawnward's"): where Total RP 3 already holds the player's own
+-- content, the first write of each managed feature may take it over (after
+-- a pinned backup) instead of pausing; recorded as entry.adopt and used
+-- once per feature. Returns ok, message.
+function Sync.Authorize(deps, choices, opts)
 	local ids = {}
 	for _, id in ipairs(Ledger.MAPPINGS) do
 		if choices[id] ~= nil then
@@ -658,6 +662,10 @@ function Sync.Authorize(deps, choices)
 	if not ok then
 		undo()
 		return nil, tostring(err) .. "; nothing was changed"
+	end
+	local saved = deps.ledger.optIn[key]
+	if saved and opts and opts.adopt then
+		saved.adopt = { about = true, traits = true, fields = true }
 	end
 	if #managed == 0 then
 		return true, "Saved. Dawnward manages nothing in Total RP 3 for this character."

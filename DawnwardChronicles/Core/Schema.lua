@@ -184,10 +184,17 @@ function Schema.NewCharacter(now)
 		-- Player-defined axis words, meanings and locks (#21, Core/AxisMeanings.lua).
 		axisMeanings = {},
 		wizard = {},
+		-- The publication model (v0.9, Privacy.ProfileModel): {} is the
+		-- original model (everything starts Private).
+		publication = {},
 		story = StorySchema.New(),
 	}
 end
 
+
+-- visibility (v0.9): who may see the biography itself (the current
+-- version's text). nil until a biography is first stored; read through
+-- Sources.Visibility, which treats nil as Private.
 function Schema.NewSources()
 	return { current = nil, nextId = 1, versions = {} }
 end
@@ -219,6 +226,16 @@ local function normalizeTimestamp(value)
 		return value
 	end
 	return 0
+end
+
+--- Cleans the publication model: { mode = "profile", since?, transitionedAt? }
+-- or {} (the original model). Unknown values fall back to {}, the safe side.
+function Schema.CleanPublication(raw)
+	if type(raw) ~= "table" or raw.mode ~= "profile" then
+		return {}
+	end
+	return { mode = "profile", since = normalizeTimestamp(raw.since),
+		transitionedAt = raw.transitionedAt ~= nil and normalizeTimestamp(raw.transitionedAt) or nil }
 end
 
 local function claimId(raw, usedIds, report, label)
@@ -668,6 +685,9 @@ local function normalizeSources(raw, report)
 	if Schema.RotateSources(out) > 0 then
 		note(report, "sources: kept the newest " .. Schema.FOUNDATION.bioVersions .. " biography versions")
 	end
+	if Privacy.IsValid(raw.visibility) then
+		out.visibility = raw.visibility
+	end
 	return out
 end
 
@@ -798,6 +818,7 @@ function Schema.NormalizeCharacter(raw, report)
 	char.interpretations = normalizeInterpretations(raw.interpretations, char.interpretationKeys, report)
 	-- First-time setup state (v0.6, Core/Onboarding.lua): { done, version, doneAt }.
 	char.wizard = ns.Onboarding.Clean(raw.wizard)
+	char.publication = Schema.CleanPublication(raw.publication)
 	char.guide = ns.Guide.Clean(raw.guide)
 	char.story = StorySchema.Normalize(raw.story, Schema.PERSONALITY_AXIS_BY_ID, report)
 
@@ -870,6 +891,11 @@ function Schema.NormalizeUi(raw)
 	-- Unfinished first-time setups, by character key (Core/Onboarding.lua).
 	if type(raw.wizardDrafts) == "table" then
 		ui.wizardDrafts = ns.Onboarding.CleanDrafts(raw.wizardDrafts)
+	end
+	-- When the wizard first opened by itself, by character key (v0.9): it
+	-- opens by itself only once; later logins offer to resume instead.
+	if type(raw.setupSeen) == "table" then
+		ui.setupSeen = ns.Onboarding.CleanSeen(raw.setupSeen)
 	end
 	if type(raw.minimap) == "table" then
 		local angle = raw.minimap.angle
