@@ -61,6 +61,14 @@ StorySchema.CHANGE_STATUS = { pending = true, applied = true, rejected = true, r
 StorySchema.FREQUENCY = { off = true, rare = true, normal = true, frequent = true }
 StorySchema.APPROVAL = { ask = true, auto = true }
 StorySchema.TRP3_STYLES = { neutral = true, silverhand = true, arcane = true }
+-- v0.9: what Dawnward writes to the Total RP 3 About page. "auto": the full
+-- profile for a character on the profile publication model, otherwise the
+-- v0.3 summary block; "summary": the short Chronicle block; "profile": the
+-- whole biography and every Public section (Integrations/TRP3/AboutDoc.lua).
+StorySchema.TRP3_ABOUT = { auto = true, summary = true, profile = true }
+-- Which Total RP 3 About template it uses: "current" keeps the player's
+-- choice in Total RP 3; text, frames and sections pick template 1, 2 or 3.
+StorySchema.TRP3_LAYOUTS = { current = true, text = true, frames = true, sections = true }
 
 StorySchema.DEFAULT_PREFS = {
 	frequency = "normal",
@@ -70,6 +78,8 @@ StorySchema.DEFAULT_PREFS = {
 	flavor = true,       -- optional class-flavoured extra option
 	card = true,         -- show the small reaction card at a safe moment
 	trp3Style = "neutral",
+	trp3About = "auto",
+	trp3Layout = "current",
 	places = "on",       -- location moments: on, fewer or off
 	pace = "standard",   -- narrative day length in play (Core/NarrativeClock.lua): brisk, standard, slow
 	repeatDays = 3,      -- (v0.7.x) narrative days before the same question about the same situation (0-14; 0 off)
@@ -355,6 +365,8 @@ local function cleanPrefs(raw)
 	prefs.threshold = smallInt(raw.threshold, 1, 3) or prefs.threshold
 	if StorySchema.APPROVAL[raw.approval] then prefs.approval = raw.approval end
 	if StorySchema.TRP3_STYLES[raw.trp3Style] then prefs.trp3Style = raw.trp3Style end
+	if StorySchema.TRP3_ABOUT[raw.trp3About] then prefs.trp3About = raw.trp3About end
+	if StorySchema.TRP3_LAYOUTS[raw.trp3Layout] then prefs.trp3Layout = raw.trp3Layout end
 	if StorySchema.PLACE_PROMPTS[raw.places] then prefs.places = raw.places end
 	if ns.NarrativeClock.PACES[raw.pace] then prefs.pace = raw.pace end
 	prefs.repeatDays = smallInt(raw.repeatDays, 0, 14) or prefs.repeatDays

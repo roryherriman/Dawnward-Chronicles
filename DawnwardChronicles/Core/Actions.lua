@@ -454,6 +454,8 @@ local PREFS = {
 	threshold = function(v) local n = tonumber(v); return n and n >= 1 and n <= 3 and n == math.floor(n) and n or nil end,
 	approval = function(v) return ns.StorySchema.APPROVAL[v] and v or nil end,
 	trp3Style = function(v) return ns.StorySchema.TRP3_STYLES[v] and v or nil end,
+	trp3About = function(v) return ns.StorySchema.TRP3_ABOUT[v] and v or nil end,
+	trp3Layout = function(v) return ns.StorySchema.TRP3_LAYOUTS[v] and v or nil end,
 	places = function(v) return ns.StorySchema.PLACE_PROMPTS[v] and v or nil end,
 	pace = function(v) return ns.NarrativeClock.PACES[v] and v or nil end,
 	repeatDays = function(v)

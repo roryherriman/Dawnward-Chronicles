@@ -25,17 +25,45 @@ local _, ns = ...
 local Util, Projection, Ledger, Adapter, AboutBlock, TraitPlan, FieldPlan, Presentation, VersionProfiles =
 	ns.Util, ns.Projection, ns.TRP3Ledger, ns.TRP3Adapter, ns.TRP3AboutBlock, ns.TRP3TraitPlan, ns.TRP3FieldPlan,
 	ns.TRP3Presentation, ns.TRP3VersionProfiles
-local MiscPlan = ns.TRP3MiscPlan
+local MiscPlan, AboutDoc = ns.TRP3MiscPlan, ns.TRP3AboutDoc
+
 
 local Sync = {}
 ns.TRP3Sync = Sync
+
+-- Template numbers for the Total RP 3 layout preference (nil keeps TRP3's).
+local LAYOUT_TEMPLATE = { text = 1, frames = 2, sections = 3 }
+
+--- Whether the About page gets the full profile (AboutDoc) or the summary
+-- block (AboutBlock), from the public projection's settings.
+function Sync.UsesProfile(public)
+	return public.trp3About == "profile" or (public.trp3About ~= "summary" and public.profileModel == true)
+end
+
+-- Plans the About page for one projection (the about feature's planner).
+local function planAbout(section, record, public, extra)
+	extra = extra or {}
+	local upgraded = record and (record.slots ~= nil or record.frames ~= nil)
+	if Sync.UsesProfile(public) or upgraded or extra.adopt then
+		local doc = Sync.UsesProfile(public) and AboutDoc.Build(public) or {}
+		if not Sync.UsesProfile(public) then
+			-- The summary block as one section, without a heading of its own.
+			local block = AboutBlock.Compose(public)
+			if block ~= "" then doc = { { id = "notes", title = nil, body = block, raw = true } } end
+		end
+		return AboutDoc.Plan(section, record, doc, { template = LAYOUT_TEMPLATE[public.trp3Layout],
+			style = public.trp3Style, adopt = extra.adopt })
+	end
+	return AboutBlock.Plan(section, record, AboutBlock.Compose(public))
+end
+Sync.PlanAbout = planAbout
 
 Sync.FEATURES = {
 	about = {
 		section = "about",
 		label = "biography",
-		plan = function(section, record, public)
-			return AboutBlock.Plan(section, record, AboutBlock.Compose(public))
+		plan = function(section, record, public, extra)
+			return planAbout(section, record, public, extra)
 		end,
 		planned = "about",
 	},
@@ -151,11 +179,23 @@ local function disableForProfile(deps, profileId, feature, fieldIds)
 	end
 end
 
--- The public projection and the one cosmetic setting a plan reads.
+--- Copies the presentation settings a plan reads onto a projection: the
+-- style, the About layout and template, and whether the character uses the
+-- profile publication model (all cosmetic; no character data).
+function Sync.ApplySettings(public, char)
+	local prefs = char and char.story and char.story.prefs or {}
+	public.trp3Style = prefs.trp3Style
+	public.trp3About = prefs.trp3About or "auto"
+	public.trp3Layout = prefs.trp3Layout or "current"
+	public.profileModel = ns.Privacy.ProfileModel(char)
+	return public
+end
+
+-- The public projection and the cosmetic settings a plan reads.
 local function publicOf(deps)
 	local char = realCharacter(deps)
 	local public = (char and Projection.GetPublic(char)) or { facts = {}, personality = {}, fields = {} }
-	public.trp3Style = char and char.story and char.story.prefs.trp3Style or nil
+	Sync.ApplySettings(public, char)
 	return public
 end
 Sync.PublicOf = publicOf
@@ -274,8 +314,7 @@ function Sync.Check(deps, feature, publicOverride, fieldScope)
 	end
 	local public = publicOverride or publicOf(deps)
 	if publicOverride then
-		local char = realCharacter(deps)
-		public.trp3Style = char and char.story and char.story.prefs.trp3Style or nil
+		Sync.ApplySettings(public, realCharacter(deps))
 	end
 	local section, err = readSection(deps, spec.section)
 	if not section then
@@ -823,11 +862,22 @@ end
 -- must not make old lines look private).
 local function currentBlockLines(public)
 	local lines = {}
+	local function addLines(text)
+		for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+			lines[line] = true
+		end
+	end
+	local doc = AboutDoc.Build(public)
 	for id in pairs(Presentation.STYLES) do
 		local copy = Util.DeepCopy(public)
 		copy.trp3Style = id
-		for line in (AboutBlock.Compose(copy) .. "\n"):gmatch("([^\n]*)\n") do
-			lines[line] = true
+		addLines(AboutBlock.Compose(copy))
+		for template = 1, 3 do
+			local rendered = AboutDoc.Render(doc, template, id)
+			for _, text in pairs({ rendered.T1 or "", rendered.PH or "", rendered.PS or "", rendered.HI or "" }) do
+				addLines(text)
+			end
+			for _, frame in ipairs(rendered.frames or {}) do addLines(frame.TX) end
 		end
 	end
 	return lines
@@ -866,7 +916,7 @@ function Sync.RollbackPreview(deps, backupId)
 	local items = {}
 	if backup.section == "about" and owners.about then
 		local now = currentBlockLines(public)
-		for line in (owners.about.block .. "\n"):gmatch("([^\n]*)\n") do
+		for line in (AboutDoc.OwnedText(owners.about) .. "\n"):gmatch("([^\n]*)\n") do
 			if not isHeading(line) and not now[line] then
 				items[#items + 1] = "Biography line: " .. line
 			end
@@ -907,9 +957,9 @@ function Sync.RollbackPreview(deps, backupId)
 	-- "Your own text only" needs Dawnward's old part to be separable.
 	if backup.section == "about" then
 		if owners.about then
-			local plan = AboutBlock.Plan(Util.DeepCopy(data), owners.about, "")
-			if plan.action == "conflict" or plan.action == "unsupported" then
-				preview.ownPossible, preview.ownReason = false, plan.reason
+			local ok, why = AboutDoc.Strip(data, owners.about)
+			if not ok then
+				preview.ownPossible, preview.ownReason = false, why
 			end
 		end
 	else
@@ -986,14 +1036,14 @@ local function ownOnly(deps, inputs)
 	local newOwners, conflicts = {}, nil
 	if backup.section == "about" then
 		if owners.about then
-			local plan = AboutBlock.Plan(data, owners.about, "")
-			if plan.action == "conflict" or plan.action == "unsupported" then
-				return nil, "Dawnward's part of that backup cannot be separated (" .. tostring(plan.reason) .. ")"
+			local stripped, why = AboutDoc.Strip(data, owners.about)
+			if not stripped then
+				return nil, "Dawnward's part of that backup cannot be separated (" .. tostring(why) .. ")"
 			end
-			data = plan.about
+			data = stripped
 		end
 		if featureOn(entry, "about") then
-			local plan = AboutBlock.Plan(data, nil, AboutBlock.Compose(public))
+			local plan = planAbout(data, nil, public)
 			if plan.action ~= "conflict" and plan.action ~= "unsupported" then
 				data, newOwners.about = plan.about, plan.record
 			end

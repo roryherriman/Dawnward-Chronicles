@@ -696,7 +696,7 @@ local function keepText(feature, check, view)
 			return "Your own Total RP 3 text is kept and never edited by Dawnward."
 		end
 		local record = check.profileId and view.ledgerProfiles and view.ledgerProfiles[check.profileId]
-		local own = ns.TRP3AboutBlock.WithoutOwned(section, record and record.about)
+		local own = ns.TRP3AboutDoc.Strip(section, record and record.about)
 		if not own then
 			return "Your own text is kept and never edited by Dawnward (Dawnward's section was changed in Total RP 3, "
 				.. "so it is not shown separately)."

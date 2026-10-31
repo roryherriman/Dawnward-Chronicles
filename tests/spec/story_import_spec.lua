@@ -284,10 +284,10 @@ return function(t, expect)
 
 		t:it("imports nothing when Dawnward's own section cannot be separated from the player's text", function()
 			local core = require("support.loader").Core()
-			local real = core.TRP3AboutBlock
-			core.TRP3AboutBlock = { WithoutOwned = function() return nil, "the section was edited" end }
+			local real = core.TRP3AboutDoc
+			core.TRP3AboutDoc = { Strip = function() return nil, "the section was edited" end }
 			local text, reason = core.StoryImport.AboutText({ v = 1, TE = 1, T1 = { TX = "Mine. Dawnward's." } }, {})
-			core.TRP3AboutBlock = real
+			core.TRP3AboutDoc = real
 			expect.equal(text, nil, "never the whole text, Dawnward's block included")
 			expect.truthy(reason:find("could not be separated", 1, true))
 		end)

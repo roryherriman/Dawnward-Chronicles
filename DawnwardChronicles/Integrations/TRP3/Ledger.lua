@@ -29,7 +29,8 @@ Ledger.LIMITS = {
 	backups = 20,          -- section backups kept in total, oldest unpinned dropped first
 	pinned = 4,            -- of those, at most this many pinned (see Ledger.Prune)
 	backupBytes = 65536,   -- a section too large to back up is never written
-	block = 4100,          -- bytes of an owned biography string (section cap plus separator, with margin)
+	block = 30100,         -- bytes of one owned About text (AboutDoc.MAX_BYTES plus separator, with margin)
+	frames = 20,           -- owned template 2 frames
 	ownedTraits = 8,       -- Dawnward-owned personality traits per profile
 	log = 30,
 	profiles = 200,
@@ -128,13 +129,38 @@ function Ledger.IsStorableProfileId(id)
 	return type(id) == "string" and id ~= "" and #id <= 100 and id:sub(-1) ~= "*" and not id:find("[%c|]")
 end
 
+local function ownedText(v)
+	return type(v) == "string" and v ~= "" and #v <= Ledger.LIMITS.block
+end
+
+-- v0.8 { block, template } or v0.9 { template, mode, slots = { T1, PH,
+-- PS, HI }, frames = { text, ... } } (Integrations/TRP3/AboutDoc.lua).
 local function normalizeAbout(raw)
-	if type(raw) ~= "table" or type(raw.block) ~= "string" or raw.block == ""
-		or #raw.block > Ledger.LIMITS.block then
+	if type(raw) ~= "table" then
 		return nil
 	end
 	local template = raw.template
 	if template ~= 1 and template ~= 2 and template ~= 3 then
+		return nil
+	end
+	if raw.slots ~= nil or raw.frames ~= nil then
+		local out = { template = template, mode = raw.mode == "adopt" and "adopt" or "append", slots = {},
+			frames = {}, at = timestamp(raw.at) }
+		for _, slot in ipairs({ "T1", "PH", "PS", "HI" }) do
+			if type(raw.slots) == "table" and ownedText(raw.slots[slot]) then out.slots[slot] = raw.slots[slot] end
+		end
+		if type(raw.frames) == "table" then
+			for _, tx in ipairs(raw.frames) do
+				if not ownedText(tx) or #out.frames >= Ledger.LIMITS.frames then return nil end
+				out.frames[#out.frames + 1] = tx
+			end
+		end
+		if not next(out.slots) and #out.frames == 0 then
+			return nil
+		end
+		return out
+	end
+	if not ownedText(raw.block) then
 		return nil
 	end
 	return { block = raw.block, template = template, at = timestamp(raw.at) }
