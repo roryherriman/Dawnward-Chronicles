@@ -10,7 +10,14 @@
 --     empty value is stored as nil), with no length limit (letters="0");
 --   * FT, RA and CL also have public setters (Player.lua: SetFullTitle,
 --     SetCustomRace, SetCustomClass); AG and BP have none;
---   * the MSP bridge sends them as NT, RA, RC, AG and HB (RegisterMSP.lua);
+--   * v0.9 (TRP3 3.4.1 as installed, same files): FN, LN, TI, EC, HE, WE
+--     and RE are written by the same saveInDraft (stEtN(strtrim(...)));
+--     FN, LN and TI also have public setters (SetFirstName, SetLastName,
+--     SetTitle); RS is a number (tonumber of the dropdown value;
+--     AddOn_TotalRP3.Enums.RELATIONSHIP_STATUS: 0 unknown/"do not show",
+--     1 single, 2 taken, 3 married, 4 divorced, 5 widowed);
+--   * the MSP bridge sends them as NT, RA, RC, AG and HB (RegisterMSP.lua),
+--     and NA (from FN and LN), PX (TI), AE, AH, AW, HH and RS;
 --   * TRP3 sanitises them when a profile loads (sanitizeCharacteristics:
 --     Utils.str.sanitize strips colour, link, texture and line codes), so
 --     Dawnward only ever writes values that sanitising leaves unchanged.
@@ -39,7 +46,47 @@ FieldPlan.MAPPINGS = {
 		setter = "SetCustomClass", risk = "high" },
 	{ id = "age", source = "age", key = "AG", label = "Age", trp3 = "Age", msp = "AG" },
 	{ id = "homeland", source = "homeland", key = "BP", label = "Homeland", trp3 = "Birthplace", msp = "HB" },
+	-- v0.9
+	{ id = "firstName", source = "firstName", key = "FN", label = "First name", trp3 = "First name", msp = "NA",
+		setter = "SetFirstName", risk = "high", gameDefault = "name" },
+	{ id = "lastName", source = "lastName", key = "LN", label = "Last name", trp3 = "Last name", msp = "NA",
+		setter = "SetLastName", risk = "high" },
+	{ id = "honorific", source = "honorific", key = "TI", label = "Title prefix", trp3 = "Title", msp = "PX",
+		setter = "SetTitle" },
+	{ id = "eyes", source = "eyes", key = "EC", label = "Eye colour", trp3 = "Eye color", msp = "AE" },
+	{ id = "height", source = "height", key = "HE", label = "Height", trp3 = "Height", msp = "AH" },
+	{ id = "weight", source = "weight", key = "WE", label = "Build", trp3 = "Body shape", msp = "AW" },
+	{ id = "residence", source = "residence", key = "RE", label = "Residence", trp3 = "Residence", msp = "HH" },
+	{ id = "relationship", source = "relationship", key = "RS", label = "Relationship status",
+		trp3 = "Relationship status", msp = "RS", kind = "relationship" },
 }
+
+-- Relationship status words (Dawnward's text) and TRP3's numbers.
+FieldPlan.RELATIONSHIP = { single = 1, taken = 2, married = 3, divorced = 4, widowed = 5 }
+FieldPlan.RELATIONSHIP_UNKNOWN = 0
+
+-- Values Total RP 3 fills in by itself on a new profile (the character's
+-- own name, race and class from the game; RegisterCharacteristics.lua's
+-- default profile) are not the player's writing: Dawnward may replace them
+-- (after a backup), and restores nothing when it later clears its value.
+-- RS 0 means "do not show".
+FieldPlan.GAME_DEFAULT_KEYS = { FN = true, RA = true, CL = true }
+
+--- The game's own values for the replaceable defaults, read from env
+-- (UnitName, UnitRace, UnitClass). Read only; missing functions are skipped.
+function FieldPlan.GameDefaults(env)
+	local out = { RS = FieldPlan.RELATIONSHIP_UNKNOWN }
+	local function read(fn, ...)
+		local f = env and env[fn]
+		if type(f) ~= "function" then return nil end
+		local ok, value = pcall(f, ...)
+		return ok and type(value) == "string" and value ~= "" and value or nil
+	end
+	out.FN = read("UnitName", "player")
+	out.RA = read("UnitRace", "player")
+	out.CL = read("UnitClass", "player")
+	return out
+end
 FieldPlan.BY_ID = {}
 for _, m in ipairs(FieldPlan.MAPPINGS) do
 	FieldPlan.BY_ID[m.id] = m
@@ -49,20 +96,13 @@ end
 -- Total RP 3 page; the manual "trp3 paste" text still carries the public
 -- Dawnward values that have a source).
 FieldPlan.UNSUPPORTED = {
-	{ label = "First and last name", source = "name",
-		reason = "Dawnward keeps one name; splitting it into TRP3's first and last name would be a guess" },
-	{ label = "Short title (prefix)", reason = "Dawnward's Title maps to TRP3's full title; the prefix stays yours" },
-	{ label = "Pronouns", source = "pronouns",
-		reason = "stored in TRP3's additional-information list, not a field Dawnward can own safely" },
-	{ label = "Faith, occupation", source = "faith",
-		reason = "TRP3 has no field for them (only custom additional information)" },
-	{ label = "Appearance", source = "appearance",
-		reason = "TRP3 keeps it inside the About template (physical description); Dawnward never edits your text" },
-	{ label = "Summary, motivation", source = "summary",
-		reason = "long text; public facts, stances and defining moments go into the biography block instead" },
+	{ label = "Name (one field)", source = "name",
+		reason = "Dawnward's Name is kept as it is; TRP3's first and last name come from the First name and Last "
+			.. "name details instead, never from splitting it" },
 	{ label = "Currently, OOC, RP status", reason = "a live status you set in TRP3; Dawnward has no source for it" },
-	{ label = "Eye colour, height, weight, residence, relationship status",
-		reason = "Dawnward has no field for them" },
+	{ label = "Icon, class colour, eye colour colour, residence map pin", reason = "TRP3 choices with no Dawnward "
+		.. "source; they stay yours" },
+	{ label = "Walk-up, roleplay experience, music", reason = "TRP3 settings, not character details" },
 }
 
 --- A value TRP3's sanitiser and editor leave exactly as written: one line,
@@ -103,6 +143,38 @@ function FieldPlan.Check(value)
 	return value
 end
 
+--- Whether value is something Dawnward could have written for mapping m
+-- (a clean one-line string, or a relationship number 1-5).
+function FieldPlan.IsOwnedValue(m, value)
+	if m.kind == "relationship" then
+		return type(value) == "number" and value >= 1 and value <= 5 and value == math.floor(value)
+	end
+	return type(value) == "string" and FieldPlan.Clean(value) == value
+end
+
+--- A value as the player reads it ("married" for RS 3). nil stays nil.
+function FieldPlan.Display(m, value)
+	if m.kind == "relationship" and type(value) == "number" then
+		for word, n in pairs(FieldPlan.RELATIONSHIP) do
+			if n == value then return word end
+		end
+		return value == FieldPlan.RELATIONSHIP_UNKNOWN and nil or tostring(value)
+	end
+	return value
+end
+
+--- The TRP3 number for a relationship status word, or nil plus the reason.
+function FieldPlan.Relationship(value)
+	if type(value) ~= "string" then
+		return nil, "it is empty"
+	end
+	local n = FieldPlan.RELATIONSHIP[value:lower():match("^%s*(.-)%s*$")]
+	if not n then
+		return nil, "Total RP 3 only offers single, taken, married, divorced or widowed"
+	end
+	return n
+end
+
 --- Desired values from a public projection: { [id] = value } for fields
 -- whose Dawnward value is Public and writable as it is, plus
 -- { [id] = reason } for Public values that cannot be written unchanged.
@@ -113,7 +185,8 @@ function FieldPlan.Desired(public)
 	for _, m in ipairs(FieldPlan.MAPPINGS) do
 		local entry = fields[m.source]
 		if type(entry) == "table" and entry.visibility == "public" then
-			local value, why = FieldPlan.Check(entry.value)
+			local check = m.kind == "relationship" and FieldPlan.Relationship or FieldPlan.Check
+			local value, why = check(entry.value)
 			if value then
 				out[m.id] = value
 			else
@@ -133,12 +206,17 @@ end
 -- paused: { [id] = reason } fields already in conflict (left untouched).
 -- unwritable: { [id] = reason } Public values that cannot be written
 --   unchanged (left untouched: never written, never cleared).
+-- opts (v0.9): { defaults = { [key] = value } (FieldPlan.GameDefaults: a
+--   field still holding the game's own value counts as empty), adopt = true
+--   (the player chose "Replace it with Dawnward's" when connecting: a field
+--   holding the player's own value is written instead of paused) }.
 -- Returns { action = "write" | "noop", characteristics, record, rows,
 --   changes, conflicts = { [id] = reason } (new ones) }.
 -- rows[i] = { id, state, current, desired, reason }, state one of
 --   "write", "clear", "noop", "matches", "empty", "conflict", "unwritable".
-function FieldPlan.Plan(characteristics, record, desired, policies, paused, unwritable)
-	record, policies, paused, unwritable = record or {}, policies or {}, paused or {}, unwritable or {}
+function FieldPlan.Plan(characteristics, record, desired, policies, paused, unwritable, opts)
+	record, policies, paused, unwritable, opts = record or {}, policies or {}, paused or {}, unwritable or {}, opts or {}
+	local defaults = opts.defaults or {}
 	local newRecord, rows, changes, conflicts = {}, {}, {}, {}
 	for id, owned in pairs(record) do
 		newRecord[id] = { value = owned.value }
@@ -150,13 +228,23 @@ function FieldPlan.Plan(characteristics, record, desired, policies, paused, unwr
 			local owned = record[m.id] and record[m.id].value
 			local row = { id = m.id, current = current, desired = want }
 			rows[#rows + 1] = row
+			local valueType = m.kind == "relationship" and "number" or "string"
+			-- The game's own default (or "do not show") counts as empty.
+			local isDefault = owned == nil and current ~= nil and defaults[m.key] ~= nil and current == defaults[m.key]
 			if paused[m.id] then
 				row.state, row.reason = "conflict", paused[m.id]
 			elseif unwritable[m.id] then
 				-- Neither written nor cleared: Dawnward's earlier value (if any)
 				-- stays, and the player is told why.
 				row.state, row.reason = "unwritable", unwritable[m.id]
-			elseif current ~= nil and type(current) ~= "string" then
+			elseif isDefault and want ~= nil and want ~= current then
+				characteristics[m.key] = want
+				newRecord[m.id] = { value = want }
+				row.state = "write"
+				changes[#changes + 1] = "added " .. m.id
+			elseif isDefault then
+				row.state = want == nil and "empty" or "matches"
+			elseif current ~= nil and type(current) ~= valueType then
 				row.state, row.reason = "conflict", m.trp3 .. " has an unexpected value in Total RP 3"
 				conflicts[m.id] = row.reason
 			elseif current == "" then
@@ -192,6 +280,13 @@ function FieldPlan.Plan(characteristics, record, desired, policies, paused, unwr
 			elseif current == want then
 				-- Same text, but not written by Dawnward: never claimed.
 				row.state = "matches"
+			elseif opts.adopt then
+				-- The player chose to replace their Total RP 3 text when
+				-- connecting; the backup taken before this write keeps it.
+				characteristics[m.key] = want
+				newRecord[m.id] = { value = want }
+				row.state = "write"
+				changes[#changes + 1] = "replaced " .. m.id
 			else
 				row.state = "conflict"
 				row.reason = m.trp3 .. " already has your own value in Total RP 3"

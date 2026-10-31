@@ -96,7 +96,7 @@ return function(t, expect)
 			-- Nothing set up yet: the page opens on the first-connection Mappings tab (v0.8).
 			expect.equal(page.feature, "mappings")
 			expect.truthy(page.map:IsShown())
-			click(page.nav.buttons[1])
+			click(page.nav.buttons[2])
 			expect.falsy(page.map:IsShown())
 			expect.equal(page.columns[1]:GetText(), "Installed · 3.4.1 · supported")
 			expect.truthy(page.columns[2]:GetText():find("not linked", 1, true))
@@ -109,7 +109,7 @@ return function(t, expect)
 			expect.equal(page.columns[3]:GetText(), "On for Biography · off for Traits")
 			expect.equal(page.chip.label:GetText(), "Needs your approval")
 			expect.truthy(page.reasons:GetText():find("Proposed change: insert", 1, true))
-			click(page.nav.buttons[2])
+			click(page.nav.buttons[3])
 			expect.equal(page.title:GetText(), "Traits: sync is off")
 		end)
 
@@ -124,8 +124,8 @@ return function(t, expect)
 			local events = #fake.events
 			local page = open(ns)
 			ns.MainWindow.Refresh()
+			click(page.nav.buttons[3])
 			click(page.nav.buttons[2])
-			click(page.nav.buttons[1])
 			click(page.notNow)
 			expect.deepEqual(fake.snapshot(), before)
 			expect.equal(#fake.events, events)
@@ -139,7 +139,7 @@ return function(t, expect)
 			local mock, env, ns, fake = start()
 			publicFact(mock)
 			local page = open(ns)
-			click(page.nav.buttons[1])
+			click(page.nav.buttons[2])
 			expect.falsy(page.approve:IsEnabled())
 			click(page.approve) -- even if forced, nothing is written without the opt-in
 			expect.equal(fake.profile.player.about.T1.TX, "Private about text")
@@ -262,21 +262,27 @@ return function(t, expect)
 					page.hiddenText, page.unsupported, page.conflictText }) do
 					all[#all + 1] = fs:GetText() or ""
 				end
+				for _, row in ipairs(page.overviewRows) do
+					all[#all + 1] = (row.name:GetText() or "") .. " " .. (row.value:GetText() or "")
+				end
+				for _, fs in ipairs({}) do
+					all[#all + 1] = fs:GetText() or ""
+				end
 				return table.concat(all, "\n")
 			end
-			for _, feature in ipairs({ 1, 2 }) do
+			for _, feature in ipairs({ 1, 2, 3 }) do
 				click(page.nav.buttons[feature])
 				local shown = texts()
 				expect.falsy(shown:find("Duskwood", 1, true), "private fact leaked")
 				expect.falsy(shown:find("Alterac", 1, true), "secret fact leaked")
 				expect.falsy(shown:find("Sceptical", 1, true) or shown:find("Devout", 1, true), "private axis leaked")
 			end
-			click(page.nav.buttons[1])
+			click(page.nav.buttons[2])
 			expect.truthy(page.previewText:GetText():find("Born in Stormwind", 1, true))
 			expect.truthy(page.hiddenText:GetText():find("1 fact and 1 personality axis are Private", 1, true),
 				page.hiddenText:GetText())
 			expect.truthy(page.hiddenText:GetText():find("1 fact is Secret", 1, true))
-			click(page.nav.buttons[2])
+			click(page.nav.buttons[3])
 			expect.truthy(page.previewText:GetText():find(" 5 / 15 ", 1, true), page.previewText:GetText())
 		end)
 
@@ -411,8 +417,15 @@ return function(t, expect)
 			mock.timers = {}
 			local page = open(ns)
 			expect.equal(page.feature, "mappings")
-			expect.equal(#page.mapRows, 7)
-			expect.truthy(page.unsupportedNote:GetText():find("first and last name", 1, true))
+			expect.equal(#page.mapRows, #ns.TRP3Ledger.MAPPINGS, "every mapping has a row (v0.9: 19)")
+			expect.equal(#page.mapRows, 19)
+			expect.truthy(page.mapPages > 1, "paged: more than fit at once")
+			expect.truthy(page.mapRows[1]:IsShown())
+			expect.falsy(page.mapRows[#page.mapRows]:IsShown(), "later rows are on a later page")
+			click(page.mapNext)
+			expect.truthy(page.mapRows[#page.mapRows]:IsShown() or page.mapPages > 2)
+			click(page.mapPrev)
+			expect.truthy(page.unsupportedNote:GetText():find("Currently", 1, true), page.unsupportedNote:GetText())
 			expect.truthy(page.sharedWarn:GetText():find("this character only", 1, true))
 			expect.equal(row(page, "race").selector.selected, "trp3", "a field starts managed by Total RP 3")
 			expect.equal(row(page, "about").selector.selected, "off")
@@ -509,7 +522,7 @@ return function(t, expect)
 			mock.Slash("vis age private")
 			mock.timers = {}
 			local page = open(ns)
-			click(page.nav.buttons[3])
+			click(page.nav.buttons[4])
 			choose(row(page, "age"), "trp3")
 			expect.truthy(row(page, "age").detail:GetText():find("will be removed from TRP3 first", 1, true))
 			click(page.authorize)

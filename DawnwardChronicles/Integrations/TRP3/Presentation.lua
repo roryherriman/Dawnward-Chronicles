@@ -25,6 +25,8 @@ Presentation.STYLES = {
 		momentsHeading = "Defining moments:",
 		momentPrefix = "- ",
 		stancesHeading = "Where they stand:",
+		-- v0.9 full profile: plain headings, TRP3's first background.
+		background = 1,
 	},
 	silverhand = {
 		label = "Silver Hand (gold headings)",
@@ -32,15 +34,56 @@ Presentation.STYLES = {
 		momentsHeading = "{col:e6c35c}Defining moments{/col}",
 		momentPrefix = "- ",
 		stancesHeading = "{col:e6c35c}Where they stand{/col}",
+		color = "e6c35c",
+		background = 2,
 	},
 	arcane = {
-		label = "Arcane (violet headings, book icon)",
+		label = "Arcane (violet headings, section icons)",
 		heading = "{h3}{icon:INV_Misc_Book_09:18} {col:b89cff}Chronicle{/col}{/h3}",
 		momentsHeading = "{col:b89cff}Defining moments{/col}",
 		momentPrefix = "- ",
 		stancesHeading = "{col:b89cff}Where they stand{/col}",
+		color = "b89cff",
+		icons = true,
+		background = 1,
 	},
 }
+
+-- Section icons (v0.9 full profile): template 2 frame icons, and inline
+-- icons in the Arcane style. Each is one of Total RP 3 3.4.1's own
+-- interface icons, the entry it uses on older clients
+-- (Resources/InterfaceIcons.lua: DirectorySection, HistorySection,
+-- MiscInfoSection, PhysicalSection, TraitSection, TargetNotes, ProfileDefault).
+-- Whether each renders on Classic Era is to be checked in game (L3).
+Presentation.SECTION_ICONS = {
+	overview = "inv_misc_book_09",
+	appearance = "spell_nature_strength",
+	bio = "inv_misc_book_12",
+	family = "inv_misc_grouplooking",
+	beliefs = "inv_misc_note_06",
+	personality = "spell_arcane_mindmastery",
+	experiences = "inv_scroll_02",
+	notes = "inv_misc_note_06",
+}
+
+function Presentation.SectionIcon(id)
+	return Presentation.SECTION_ICONS[id] or Presentation.SECTION_ICONS.bio
+end
+
+--- A section heading line: {h2} (or {h3}) with the style's colour and, in
+-- the Arcane style, the section's icon. title is escaped (a player's own
+-- heading can never become markup).
+function Presentation.SectionHeading(style, title, level, id)
+	level = level == 3 and 3 or 2
+	local text = Presentation.Escape(title)
+	if style.color then
+		text = "{col:" .. style.color .. "}" .. text .. "{/col}"
+	end
+	if style.icons then
+		text = "{icon:" .. Presentation.SectionIcon(id) .. ":18} " .. text
+	end
+	return "{h" .. level .. "}" .. text .. "{/h" .. level .. "}"
+end
 
 function Presentation.Get(id)
 	return Presentation.STYLES[id] or Presentation.STYLES[Presentation.DEFAULT]

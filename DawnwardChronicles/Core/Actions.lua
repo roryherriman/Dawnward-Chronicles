@@ -454,6 +454,8 @@ local PREFS = {
 	threshold = function(v) local n = tonumber(v); return n and n >= 1 and n <= 3 and n == math.floor(n) and n or nil end,
 	approval = function(v) return ns.StorySchema.APPROVAL[v] and v or nil end,
 	trp3Style = function(v) return ns.StorySchema.TRP3_STYLES[v] and v or nil end,
+	trp3About = function(v) return ns.StorySchema.TRP3_ABOUT[v] and v or nil end,
+	trp3Layout = function(v) return ns.StorySchema.TRP3_LAYOUTS[v] and v or nil end,
 	places = function(v) return ns.StorySchema.PLACE_PROMPTS[v] and v or nil end,
 	pace = function(v) return ns.NarrativeClock.PACES[v] and v or nil end,
 	repeatDays = function(v)
@@ -651,6 +653,18 @@ function Actions.CompleteSetup(ctx, values, opts)
 		end
 	end
 	return ok, message
+end
+
+--- Who may see the biography (the story kept word for word). Public: it
+-- is part of share exports and, when Total RP 3 is connected, the About
+-- page. Returns ok, message.
+function Actions.SetBiographyVisibility(ctx, level)
+	return withCharacter(ctx, function(char)
+		local ok, err = ns.Sources.SetVisibility(char, level, ctx.now())
+		if not ok then return fail(err) end
+		return true, "Your story is now " .. (ns.Themes.VISIBILITY_LABELS[level] or level) .. "."
+			.. (level == "public" and " With Total RP 3 connected, it becomes your About page." or "")
+	end)
 end
 
 --- The one-time move of an established character to the profile

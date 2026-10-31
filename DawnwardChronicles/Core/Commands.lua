@@ -478,7 +478,7 @@ end
 
 handlers.set = function(ctx, rest)
 	local key, value = Util.NextWord(rest)
-	key = key:lower()
+	key = Schema.FieldKey(key:lower())
 	if key == "" or value == "" then
 		out(ctx, "Usage: /dawnward set <field> <text>   (see /dawnward fields)")
 		return
@@ -492,7 +492,7 @@ end
 
 handlers.vis = function(ctx, rest)
 	local key, level = Util.NextWord(rest)
-	key, level = key:lower(), Util.NextWord(level):lower()
+	key, level = Schema.FieldKey(key:lower()), Util.NextWord(level):lower()
 	local char = writable(ctx)
 	if not char then return end
 	local ok, err = Character.SetFieldVisibility(char, key, level, ctx.now())
@@ -501,7 +501,7 @@ end
 
 handlers.clear = function(ctx, rest)
 	local key, confirm = Util.NextWord(rest)
-	key = key:lower()
+	key = Schema.FieldKey(key:lower())
 	if Util.NextWord(confirm):lower() ~= "confirm" then
 		out(ctx, "This deletes the field. Type: /dawnward clear " .. key .. " confirm")
 		return

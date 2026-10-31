@@ -830,3 +830,23 @@ Build: **0.9.0-dev**. Everything below has passed mocked tests (L2) only. Turn o
 | W10 | A character on another realm with the same name | Gets its own first-login wizard; the first character's choice does not carry over |
 | W11 | Total RP 3 stage, default TRP3 profile active | "Cannot connect right now: … default profile …"; the choice is disabled; Finish completes setup without connecting |
 | W12 | Total RP 3 stage, spare profile active, Connect, Keep | Finish: chat confirms the authorisation; a few seconds later Dawnward writes (part X). Your own TRP3 text is untouched |
+
+#### Part X: the complete Total RP 3 profile (automated: `trp3_profile_fields_spec.lua`, `trp3_about_doc_spec.lua`, `trp3_connected_profile_spec.lua`)
+
+Use a **spare, non-default** Total RP 3 profile. Note the time of each step so it can be matched to `/dawnward trp3 log`.
+
+| # | Steps | Pass when |
+|---|---|---|
+| X1 | Import a long backstory with headings (`# The fall of Lordaeron` on its own line), via the setup Story stage or `/dawnward biography`. For the owner: use Kyssarra Dawnward's complete backstory | Saved word for word; `/dawnward biography status` says "public" on a character set up with v0.9 |
+| X2 | Settings > Total RP 3 > Overview > **Connect everything…**, confirm | Within a few seconds Total RP 3's About page shows your own text first, then Dawnward's sections; every paragraph of the story is there, in order, under your own headings |
+| X3 | Open Total RP 3's characteristics | First name, last name, title, race, class, age, birthplace, residence, eye colour, height, body shape, relationship status hold your Public values; Pronouns, Faith, Occupation, Allegiance appear under additional information; personality bars match your Public axes |
+| X4 | Edit one paragraph of the story in Dawnward (Load saved story, change, Save) | Total RP 3 updates the paragraph in place; nothing appears twice |
+| X5 | Overview > Template: **Frames**, then **Sections**, then **Keep** | Frames: one frame per section with icons; Sections: appearance under physical description, history holds the story; your own text in the old template untouched |
+| X6 | Overview > Style: **Arcane** | Violet headings with section icons; icons render (no green squares) |
+| X7 | In Total RP 3, edit a sentence inside Dawnward's section and Save | Overview shows a conflict; Dawnward never overwrites it until you choose |
+| X8 | Make Faith Private in Dawnward | It disappears from Total RP 3's additional information within seconds |
+| X9 | Overview > **Preview profile** | A copy window lists the About page, fields and traits; nothing is written (`trp3 log` unchanged) |
+| X10 | Roll back the newest backup (Roll back…) | Your own text returns; Dawnward's part is rebuilt from what is Public now |
+| X11 | `/reload`, then wait | Nothing is written again (no duplicate, `trp3 log` shows no new write) |
+| X12 | Second client (or a friend) targets you after X2 | They see the About page and fields after Total RP 3's normal refresh (at most every 10 s per target) |
+| X13 | Character created before v0.9: Overview > **Use the profile model…** | The confirmation counts Private, Secret and Public items per category; Secret stays Secret |

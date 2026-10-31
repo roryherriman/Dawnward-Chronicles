@@ -60,11 +60,30 @@ Schema.FIELDS = {
 	{ key = "appearance", kind = "long", label = "Appearance" },
 	{ key = "summary", kind = "long", label = "Summary" },
 	{ key = "motivation", kind = "long", label = "Motivation" },
+	-- v0.9: details with a matching Total RP 3 field (docs/TRP3_INTEGRATION.md,
+	-- "Field mappings"). Additive: an older build drops them on load.
+	{ key = "firstName", kind = "short", label = "First name" },
+	{ key = "lastName", kind = "short", label = "Last name" },
+	{ key = "honorific", kind = "short", label = "Title prefix" },
+	{ key = "eyes", kind = "short", label = "Eye colour" },
+	{ key = "height", kind = "short", label = "Height" },
+	{ key = "weight", kind = "short", label = "Build" },
+	{ key = "residence", kind = "short", label = "Residence" },
+	{ key = "relationship", kind = "short", label = "Relationship status" },
+	{ key = "allegiance", kind = "short", label = "Allegiance" },
 }
 
 Schema.FIELD_BY_KEY = {}
+local FIELD_BY_LOWER = {}
 for _, field in ipairs(Schema.FIELDS) do
 	Schema.FIELD_BY_KEY[field.key] = field
+	FIELD_BY_LOWER[field.key:lower()] = field.key
+end
+
+--- The field key for a word typed in any case ("firstname" -> "firstName"),
+-- or the word itself when it names no field.
+function Schema.FieldKey(word)
+	return FIELD_BY_LOWER[tostring(word):lower()] or word
 end
 
 Schema.FAMILY_STATUS = { living = true, deceased = true, missing = true, unknown = true }

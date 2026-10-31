@@ -30,6 +30,20 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 - **The biography has its own visibility** (Public under the profile model). Only while it is Public does its text reach share exports and Total RP 3.
 - **Developer status** (`/dawnward dev setup status`) also reports the publication model and whether setup has opened by itself; `dev setup reset confirm` forgets that too.
 
+### The complete Total RP 3 profile
+- **Your whole story becomes your About page.** With Total RP 3 connected, the biography you imported or wrote is published **word for word**, every paragraph, in order, split only at your own headings (a line `# Heading`). Around it, from your Public information only: Character overview, Appearance, Family, Beliefs and motivations, Personality, Defining experiences and Chronicle notes. It updates by itself when the story changes.
+- **All three About templates:**
+  - **Template 1:** one page.
+  - **Template 2:** one frame per section, with Total RP 3's own section icons and a background. If you restyle a frame in Total RP 3, Dawnward keeps your icon and background.
+  - **Template 3:** your appearance becomes the physical description, beliefs and personality the personality text, the rest the history.
+- **Choose how it looks** (Settings > Total RP 3 > Overview): the About page (whole profile or short summary), the template (keep yours, or text, frames, sections) and the style (Neutral, Silver Hand, Arcane).
+- **Never over your own text:** Dawnward's part sits after your own text and frames and is never written twice. If you edit Dawnward's part in Total RP 3, sync pauses for it until you choose. "Replace it with Dawnward's" (offered when connecting) takes over once, after a backup.
+- **More profile fields:** first and last name, title prefix, eye colour, height, build, residence and relationship status, plus pronouns, faith, occupation and allegiance as Total RP 3 additional information. The name, race and class Total RP 3 fills in from the game are replaced; anything you wrote yourself in Total RP 3 is kept until you choose.
+- **One connection:** Overview > **Connect everything…** (or the setup wizard's Total RP 3 stage) authorises every mapping at once; after that, changes reach Total RP 3 by themselves (debounced, backed up, read back, rolled back on any mismatch).
+- **Overview tab:** the active profile, the connected character, what is kept up to date, the last update, the state of each part, conflicts, **Preview profile** (`/dawnward trp3 profile`) and the one-time switch to the profile model for older characters.
+- **The story's own visibility:** a chip in the story import window, or `/dawnward biography public|private|secret`.
+- **Safety:** the sync ledger is now version 2 (an older Dawnward pauses sync instead of misreading it). Field names can be typed in any case (`/dawnward set firstname …`).
+
 ## 0.8.0-dev (pre-playthrough candidate)
 
 **Verified: L2** (mocked). Nothing in this section has been tested in game yet.

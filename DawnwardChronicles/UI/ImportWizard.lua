@@ -150,7 +150,30 @@ local function buildText()
 	wizard.area.frame:SetSize(BODY, L.area)
 	wizard.edit = wizard.area.edit
 	wizard.edit:SetScript("OnTextChanged", function() ImportWizard.UpdateCount() end)
-	wizard.count = label(p, "meta", false, "muted", 0, -L.area - 6, BODY)
+	wizard.count = label(p, "meta", false, "muted", 0, -L.area - 6, BODY - 180)
+	-- v0.9: who may see the saved story as a whole (Public: share exports
+	-- and, when connected, the Total RP 3 About page). Making it Public asks.
+	wizard.bioVis = Widgets.VisibilityButton(p, function(level)
+		local function apply()
+			local _, message = ns.Actions.SetBiographyVisibility(ns.ctx, level)
+			MainWindow.SetStatus(message)
+			ImportWizard.Refresh()
+		end
+		if level == "public" then
+			Widgets.Confirm("Make your whole saved story Public?\n\nIt becomes part of share exports and, if Total "
+				.. "RP 3 is connected, your About page there, exactly as written.", "Make Public", apply)
+		else
+			apply()
+		end
+	end)
+	wizard.bioVis:SetPoint("TOPRIGHT", p, "TOPLEFT", BODY, -L.area - 4)
+	wizard.bioVisLabel = label(p, "meta", false, "muted", 0, 0, 90)
+	wizard.bioVisLabel:ClearAllPoints()
+	wizard.bioVisLabel:SetPoint("RIGHT", wizard.bioVis, "LEFT", -6, 0)
+	wizard.bioVisLabel:SetJustifyH("RIGHT")
+	wizard.bioVisLabel:SetText("Saved story:")
+	Widgets.Tooltip(wizard.bioVis, "Who sees your saved story", "Public: share exports and, when Total RP 3 is "
+		.. "connected, your About page. Private or Secret: only you. Click to change.")
 
 	local y = -L.area - 34
 	wizard.readTRP3 = Widgets.Button(p, "Read from Total RP 3", 180, L.control)
@@ -368,7 +391,11 @@ function ImportWizard.Refresh()
 	local counts = ns.StoryImport.Counts(char)
 	if onText then
 		wizard.mode:Select(wizard.modeValue)
-		wizard.loadSaved:SetEnabled(char ~= nil and ns.Sources.Current(char) ~= nil)
+		local saved = char ~= nil and ns.Sources.Current(char) ~= nil
+		wizard.loadSaved:SetEnabled(saved)
+		wizard.bioVis:SetShown(saved)
+		wizard.bioVisLabel:SetShown(saved)
+		if saved then wizard.bioVis:SetLevel(ns.Sources.Visibility(char)) end
 		ImportWizard.UpdateCount()
 		wizard.primary:SetText("Save and review")
 		wizard.secondary:SetText(counts.waiting > 0 and ("Review waiting (" .. counts.waiting .. ")") or "Close")

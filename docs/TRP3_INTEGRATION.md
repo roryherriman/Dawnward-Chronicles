@@ -1,9 +1,9 @@
 # Total RP 3 integration
 
-**Status (v0.8-dev):** read-only status (tested in game, v0.1/v0.2), plus **experimental automatic sync** of a Dawnward-owned biography section, Dawnward-owned personality traits and, new in v0.8, five profile fields (title, race, class, age, homeland), each under a per-field ownership policy.
+**Status (v0.9-dev):** read-only status (tested in game, v0.1/v0.2), plus **experimental automatic sync** of the character's whole public profile: the About page (the whole biography and every Public section, in templates 1, 2 and 3), Dawnward-owned personality traits, thirteen profile fields and four additional-information entries, each under a per-item ownership policy. Connecting is **one authorisation** (the setup wizard's Total RP 3 stage, or Overview > Connect everything); after that, changes in Dawnward reach Total RP 3 automatically.
 
 The sync is **built and tested against mocks only (L2)**:
-- It is **off by default**. Each character has to authorise each mapping: on the Total RP 3 page (Mappings, then **Authorize…**), or with `/dawnward trp3 enable about|traits confirm` and `/dawnward trp3 field <name> dawnward confirm`.
+- It is **off by default**. A character connects once (setup's Total RP 3 stage, or Settings > Total RP 3 > Overview > **Connect everything…**), or authorises single mappings on the Mappings tab, or with `/dawnward trp3 enable about|traits confirm` and `/dawnward trp3 field <name> dawnward confirm`.
 - It is **allowlisted for TRP3 3.4.1 only**.
 - **Nothing in this document about sync has been validated in game yet.** The checklist is in [TESTING.md](TESTING.md#v03-in-game-checklist-l3).
 
@@ -103,7 +103,9 @@ All of them are under `Integrations/TRP3/`:
 | `Shape.lua` | Fail-closed layout checks for About and characteristics (unknown extra fields are preserved), and the version rule |
 | `AboutBlock.lua` | Composes the Dawnward section from public facts, and plans insert, replace, remove, no-op or conflict (pure) |
 | `TraitPlan.lua` | Maps public Dawnward personality axes to owned custom traits, and plans changes (pure) |
-| `FieldPlan.lua` | Profile field mappings (Title, Race, Class, Age, Homeland), the value cleaner and the per-field plan (pure) |
+| `FieldPlan.lua` | Profile field mappings (13 fields, below), the value cleaner, the game's own defaults and the per-field plan (pure) |
+| `MiscPlan.lua` | v0.9: Dawnward-owned entries in TRP3's additional-information list (pronouns, faith, occupation, allegiance) (pure) |
+| `AboutDoc.lua` | v0.9: the full-profile About document (the whole biography and Public sections), rendered for templates 1, 2 and 3, and its plan (pure) |
 | `Ledger.lua` | `DawnwardChroniclesTRP3DB`: ownership policies per character and profile, ownership records, conflicts, backups and log |
 | `Sync.lua` | The transaction, plus rollback, release and resolve |
 | `Commands.lua` | `/dawnward trp3 …` |
@@ -215,27 +217,44 @@ Facts that apply to every characteristics field below **S**:
 - The characteristics editor works on a draft (as for About); its Save copies the draft over the whole section. The existing editor guard covers them.
 - On the default profile, TRP3 wipes everything except `v`, `RA`, `CL`, `FN`, `IC`; Dawnward never writes the default profile anyway.
 
-| Candidate | Dawnward source | TRP3 destination | Public setter (3.4.1) | MSP | Origin of the value | Decision |
-|---|---|---|---|---|---|---|
-| Full title | `title` field | `characteristics.FT` | `SetFullTitle` (read: `GetFullTitle`) | `NT` | Player-authored | **Supported** (default: Managed by Total RP 3; high risk) |
-| Race | `race` field | `characteristics.RA` | `SetCustomRace` (`GetCustomRace`) | `RA` | Player-authored | **Supported** (default: TRP3; high risk) |
-| Class | `class` field | `characteristics.CL` | `SetCustomClass` (`GetCustomClass`) | `RC` (with class colour `CH`, untouched) | Player-authored | **Supported** (default: TRP3; high risk) |
-| Age | `age` field | `characteristics.AG` | none | `AG` | Player-authored | **Supported** (default: TRP3), editor path |
-| Birthplace | `homeland` field | `characteristics.BP` | none | `HB` | Player-authored (a homeland is only ever the player's choice, `Places.SetHomeland`) | **Supported** (default: TRP3), editor path |
-| Biography (About) | Public facts, stances, defining moments | Dawnward block in `about` (T1/T3 text, T2 frame) | none | `DE` (and `HI` for T3) | Player-authored or player-approved | Supported since v0.3 (ownership policy `about`) |
-| Background / history, motivations / beliefs, relationships / affiliations | Public facts by category (origin, motivation, belief, relationship, …) | Inside the biography block | none | `DE` | Player-authored / approved | Supported through the biography block only |
-| Defining moments | Public, approved, important journal entries | Inside the biography block | none | `DE` | Player-approved | Supported through the biography block only |
-| Personality traits | Public personality axes | Dawnward-owned custom traits in `characteristics.PS` | none | traits | Player-set values | Supported since v0.3 (policy `traits`) |
-| First / last name | `name` (one field) | `FN`, `LN` | `SetFirstName`, `SetLastName` | `NA` | Player-authored | **Unsupported**: splitting one name into first and last name would be a guess. Manual (`trp3 paste`). |
-| Short title (prefix) | none (Dawnward's Title maps to the full title) | `TI` | `SetTitle` | `PX` | — | **Unsupported**: no separate Dawnward source. |
-| RP status (IC / OOC) | none | `character.RP` | `SetRoleplayStatus` | `FC` | Live player status | **Unsupported**: no Dawnward source; a live status the player sets in TRP3. |
-| Currently, OOC info | none | `character.CU`, `character.CO` | `SetCurrentlyText`, `SetOutOfCharacterInfo` | `CU`, `CO` | Live player status | **Unsupported**: no public Dawnward source (story data is never published). |
-| Pronouns | `pronouns` field | an entry of `characteristics.MI` (type 7) | none | `PN` | Player-authored | **Unsupported**: a list entry identified by type or by name, with its own icon; not a field Dawnward can own safely. Manual. |
-| Faith, occupation | `faith`, `occupation` | custom `MI` entries only | none | — | Player-authored | **Unsupported**: no TRP3 field. Manual. |
-| Appearance | `appearance` (long) | `about.T3.PH` (template 3 only) | none | `DE` | Player-authored | **Unsupported**: player text inside the About template; Dawnward never edits the player's text. Manual. |
-| Summary, motivation (fields) | long fields | none | — | — | Player-authored | **Unsupported**: public facts, stances and moments go into the biography block instead. |
-| Eye colour, height, weight, residence, relationship status | none | `EC`, `HE`, `WE`, `RE` (+`RC` map pin), `RS` | none | `AE`, `AH`, `AW`, `HH`, `RS` | — | **Unsupported**: no Dawnward field. |
-| Icon, class colour, walk-up, RP experience | none | `IC`, `CH`, `WU`, config | setters exist | — | — | Out of scope. |
+### Complete mapping matrix (v0.9)
+
+Verified against Total RP 3 **3.4.1** as installed (the same files as tag `3.4.1`): `Core/Player.lua`, `Core/ProfileUtil.lua`, `Core/Enums.lua`, `Core/Utils.lua` (`toHTML`, `convertTextTags`), `Core/UITools.lua` (backgrounds), `Resources/InterfaceIcons.lua`, `Modules/Register/Characters/RegisterCharacteristics.lua`, `RegisterAbout.lua`, `RegisterMain.lua` and `Modules/Register/MSP/RegisterMSP.lua`. Every write uses the editor path (replace the section's contents, bump `v`, fire `REGISTER_DATA_UPDATED`) inside a backed-up, read-back transaction; "public setter" only notes what TRP3 also offers.
+
+| Area | Dawnward source | TRP3 destination | Public setter | Format and limits | Status |
+|---|---|---|---|---|---|
+| First name | `firstName` | `characteristics.FN` | `SetFirstName` | one clean line ≤ 100 bytes | **Synced.** The game's own name (TRP3's default) counts as empty and is replaced |
+| Last name | `lastName` | `LN` | `SetLastName` | as above | **Synced** |
+| Full name | (derived) | TRP3 shows `TI FN LN` | — | — | Follows from the three above |
+| Title prefix | `honorific` | `TI` | `SetTitle` | as above | **Synced** |
+| Full title | `title` | `FT` | `SetFullTitle` | as above | **Synced** |
+| Race | `race` | `RA` | `SetCustomRace` | as above | **Synced.** The game's race counts as empty |
+| Class | `class` | `CL` | `SetCustomClass` | as above; the class colour `CH` is untouched | **Synced.** The game's class counts as empty |
+| Age | `age` | `AG` | none | as above | **Synced** |
+| Birthplace | `homeland` | `BP` | none | as above | **Synced** |
+| Residence | `residence` | `RE` (the map pin `RC` is untouched) | none | as above | **Synced** |
+| Eye colour | `eyes` | `EC` (its colour `EH` untouched) | none | as above | **Synced** |
+| Height | `height` | `HE` | none | as above | **Synced** |
+| Body shape | `weight` ("Build") | `WE` | none | as above | **Synced** |
+| Relationship status | `relationship` | `RS` (number) | none | single 1, taken 2, married 3, divorced 4, widowed 5; anything else is "not writable" and shown with the reason. RS 0 ("do not show") counts as empty | **Synced** |
+| Pronouns | `pronouns` | an `MI` entry, preset type 7 | none | `{ ID = 7, NA = <TRP3's own localised name>, VA }`; MSP `PN` | **Synced** (additional information) |
+| Faith, occupation, allegiance | `faith`, `occupation`, `allegiance` | custom `MI` entries named Faith, Occupation, Allegiance | none | `{ ID = 1, NA, VA }` | **Synced** (additional information); icons are never written or compared, so the player can restyle them |
+| Physical description | `appearance` (Public) | template 3 `PH`; templates 1 and 2: an Appearance section | none | text | **Synced** in the About page |
+| Full biography | the current biography source (when the biography is Public) | the About page: T1 text, T2 frames, T3 history | none | word for word, split only at the player's own headings; ≤ 16 KB stored, ≤ 30 000 bytes per written slot | **Synced** |
+| Character overview | `summary` | About page section | none | text | **Synced** |
+| Family | Public family members | About page section "Family" | none | one line each | **Synced** |
+| Beliefs, motivations, fears | `motivation`, Public belief / motivation / fear facts | About "Beliefs and motivations" (T3: personality) | none | | **Synced** |
+| Personality (described) | Public stances, Public trait facts | About "Personality" (T3: personality) | none | | **Synced** |
+| Personality values | Public personality axes | Dawnward-owned custom traits in `PS` | none | `V2` = 20 − value (points toward the left trait) | **Synced** (traits) |
+| Defining experiences | approved Public defining moments, Public history entries | About "Defining experiences" | none | | **Synced** |
+| Other public facts | origin, relationship, event, place, other | About "Chronicle notes" | none | | **Synced** |
+| Memories, arcs, goals, places, people, journal | story records | — | — | — | **Never published** (private by design; see PRIVACY.md) |
+| Custom axis words | `axisMeanings` | — | — | — | **Not published**: private; traits keep Dawnward's own labels so ownership stays provable |
+| Relationships with other players | `story.people` | TRP3 relations (`register.relations`) | none | describe *other* players' profiles | **Unsupported**: TRP3 relations are about other characters' profiles, not the player's own |
+| Currently, OOC info | none | `character.CU`, `character.CO` | `SetCurrentlyText`, `SetOutOfCharacterInfo` | | **Unsupported**: a live status the player sets in TRP3; Dawnward has no source |
+| RP status | none | `character.RP` | `SetRoleplayStatus` | | **Unsupported** (live status) |
+| Icon, class and eye colours, walk-up, RP experience, music | none | `IC`, `CH`, `EH`, `WU`, `MU`, config | some | | **Out of scope**: TRP3 customisation the player keeps |
+| Name (one field) | `name` | — | — | | Kept in Dawnward; never split into first and last name (that would be a guess) |
 
 Why the editor path rather than the public setters for Title, Race and Class: Age and Birthplace have no setter, and the five fields are written as **one** backed-up, read-back-verified transaction on the characteristics section, exactly as TRP3's own `saveCharacteristics` does (replace contents, bump `v`, fire `REGISTER_DATA_UPDATED`). The effect for TRP3, MSP and other clients is the same as the setters' `UpdateProfileField`. The setter names are recorded in `FieldPlan.MAPPINGS` (`setter`) for a later switch.
 
@@ -326,6 +345,36 @@ Nothing below is verified. Use two accounts (A writes, B observes), both on Clas
 - Does a second client (and an MSP client) receive the update after mouse-over?
 - Do profile field writes (`FT`, `RA`, `CL`, `AG`, `BP`) reach other TRP3 and MSP clients exactly like the public setters do (multiplayer procedure, steps 2, 5 and 9)?
 - Does the page-context edit-mode check match what TRP3 does in every path (cancel, tab switch, closing the window mid-edit, `/reload` while editing)? Check with `/dawnward trp3 diagnose`.
+
+## The About page (v0.9)
+
+`Integrations/TRP3/AboutDoc.lua` builds the document, `Presentation.lua` styles it, and the plan follows the same ownership rules as before.
+
+**Settings (Settings > Total RP 3 > Overview, or `/dawnward story set …`):**
+- **About page** (`trp3About`): **Auto** (the full profile for characters on the profile model, the v0.3 summary block for others), **Profile**, or **Summary**.
+- **Template** (`trp3Layout`): **Keep** your Total RP 3 template, or **Text** (1), **Frames** (2), **Sections** (3). Choosing one in Dawnward moves only Dawnward's content (the player's text in the old template is untouched) and switches TRP3's template; switching the template in TRP3 instead is a conflict, never overwritten.
+- **Style** (`trp3Style`): Neutral (plain headings), Silver Hand (gold headings, background 2), Arcane (violet headings with section icons).
+
+**Sections**, in order, each only when it has Public content: Character overview, Appearance, the biography (one section per heading of the player's own, the text before the first heading titled "Background"), Family, Beliefs and motivations, Personality, Defining experiences, Chronicle notes. Section titles are generic container names or the player's own headings; nothing is invented.
+
+**Templates:**
+| Template | Where Dawnward writes |
+|---|---|
+| 1 | One text after the player's own `T1.TX` (each section a `{h2}` heading and its text) |
+| 2 | One frame per section after the player's frames: `{ TX, IC = the section icon, BK = the style's background }`. A frame the player restyles keeps their icon and background; only its text is updated |
+| 3 | `PH`: the appearance (TRP3 titles it); `PS`: beliefs and personality; `HI`: overview, biography, family, experiences, notes; each after the player's own text in that part |
+
+**Ownership modes:**
+- **Append** (default): the player's own text and frames are never changed.
+- **Adopt**: the player chose "Replace it with Dawnward's" when connecting. The first write takes over each slot it uses after a backup (the player's previous text stays in that backup); afterwards an edit in TRP3 is a conflict.
+
+**Never duplicated:** content is found by exact match; missing, duplicated or edited content is a conflict. Text identical to Dawnward's that Dawnward has no record of writing (for example after a lost ledger) is also a conflict, so the About page is never written twice.
+
+**Never shortened:** a slot over 30 000 bytes is refused with the reason. The biography itself is stored up to 16 KB and is never cut. TRP3 has no hard size limit, only a "profile too heavy" warning when the profile would need more than 20 messages to send (`RegisterExchange.lua`); a long biography may trigger it.
+
+**Icons** are Total RP 3 3.4.1's own interface icons, the entry it uses on older clients (`DirectorySection`, `HistorySection`, `MiscInfoSection`, `PhysicalSection`, `TraitSection`, `TargetNotes`, `ProfileDefault`). **Backgrounds** are indices 1 and 2 of TRP3's tiled background list. Whether each icon and background renders on Classic Era is to be checked in game (L3).
+
+**Preview:** Overview > **Preview profile** (or `/dawnward trp3 profile`) shows everything that would be published, read only.
 
 ## Presentation and supported markup (v0.4)
 
