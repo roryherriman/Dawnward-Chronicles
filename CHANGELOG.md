@@ -42,6 +42,7 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 - **One connection:** Overview > **Connect everything…** (or the setup wizard's Total RP 3 stage) authorises every mapping at once; after that, changes reach Total RP 3 by themselves (debounced, backed up, read back, rolled back on any mismatch).
 - **Overview tab:** the active profile, the connected character, what is kept up to date, the last update, the state of each part, conflicts, **Preview profile** (`/dawnward trp3 profile`) and the one-time switch to the profile model for older characters.
 - **The story's own visibility:** a chip in the story import window, or `/dawnward biography public|private|secret`.
+- **Visual fidelity (setup and scrolling):** each setup stage now has a question as its heading, in Cinzel 26 ("Who is your character?"), and 40 px inputs, as in the approved rendering. The Journal's slim scroll bar is now shared and used by the Character profile, its public preview and the Chronicle's full view. Remaining differences: [`docs/design/UI_DESIGN_V09.md`](docs/design/UI_DESIGN_V09.md).
 - **Safety:** the sync ledger is now version 2 (an older Dawnward pauses sync instead of misreading it). Field names can be typed in any case (`/dawnward set firstname …`).
 
 ## 0.8.0-dev (pre-playthrough candidate)

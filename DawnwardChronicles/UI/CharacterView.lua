@@ -336,6 +336,8 @@ local function create(parent)
 	child:SetSize(cols.child, 100)
 	scroll:SetScrollChild(child)
 	section.scroll, section.child = scroll, child
+	-- The design's slim bar in the gutter (v0.9; the stock bar until then).
+	section.scrollBar = Widgets.SlimScrollBar(scroll, L.scrollBar - Widgets.SLIM_BAR.width - 4)
 
 	-- Field groups: unboxed, so their tiles sit on the window ground as in the
 	-- mockup; a group names itself with an eyebrow (more fields than the
@@ -412,6 +414,7 @@ local function create(parent)
 	local previewChild = CreateFrame("Frame", nil, preview)
 	previewChild:SetSize(cols.child, 100)
 	preview:SetScrollChild(previewChild)
+	section.previewBar = Widgets.SlimScrollBar(preview, L.scrollBar - Widgets.SLIM_BAR.width - 4)
 	section.previewScroll = preview
 	section.previewPanel = Widgets.Panel(previewChild, "Public profile preview")
 	section.previewPanel:SetPoint("TOPLEFT", 0, 0)

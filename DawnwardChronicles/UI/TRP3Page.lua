@@ -1075,8 +1075,9 @@ function TRP3Page.BuildOverview(page, P, innerW)
 	page.previewProfile:SetScript("OnClick", function() Commands.Execute(ns.ctx, "trp3 profile") end)
 	Widgets.Tooltip(page.previewProfile, "Preview profile", "Everything Dawnward would publish, in a window you can "
 		.. "copy from. Nothing is written. Same as /dawnward trp3 profile.")
+	-- Only for older characters, at the right of the title line.
 	page.switchModel = Widgets.Button(o, "Use the profile model…", 190, Style.CONTROL.compact, "ghost")
-	page.switchModel:SetPoint("BOTTOMRIGHT", -P, 14)
+	page.switchModel:SetPoint("TOPRIGHT", -P, -54)
 	page.switchModel:SetScript("OnClick", function() TRP3Page.AskSwitchModel() end)
 	Widgets.Tooltip(page.switchModel, "Use the profile model", "Characters set up since v0.9 start their profile "
 		.. "details Public. This one-time switch shows what would change first; Secret items never change. "

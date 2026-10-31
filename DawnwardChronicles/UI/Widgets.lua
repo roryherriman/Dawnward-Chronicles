@@ -289,6 +289,69 @@ end
 Widgets.ENTRY = { pad = 8, gap = 6 }
 
 --- An entry panel (a "card"). Paints itself; :SetRowHover(on), :SetPlain(on).
+--- The design's slim scroll bar (v0.8 Journal, shared since v0.9): restyles
+-- a UIPanelScrollFrameTemplate's bar into a width-px track offset px right
+-- of the scroll frame, with a proportional thumb and no arrow buttons (the
+-- mouse wheel and dragging the thumb scroll). It follows the scroll range by
+-- itself. Returns the bar, or nil where the template has none (nothing
+-- changes then: the stock bar stays usable).
+Widgets.SLIM_BAR = { width = 6, thumbMin = 30 }
+
+--- Thumb height for a view of viewH showing total. Pure.
+function Widgets.SlimThumbHeight(viewH, total)
+	if not total or not viewH or total <= viewH or viewH <= 0 then
+		return viewH or 0
+	end
+	return math.max(Widgets.SLIM_BAR.thumbMin, math.floor(viewH * viewH / total))
+end
+
+function Widgets.SlimScrollBar(scroll, offset, width)
+	width = width or Widgets.SLIM_BAR.width
+	local bar = type(scroll) == "table" and scroll.ScrollBar or nil -- parentKey in the 1.15.9 template
+	if type(bar) ~= "table" or not bar.ClearAllPoints then
+		return nil
+	end
+	bar:ClearAllPoints()
+	bar:SetPoint("TOPLEFT", scroll, "TOPRIGHT", offset or 0, 0)
+	bar:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", offset or 0, 0)
+	bar:SetWidth(width)
+	for _, key in ipairs({ "ScrollUpButton", "ScrollDownButton" }) do
+		local arrow = type(bar[key]) == "table" and bar[key] or nil
+		if arrow then
+			arrow:SetAlpha(0)
+			if arrow.EnableMouse then arrow:EnableMouse(false) end
+			arrow:SetSize(1, 1)
+		end
+	end
+	bar.track = Style.Solid(bar, "BACKGROUND")
+	bar.track:SetAllPoints(bar)
+	local thumb = type(bar.ThumbTexture) == "table" and bar.ThumbTexture or nil
+	bar.thumb = thumb
+	if thumb then
+		thumb:SetTexture(nil)
+		thumb:SetTexCoord(0, 1, 0, 1)
+		thumb:SetSize(width, 90)
+	end
+	Style.Register(bar, function(b, theme)
+		local tones = Style.Tones(theme)
+		Style.Color(b.track, Style.Mix(theme.background, theme.panel, 0.6))
+		if b.thumb then Style.Color(b.thumb, tones.edgeStrong) end
+	end)
+	-- Follow the scroll range: a proportional thumb, hidden when nothing scrolls.
+	local function update()
+		local ok, range = pcall(scroll.GetVerticalScrollRange, scroll)
+		local viewH = scroll.GetHeight and scroll:GetHeight() or 0
+		range = ok and type(range) == "number" and range or 0
+		if bar.thumb then bar.thumb:SetSize(width, math.max(1, Widgets.SlimThumbHeight(viewH, viewH + range))) end
+		bar:SetShown(range > 0)
+	end
+	if scroll.HookScript then
+		scroll:HookScript("OnScrollRangeChanged", update)
+	end
+	bar.UpdateThumb = update
+	return bar
+end
+
 function Widgets.Card(parent)
 	local card = CreateFrame("Frame", nil, parent)
 	card.bg = Style.Solid(card, "BACKGROUND", -2)

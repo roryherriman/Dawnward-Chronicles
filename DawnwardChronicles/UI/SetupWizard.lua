@@ -44,7 +44,7 @@ SetupWizard.STRATA = "HIGH" -- above the journal (MEDIUM), below game dialogs
 -- rail: step rail width; pad: content padding; bodyTop: where a stage's
 -- panels start; footer: the button strip; button: footer button height.
 SetupWizard.LAYOUT = { width = 820, height = 600, rail = 236, pad = 30, top = 26, bodyTop = 118, footer = 70,
-	button = 36, step = 44, stepGap = 4, stepsTop = 92, field = 36, badge = 26, fieldRow = 80, portrait = 48,
+	button = 36, step = 44, stepGap = 4, stepsTop = 92, field = 40, badge = 26, fieldRow = 84, portrait = 48,
 	area = 80, cycle = 30, cycleRow = 40, tile = 40 }
 
 local L = SetupWizard.LAYOUT
@@ -69,6 +69,18 @@ SetupWizard.SUBTITLES = {
 	appearance = "Choose how this character's journal looks.",
 	trp3 = "Connect once; Dawnward keeps your Total RP 3 profile up to date.",
 	finish = "Review your choices. Finish saves them for this character.",
+}
+
+-- Each stage's heading, a question as in the mockup ("Who is your
+-- character?", SetupWizard.dc.html); the rail keeps the short stage names.
+-- No pronouns: the player's character may be anyone.
+SetupWizard.HEADLINES = {
+	welcome = "Welcome to your chronicle",
+	character = "Who is your character?",
+	story = "What is their story?",
+	appearance = "How should it look?",
+	trp3 = "Connect Total RP 3?",
+	finish = "Ready to begin?",
 }
 
 -- What connecting does (the Total RP 3 stage).
@@ -247,7 +259,7 @@ local function buildCharacter()
 	wizard.chain.SetFields(wizard.inputs)
 	-- The profile note (v0.9): what these details are for. No privacy
 	-- classification here; a detail can be made Private later.
-	local note = panel(p, nil, 0, -346, BODY_WIDTH, 46)
+	local note = panel(p, nil, 0, -354, BODY_WIDTH, 46)
 	wizard.profileNote = note
 	wizard.profileNoteText = paragraph(note.inner, 0, 0, INNER_WIDTH - 160, SetupWizard.PROFILE_NOTE, "small")
 	wizard.profileNoteText:SetPoint("TOPLEFT", 0, 3)
@@ -506,7 +518,7 @@ local function build()
 	-- (the shell's screen title style), a one-line subtitle; the 36 px close.
 	wizard.stepLabel = Widgets.Label(wizard, "GameFontNormalSmall", false, "eyebrow")
 	wizard.stepLabel:SetPoint("TOPLEFT", x, -L.top)
-	wizard.title = Widgets.Label(wizard, "GameFontNormalHuge", false, "title")
+	wizard.title = Widgets.Label(wizard, "stage", false, "title")
 	wizard.title:SetPoint("TOPLEFT", x, -L.top - 20)
 	wizard.subtitle = Widgets.Label(wizard, "GameFontHighlight", false, "muted")
 	Widgets.SetTextRole(wizard.subtitle, "navText")
@@ -679,7 +691,7 @@ function SetupWizard.Refresh()
 	local page = Onboarding.PAGES[wizard.page]
 	local at = wizard.position[wizard.page] or 1
 	wizard.stepLabel:SetText(string.format("STEP %d OF %d", at, count))
-	wizard.title:SetText(page.title)
+	wizard.title:SetText(SetupWizard.HEADLINES[page.id] or page.title)
 	wizard.subtitle:SetText(SetupWizard.SUBTITLES[page.id] or "")
 	for i, step in ipairs(wizard.steps) do
 		local n = wizard.position[i]

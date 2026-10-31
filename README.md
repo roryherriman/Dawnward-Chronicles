@@ -90,10 +90,11 @@ Paste a backstory you already wrote, or read your Total RP 3 About text (read-on
 - Places has a list-and-detail view with visits, your last visit, and when a return could next become a moment.
 
 ### First-time setup
-A six-step guided setup for a new character: Welcome, Character, Story, Privacy, Appearance, Finish.
-- It opens by itself only for a genuinely new character.
-- Your progress is kept if you close it, and you can rerun it any time from Settings.
-- It never publishes anything to Total RP 3.
+A guided setup for a new character: Welcome, Character, Story, Appearance, Total RP 3 (only when installed), Finish.
+- **It opens by itself** a few seconds after a brand-new character first enters the world, never during combat, the intro cinematic or a loading screen, and only once. If you leave it unfinished, later logins offer to resume it with your answers kept.
+- **No privacy sorting:** a new character's profile details start Public (their journal and story answers stay Private), so Total RP 3 can show them. Any detail can still be made Private or Secret. Older characters keep their settings until you choose the one-time switch (`/dawnward publish`).
+- **Your backstory first:** import the story you already wrote, word for word.
+- **Connect Total RP 3 once** (optional): keep what you already wrote there, or let Dawnward replace it (a backup is kept). Nothing is sent before Finish.
 
 ### Optional Total RP 3 integration
 Dawnward works fully without [Total RP 3](https://github.com/Total-RP/Total-RP-3). With it, a **Total RP 3 page** (Settings → Total RP 3, or the status line in the side rail) shows:
@@ -103,16 +104,20 @@ Dawnward works fully without [Total RP 3](https://github.com/Total-RP/Total-RP-3
 - conflicts, backups and rollback;
 - which TRP3 fields Dawnward never writes.
 
-Sync is **experimental and off by default**. Once you authorise it, it keeps your **Public** information up to date in Total RP 3 by itself:
-- **What it can manage:**
-  - Dawnward's own biography section and personality traits;
-  - Title, Race, Class, Age and Homeland (shown as Birthplace), each with its own setting: managed by Dawnward, managed by Total RP 3 (the default), or not synchronised.
+Sync is **experimental and off by default**. Connect once (in setup, or Settings → Total RP 3 → Overview → **Connect everything…**) and it keeps your **Public** information up to date in Total RP 3 by itself:
+- **What it manages (v0.9):**
+  - **Your About page:** your whole backstory, word for word, with your own headings, plus Character overview, Appearance, Family, Beliefs and motivations, Personality, Defining experiences and Chronicle notes, in Total RP 3's template 1, 2 (one frame per section, with icons) or 3. You choose the template and the style (Neutral, Silver Hand, Arcane);
+  - **Profile fields:** first and last name, title prefix, full title, race, class, age, birthplace, residence, eye colour, height, body shape and relationship status;
+  - **Additional information:** pronouns, faith, occupation and allegiance;
+  - **Personality traits** from your Public personality values.
+- **Each part has its own setting** on the Mappings tab: managed by Dawnward, managed by Total RP 3, or not synchronised.
 - **Your own values stay yours:** Dawnward writes a field only while it is empty or still holds exactly what Dawnward last wrote. If you or another addon changed it, that field pauses until you choose **Keep yours** or **Use Dawnward's**.
 - **Approval:** opt-in per character and per TRP3 profile, after a preview of exactly what would be written; a shared profile is flagged.
 - **Safety:** a backup before every write (the state before Dawnward's first write is always kept), and a read-back that undoes the write at once if anything differs.
 - **Rollback:** it shows anything no longer Public before restoring, and by default never makes it visible again.
 - **Import from TRP3:** always explicit (Private by default).
-- **Never written:** first and last name, pronouns, Currently/OOC and the other fields listed on the page.
+- **Never written:** Currently, OOC and RP status, icon, colours, walk-up and music (they stay yours in Total RP 3).
+- **Preview first:** Overview → **Preview profile** (`/dawnward trp3 profile`) shows everything that would be published.
 
 ### Privacy guarantees
 - **Private and Secret never leave Dawnward.** They never reach Total RP 3 or a share export.
@@ -135,7 +140,7 @@ These are the approved designs the in-game interface is built to. **They are con
 | **First-time setup** | **Design system** |
 | ![First-time setup (concept)](docs/design/mockups/first-time-setup.png) | ![Design system (concept)](docs/design/mockups/design-system.png) |
 
-The full gallery, with the sources the images were rendered from, is in [`docs/design/mockups`](docs/design/mockups/README.md). The design specification is [`docs/design/UI_DESIGN_V07.md`](docs/design/UI_DESIGN_V07.md).
+The full gallery, with the sources the images were rendered from, is in [`docs/design/mockups`](docs/design/mockups/README.md). The design specification is [`docs/design/UI_DESIGN_V07.md`](docs/design/UI_DESIGN_V07.md); the latest fidelity notes and remaining differences are in [`UI_DESIGN_V09.md`](docs/design/UI_DESIGN_V09.md).
 
 ## How it works
 
@@ -245,6 +250,7 @@ Approved designs are listed separately: an approved mockup is a design, not a fe
 | **0.6** (PR [#54](https://github.com/roryherriman/Dawnward-Chronicles/pull/54)) | Design system and themes, first-time setup wizard, keyboard navigation, inline validation, entry rows, developer diagnostics | 🧪 automated; in-game checklist parts N to P not yet run |
 | **0.7** | Gameplay-time Story Director, the approved v0.7 interface (rail, Journal dashboard, Character profile and Showcase, Story Director, Chronicle cards and Places, setup wizard), the Total RP 3 page, bundled fonts; 0.7.1: live model fix, resizable window | 🧪 automated; first in-game inspection done by the owner (fixes in 0.7.1); checklist parts Q to T pending |
 | **0.8-dev** (pre-playthrough candidate) | Automatic TRP3 field sync with per-field ownership, story import, own axis words and locks, context-aware Story Director with repetition control, continuity review, verified atlas evidence, calmer timing, v0.8 visual refinement | 🧪 automated; first-playthrough checklist [part U](docs/TESTING.md) pending |
+| **0.9-dev** | Setup opens by itself on first login; simpler setup without privacy sorting (the profile model); the whole backstory in Total RP 3's About page (templates 1, 2, 3, styles); 13 profile fields and 4 additional-information entries; one-step connection and the Overview; wizard and scroll-bar fidelity | 🧪 automated; in-game checklist parts [W and X](docs/TESTING.md) pending |
 | **Release gate** | WoW Forever compatibility and launch readiness | ⛔ [#24](https://github.com/roryherriman/Dawnward-Chronicles/issues/24) |
 
 ### Compatibility
@@ -253,7 +259,7 @@ Approved designs are listed separately: an approved mockup is a design, not a fe
 |---|---|
 | WoW Classic Era 1.15.9 | Primary development client. Client APIs are checked against Blizzard's 1.15.9 interface source; the v0.7 interface awaits in-game verification. |
 | WoW Forever | **Pending verification.** Nothing has been tested on a Forever client, and no compatibility is claimed. |
-| Total RP 3 3.4.1 | Read-only status verified in game. Opt-in biography/traits sync, editor protection, backup and rollback owner-tested in game. The management page and the automatic field sync (v0.8) are tested against a mock only; multiplayer propagation is not verified. |
+| Total RP 3 3.4.1 | Read-only status verified in game. Opt-in biography/traits sync, editor protection, backup and rollback owner-tested in game. The management page, the automatic field sync (v0.8) and the v0.9 full profile (About templates, new fields, additional information) are tested against a mock only; multiplayer propagation is not verified. |
 | Total RP 3, other versions | Read-only status only; sync refuses versions not on its allowlist. |
 | Languages | The bundled fonts cover Latin-script clients; other clients use the game's own fonts. Only English text is provided. |
 
@@ -292,8 +298,8 @@ Dawnward is not yet published on an addon site. To try a development build:
 ### Total RP 3 sync (experimental, opt-in)
 
 Use a **spare, non-default TRP3 profile** first. Everything below is also on the **Total RP 3 page** (Settings → Total RP 3, or click the Total RP 3 line in the side rail), which previews and asks before every write. `/dawnward trp3 help` lists the commands:
-- `trp3 preview` shows exactly what would change, without writing;
-- `trp3 enable about confirm` turns biography sync on;
+- `trp3 profile` shows everything you would publish; `trp3 preview` shows what the next sync would change, without writing;
+- `trp3 enable about confirm` turns biography sync on (Overview → Connect everything does every part at once);
 - `trp3 rollback confirm` undoes the last write.
 
 Sync is allowlisted for TRP3 3.4.1, never writes in combat or while TRP3's editor holds unsaved changes, and never publishes private or secret information. See [`docs/TRP3_INTEGRATION.md`](docs/TRP3_INTEGRATION.md).
