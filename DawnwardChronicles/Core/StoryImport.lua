@@ -396,8 +396,8 @@ local function statusLines(char)
 	local lines = {}
 	local current = char and Sources.Current(char)
 	if current then
-		lines[#lines + 1] = string.format("Stored story: version %d, %d bytes (%s), saved verbatim.", current.id,
-			#current.text, current.kind == "trp3" and "from Total RP 3" or "pasted")
+		lines[#lines + 1] = string.format("Stored story: version %d, %d bytes (%s), saved verbatim; %s.", current.id,
+			#current.text, current.kind == "trp3" and "from Total RP 3" or "pasted", Sources.Visibility(char))
 	else
 		lines[#lines + 1] = "No story stored yet. Open the import window with /dawnward biography."
 	end
@@ -415,6 +415,10 @@ if ns.Commands and ns.Commands.Register then
 			for _, line in ipairs(statusLines(ns.Actions.Character(ctx))) do
 				ns.Commands.Out(ctx, line)
 			end
+		elseif Privacy.IsValid(sub) then
+			-- v0.9: the whole story's own visibility (public reaches Total RP 3's About page).
+			local _, message = ns.Actions.SetBiographyVisibility(ctx, sub)
+			ns.Commands.Out(ctx, message)
 		elseif ctx.ui and ctx.ui.ShowStoryImport then
 			ctx.ui.ShowStoryImport()
 		else

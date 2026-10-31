@@ -28,11 +28,26 @@ local TRP3Page = {}
 ns.TRP3Page = TRP3Page
 
 TRP3Page.FEATURES = {
+	{ id = "overview", label = "Overview" },
 	{ id = "about", label = "Biography" },
 	{ id = "traits", label = "Traits" },
 	{ id = "mappings", label = "Mappings" },
 }
-local FEATURE_LABEL = { about = "Biography", traits = "Traits", fields = "Profile fields", mappings = "Mappings" }
+local FEATURE_LABEL = { about = "Biography", traits = "Traits", fields = "Profile fields", mappings = "Mappings",
+	misc = "Additional information", overview = "Overview" }
+
+-- Overview (v0.9): the connected-profile screen. Its choices, each a
+-- segmented control writing one story preference (Actions.SetStoryPref).
+TRP3Page.OVERVIEW_CHOICES = {
+	{ key = "trp3About", label = "About page", items = { { id = "auto", label = "Auto" },
+		{ id = "profile", label = "Profile" }, { id = "summary", label = "Summary" } } },
+	{ key = "trp3Layout", label = "Template", items = { { id = "current", label = "Keep" },
+		{ id = "text", label = "Text" }, { id = "frames", label = "Frames" }, { id = "sections", label = "Sections" } } },
+	{ key = "trp3Style", label = "Style", items = { { id = "neutral", label = "Neutral" },
+		{ id = "silverhand", label = "Silver Hand" }, { id = "arcane", label = "Arcane" } } },
+}
+TRP3Page.OVERVIEW_ROW = 22     -- one status line
+TRP3Page.OVERVIEW_LABEL = 150  -- the status label column
 
 -- Layout (v0.8, proposed-trp3-sync.png / TRP3Sync.dc.html). The page fills
 -- the settings page: the summary strip on top, then the feature card on the
@@ -401,14 +416,14 @@ function TRP3Page.Build(parent, width, height)
 	body:SetAllPoints(card)
 	page.body = body
 
-	page.nav = Widgets.Segmented(body, TRP3Page.FEATURES, 3 * 92, Style.CONTROL.compact, function(id)
+	page.nav = Widgets.Segmented(body, TRP3Page.FEATURES, #TRP3Page.FEATURES * 92, Style.CONTROL.compact, function(id)
 		page.feature = id
 		MainWindow.Refresh()
 	end)
 	page.nav.buttons[1]:SetPoint("TOPLEFT", P, -16)
 	page.chip = Widgets.Chip(body, "", "muted")
 	page.chip:SetPoint("TOPRIGHT", -P, -19)
-	page.chip:SetMaxWidth(innerW - 3 * 92 - 12)
+	page.chip:SetMaxWidth(innerW - #TRP3Page.FEATURES * 92 - 12)
 
 	page.title = Widgets.Label(body, "GameFontNormalLarge", false, "title")
 	page.title:SetPoint("TOPLEFT", P, -58)
@@ -563,6 +578,7 @@ function TRP3Page.Build(parent, width, height)
 	end)
 	Widgets.Tooltip(page.mapPrev, "Previous", "The previous mappings.")
 	Widgets.Tooltip(page.mapNext, "Next", "More mappings.")
+	TRP3Page.BuildOverview(page, P, innerW)
 	page.featureWidgets = { page.title, page.explain, page.reasons, page.reasonsHover, page.keep, page.preview,
 		page.hidden, page.approve, page.notNow, page.toggle, rule }
 
@@ -896,17 +912,27 @@ function TRP3Page.Refresh(page)
 	-- Each feature's state on hover, so every one is visible from any view.
 	for i, f in ipairs(TRP3Page.FEATURES) do
 		local c = view.checks[f.id] or (f.id == "mappings" and view.checks.fields)
-		local chipDef = TRP3Page.STATE_CHIP[c.state]
-		Widgets.Tooltip(page.nav.buttons[i], f.label .. ": " .. (chipDef and chipDef[1] or c.state),
-			#c.reasons > 0 and plain(table.concat(c.reasons, "; ")) or nil)
+		if c then
+			local chipDef = TRP3Page.STATE_CHIP[c.state]
+			Widgets.Tooltip(page.nav.buttons[i], f.label .. ": " .. (chipDef and chipDef[1] or c.state),
+				#c.reasons > 0 and plain(table.concat(c.reasons, "; ")) or nil)
+		else
+			Widgets.Tooltip(page.nav.buttons[i], f.label, "Your connected profile at a glance.")
+		end
 	end
 	local mappings = feature == "mappings"
+	local overview = feature == "overview"
 	page.map:SetShown(mappings)
+	page.overview:SetShown(overview)
 	for _, w in ipairs(page.featureWidgets) do
-		w:SetShown(not mappings)
+		w:SetShown(not mappings and not overview)
 	end
 	if mappings then
 		TRP3Page.RefreshMappings(page, view)
+		return
+	end
+	if overview then
+		TRP3Page.RefreshOverview(page, view)
 		return
 	end
 	Widgets.Tooltip(page.hiddenHover, "Never shared", TRP3Page.HiddenText(TRP3Page.HiddenCounts(realChar()))
@@ -944,6 +970,179 @@ function TRP3Page.Refresh(page)
 end
 
 --- "27 Oct" for a backup row ("?" when unknown); the full date is its tooltip.
+--- Overview (v0.9) ----------------------------------------------------------------
+
+-- A feature's state as a short phrase ("Up to date", "Sync off", ...).
+local function stateText(check)
+	if not check then return "Not available" end
+	local chipDef = TRP3Page.STATE_CHIP[check.state]
+	return chipDef and chipDef[1] or check.state
+end
+
+--- When Dawnward last wrote to this profile (from its log), or nil.
+function TRP3Page.LastWrite(log)
+	for i = #(log or {}), 1, -1 do
+		local line = log[i]
+		if line.text and line.text:find("(version ", 1, true) and line.at and line.at > 0 then
+			return line.at
+		end
+	end
+	return nil
+end
+
+--- The Overview's status lines: { { label, value }, ... }. Pure (from view).
+function TRP3Page.OverviewLines(view, char, characterKey)
+	local lines = {}
+	local function add(name, value) lines[#lines + 1] = { name, value } end
+	local profile = view.probe.profile
+	local shared = profile and profile.sharedWith or 0
+	add("Active profile", profile and profile.name and (plain(profile.name) .. (shared > 0
+		and (" · shared with " .. plural(shared, "other character", "other characters")) or " · this character only"))
+		or "None readable")
+	local managed, total, conflicts = 0, 0, 0
+	for _, id in ipairs(ns.TRP3Ledger.MAPPINGS) do
+		total = total + 1
+		if view.bound and view.policies[id] == "dawnward" then managed = managed + 1 end
+		if view.fieldConflicts[id] then conflicts = conflicts + 1 end
+	end
+	for _, f in ipairs({ "about", "traits" }) do
+		if view.checks[f] and view.checks[f].state == "conflict" then conflicts = conflicts + 1 end
+	end
+	add("Connected character", managed > 0 and (tostring(characterKey) .. " · " .. managed .. " of " .. total
+		.. " items kept up to date") or "Not connected")
+	local last = TRP3Page.LastWrite(view.log)
+	add("Last update", last and date("%d %b %Y, %H:%M", last) or "Nothing written yet")
+	local prefs = char and char.story and char.story.prefs or {}
+	local public = ns.TRP3Sync.ApplySettings({}, char)
+	local layout = ({ current = "your Total RP 3 template", text = "template 1", frames = "template 2 (frames)",
+		sections = "template 3 (sections)" })[prefs.trp3Layout or "current"]
+	add("Biography", stateText(view.checks.about) .. " · " .. (ns.TRP3Sync.UsesProfile(public)
+		and "whole story and profile" or "summary block") .. " in " .. layout)
+	add("Identity and details", stateText(view.checks.fields))
+	add("Personality", stateText(view.checks.traits))
+	add("Additional information", stateText(view.checks.misc))
+	add("Conflicts", conflicts == 0 and "None" or (plural(conflicts, "item waits", "items wait")
+		.. " for your choice (Mappings tab)"))
+	return lines
+end
+
+function TRP3Page.BuildOverview(page, P, innerW)
+	local o = CreateFrame("Frame", nil, page.body)
+	o:SetAllPoints(page.body)
+	o:Hide()
+	page.overview = o
+	page.overviewTitle = Widgets.Label(o, "GameFontNormalLarge", false, "title")
+	page.overviewTitle:SetPoint("TOPLEFT", P, -58)
+	page.overviewTitle:SetText("Your Total RP 3 profile")
+	page.overviewRows = {}
+	local R, LW = TRP3Page.OVERVIEW_ROW, TRP3Page.OVERVIEW_LABEL
+	for i = 1, 8 do
+		local y = -(88 + (i - 1) * R)
+		local name = oneLine(o, "muted", LW - 8)
+		name:SetPoint("TOPLEFT", P, y)
+		local value = oneLine(o, "body", innerW - LW)
+		value:SetPoint("TOPLEFT", P + LW, y)
+		local hover = hoverOver(o, value)
+		page.overviewRows[i] = { name = name, value = value, hover = hover }
+	end
+	local top = 88 + 8 * R + 10
+	page.overviewChoices = {}
+	for i, choice in ipairs(TRP3Page.OVERVIEW_CHOICES) do
+		local y = -(top + (i - 1) * (TRP3Page.SELECTOR_HEIGHT + 10))
+		local name = oneLine(o, "body", LW - 8, "body")
+		name:SetPoint("TOPLEFT", P, y - 2)
+		name:SetText(choice.label)
+		local width = #choice.items * 86
+		local seg = Widgets.Segmented(o, choice.items, width, TRP3Page.SELECTOR_HEIGHT, function(id)
+			act(function()
+				local _, message = ns.Actions.SetStoryPref(ns.ctx, choice.key, id)
+				return message
+			end)
+		end)
+		seg.buttons[1]:SetPoint("TOPLEFT", o, "TOPLEFT", P + LW, y)
+		seg.key = choice.key
+		page.overviewChoices[i] = seg
+	end
+	page.connectAll = Widgets.Button(o, "Connect everything…", 180, Style.CONTROL.compact, "primary")
+	page.connectAll:SetPoint("BOTTOMLEFT", P, 14)
+	page.connectAll:SetScript("OnClick", function() TRP3Page.AskConnectAll(page) end)
+	Widgets.Tooltip(page.connectAll, "Connect everything", "Dawnward keeps every supported part of this Total RP 3 "
+		.. "profile up to date from your Public information: names, titles, details, About page, personality and "
+		.. "additional information. Your own Total RP 3 text is never overwritten; a backup is taken before every "
+		.. "write.")
+	page.previewProfile = Widgets.Button(o, "Preview profile", 140, Style.CONTROL.compact)
+	page.previewProfile:SetPoint("LEFT", page.connectAll, "RIGHT", 8, 0)
+	page.previewProfile:SetScript("OnClick", function() Commands.Execute(ns.ctx, "trp3 profile") end)
+	Widgets.Tooltip(page.previewProfile, "Preview profile", "Everything Dawnward would publish, in a window you can "
+		.. "copy from. Nothing is written. Same as /dawnward trp3 profile.")
+	page.switchModel = Widgets.Button(o, "Use the profile model…", 190, Style.CONTROL.compact, "ghost")
+	page.switchModel:SetPoint("BOTTOMRIGHT", -P, 14)
+	page.switchModel:SetScript("OnClick", function() TRP3Page.AskSwitchModel() end)
+	Widgets.Tooltip(page.switchModel, "Use the profile model", "Characters set up since v0.9 start their profile "
+		.. "details Public. This one-time switch shows what would change first; Secret items never change. "
+		.. "Same as /dawnward publish.")
+end
+
+function TRP3Page.RefreshOverview(page, view)
+	local char = realChar()
+	page.title:SetText("")
+	local managed = ns.TRP3Commands.AnyManaged(view.bound and view.entry or nil)
+	page.chip:SetChip(managed and "Connected" or "Not connected", managed and "public" or "muted")
+	local lines = TRP3Page.OverviewLines(view, char, ns.ctx and ns.ctx.characterKey)
+	for i, row in ipairs(page.overviewRows) do
+		local line = lines[i]
+		row.name:SetShown(line ~= nil)
+		row.value:SetShown(line ~= nil)
+		if line then
+			row.name:SetText(line[1])
+			row.value:SetText(line[2])
+			Widgets.Tooltip(row.hover, line[1], line[2])
+		end
+	end
+	local prefs = char and char.story and char.story.prefs or ns.StorySchema.NewPrefs()
+	for _, seg in ipairs(page.overviewChoices) do
+		seg:Select(prefs[seg.key] or ns.StorySchema.DEFAULT_PREFS[seg.key])
+	end
+	page.connectAll:SetEnabled(view.probe.experimental.allowed == true)
+	page.switchModel:SetShown(char ~= nil and not ns.Privacy.ProfileModel(char))
+end
+
+--- "Connect everything…": the same single authorisation as setup's
+-- Total RP 3 stage (TRP3Commands.ConnectAll); keeps the player's own text.
+function TRP3Page.AskConnectAll(page)
+	local view = page.view
+	if not view then return end
+	local shared = view.probe.profile and view.probe.profile.sharedWith or 0
+	Widgets.Confirm("Connect Total RP 3 profile \"" .. plain(view.probe.profile and view.probe.profile.name or "?")
+		.. "\" to this character?\n\nDawnward will keep your names, titles, details, About page (your whole story), "
+		.. "personality and additional information up to date from your Public information. Where Total RP 3 already "
+		.. "has your own text, it is kept and that item waits for your choice. A backup is taken before every write."
+		.. (shared > 0 and ("\n\nThis profile is shared with " .. plural(shared, "other character",
+			"other characters") .. "; they will show the same.") or ""), "Connect", function()
+		act(function()
+			local _, message = ns.TRP3Commands.ConnectAll(ns.ctx, { existing = "keep" })
+			return message
+		end)
+	end)
+end
+
+--- The one-time switch of an older character to the profile model.
+function TRP3Page.AskSwitchModel()
+	local char = realChar()
+	if not char or ns.Privacy.ProfileModel(char) then return end
+	local all = {}
+	for id in pairs(ns.Publication.CATEGORY_IDS) do all[id] = true end
+	local lines = ns.Publication.PreviewLines(char, all)
+	Widgets.Confirm("Switch this character to the profile model?\n\n" .. table.concat(lines, "\n")
+		.. "\n\nNew profile details will start Public. Secret items never change. To publish only some categories, "
+		.. "use /dawnward publish.", "Switch", function()
+		act(function()
+			local _, message = ns.Actions.TransitionPublication(ns.ctx, all)
+			return message
+		end)
+	end)
+end
+
 function TRP3Page.ShortDate(at)
 	if type(at) ~= "number" or at <= 0 then return "?" end
 	return tostring(tonumber(date("%d", at))) .. " " .. date("%b", at)

@@ -655,6 +655,18 @@ function Actions.CompleteSetup(ctx, values, opts)
 	return ok, message
 end
 
+--- Who may see the biography (the story kept word for word). Public: it
+-- is part of share exports and, when Total RP 3 is connected, the About
+-- page. Returns ok, message.
+function Actions.SetBiographyVisibility(ctx, level)
+	return withCharacter(ctx, function(char)
+		local ok, err = ns.Sources.SetVisibility(char, level, ctx.now())
+		if not ok then return fail(err) end
+		return true, "Your story is now " .. (ns.Themes.VISIBILITY_LABELS[level] or level) .. "."
+			.. (level == "public" and " With Total RP 3 connected, it becomes your About page." or "")
+	end)
+end
+
 --- The one-time move of an established character to the profile
 -- publication model (Core/Publication.lua). choices = { [categoryId] =
 -- true }: Private items of those categories become Public; Secret items

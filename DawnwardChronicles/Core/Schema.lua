@@ -74,8 +74,16 @@ Schema.FIELDS = {
 }
 
 Schema.FIELD_BY_KEY = {}
+local FIELD_BY_LOWER = {}
 for _, field in ipairs(Schema.FIELDS) do
 	Schema.FIELD_BY_KEY[field.key] = field
+	FIELD_BY_LOWER[field.key:lower()] = field.key
+end
+
+--- The field key for a word typed in any case ("firstname" -> "firstName"),
+-- or the word itself when it names no field.
+function Schema.FieldKey(word)
+	return FIELD_BY_LOWER[tostring(word):lower()] or word
 end
 
 Schema.FAMILY_STATUS = { living = true, deceased = true, missing = true, unknown = true }

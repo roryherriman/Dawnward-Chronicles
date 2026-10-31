@@ -12,10 +12,10 @@ ns.TRP3Commands = TRP3Commands
 
 local HELP = {
 	"Total RP 3 sync (EXPERIMENTAL, off by default; Total RP 3 3.4.1 only):",
-	"  trp3 preview | trp3 sync | trp3 paste | trp3 backups | trp3 log",
+	"  trp3 preview | trp3 profile (everything you would publish) | trp3 sync | trp3 paste | trp3 backups | trp3 log",
 	"  trp3 enable about|traits confirm | trp3 disable about|traits",
 	"  trp3 fields (each mapping, who manages it, and what Total RP 3 holds vs your Public value)",
-	"  trp3 field <title|race|class|age|homeland> dawnward confirm | trp3 field <name> trp3|off",
+	"  trp3 field <name> dawnward confirm | trp3 field <name> trp3|off   (names: see trp3 fields)",
 	"  trp3 import <field> [private|public|secret] confirm (copy Total RP 3's value into Dawnward)",
 	"  trp3 release about|traits|fields confirm | trp3 rollback [#] [exact] confirm",
 	"  trp3 resolve about|traits|<field> keep|reclaim",
@@ -253,6 +253,53 @@ function TRP3Commands.Approve(deps, feature)
 	return Sync.RunFeature(deps, feature)
 end
 
+--- The public profile Dawnward would publish, as text (read only): the
+-- About page for the given template (1, 2 or 3; default 1) in the
+-- character's style and layout settings, then every Public profile field and
+-- additional-information entry with its Total RP 3 destination.
+function TRP3Commands.ProfilePreview(char, template)
+	local public = char and Projection.GetPublic(char) or { facts = {}, personality = {}, fields = {} }
+	Sync.ApplySettings(public, char)
+	local lines = {}
+	local LAYOUT = { text = 1, frames = 2, sections = 3 }
+	template = LAYOUT[public.trp3Layout] or template or 1
+	if Sync.UsesProfile(public) then
+		local rendered = ns.TRP3AboutDoc.Render(ns.TRP3AboutDoc.Build(public), template, public.trp3Style)
+		lines[#lines + 1] = "ABOUT PAGE (template " .. template .. ")"
+		if template == 2 then
+			for i, frame in ipairs(rendered.frames) do
+				lines[#lines + 1] = string.format("--- Frame %d (icon %s) ---", i, frame.IC)
+				lines[#lines + 1] = frame.TX
+			end
+		elseif template == 3 then
+			for _, part in ipairs({ { "PH", "Physical description" }, { "PS", "Personality traits" },
+				{ "HI", "History" } }) do
+				lines[#lines + 1] = "--- " .. part[2] .. " ---"
+				lines[#lines + 1] = rendered[part[1]] ~= "" and rendered[part[1]] or "(nothing Public)"
+			end
+		else
+			lines[#lines + 1] = rendered.T1 ~= "" and rendered.T1 or "(nothing Public)"
+		end
+	else
+		lines[#lines + 1] = "ABOUT PAGE (summary block)"
+		lines[#lines + 1] = AboutBlock.Compose(public) ~= "" and AboutBlock.Compose(public) or "(nothing Public)"
+	end
+	lines[#lines + 1] = ""
+	lines[#lines + 1] = "PROFILE FIELDS"
+	local preview = TRP3Commands.PublicPreview(char)
+	for _, f in ipairs(preview.fields) do
+		lines[#lines + 1] = f.trp3 .. ": " .. tostring(f.value)
+	end
+	if #preview.fields == 0 then lines[#lines + 1] = "(nothing Public)" end
+	lines[#lines + 1] = ""
+	lines[#lines + 1] = "PERSONALITY TRAITS"
+	for _, tr in ipairs(preview.traits) do
+		lines[#lines + 1] = string.format("%s %d / %d %s", tr.LT, tr.V2, 20 - tr.V2, tr.RT)
+	end
+	if #preview.traits == 0 then lines[#lines + 1] = "(nothing Public)" end
+	return table.concat(lines, "\n")
+end
+
 --- The single authorisation of the v0.9 first-time setup ("Connect"):
 -- every mapping becomes managed by Dawnward for the active profile, through
 -- Sync.Authorize (all-or-nothing, every guard and the shared-profile rule
@@ -439,6 +486,7 @@ function TRP3Commands.Overview(deps)
 	end
 	local char = deps.store.real.characters[deps.characterKey]
 	view.preview = TRP3Commands.PublicPreview(char)
+	view.log = deps.ledger.log
 	view.differences = Sync.Differences(deps)
 	view.policies = {}
 	local bound = view.entry and probe.profile and view.entry.profileId == probe.profile.id
@@ -531,6 +579,14 @@ local function command(ctx, rest)
 		out(ctx, "Total RP 3 sync preview (nothing is written):")
 		for _, feature in ipairs(Sync.ORDER) do
 			describeCheck(ctx, Sync.Check(deps, feature))
+		end
+	elseif sub == "profile" then
+		-- v0.9: everything Dawnward would publish, in one window (read only).
+		local text = TRP3Commands.ProfilePreview(deps.store.real.characters[deps.characterKey])
+		if ctx.ui and ctx.ui.ShowExport then
+			ctx.ui.ShowExport("Your public Total RP 3 profile - preview, nothing is written", text)
+		else
+			for line in (text .. "\n"):gmatch("([^\n]*)\n") do out(ctx, line) end
 		end
 	elseif sub == "diagnose" then
 		diagnose(ctx, deps)
