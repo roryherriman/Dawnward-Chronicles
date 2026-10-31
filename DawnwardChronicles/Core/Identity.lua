@@ -24,7 +24,9 @@ end
 --- values: { subject, persona, conviction, visibility (persona),
 --   convictionVisibility, deliberate }.
 function Identity.Add(char, values, now)
-	local i = Records.New(char.story, "player", now, values.visibility)
+	-- The public persona is what others see; under the profile model it
+	-- starts Public. The private conviction always starts Private.
+	local i = Records.New(char.story, "player", now, values.visibility or Privacy.DefaultFor(char, "stance"))
 	i.subject = values.subject
 	i.persona = values.persona
 	i.conviction = values.conviction

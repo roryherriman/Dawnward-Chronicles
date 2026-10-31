@@ -581,6 +581,26 @@ function Actions.SaveSetupDraft(ctx, draft)
 	return true
 end
 
+--- When the wizard first opened by itself for this character (v0.9), or nil.
+function Actions.SetupSeen(ctx)
+	local ui = ctx.store.real.ui
+	return ui and ui.setupSeen and ui.setupSeen[ctx.characterKey]
+end
+
+--- Records that the wizard opened by itself, so it does so only once. Never
+-- creates a character record. Refused (nil) on read-only data.
+function Actions.MarkSetupSeen(ctx)
+	if ctx.store.realReadOnly then
+		return nil
+	end
+	local ui = ctx.store.real.ui or {}
+	ctx.store.real.ui = ui
+	ui.setupSeen = ui.setupSeen or {}
+	ui.setupSeen[ctx.characterKey] = ui.setupSeen[ctx.characterKey] or ctx.now()
+	ui.setupSeen = ns.Onboarding.CleanSeen(ui.setupSeen)
+	return true
+end
+
 function Actions.ClearSetupDraft(ctx)
 	local list = drafts(ctx, false)
 	if list and not ctx.store.realReadOnly then
@@ -590,14 +610,24 @@ end
 
 --- Finish: writes the wizard's choices for the active character and marks
 -- setup complete. opts.test (developer preview): the choices are saved,
--- but completion and the real draft are left exactly as they were.
--- Never writes to Total RP 3; profile fields are only added or changed,
--- never cleared. opts.only: the set of keys the player changed (only those
--- are applied); the minimap setting only when it is in that set.
+-- but completion and the real draft are left exactly as they were, and
+-- nothing is connected. Profile fields are only added or changed, never
+-- cleared. opts.only: the set of keys the player changed (only those are
+-- applied); the minimap setting only when it is in that set.
+-- v0.9: a new character starts the profile publication model
+-- (Core/Publication.lua) before its details are saved, so they start
+-- Public. opts.trp3Shown: the Total RP 3 stage was shown; with
+-- values.trp3 == "connect" this is the one authorisation
+-- (ctx.trp3.ConnectAll), run after the character is saved. A refused
+-- connection never undoes setup: its reason is added to the message.
 function Actions.CompleteSetup(ctx, values, opts)
 	opts = opts or {}
 	local ok, message = withCharacter(ctx, function(char)
-		local changed = ns.Onboarding.Apply(char, values, ctx.now(), { complete = not opts.test, only = opts.only })
+		local now = ctx.now()
+		if not opts.test and ns.Onboarding.StartsProfileModel(char, now) then
+			ns.Publication.Adopt(char, now)
+		end
+		local changed = ns.Onboarding.Apply(char, values, now, { complete = not opts.test, only = opts.only })
 		return changed, opts.test and "Preview choices saved. Setup status was not changed."
 			or "Setup complete. Welcome to your chronicle."
 	end)
@@ -609,8 +639,35 @@ function Actions.CompleteSetup(ctx, values, opts)
 	end
 	if not opts.test then
 		Actions.ClearSetupDraft(ctx)
+		if opts.trp3Shown and values.trp3 == "connect" then
+			local connect = ctx.trp3 and ctx.trp3.ConnectAll
+			if not connect then
+				message = message .. " Total RP 3 could not be connected now; connect it later in Settings > Total RP 3."
+			else
+				local connected, why = connect(ctx, { existing = values.trp3Existing })
+				message = message .. " " .. (connected and why or ("Total RP 3 was not connected: " .. tostring(why)
+					.. ". Connect it later in Settings > Total RP 3."))
+			end
+		end
 	end
 	return ok, message
+end
+
+--- The one-time move of an established character to the profile
+-- publication model (Core/Publication.lua). choices = { [categoryId] =
+-- true }: Private items of those categories become Public; Secret items
+-- never change. Returns ok, message.
+function Actions.TransitionPublication(ctx, choices)
+	return withCharacter(ctx, function(char)
+		local changed, err = ns.Publication.Transition(char, choices, ctx.now())
+		if not changed then
+			return nil, "Not changed: " .. tostring(err) .. "."
+		end
+		local total = 0
+		for _, n in pairs(changed) do total = total + n end
+		return true, string.format("This character now uses the profile model: new profile details start Public. "
+			.. "%d Private item%s made Public; Secret items were not changed.", total, total == 1 and " was" or "s were")
+	end)
 end
 
 --- Developer reset: forgets only this character's setup completion and
@@ -624,6 +681,10 @@ function Actions.ResetSetup(ctx)
 		char.wizard = {}
 	end
 	Actions.ClearSetupDraft(ctx)
+	local ui = ctx.store.real.ui
+	if ui and ui.setupSeen then
+		ui.setupSeen[ctx.characterKey] = nil
+	end
 	return true, "Setup state reset for this character. Its profile, journal and story were not touched."
 end
 

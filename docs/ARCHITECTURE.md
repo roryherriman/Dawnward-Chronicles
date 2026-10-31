@@ -250,10 +250,12 @@ See [UI_DIRECTION.md](UI_DIRECTION.md) for principles and [design/UI_DESIGN_V07.
   - `UI/Widgets.lua` holds the component kit: buttons with variants and states, icon buttons, segmented controls, cards, dividers, inputs and the confirmation dialog.
   - Components paint themselves, and modules don't hand-colour controls.
   - Specification: [design/UI_DESIGN_V06.md](design/UI_DESIGN_V06.md), superseded visually by [design/UI_DESIGN_V07.md](design/UI_DESIGN_V07.md) and the [approved mockups](design/mockups/README.md).
-- **First-time setup (v0.6):**
-  - `Core/Onboarding.lua` holds the rules and saved state: `char.wizard`, plus drafts in `ui.wizardDrafts` keyed by character.
-  - `UI/SetupWizard.lua` holds the six pages. It opens through `MainWindow.BeforeShow` for genuinely new characters only.
-  - `Core/SetupCommands.lua` adds `/dawnward setup` and the developer commands, which only work in `-dev` builds.
+- **First-time setup (v0.6, reworked in v0.9):**
+  - `Core/Onboarding.lua` holds the rules and saved state: `char.wizard`, drafts in `ui.wizardDrafts` and, since v0.9, `ui.setupSeen` (when the wizard first opened by itself), all keyed by character (`Name-Realm`). `Onboarding.LoginAction` decides "open", "offer" (resume) or "none".
+  - `Platform/SetupLaunch.lua` (v0.9) acts on that decision after `PLAYER_ENTERING_WORLD`: it waits for combat, cinematics, movies and loading screens to end (retrying on `PLAYER_REGEN_ENABLED`, `CINEMATIC_STOP`, `LOADING_SCREEN_DISABLED` and a bounded timer), opens the wizard once, and on later logins offers to resume an unfinished setup.
+  - `UI/SetupWizard.lua` holds the stages (Welcome, Character, Story, Appearance, Total RP 3 when installed, Finish). It still also opens through `MainWindow.BeforeShow` once per session for a new character.
+  - `Core/SetupCommands.lua` adds `/dawnward setup`, `/dawnward publish` and the developer commands, which only work in `-dev` builds.
+- **Publication model (v0.9):** `Privacy.DefaultFor(char, kind)` gives each new item its starting visibility: Public for profile kinds under the profile model (`char.publication.mode == "profile"`), Private otherwise. `Core/Publication.lua` holds the model's adoption (setup Finish) and the one-time, previewed transition of older characters. See [PRIVACY.md](PRIVACY.md#publication-model-v09).
 - **Forms (v0.5):** `UI/Forms.lua` is one shared form (line, text area, cycle and number fields; Save, Cancel and a confirmed Remove) used for every record in the Chronicle and for family and history. Records no longer need slash commands.
 - **Chronicle rows (v0.5, #46):** two lines per record. The text has the full width on the first; status and up to five buttons share the second. `ChronicleView.RowRects` is the single source of the row's rectangles, and a test checks none overlap. Lists are paged, six rows per page.
 - **Minimap button (v0.5, #45):** `UI/MinimapButton.lua`; angle and hidden state are account-wide in `DawnwardChroniclesDB.ui.minimap`.

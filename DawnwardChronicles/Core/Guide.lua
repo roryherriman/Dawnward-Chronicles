@@ -60,7 +60,10 @@ Guide.TOPICS = {
 	} },
 	{ id = "privacy", title = "Privacy", lines = {
 		"Private: only you; included in your personal backups. Secret: only you; left out of backups unless "
-			.. "you ask. Public: may be shared through share exports and, if you opt in, Total RP 3.",
+			.. "you ask. Public: may be shared through share exports and, if you connect it, Total RP 3.",
+		"Characters set up since v0.9 start their profile details Public, so nothing has to be sorted item by "
+			.. "item; your journal and story answers stay Private. Older characters can switch once with "
+			.. "/dawnward publish (Secret items never change).",
 		"Suggestions cannot be public until you accept them. Exports for sharing contain public items only.",
 	} },
 	{ id = "trp3", title = "Total RP 3", lines = {

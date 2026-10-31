@@ -268,6 +268,15 @@ function Ledger.Normalize(raw)
 				and Ledger.IsStorableProfileId(entry.profileId) then
 				local clean = { about = entry.about == true, traits = entry.traits == true,
 					profileId = entry.profileId, at = timestamp(entry.at), policy = normalizePolicy(entry.policy) }
+				-- v0.9: the player chose "Replace it with Dawnward's" when
+				-- connecting; consumed by the first write of each feature.
+				if type(entry.adopt) == "table" then
+					local adopt = {}
+					for feature in pairs(Ledger.FEATURES) do
+						if entry.adopt[feature] == true then adopt[feature] = true end
+					end
+					clean.adopt = next(adopt) and adopt or nil
+				end
 				-- Migration (v0.7 opt-ins had only the booleans): a feature
 				-- that was on becomes "dawnward", with no change in behaviour.
 				-- A stored policy wins and the boolean follows it.
