@@ -103,7 +103,9 @@ function CharacterView.HistoryText(item)
 	return (item.when and (item.when .. ": ") or "") .. (item.text or "")
 end
 
---- Column widths for a content width: { child, left, right, rightX }. Pure.
+--- Column widths for a content width: { child (both columns: the public
+-- preview's width), left, right, rightX }. The left column scrolls by
+-- itself; the right one stands at rightX. Pure.
 function CharacterView.Columns(contentWidth)
 	local child = contentWidth - L.scrollBar
 	local left = child - L.rightWidth - L.colGap
@@ -328,16 +330,37 @@ local function create(parent)
 	section.intro:SetWidth(contentWidth - 2)
 	section.intro:SetText(CharacterView.INTRO)
 
-	-- Profile: one scroll frame, two columns.
+	-- Profile: only the left column (the field groups) scrolls, with the slim
+	-- bar in the column gap; the right column (Personality, Family) and the
+	-- header stay put (mockup: character-profile.png). Both views have fixed
+	-- sizes in layout units, so the window's SetScale changes nothing here.
+	local viewHeight = contentHeight - L.scrollTop
 	local scroll = CreateFrame("ScrollFrame", Widgets.NextName("CharacterScroll"), f, "UIPanelScrollFrameTemplate")
 	scroll:SetPoint("TOPLEFT", 0, -L.scrollTop)
-	scroll:SetPoint("BOTTOMRIGHT", -L.scrollBar, 0)
+	scroll:SetSize(cols.left, viewHeight)
 	local child = CreateFrame("Frame", nil, scroll)
-	child:SetSize(cols.child, 100)
+	child:SetSize(cols.left, 1)
 	scroll:SetScrollChild(child)
 	section.scroll, section.child = scroll, child
-	-- The design's slim bar in the gutter (v0.9; the stock bar until then).
-	section.scrollBar = Widgets.SlimScrollBar(scroll, L.scrollBar - Widgets.SLIM_BAR.width - 4)
+	section.scrollBar = Widgets.SlimScrollBar(scroll, math.floor((L.colGap - Widgets.SLIM_BAR.width) / 2))
+	Widgets.WheelScroll(scroll)
+
+	-- The right column does not move with the left. It can still be taller
+	-- than the room (unset axes carry a note; family and history entries
+	-- have no limit), so it is a scroll frame of its own whose slim bar, in
+	-- the gutter at the window's right, shows only when it has something to
+	-- scroll. A "+N more" cap or a pager would hide entries (and History
+	-- under them) or add controls the design does not have; this way nothing
+	-- is cut off or overlaps.
+	local sideScroll = CreateFrame("ScrollFrame", Widgets.NextName("CharacterSide"), f, "UIPanelScrollFrameTemplate")
+	sideScroll:SetPoint("TOPLEFT", cols.rightX, -L.scrollTop)
+	sideScroll:SetSize(cols.right, viewHeight)
+	local side = CreateFrame("Frame", nil, sideScroll)
+	side:SetSize(cols.right, 1)
+	sideScroll:SetScrollChild(side)
+	section.sideScroll, section.side = sideScroll, side
+	section.sideBar = Widgets.SlimScrollBar(sideScroll, L.scrollBar - Widgets.SLIM_BAR.width - 4)
+	Widgets.WheelScroll(sideScroll)
 
 	-- Field groups: unboxed, so their tiles sit on the window ground as in the
 	-- mockup; a group names itself with an eyebrow (more fields than the
@@ -351,11 +374,11 @@ local function create(parent)
 		section.groups[group.id] = g
 	end
 
-	-- Right-hand panels sit behind their entries: same level as the scroll
-	-- child, so the entries (one level up) draw over them.
+	-- Right-hand panels sit behind their entries: same level as the column's
+	-- scroll child, so the entries (one level up) draw over them.
 	local function backPanel(title)
-		local panel = Widgets.Panel(child, title)
-		local level = child.GetFrameLevel and child:GetFrameLevel()
+		local panel = Widgets.Panel(side, title)
+		local level = side.GetFrameLevel and side:GetFrameLevel()
 		if type(level) == "number" and panel.SetFrameLevel then panel:SetFrameLevel(level) end
 		return panel
 	end
@@ -369,13 +392,13 @@ local function create(parent)
 	local innerRight = cols.right - 2 * L.pad
 	pers.status = Widgets.Label(pers, "GameFontHighlightSmall", true, "muted")
 	pers.status:SetWidth(innerRight)
-	pers.review = Widgets.Button(child, "Review in Story", 140, L.controlHeight, "primary")
+	pers.review = Widgets.Button(side, "Review in Story", 140, L.controlHeight, "primary")
 	pers.review:SetScript("OnClick", function() MainWindow.Select("story") end)
 	Widgets.Tooltip(pers.review, "Review in Story", "Approve or reject personality changes from your choices.")
 	pers.review:Hide()
 	pers.axes = {}
 	for i = 1, #Schema.PERSONALITY_AXES do
-		local a = CreateFrame("Frame", nil, child)
+		local a = CreateFrame("Frame", nil, side)
 		a:SetSize(innerRight, 30)
 		if a.EnableMouse then a:EnableMouse(true) end
 		a.left = Widgets.Label(a, "GameFontHighlightSmall", false)
@@ -415,6 +438,7 @@ local function create(parent)
 	previewChild:SetSize(cols.child, 100)
 	preview:SetScrollChild(previewChild)
 	section.previewBar = Widgets.SlimScrollBar(preview, L.scrollBar - Widgets.SLIM_BAR.width - 4)
+	Widgets.WheelScroll(preview)
 	section.previewScroll = preview
 	section.previewPanel = Widgets.Panel(previewChild, "Public profile preview")
 	section.previewPanel:SetPoint("TOPLEFT", 0, 0)
@@ -438,14 +462,19 @@ local function create(parent)
 	-- The model card (kept as section.showcase for callers and tests).
 	section.showcase = section.showcaseView.model
 
-	local function getRow(index)
+	-- column: the scroll child the row belongs in (child for fields, side
+	-- for family and history). Field rows come first and their number is
+	-- fixed, so a pooled row normally stays in its column.
+	local function getRow(index, column)
+		column = column or child
 		local row = section.pool[index]
 		if row then
+			if row.GetParent and row:GetParent() ~= column and row.SetParent then row:SetParent(column) end
 			return row
 		end
 		-- Each field, family member and history entry is its own card, with
 		-- its Edit and visibility controls inside it (Widgets.EntryRow).
-		row = Widgets.EntryRow(child)
+		row = Widgets.EntryRow(column)
 		Style.Register(row, paintFieldCard)
 		row.key = Widgets.Label(row, "GameFontNormalSmall", false, "eyebrow") -- field label, Cinzel 13
 		row.label = Widgets.Label(row, "GameFontNormal", true)                -- list headings, bold 14
@@ -467,7 +496,7 @@ local function create(parent)
 
 	local function place(row, x, y, width, height)
 		row:ClearAllPoints()
-		row:SetPoint("TOPLEFT", child, "TOPLEFT", x, -y)
+		row:SetPoint("TOPLEFT", row:GetParent() or child, "TOPLEFT", x, -y)
 		row:SetWidth(width)
 		if height then row:SetHeight(height) end
 		row:Show()
@@ -663,7 +692,7 @@ local function create(parent)
 		local width = cols.right - 2 * L.pad
 		local rows, waiting = CharacterView.PersonalityRows(char)
 		pers:ClearAllPoints()
-		pers:SetPoint("TOPLEFT", child, "TOPLEFT", x, -y)
+		pers:SetPoint("TOPLEFT", side, "TOPLEFT", x, -y)
 		pers:SetWidth(cols.right)
 		pers.status:ClearAllPoints()
 		pers.status:SetPoint("TOPLEFT", L.pad, -L.panelTop)
@@ -673,7 +702,7 @@ local function create(parent)
 		pers.waiting = waiting
 		if waiting > 0 then
 			pers.review:ClearAllPoints()
-			pers.review:SetPoint("TOPLEFT", child, "TOPLEFT", x + L.pad, -(y + h))
+			pers.review:SetPoint("TOPLEFT", side, "TOPLEFT", x + L.pad, -(y + h))
 			pers.review:Show()
 			h = h + L.controlHeight + 12
 		else
@@ -682,7 +711,7 @@ local function create(parent)
 		for i, row in ipairs(rows) do
 			local a = pers.axes[i]
 			a:ClearAllPoints()
-			a:SetPoint("TOPLEFT", child, "TOPLEFT", x + L.pad, -(y + h))
+			a:SetPoint("TOPLEFT", side, "TOPLEFT", x + L.pad, -(y + h))
 			local ah = paintAxis(a, row, theme, width)
 			a:SetHeight(ah)
 			a:Show()
@@ -697,7 +726,8 @@ local function create(parent)
 	function section:RenderList(view)
 		local specs = CharacterView.BuildSpecs(view.char)
 		local theme = view.theme
-		self.child:SetWidth(cols.child)
+		self.child:SetWidth(cols.left)
+		self.side:SetWidth(cols.right)
 		local rows = {}
 		local tileWidth = CharacterView.TileWidth(contentWidth)
 
@@ -719,7 +749,7 @@ local function create(parent)
 				pending = {}
 			end
 			while specs[i] and specs[i].kind == "field" and specs[i].group == group.id do
-				local spec, row = specs[i], getRow(i)
+				local spec, row = specs[i], getRow(i, child)
 				rows[i] = row
 				if spec.field.kind == "long" then
 					flush()
@@ -741,14 +771,15 @@ local function create(parent)
 		end
 		local leftHeight = y - L.groupGap
 
-		-- Right column: Personality, then Family & relationships.
-		local x = cols.rightX
+		-- Right column (its own scroll child): Personality, then Family &
+		-- relationships.
+		local x = 0
 		local ry = layoutPersonality(view.char, x, 0, theme) + L.panelGap
 		local famTop = ry
 		local famInner = L.panelTop
 		local itemWidth = cols.right - 2 * L.pad
 		for j = i, #specs do
-			local spec, row = specs[j], getRow(j)
+			local spec, row = specs[j], getRow(j, side)
 			rows[j] = row
 			local h
 			if spec.kind == "item" then
@@ -762,14 +793,22 @@ local function create(parent)
 		end
 		local famHeight = famInner + L.pad - 8
 		self.familyPanel:ClearAllPoints()
-		self.familyPanel:SetPoint("TOPLEFT", child, "TOPLEFT", x, -famTop)
+		self.familyPanel:SetPoint("TOPLEFT", side, "TOPLEFT", x, -famTop)
 		self.familyPanel:SetSize(cols.right, famHeight)
 		local rightHeight = famTop + famHeight
 
 		for k = #specs + 1, #self.pool do
 			self.pool[k]:Hide()
 		end
-		self.child:SetHeight(math.max(leftHeight, rightHeight, 1))
+		-- Each column scrolls over its own height. The client recomputes the
+		-- range from the child's size (OnScrollRangeChanged: the template's bar
+		-- and the slim thumb follow); a view that got shorter keeps its place
+		-- when it can and otherwise stops at its new end.
+		self.child:SetHeight(math.max(leftHeight, 1))
+		self.side:SetHeight(math.max(rightHeight, 1))
+		Widgets.ScrollTo(self.scroll, self.scroll:GetVerticalScroll())
+		Widgets.ScrollTo(self.sideScroll, self.sideScroll:GetVerticalScroll())
+		self.leftHeight, self.rightHeight = leftHeight, rightHeight
 		self.rows, self.specs = rows, specs
 	end
 
@@ -815,6 +854,7 @@ local function create(parent)
 		local showcase = mode == "showcase"
 		self.intro:SetShown(not showcase)
 		self.scroll:SetShown(mode == "profile")
+		self.sideScroll:SetShown(mode == "profile")
 		self.previewScroll:SetShown(mode == "preview")
 		if showcase then
 			self.showcaseView:Show()
@@ -1133,6 +1173,7 @@ function CharacterView.AttachEditing(section)
 		input():SetText(entry and entry.value or "")
 		-- The editor takes the whole section; the other views step aside.
 		section.scroll:Hide()
+		section.sideScroll:Hide()
 		section.previewScroll:Hide()
 		section.showcase:Hide()
 		section.showcaseView:Hide()
