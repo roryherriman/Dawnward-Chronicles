@@ -809,6 +809,9 @@ local function build()
 	frame:SetToplevel(true)
 	frame:SetClampedToScreen(true)
 	frame:EnableMouse(true)
+	-- The wheel over the window never zooms the camera: scroll frames in it
+	-- scroll (Widgets.WheelScroll), everywhere else it does nothing.
+	Widgets.SwallowWheel(frame)
 	frame:SetMovable(true)
 	frame:RegisterForDrag("LeftButton")
 	frame:SetScript("OnDragStart", frame.StartMoving)

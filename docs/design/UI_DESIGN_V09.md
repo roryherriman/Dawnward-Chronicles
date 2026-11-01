@@ -40,7 +40,7 @@ Status: **open** (worth doing), **limit** (the client cannot do it without shipp
 | 3 | All | Tracked capitals (letter spacing) are plain capitals one size up | limit | — |
 | 4 | Setup | No Privacy stage; a Total RP 3 stage instead | choice (owner decision, v0.9) | — |
 | 5 | Total RP 3 | The Overview tab has no approved rendering; it reuses existing components | open: render a mockup, then align | P1 |
-| 6 | Character | Only one scroll area for both columns (the rendering scrolls the left column only) | open | P2 |
+| 6 | Character | Only one scroll area for both columns (the rendering scrolls the left column only) | closed: the left column scrolls on its own; the right column stays put and gets its own slim bar only when it is taller than the room (many family or history entries) | — |
 | 7 | Story | One click answers a moment (the rendering shows pick, then Save) | choice (behaviour, not look) | — |
 | 8 | Journal | A highlighted word inside story text | open | P3 |
 | 9 | All | Card tones and a "featured" card state; a padded segmented track with per-item widths; a text link; wrapping chip rows; a portrait-in-ring component | open (component proposals from the v0.8 audits) | P2 |
@@ -51,4 +51,5 @@ Status: **open** (worth doing), **limit** (the client cannot do it without shipp
 ## 3. Most likely in-game risks (v0.9 additions)
 - **Wizard heights:** the 40 px inputs leave about 4 px spare at the bottom of the Character stage (L2-checked); at window scale 0.7 check that the profile note is not clipped.
 - **Slim bar:** relies on the template's `ScrollBar`, `ThumbTexture` and `OnScrollRangeChanged` as in the Journal; if a view shows no bar at all, it falls back to the stock one only where the template differs.
+- **Mouse wheel:** the window now takes the wheel (`Widgets.SwallowWheel`), so it never zooms the camera over the journal; scroll frames on the Character page scroll a fixed 60 per notch (`Widgets.WheelScroll`). Check the Character columns and the Showcase model zoom.
 - **Overview controls:** three segmented rows of 3–4 items; check that "Silver Hand" and "Sections" fit their items at your UI scale.

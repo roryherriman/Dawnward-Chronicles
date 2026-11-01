@@ -1384,7 +1384,9 @@ local function create(parent)
 		local lines = ChronicleView.WrapLines(text, dInner - 26, "reading")
 		local measured = d.text.GetStringHeight and d.text:GetStringHeight() or 0
 		d.body:SetHeight(math.max(L.textLine, lines * L.textLine, type(measured) == "number" and measured or 0))
-		d.scroll:SetVerticalScroll(0)
+		-- A new record starts at its top (through the bar, so its thumb does
+		-- not keep the last record's place).
+		Widgets.ScrollTo(d.scroll, 0)
 		fillChips(d, chips, content)
 		fillButtons(d, buttons, tabId, item)
 		d:Show()

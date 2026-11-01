@@ -198,7 +198,10 @@ return function(t, expect)
 			mock.Slash("history add Took the oath")
 			local cols = ns.CharacterView.Columns(ns.MainWindow.ContentWidth())
 			local panelX, panelY = pos(section.familyPanel)
-			expect.equal(panelX, cols.rightX)
+			-- In the right column's own scroll child, which stands at rightX.
+			expect.equal(panelX, 0)
+			expect.equal(section.familyPanel:GetParent(), section.side)
+			expect.equal(section.sideScroll.__points[1][2], cols.rightX)
 			for i, spec in ipairs(section.specs) do
 				if spec.kind ~= "field" then
 					local x, y = pos(section.rows[i])
