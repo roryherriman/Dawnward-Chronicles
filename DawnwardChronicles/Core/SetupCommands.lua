@@ -32,8 +32,11 @@ function SetupCommands.StatusLines(ctx)
 		lines[#lines + 1] = "Setup: not complete."
 	end
 	lines[#lines + 1] = "Current wizard version: " .. Onboarding.VERSION .. "."
-	lines[#lines + 1] = "Publication model: " .. (char and ns.Privacy.ProfileModel(char)
-		and "profile (new profile details start Public)" or "original (everything starts Private)") .. "."
+	local status = char and ns.Publication.Status(char) or "empty"
+	lines[#lines + 1] = "Publication: " .. (status == "profile" and "the whole profile publishes"
+		or status == "pending" and ("waiting for your one-time confirmation (/dawnward publish), "
+			.. ns.Publication.HiddenCount(char) .. " item(s) not published yet")
+		or "nothing to publish yet") .. "."
 	local seen = Actions.SetupSeen(ctx)
 	lines[#lines + 1] = seen and "Opened by itself once already; later logins offer to resume an unfinished setup."
 		or "Not opened by itself yet."
@@ -63,46 +66,33 @@ Commands.Register("setup", function(ctx)
 	end
 end)
 
---- /dawnward publish: the one-time move to the profile publication model
--- for a character created before v0.9 (Core/Publication.lua). Without
--- "confirm" it only previews; "publish <categories> confirm" makes the
--- Private items of those categories Public (Secret items never change);
--- "publish none confirm" switches the model without publishing anything.
+--- /dawnward publish: the one-time confirmation that the whole character
+-- profile publishes (Core/Publication.lua), for a character whose older
+-- details were kept back by a previous version. Without "confirm" it only
+-- previews; "publish undo" goes back to the model the character had.
 Commands.Register("publish", function(ctx, rest)
 	local char = Actions.Character(ctx)
-	if char and ns.Privacy.ProfileModel(char) then
-		out(ctx, "This character already uses the profile model: new profile details start Public. Change any "
-			.. "item's visibility in the window.")
+	local word = (rest or ""):lower():match("^%s*(%S*)")
+	if word == "undo" then
+		local _, message = Actions.RevertPublication(ctx)
+		out(ctx, message)
 		return
 	end
-	local words, confirm = {}, false
-	for word in (rest or ""):lower():gmatch("[^%s,]+") do
-		if word == "confirm" then confirm = true else words[#words + 1] = word end
+	if not char or ns.Publication.IsComplete(char) then
+		out(ctx, "Your whole character profile is already published to Total RP 3 once it is connected.")
+		return
 	end
-	local choices = {}
-	for _, word in ipairs(words) do
-		if word == "all" then
-			for id in pairs(ns.Publication.CATEGORY_IDS) do choices[id] = true end
-		elseif word ~= "none" and not ns.Publication.CATEGORY_IDS[word] then
-			local ids = {}
-			for _, c in ipairs(ns.Publication.CATEGORIES) do ids[#ids + 1] = c.id end
-			out(ctx, "Unknown category '" .. word .. "'. Use: " .. table.concat(ids, ", ") .. ", all or none.")
-			return
-		elseif word ~= "none" then
-			choices[word] = true
-		end
-	end
-	if not confirm then
-		out(ctx, "The profile model: new profile details start Public, ready for Total RP 3. Nothing changes "
-			.. "until you confirm. Secret items never become Public.")
-		for _, line in ipairs(char and ns.Publication.PreviewLines(char, choices) or {}) do
+	if word ~= "confirm" then
+		local lines = ns.Publication.PreviewLines(char)
+		out(ctx, "An earlier version of Dawnward kept some of this character's profile back. Confirming makes your "
+			.. "whole profile the source for Total RP 3 (when connected). Nothing changes until you confirm.")
+		for _, line in ipairs(lines) do
 			out(ctx, "  " .. line)
 		end
-		out(ctx, "Switch: /dawnward publish <categories|all|none> confirm   (for example: publish fields,biography "
-			.. "confirm)")
+		out(ctx, "Confirm: /dawnward publish confirm   Undo later: /dawnward publish undo")
 		return
 	end
-	local _, message = Actions.TransitionPublication(ctx, choices)
+	local _, message = Actions.TransitionPublication(ctx)
 	out(ctx, message)
 end)
 

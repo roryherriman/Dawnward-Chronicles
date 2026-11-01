@@ -90,7 +90,10 @@ return function(t, expect)
 		local w = { ns = ns, fake = fake, deps = deps, Sync = ns.TRP3Sync, store = store }
 		function w.char()
 			local char = assert(store:EnsureCharacter(KEY, 1))
-			ns.Publication.Adopt(char, 1)
+			if not w.adopted then
+				ns.Publication.Adopt(char, 1) -- a character set up with the wizard: its whole profile publishes
+				w.adopted = true
+			end
 			return char
 		end
 		function w.import(text)
@@ -233,7 +236,7 @@ return function(t, expect)
 				local preview = w.Sync.RollbackPreview(w.deps)
 				expect.truthy(preview, "a preview before anything changes")
 				expect.truthy(w.about().T1.TX:find(paragraphs(text)[2], 1, true), "previewing changes nothing")
-				w.ns.Sources.SetVisibility(w.char(), "private", w.deps.now())
+				w.char().publication = {} -- an older model: the story is no longer published
 				local ok, msg = w.Sync.Rollback(w.deps, nil, "own")
 				expect.truthy(ok, msg)
 				expect.equal(w.about().T1.TX, "Private about text")

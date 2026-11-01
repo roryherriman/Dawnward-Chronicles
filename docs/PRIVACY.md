@@ -2,31 +2,34 @@
 
 A character's history is the player's creative work. Some of it is meant for other players to see, and much of it is not. Dawnward keeps a hard line between **private character history** and **public profile information**.
 
-## Visibility levels
+## Publication model (v0.10): your profile is your profile
 
-Every fact Dawnward stores (a family member, a backstory paragraph, a journal entry, a trait reason) has one visibility level:
+**From v0.10 there is no per-item Public / Private / Secret classification in the normal experience.** A character's Dawnward profile is what Dawnward publishes to Total RP 3 once the player connects a named Total RP 3 profile. What is not meant for others is simply not part of the profile:
 
-| Level | Inside Dawnward | Shareable export | TRP3 | Default for |
-|---|---|---|---|---|
-| `public` | ✅ | ✅ | ✅ (when sync is enabled) | Original model: nothing (making something public is an explicit choice). Profile model (v0.9): profile details, see below. |
-| `private` | ✅ | ❌, unless "include private" is ticked for a personal backup | ❌ | Original model: everything. Profile model: the journal, story answers, private convictions |
-| `secret` | ✅ | ❌, unless "include secrets" is ticked separately, with a warning | ❌ **never** | Facts the player marks as secret |
+| Part of the profile (published when connected) | Never part of the profile |
+|---|---|
+| Profile details (names, titles, race, class, age, birthplace, residence, appearance, ...), the biography (the story kept word for word), family, history, facts, personality values, the public persona of an established stance, defining moments (approved story entries marked important) | Journal notes, unapproved story drafts and suggestions, story answers and decisions, memories, a stance's inner conviction, earlier biography versions and where text came from |
 
-## Publication model (v0.9)
+`char.publication` (`Core/Publication.lua`) records which model a character is on:
 
-Two models exist side by side, per character (`char.publication`, `Core/Publication.lua`, `Privacy.DefaultFor`):
-
-| | Original model | Profile model |
+| Value | Who | What publishes |
 |---|---|---|
-| Who has it | Characters created before v0.9 | Characters set up with the v0.9 wizard, and older characters after the one-time switch |
-| Profile fields, family, history, facts, personality values, a stance's public persona, the biography | Start **Private** | Start **Public**: they describe the character to others, ready for Total RP 3 |
-| Journal entries, story answers and records, private convictions, memories | Start Private | Start Private (unchanged) |
-| Secret | Never published | Never published |
+| `{ mode = "profile", version = 2 }` | Characters set up with the wizard since v0.10; v0.9 characters with nothing hidden (moved over automatically when loaded); any character after the one-time confirmation | The whole profile; the old visibility of each record is ignored |
+| `{ mode = "profile" }` (v0.9) with something hidden, or `{}` (before v0.9) | Older characters until the player confirms | Only what an earlier version marked Public |
 
-- **No routine classification.** The v0.9 setup wizard has no privacy step. A new character's details are its public profile; any single item can still be made Private or Secret with its chip.
-- **Older characters are never published silently.** They keep the original model until the player runs the one-time switch (`/dawnward publish`, or the Total RP 3 page). It first previews, per category, how many items are Private, Secret and already Public. Only the **Private** items of the categories the player ticks become Public; **Secret items never change**; the journal and story records are not part of it. Ticking nothing switches the model for new items only.
-- **The biography** (the verbatim story kept as a biography source) now has its own visibility. It starts Public under the profile model and Private otherwise; only while it is Public does its current text reach the public projection (share exports and, when connected, Total RP 3). Earlier versions and where it came from never do.
-- **Unknown values are safe.** A damaged or unknown publication value loads as the original model; an unknown biography visibility loads as Private. An older build that does not know these keys drops them, which also falls back to Private.
+- **Older content is never published silently.** A character an earlier version kept partly back stays as it was until the player confirms once (`/dawnward publish confirm`, or **Publish whole profile…** on the Total RP 3 page). The confirmation first lists, per category, how many items would be published.
+- **Reversible and lossless.** The confirmation does not change any record: old visibility values stay stored, and `/dawnward publish undo` returns the character to the model it had.
+- **Why this changed (v0.10).** In 0.9 a backstory imported during first-time setup was stored with the old Private default, because the wizard switched the character to the profile model only at Finish; the About page was then built from Public items only and stayed empty in game ("No description"). In v0.10 the profile publishes as a whole, so the order of setup steps no longer matters.
+
+## Visibility levels (legacy, before v0.10)
+
+Older saved data still carries a visibility on each record. It is kept for compatibility and for characters that have not confirmed yet:
+
+| Level | Meaning before v0.10 |
+|---|---|
+| `public` | Could reach share exports and Total RP 3 |
+| `private` | Inside Dawnward only (personal backups could include it) |
+| `secret` | Inside Dawnward only, never published |
 
 ## The journal (v0.2)
 - Every journal entry has a visibility. Entries you write and automatic milestones both start **private**.
@@ -81,13 +84,14 @@ Two models exist side by side, per character (`char.publication`, `Core/Publicat
 
 ## The public projection
 
-The **only** way character data leaves the core is `Projection.GetPublic(characterKey)`. It returns a newly built, deep-copied table that contains `public` facts only (each with its statement, category and subject; provenance is reduced to its origin, without source links or excerpts) and, since v0.9, the biography's current text when the biography itself is Public. The TRP3 integration and the shareable export both work from this projection and never see the core database.
+The **only** way character data leaves the core is `Projection.GetPublic(char)`. It returns a newly built, deep-copied table. For a character on the v0.10 model it holds the profile described above; for an older character that has not confirmed, only items marked Public. Facts carry their statement, category and subject; provenance is reduced to its origin, without source links or excerpts. The TRP3 integration and the shareable export both work from this projection and never see the core database.
 
 Tests check that:
 
-- `private` and `secret` values never appear in any projection, share export or TRP3 write;
+- journal notes, drafts, story answers and inner convictions never appear in any projection or TRP3 write;
+- an older character's kept-back items never appear before the one-time confirmation;
 - changing the projection cannot change the core data;
-- marking a fact as `secret` removes it from the very next projection.
+- the confirmation can be undone exactly.
 
 ## What Dawnward never does
 

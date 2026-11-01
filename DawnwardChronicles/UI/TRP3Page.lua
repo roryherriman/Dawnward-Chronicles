@@ -1076,11 +1076,11 @@ function TRP3Page.BuildOverview(page, P, innerW)
 	Widgets.Tooltip(page.previewProfile, "Preview profile", "Everything Dawnward would publish, in a window you can "
 		.. "copy from. Nothing is written. Same as /dawnward trp3 profile.")
 	-- Only for older characters, at the right of the title line.
-	page.switchModel = Widgets.Button(o, "Use the profile model…", 190, Style.CONTROL.compact, "ghost")
+	page.switchModel = Widgets.Button(o, "Publish whole profile…", 190, Style.CONTROL.compact, "ghost")
 	page.switchModel:SetPoint("TOPRIGHT", -P, -54)
 	page.switchModel:SetScript("OnClick", function() TRP3Page.AskSwitchModel() end)
-	Widgets.Tooltip(page.switchModel, "Use the profile model", "Characters set up since v0.9 start their profile "
-		.. "details Public. This one-time switch shows what would change first; Secret items never change. "
+	Widgets.Tooltip(page.switchModel, "Publish whole profile", "An earlier version kept part of this character's "
+		.. "profile back from Total RP 3. This one-time confirmation lists it first and can be undone. "
 		.. "Same as /dawnward publish.")
 end
 
@@ -1105,7 +1105,7 @@ function TRP3Page.RefreshOverview(page, view)
 		seg:Select(prefs[seg.key] or ns.StorySchema.DEFAULT_PREFS[seg.key])
 	end
 	page.connectAll:SetEnabled(view.probe.experimental.allowed == true)
-	page.switchModel:SetShown(char ~= nil and not ns.Privacy.ProfileModel(char))
+	page.switchModel:SetShown(char ~= nil and ns.Publication.Status(char) == "pending")
 end
 
 --- "Connect everything…": the same single authorisation as setup's
@@ -1127,18 +1127,18 @@ function TRP3Page.AskConnectAll(page)
 	end)
 end
 
---- The one-time switch of an older character to the profile model.
+--- The one-time confirmation for a character an earlier version kept
+-- partly back (Publication.Status "pending").
 function TRP3Page.AskSwitchModel()
 	local char = realChar()
-	if not char or ns.Privacy.ProfileModel(char) then return end
-	local all = {}
-	for id in pairs(ns.Publication.CATEGORY_IDS) do all[id] = true end
-	local lines = ns.Publication.PreviewLines(char, all)
-	Widgets.Confirm("Switch this character to the profile model?\n\n" .. table.concat(lines, "\n")
-		.. "\n\nNew profile details will start Public. Secret items never change. To publish only some categories, "
-		.. "use /dawnward publish.", "Switch", function()
+	if not char or ns.Publication.Status(char) ~= "pending" then return end
+	local lines = ns.Publication.PreviewLines(char)
+	Widgets.Confirm("Publish your whole character profile?\n\nAn earlier version of Dawnward kept part of this "
+		.. "character back from Total RP 3:\n\n" .. table.concat(lines, "\n")
+		.. "\n\nFrom now on your whole Dawnward profile is the source for Total RP 3. You can undo this with "
+		.. "/dawnward publish undo.", "Publish", function()
 		act(function()
-			local _, message = ns.Actions.TransitionPublication(ns.ctx, all)
+			local _, message = ns.Actions.TransitionPublication(ns.ctx)
 			return message
 		end)
 	end)

@@ -12,6 +12,20 @@ Every release entry has a **Verified** line naming the highest test level reache
 
 A feature is never called "tested" or "compatible" in this file unless it reached L3 or L4.
 
+## [Unreleased]: 0.10.0-dev (pre-playthrough overhaul)
+
+**Verified: L2** (mocked). Nothing in this section has been tested in game yet.
+
+### Fixed: the Total RP 3 About page stayed empty ("No description")
+- **Cause:** a backstory imported during first-time setup was stored before Finish switched the character to the profile model, so it kept the old Private default. The About page was built only from items marked Public, so the story never reached Total RP 3, while the fields set at Finish (name, race, class, birthplace, pronouns) did. The mocked tests switched the model before importing, so they never took this path.
+- **Fix:** your Dawnward profile is published as a whole once Total RP 3 is connected; per-item visibility no longer decides what reaches Total RP 3 (see Publication below). A test now drives the real path (first login, setup, Import a story, Finish with Connect, the debounced sync) and the owner's 0.9 saved data.
+- **If you used 0.9:** your character waits for one confirmation before anything an earlier version kept back is published: `/dawnward publish confirm`, or **Publish whole profile…** on the Total RP 3 page. `/dawnward trp3 diagnose` shows exactly where the About page stands.
+- **Diagnostics:** `/dawnward trp3 diagnose` now traces the About page link by link (character, publication, biography size and paragraphs, whether it is in the profile, layout, composed sections, authorisation, Total RP 3's current template and size, the next run's state and reason, the last write and read-back). It never prints the story itself.
+
+### Publication: no more Public / Private / Secret
+- What describes your character is your profile and is published when Total RP 3 is connected. Journal notes, drafts, story answers, memories and a stance's inner conviction are never part of it.
+- New characters start this way. A 0.9 character with nothing hidden moves over by itself. Any other character keeps publishing only what it did before until you confirm once; the confirmation changes no record and can be undone (`/dawnward publish undo`).
+
 ## [Unreleased]: 0.9.0-dev (first login, complete Total RP 3 profile)
 
 **Verified: L2** (mocked). Nothing in this section has been tested in game yet.

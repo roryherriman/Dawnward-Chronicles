@@ -56,7 +56,10 @@ return function(t, expect)
 		local w = { ns = ns, fake = fake, deps = deps, Sync = ns.TRP3Sync }
 		function w.char()
 			local char = assert(store:EnsureCharacter(KEY, 1))
-			ns.Publication.Adopt(char, 1) -- a v0.9 character: profile details start Public
+			if not w.adopted then
+				ns.Publication.Adopt(char, 1) -- a character set up with the wizard: its whole profile publishes
+				w.adopted = true
+			end
 			return char
 		end
 		function w.bio(text)
@@ -149,10 +152,11 @@ return function(t, expect)
 			expect.equal(count, 1)
 		end)
 
-		t:it("never publishes a biography that is not Public", function()
+		t:it("an older character's hidden biography waits for the one-time confirmation", function()
 			local w = world()
 			w.bio("A secret past.")
 			w.ns.Sources.SetVisibility(w.char(), "secret", 5)
+			w.char().publication = { mode = "profile" } -- a v0.9 character with a hidden item
 			w.field("summary", "Public summary.")
 			w.connect()
 			w.run()
@@ -314,7 +318,7 @@ return function(t, expect)
 			w.run()
 			w.bio("A tale, retold.") -- a second write: its backup holds Dawnward's first text
 			w.run()
-			w.ns.Sources.SetVisibility(w.char(), "private", 9)
+			w.char().publication = {} -- back on an older model: the story is no longer published
 			local preview = w.Sync.RollbackPreview(w.deps)
 			expect.truthy(preview.ownPossible, preview.ownReason)
 			expect.truthy(table.concat(preview.items, "\n"):find("A tale.", 1, true), "names what is no longer Public")

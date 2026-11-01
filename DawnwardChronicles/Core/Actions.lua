@@ -667,20 +667,32 @@ function Actions.SetBiographyVisibility(ctx, level)
 	end)
 end
 
---- The one-time move of an established character to the profile
--- publication model (Core/Publication.lua). choices = { [categoryId] =
--- true }: Private items of those categories become Public; Secret items
--- never change. Returns ok, message.
-function Actions.TransitionPublication(ctx, choices)
+--- The one-time confirmation (Core/Publication.lua): the whole profile of
+-- a character an earlier version kept partly back publishes from now on.
+-- Old visibility values are kept, so RevertPublication undoes it exactly.
+-- Returns ok, message.
+function Actions.TransitionPublication(ctx)
 	return withCharacter(ctx, function(char)
-		local changed, err = ns.Publication.Transition(char, choices, ctx.now())
+		local changed, err = ns.Publication.Transition(char, nil, ctx.now())
 		if not changed then
 			return nil, "Not changed: " .. tostring(err) .. "."
 		end
 		local total = 0
 		for _, n in pairs(changed) do total = total + n end
-		return true, string.format("This character now uses the profile model: new profile details start Public. "
-			.. "%d Private item%s made Public; Secret items were not changed.", total, total == 1 and " was" or "s were")
+		return true, string.format("Your whole character profile now publishes to Total RP 3 (when connected): "
+			.. "%d item%s that an earlier version kept back. Undo: /dawnward publish undo.", total,
+			total == 1 and "" or "s")
+	end)
+end
+
+--- Undoes TransitionPublication. Returns ok, message.
+function Actions.RevertPublication(ctx)
+	return withCharacter(ctx, function(char)
+		local ok, err = ns.Publication.Revert(char, ctx.now())
+		if not ok then
+			return nil, "Not changed: " .. tostring(err) .. "."
+		end
+		return true, "Back to the earlier publication model: only what it published before is published."
 	end)
 end
 
