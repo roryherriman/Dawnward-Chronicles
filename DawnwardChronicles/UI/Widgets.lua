@@ -352,6 +352,48 @@ function Widgets.SlimScrollBar(scroll, offset, width)
 	return bar
 end
 
+--- Mouse wheel ---------------------------------------------------------------------
+-- The client gives the wheel to the topmost frame under the cursor that has
+-- it enabled; with none, it zooms the camera. Scroll frames scroll by a
+-- fixed step (clamped to their range); the window swallows the rest, so the
+-- wheel never reaches the game world while the journal is under the cursor.
+Widgets.WHEEL_STEP = 60
+
+--- How far scroll can move (0 when nothing scrolls or the client cannot say).
+function Widgets.ScrollRange(scroll)
+	local ok, range = pcall(scroll.GetVerticalScrollRange, scroll)
+	range = ok and type(range) == "number" and range or 0
+	return math.max(0, math.floor(range))
+end
+
+--- Scrolls to value, clamped to the range; returns where it went. Through
+-- the template's bar where there is one (its OnValueChanged moves the view),
+-- so the thumb and the view stay together.
+function Widgets.ScrollTo(scroll, value)
+	value = math.max(0, math.min(Widgets.ScrollRange(scroll), value or 0))
+	local bar = scroll.ScrollBar
+	if type(bar) == "table" and bar.SetValue then
+		bar:SetValue(value)
+	end
+	if scroll:GetVerticalScroll() ~= value then scroll:SetVerticalScroll(value) end
+	return value
+end
+
+--- The wheel scrolls scroll by step (default WHEEL_STEP) per notch.
+function Widgets.WheelScroll(scroll, step)
+	step = step or Widgets.WHEEL_STEP
+	if scroll.EnableMouseWheel then scroll:EnableMouseWheel(true) end
+	scroll:SetScript("OnMouseWheel", function(self, delta)
+		Widgets.ScrollTo(self, self:GetVerticalScroll() - (delta or 0) * step)
+	end)
+end
+
+--- The wheel over frame does nothing (and so never zooms the camera).
+function Widgets.SwallowWheel(frame)
+	if frame.EnableMouseWheel then frame:EnableMouseWheel(true) end
+	frame:SetScript("OnMouseWheel", function() end)
+end
+
 function Widgets.Card(parent)
 	local card = CreateFrame("Frame", nil, parent)
 	card.bg = Style.Solid(card, "BACKGROUND", -2)

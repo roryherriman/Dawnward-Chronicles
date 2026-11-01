@@ -150,6 +150,20 @@ function Methods:SetPoint(...)
 end
 function Methods:SetVerticalScroll(v) self.__vscroll = v end
 function Methods:GetVerticalScroll() return self.__vscroll or 0 end
+-- Scroll frames: the range is how much taller the scroll child is than the
+-- frame (both as last sized), as the client computes it.
+function Methods:SetScrollChild(child)
+	self.__scrollChild = child
+	child.__scrollParent = self
+end
+function Methods:GetScrollChild() return self.__scrollChild end
+function Methods:GetVerticalScrollRange()
+	local child = self.__scrollChild
+	if not child then return 0 end
+	return math.max(0, (child.__height or 0) - (self.__height or 0))
+end
+function Methods:EnableMouseWheel(on) self.__wheel = on and true or false end
+function Methods:IsMouseWheelEnabled() return self.__wheel == true end
 function Methods:SetWordWrap(on) self.__wordWrap = on end
 function Methods:SetShown(on)
 	if on then self:Show() else self:Hide() end

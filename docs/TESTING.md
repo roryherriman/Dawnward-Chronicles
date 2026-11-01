@@ -850,3 +850,39 @@ Use a **spare, non-default** Total RP 3 profile. Note the time of each step so i
 | X11 | `/reload`, then wait | Nothing is written again (no duplicate, `trp3 log` shows no new write) |
 | X12 | Second client (or a friend) targets you after X2 | They see the About page and fields after Total RP 3's normal refresh (at most every 10 s per target) |
 | X13 | Character created before v0.9: Overview > **Use the profile model…** | The confirmation counts Private, Secret and Public items per category; Secret stays Secret |
+
+#### Part Y: the complete-biography regression (automated: `trp3_biography_regression_spec.lua`)
+
+The automated run (L2, TRP3 3.4.1 fake) imports one long backstory of plain paragraphs and checks fifteen guarantees in templates 1, 2 and 3. It always runs a public stand-in with the same shape (`tests/fixtures/backstory_paragraphs.lua`). It also runs the owner's real backstory when a private copy is at `private/fixtures/kyssarra_backstory.txt` (git-ignored, never committed); CI does not have that copy.
+
+| # | Guarantee | Automated (L2) | Still needs the game (L3) |
+|---|---|---|---|
+| 1 | The whole biography imports into Dawnward | Byte for byte; reviewing it in pieces leaves the source unchanged | Paste into the 16 KB import box: Y1 |
+| 2 | Every paragraph intact | Same paragraphs, same order, one blank line between each | Y1 |
+| 3 | Nothing truncated or rewritten | Stored length equals the original; every sentence published | Y2 |
+| 4 | It appears in TRP3 About after authorisation | Written on the first sync after Authorize | Y2 |
+| 5 | Template 1 shows the whole text | Every paragraph once, after the player's own text | How TRP3 renders a long text: Y2 |
+| 6 | Template 2 frames lose no sentence | Every sentence across the frames; each frame within size limit | Y3 |
+| 7 | Template 3 puts content in the right section | The story in the history; the player's appearance and notes kept first | Y3 |
+| 8 | Formatting, icons and backgrounds | TRP3 heading tags; each Dawnward frame has an icon and background; the player's frame unchanged | Icons render (no green squares): Y3 |
+| 9 | An edit updates Dawnward's part | Only Dawnward's part changes; the player's text outside it is kept | Y4 |
+| 10 | A second sync duplicates nothing | No-op, and the first paragraph appears once | Y5 |
+| 11 | Unrelated TRP3 content untouched | Characteristics and character info are deep-equal before and after | Y6 |
+| 12 | Conflicts | A hand edit inside Dawnward's part pauses sync; the edit is kept | Y6 |
+| 13 | Backup and rollback | Backup before the first write; preview changes nothing; rollback restores the player's text | Y7 |
+| 14 | Persists across reload | After a SavedVariables round trip the record survives and the next sync is a no-op | Y8 |
+| 15 | Stays with its character and profile | Another character can't take the profile's About page; another TRP3 profile is never written | Y9 |
+
+**In game.** Use a **new test character** and a **spare, non-default Total RP 3 profile**. Do not test on Kyssarra's real profile. Back up `WTF` first.
+
+| # | Steps | Pass when |
+|---|---|---|
+| Y1 | Setup's Story stage (or Character > Import a story), paste the complete backstory, Save | `/dawnward biography status` says stored; Load saved story shows every paragraph with its blank lines |
+| Y2 | Total RP 3 > Overview > Connect everything…, template 1 | The About page shows your own text, then the whole story, every paragraph, nothing cut at the end |
+| Y3 | Template Frames, then Sections | Frames: no sentence missing across frames, icons and backgrounds show; Sections: the story is in History |
+| Y4 | Change one sentence in Dawnward, Save | TRP3 updates that sentence in place within seconds |
+| Y5 | Wait, then `/dawnward trp3 log` | No second write; nothing duplicated |
+| Y6 | In TRP3, edit a sentence inside Dawnward's section; also check name, race and traits | A conflict is shown; your edit stays; other TRP3 fields unchanged |
+| Y7 | Roll back… the newest backup | Preview first; after confirming, your own About text returns |
+| Y8 | `/reload` | No new write; the About page is unchanged |
+| Y9 | Log in another character on the same TRP3 profile | It can't take the About page; switching TRP3 profiles pauses sync |

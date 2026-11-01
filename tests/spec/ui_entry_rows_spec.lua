@@ -213,11 +213,15 @@ return function(t, expect)
 		t:it("separates panels by a gap, even with long wrapped text", function()
 			local _, _, ns, section = open()
 			local boxes = {}
+			-- The right column scrolls by itself: its entries are placed in its
+			-- own scroll child, which stands at rightX.
+			local rightX = ns.CharacterView.Columns(ns.MainWindow.ContentWidth()).rightX
 			for i, spec in ipairs(section.specs) do
 				local row = section.rows[i]
 				if spec.kind == "field" or spec.kind == "item" then
 					local p = row.__points[1]
-					boxes[#boxes + 1] = { x = p[4] or 0, y = y(row), w = row:GetWidth(), h = row:GetHeight() }
+					local x0 = row:GetParent() == section.side and rightX or 0
+					boxes[#boxes + 1] = { x = x0 + (p[4] or 0), y = y(row), w = row:GetWidth(), h = row:GetHeight() }
 				end
 			end
 			expect.truthy(#boxes >= 14, "fields, family and history checked")
