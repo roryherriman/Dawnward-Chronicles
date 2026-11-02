@@ -100,6 +100,8 @@ local L = {
 	goalInner = 6,
 	placeGap = 10,
 	thumbMin = 30,
+	emptyPad = 24,          -- the empty-state card: padding and a 28 px icon
+	emptyIcon = 28,
 }
 L.listW = L.contentW - L.sideW - L.colGap        -- 502
 L.cardW = L.listW - L.gutter                      -- 488
@@ -199,7 +201,7 @@ end
 function JournalView.Chips(entry)
 	local chips = {}
 	if entry.important then
-		chips[#chips + 1] = { text = "Defining", tone = "accent" }
+		chips[#chips + 1] = { text = "Defining", tone = "accent", icon = "star" }
 	end
 	if Journal.NeedsApproval(entry) then
 		chips[#chips + 1] = { text = "Waiting for your approval", tone = "waiting" }
@@ -222,6 +224,13 @@ function JournalView.TitleAndBody(entry)
 		return (entry.text:gsub("%.$", "")), nil
 	end
 	return nil, entry.text
+end
+
+--- Whether an entry's card has a footer of actions: entries the player
+-- wrote and story entries (Edit, Delete, Approve). Automatic entries keep
+-- only the Defining star, at the end of their meta line. Pure.
+function JournalView.HasFooter(entry)
+	return entry.kind == "note" or entry.kind == "story"
 end
 
 --- Entries for a filter id and search text, newest first. Search covers the
@@ -414,6 +423,7 @@ local function buildSide(section, f)
 	local inner = L.sideInner
 	-- Active goals.
 	local goals = Widgets.Panel(f, "Active goals", { padX = L.sidePad })
+	goals.titleReserve = 40 -- the "All" link
 	goals:SetWidth(L.sideW)
 	goals.all = textLink(goals, "All", 36, 20)
 	goals.all:SetPoint("TOPRIGHT", -(L.sidePad - Widgets.BUTTON.inset), -Widgets.PANEL_PAD + 1)
@@ -710,9 +720,16 @@ local function create(parent)
 	-- Empty states: a card at the top of the list with the explanation.
 	section.emptyCard = Widgets.Card(f)
 	section.emptyCard:SetWidth(L.cardW)
+	-- A quiet book icon in gold over the explanation (the rail's Journal icon).
+	section.emptyIcon = Style.LineIcon(section.emptyCard, "journal", L.emptyIcon)
+	if section.emptyIcon then
+		section.emptyIcon:SetPoint("TOP", 0, -L.emptyPad)
+		Style.Register(section.emptyIcon, function(i, theme) i:SetColor(theme.accent) end)
+	end
+	L.emptyTextTop = L.emptyPad + (section.emptyIcon and (L.emptyIcon + 12) or 0)
 	section.empty = Widgets.Label(section.emptyCard, "reading", true, "muted")
 	section.empty:SetJustifyH("CENTER")
-	section.empty:SetPoint("TOP", 0, -24)
+	section.empty:SetPoint("TOP", 0, -L.emptyTextTop)
 	section.empty:SetWidth(L.cardW - 2 * 40)
 	section.empty:SetText(JournalView.EMPTY_TEXT)
 	section.emptyCard:Hide()
@@ -786,6 +803,7 @@ local function create(parent)
 		for i, chip in ipairs(row.chips) do
 			local spec = chips[i]
 			if spec then
+				if (chip.icon and chip.icon.name) ~= spec.icon then chip:SetIcon(spec.icon) end
 				chip:SetChip(spec.text, spec.tone)
 				chip:ClearAllPoints()
 				chip:SetPoint("TOPRIGHT", row, "TOPRIGHT", -(L.padX + chipsWidth),
@@ -810,10 +828,14 @@ local function create(parent)
 		else
 			row.title:Hide()
 		end
-		row.meta:SetWidth(title and L.textW or headWidth)
+		-- An automatic entry has no footer (as the design's event card): its
+		-- only action, the Defining star, sits at the end of the meta line.
+		local footer = JournalView.HasFooter(entry)
+		row.meta:SetWidth((title and L.textW or headWidth) - (footer and 0 or (CONTROL.compact + L.actionGap)))
 		row.meta:SetText(meta)
 		row.meta:ClearAllPoints()
 		row.meta:SetPoint("TOPLEFT", L.textX, -cursor)
+		row.metaTop = cursor
 		cursor = cursor + math.max(textHeight(row.meta, L.metaLine), (not title and chipsWidth > 0) and CONTROL.chip or 0)
 		if body then
 			row.body:Show()
@@ -827,11 +849,17 @@ local function create(parent)
 		end
 
 		-- Footer: the entry's actions, from the right.
-		cursor = cursor + L.footerGap
-		if not measuring and section.updateRowActions then
-			section.updateRowActions(row, entry, cursor)
+		if footer then
+			cursor = cursor + L.footerGap
+		else
+			-- The star, centred on the meta line, needs its height.
+			cursor = math.max(cursor, row.metaTop + math.floor((L.metaLine + CONTROL.compact) / 2))
 		end
-		local height = math.max(cursor + L.footerH + padY, padY + 46 + padY)
+		if not measuring and section.updateRowActions then
+			section.updateRowActions(row, entry, footer and cursor or
+				(row.metaTop + math.floor((L.metaLine - CONTROL.compact) / 2)))
+		end
+		local height = math.max(cursor + (footer and L.footerH or 0) + padY, padY + 46 + padY)
 		row:SetHeight(height)
 		if not measuring then row:Show() end
 		return height
@@ -1019,7 +1047,7 @@ local function create(parent)
 		self.empty:SetText(total == 0 and JournalView.EMPTY_TEXT or JournalView.NO_MATCH_TEXT)
 		self.emptyCard:ClearAllPoints()
 		self.emptyCard:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, -top)
-		self.emptyCard:SetHeight(24 + textHeight(self.empty, 60) + 24)
+		self.emptyCard:SetHeight(L.emptyTextTop + textHeight(self.empty, 60) + L.emptyPad)
 
 		local offset = JournalView.ClampOffset(self.offset, self.totalHeight, self.viewH)
 		self.scroll:SetVerticalScroll(offset)
@@ -1060,6 +1088,12 @@ end
 --- Editing ---------------------------------------------------------------------
 
 local INSET = 8
+
+-- The entry editor's layout (UI units from the content area's top; bottom
+-- values from its bottom). Each field's error line (meta 14) fits in the gap
+-- below it.
+JournalView.EDITOR = { headingTop = 4, titleLabelTop = 40, titleTop = 60, textLabelTop = 120, areaTop = 140,
+	areaBottom = 66, buttonsBottom = 8, buttonW = 96 }
 
 local function preview(text)
 	text = text or ""
@@ -1120,7 +1154,7 @@ function JournalView.AttachEditing(section)
 	-- Only entries the player wrote (or story entries) can be edited or deleted.
 	-- The shown actions line up from the card's right edge, at offset y.
 	function section.updateRowActions(row, entry, y)
-		local written = entry.kind == "note" or entry.kind == "story"
+		local written = JournalView.HasFooter(entry)
 		row.edit:SetShown(written)
 		row.delete:SetShown(written)
 		row.approve:SetShown(Journal.NeedsApproval(entry))
@@ -1145,22 +1179,28 @@ function JournalView.AttachEditing(section)
 	editor:Hide()
 	section.editor = editor
 
+	-- The design system's form: Cinzel 18 heading, field labels in the warm
+	-- label tone (meta 14), 36 px inputs, 36 px buttons; error lines have
+	-- their own room under each field (JournalView.EDITOR).
+	local E = JournalView.EDITOR
 	editor.heading = Widgets.Label(editor, "GameFontNormalLarge", false, "title")
-	editor.heading:SetPoint("TOPLEFT", INSET, -10)
+	editor.heading:SetPoint("TOPLEFT", INSET, -E.headingTop)
 
-	editor.titleLabel = Widgets.Label(editor, "GameFontHighlightSmall", false, "muted")
-	editor.titleLabel:SetPoint("TOPLEFT", INSET, -40)
+	editor.titleLabel = Widgets.Label(editor, "meta", false, "muted")
+	Widgets.SetTextRole(editor.titleLabel, "label")
+	editor.titleLabel:SetPoint("TOPLEFT", INSET, -E.titleLabelTop)
 	editor.titleLabel:SetText("Title (optional)")
-	editor.title = Widgets.EditLine(editor, 101)
-	editor.title:SetPoint("TOPLEFT", INSET + 6, -56)
-	editor.title:SetPoint("TOPRIGHT", -INSET, -56)
+	editor.title = Widgets.EditLine(editor, 101, CONTROL.input)
+	editor.title:SetPoint("TOPLEFT", INSET, -E.titleTop)
+	editor.title:SetPoint("TOPRIGHT", -INSET, -E.titleTop)
 
-	editor.textLabel = Widgets.Label(editor, "GameFontHighlightSmall", false, "muted")
-	editor.textLabel:SetPoint("TOPLEFT", INSET, -100) -- below the title's error line
+	editor.textLabel = Widgets.Label(editor, "meta", false, "muted")
+	Widgets.SetTextRole(editor.textLabel, "label")
+	editor.textLabel:SetPoint("TOPLEFT", INSET, -E.textLabelTop) -- below the title's error line
 	editor.textLabel:SetText("Entry")
 	editor.area = Widgets.TextArea(editor, 2001, MainWindow.ContentWidth() - 2 * INSET)
-	editor.area.frame:SetPoint("TOPLEFT", INSET, -116)
-	editor.area.frame:SetPoint("BOTTOMRIGHT", -INSET, 62) -- room for an error line above the buttons
+	editor.area.frame:SetPoint("TOPLEFT", INSET, -E.areaTop)
+	editor.area.frame:SetPoint("BOTTOMRIGHT", -INSET, E.areaBottom) -- room for an error line above the buttons
 	Widgets.FieldError(editor.title, 560)
 	Widgets.FieldError(editor.area.edit, 560)
 	-- Keyboard: Tab moves between title and text, Enter on the title moves
@@ -1169,10 +1209,10 @@ function JournalView.AttachEditing(section)
 		onEscape = function(dirty) editor.chain.ConfirmDiscard(dirty, function() section:CloseEditor() end) end,
 	})
 
-	editor.cancel = Widgets.Button(editor, "Cancel", 90, 22)
-	editor.cancel:SetPoint("BOTTOMRIGHT", -INSET, 12)
-	editor.save = Widgets.Button(editor, "Save", 90, 22, "primary")
-	editor.save:SetPoint("RIGHT", editor.cancel, "LEFT", -6, 0)
+	editor.cancel = Widgets.Button(editor, "Cancel", E.buttonW, CONTROL.standard, "ghost")
+	editor.cancel:SetPoint("BOTTOMRIGHT", -INSET, E.buttonsBottom)
+	editor.save = Widgets.Button(editor, "Save", E.buttonW, CONTROL.standard, "primary")
+	editor.save:SetPoint("RIGHT", editor.cancel, "LEFT", -8, 0)
 
 	-- The dashboard's parts, hidden while the editor is open. Showing them
 	-- again is RenderList's job (the callout and empty state depend on data).

@@ -306,20 +306,33 @@ Style.ADVANCE = {
 		533,261,285,495,263,807,529,494,518,519,348,384,338,522,445,698,461,447,424,295,307,295,480,
 	},
 }
-local WIDE_CHAR = 600 -- any other character (·, ×, accented letters): a generous estimate
+local WIDE_CHAR = 600 -- any other character (accented letters): a generous estimate
+-- The few non-ASCII characters Dawnward itself writes (· separators, ×,
+-- …, —), from the same hmtx tables: display, displayBold, body, bold,
+-- italic, medium.
+Style.ADVANCE_EXTRA = {
+	["\194\183"] = { display = 202, displayBold = 219, body = 229, bold = 229, italic = 229, medium = 229 },
+	["\195\151"] = { display = 413, displayBold = 412, body = 480, bold = 480, italic = 481, medium = 480 },
+	["\226\128\166"] = { display = 638, displayBold = 673, body = 581, bold = 630, italic = 578, medium = 601 },
+	["\226\128\148"] = { display = 800, displayBold = 800, body = 929, bold = 889, italic = 932, medium = 912 },
+}
 
 --- Estimated width in UI units of text set in a Dawnward style (a
 -- Style.FONTS style name such as "button", "body", "eyebrow"). Colour codes
 -- are ignored. Pure.
 function Style.TextWidth(text, style)
 	local spec = Style.FONT_BY_STYLE[style or "body"] or Style.FONT_BY_STYLE.body
-	local advance = Style.ADVANCE[Style.styleFile[spec.style] or spec.file]
+	local file = Style.styleFile[spec.style] or spec.file
+	local advance = Style.ADVANCE[file]
 	text = tostring(text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
 	local units = 0
 	for char in text:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
 		local byte = char:byte()
+		local extra = Style.ADVANCE_EXTRA[char]
 		if #char == 1 and byte >= 32 and byte <= 126 then
 			units = units + advance[byte - 31]
+		elseif extra and extra[file] then
+			units = units + extra[file]
 		elseif #char >= 3 then
 			-- CJK and other 3- and 4-byte characters are full width (about one em)
 			-- in the game's fonts, which those clients use (Style.LATIN_LOCALES).

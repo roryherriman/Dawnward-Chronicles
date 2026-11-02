@@ -1105,13 +1105,19 @@ function Widgets.Chip(parent, text, tone, height)
 	chip.label:SetWordWrap(false)
 	chip.base = "surface"
 	-- A 13 px line icon before the text (the design's house, star, ...).
+	-- Icons are made once per name and reused (pooled chips change icons often).
 	function chip.SetIcon(self, name)
 		if self.icon and self.icon.name ~= name then
 			self.icon:Hide()
 			self.icon = nil
 		end
 		if name and not self.icon then
-			self.icon = Style.LineIcon(self, name, Widgets.CHIP_ICON, nil, "OVERLAY")
+			self.icons = self.icons or {}
+			if self.icons[name] == nil then
+				self.icons[name] = Style.LineIcon(self, name, Widgets.CHIP_ICON, nil, "OVERLAY") or false
+			end
+			self.icon = self.icons[name] or nil
+			if self.icon then self.icon:Show() end
 		end
 		self:SetChip(self.text, self.tone)
 		return self.icon ~= nil
@@ -1211,6 +1217,18 @@ function Widgets.Panel(parent, title, opts)
 		panel.title:SetPoint("TOPLEFT", padX, -Widgets.PANEL_PAD)
 		panel.title:SetText(title:upper())
 		top = top + 22
+		-- The title never runs past the panel: in a narrow panel its tracking
+		-- tightens (panel.titleReserve keeps room for a control at the right).
+		local function fitTitle(self, w)
+			w = w or self:GetWidth()
+			if type(w) == "number" and w > 0 then
+				self.title:SetWidth(math.max(1, w - 2 * self.padX - (self.titleReserve or 0)))
+			end
+		end
+		hook(panel, "OnSizeChanged", fitTitle)
+		local setWidth, setSize = panel.SetWidth, panel.SetSize
+		function panel.SetWidth(self, w) setWidth(self, w); fitTitle(self, w) end
+		function panel.SetSize(self, w, h) setSize(self, w, h); fitTitle(self, w) end
 	end
 	panel.inner = CreateFrame("Frame", nil, panel)
 	panel.inner:SetPoint("TOPLEFT", padX, -top)
