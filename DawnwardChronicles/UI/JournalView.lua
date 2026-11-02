@@ -62,12 +62,11 @@ local L = {
 	sublineH = 18,
 	toolbarTop = 18,
 	toolbarH = 38,          -- the filter track: 30 high items, 3 padding and a 1 px edge
-	newW = 124,
+	newW = Widgets.ButtonWidth("New entry", CONTROL.standard, true), -- "+" icon, 16 padding
 	searchW = 230,
 	toolGap = 10,
-	segmentW = 62,          -- each filter item
-	segmentGap = 2,
-	trackPad = 4,           -- 3 padding + the 1 px edge
+	segmentGap = Widgets.SEGMENT.gap,
+	trackPad = Widgets.SEGMENT.pad + 1, -- 3 padding + the 1 px edge
 	calloutTop = 72,
 	blockGap = 16,          -- toolbar, callout and list (the main column's gap)
 	calloutPadX = 18,
@@ -95,26 +94,41 @@ local L = {
 	metaLine = 17,          -- 14
 	readingLine = 20,       -- 16 + 4 spacing
 	panelGap = 12,          -- between the right column's panels
+	sidePad = 16,           -- the right column's panels: padding 14 / 16
 	panelFirst = 6,         -- eyebrow to the first row
 	goalGap = 12,
 	goalInner = 6,
 	placeGap = 10,
 	thumbMin = 30,
+	emptyPad = 24,          -- the empty-state card: padding and a 28 px icon
+	emptyIcon = 28,
 }
 L.listW = L.contentW - L.sideW - L.colGap        -- 502
 L.cardW = L.listW - L.gutter                      -- 488
 L.textX = L.padX + L.dateW + L.dateGap            -- 86
 L.textW = L.cardW - L.textX - L.padX              -- 384
-L.segmentsW = #JournalView.FILTERS * L.segmentW + (#JournalView.FILTERS - 1) * L.segmentGap
+-- Filter items sized to their words (the design's .btn.sm: 12 px padding).
+L.segmentWidths = Widgets.SegmentWidths(JournalView.FILTERS, CONTROL.compact, true)
+L.segmentsW = (#JournalView.FILTERS - 1) * L.segmentGap
+for _, w in ipairs(L.segmentWidths) do L.segmentsW = L.segmentsW + w end
 L.trackW = L.segmentsW + 2 * L.trackPad
 L.questionX = L.calloutPadX + L.disc + L.discGap  -- 78
 L.questionW = L.contentW - L.questionX - L.discGap - L.answerW - 8 - L.laterW - L.calloutPadX
-L.sideInner = L.sideW - 2 * Widgets.PANEL_PAD
+L.sideInner = L.sideW - 2 * L.sidePad
 L.panelTop = Widgets.PANEL_PAD + 22               -- a panel's eyebrow takes this much
 JournalView.LAYOUT = L
 
--- Footer actions (bold 14 on 30 high buttons; tested to fit their labels).
-JournalView.ACTION_WIDTHS = { Delete = 68, Edit = 54, Approve = 78, Defining = 80 }
+-- Footer actions: the design's small buttons (bold 14 on 30, a 14 px line
+-- icon, 12 px padding; tested to fit their labels). Defining is a star
+-- toggle as wide as it is high; without line regions it keeps its word.
+JournalView.ACTION_WIDTHS = {
+	Delete = Widgets.ButtonWidth("Delete", CONTROL.compact, true),
+	Edit = Widgets.ButtonWidth("Edit", CONTROL.compact, true),
+	Approve = Widgets.ButtonWidth("Approve", CONTROL.compact, true),
+	Defining = CONTROL.compact,
+	DefiningText = 80,
+}
+JournalView.ACTION_ICONS = { Delete = "delete", Edit = "edit", Approve = "check", Defining = "star" }
 
 --- Full meta text for an entry (date, level, place, origin, flags). Kept for
 -- the card's date tooltip and for callers outside the window.
@@ -187,7 +201,7 @@ end
 function JournalView.Chips(entry)
 	local chips = {}
 	if entry.important then
-		chips[#chips + 1] = { text = "Defining", tone = "accent" }
+		chips[#chips + 1] = { text = "Defining", tone = "accent", icon = "star" }
 	end
 	if Journal.NeedsApproval(entry) then
 		chips[#chips + 1] = { text = "Waiting for your approval", tone = "waiting" }
@@ -210,6 +224,13 @@ function JournalView.TitleAndBody(entry)
 		return (entry.text:gsub("%.$", "")), nil
 	end
 	return nil, entry.text
+end
+
+--- Whether an entry's card has a footer of actions: entries the player
+-- wrote and story entries (Edit, Delete, Approve). Automatic entries keep
+-- only the Defining star, at the end of their meta line. Pure.
+function JournalView.HasFooter(entry)
+	return entry.kind == "note" or entry.kind == "story"
 end
 
 --- Entries for a filter id and search text, newest first. Search covers the
@@ -373,28 +394,18 @@ local function openChronicle(tab)
 	MainWindow.Select("chronicle")
 end
 
--- A small framed area of plain textures (fill and 1 px edge) in theme roles.
-local function framedTrack(parent, fillRole, edgeRole)
-	local f = CreateFrame("Frame", nil, parent)
-	f.bg = Style.Solid(f, "BACKGROUND", -2)
-	f.bg:SetAllPoints(f)
-	f.edges = Style.Edge(f, "BACKGROUND", 0)
-	Style.Register(f, function(t, theme)
-		Style.Color(t.bg, Style.Tone(theme, fillRole))
-		t.edges:Paint(Style.Tone(theme, edgeRole), 1)
-	end)
-	return f
-end
-
 -- A text link (the design's "All" in Active goals): accent text, brighter
 -- on hover, no box. Built on a Button so it keeps clicks and tooltips.
 local function textLink(parent, text, width, height)
 	local b = Widgets.Button(parent, text, width, height, "ghost")
 	b.label:SetJustifyH("RIGHT")
+	-- The design's link is regular 14 (a, font-size 14), not a bold button label.
+	local meta = Style.UsesBundledFont("meta") and Style.fontObjects[Style.FontFor("meta")]
+	if meta then b.label:SetFontObject(meta) end
 	b.underline = Style.Solid(b, "ARTWORK")
 	b.underline:SetHeight(1)
 	b.underline:SetPoint("BOTTOMRIGHT", b.label, "BOTTOMRIGHT", 0, -1)
-	b.underline:SetWidth(math.ceil(Style.TextWidth(text, "buttonSmall")))
+	b.underline:SetWidth(math.ceil(Style.TextWidth(text, meta and "meta" or "buttonSmall")))
 	Style.Register(b, function(link, theme)
 		local tones = Style.Tones(theme)
 		local color = link.hover and tones.accentBright or theme.accent
@@ -411,10 +422,11 @@ end
 local function buildSide(section, f)
 	local inner = L.sideInner
 	-- Active goals.
-	local goals = Widgets.Panel(f, "Active goals")
+	local goals = Widgets.Panel(f, "Active goals", { padX = L.sidePad })
+	goals.titleReserve = 40 -- the "All" link
 	goals:SetWidth(L.sideW)
 	goals.all = textLink(goals, "All", 36, 20)
-	goals.all:SetPoint("TOPRIGHT", -Widgets.PANEL_PAD, -Widgets.PANEL_PAD + 2)
+	goals.all:SetPoint("TOPRIGHT", -(L.sidePad - Widgets.BUTTON.inset), -Widgets.PANEL_PAD + 1)
 	goals.all:SetScript("OnClick", function() openChronicle("goals") end)
 	Widgets.Tooltip(goals.all, "All goals", "Open Chronicle > Goals to see, add and edit every goal.")
 	goals.empty = Widgets.Label(goals.inner, "GameFontHighlightSmall", true, "muted")
@@ -436,7 +448,7 @@ local function buildSide(section, f)
 	section.goals = goals
 
 	-- Recent places.
-	local places = Widgets.Panel(f, "Recent places")
+	local places = Widgets.Panel(f, "Recent places", { padX = L.sidePad })
 	places:SetWidth(L.sideW)
 	places.empty = Widgets.Label(places.inner, "GameFontHighlightSmall", true, "muted")
 	places.empty:SetPoint("TOPLEFT", 0, -L.panelFirst)
@@ -558,17 +570,6 @@ end
 
 --- Cards -----------------------------------------------------------------------------
 
--- Paints a card: the design's featured look for a defining moment (and on
--- hover), the plain card otherwise; a hovered featured card gets the gold edge.
-local function paintCard(c, theme)
-	local tones = Style.Tones(theme)
-	local lifted = c.hover or c.featured
-	Style.Color(c.bg, lifted and tones.cardHover or theme.surface, 1)
-	local edge = (c.hover and c.featured) and theme.border or (lifted and tones.selectedEdge or theme.edge)
-	c.edges:Paint(edge, 1)
-	c.bar:Hide()
-end
-
 -- One card's content signature: everything its height depends on.
 local function signature(title, meta, body, chips)
 	local parts = { title or "", meta, body or "" }
@@ -611,42 +612,42 @@ local function create(parent)
 	end, CONTROL.input)
 	Widgets.Tooltip(section.search, "Search the journal", "Finds entries by title, text or recorded place.")
 
-	-- The filter: a panel-coloured, edged track with 3 px padding around the items.
-	section.filterTrack = framedTrack(section.toolbar, "panel", "edge")
-	section.filterTrack:SetSize(L.trackW, L.toolbarH)
-	section.filterTrack:SetPoint("TOPRIGHT", section.toolbar, "TOPRIGHT", 0, 0)
-	if section.filterTrack.SetFrameLevel and section.toolbar.GetFrameLevel then
-		section.filterTrack:SetFrameLevel(math.max(0, (section.toolbar:GetFrameLevel() or 1)))
-	end
-	section.filters = Widgets.Segmented(section.toolbar, JournalView.FILTERS, L.segmentsW + L.segmentGap,
-		CONTROL.compact, function(id)
+	-- The filter: the shared segmented control on its framed track (panel
+	-- fill, 1 px edge, 3 px padding), each item sized to its word.
+	section.filters = Widgets.Segmented(section.toolbar, JournalView.FILTERS, L.segmentsW, CONTROL.compact,
+		function(id)
 			section.filter, section.offset = id, 0
 			MainWindow.Refresh()
-		end)
-	for _, b in ipairs(section.filters.buttons) do b:SetWidth(L.segmentW) end
-	section.filters.buttons[1]:SetPoint("TOPLEFT", section.filterTrack, "TOPLEFT", L.trackPad, -L.trackPad)
-	if section.filters.track then section.filters.track:Hide() end -- the framed track replaces it
+		end, { fit = true, framed = true })
+	section.filterTrack = section.filters.frame
+	section.filterTrack:SetPoint("TOPRIGHT", section.toolbar, "TOPRIGHT", 0, 0)
 	section.filters:Select("all")
 
 	-- "A moment awaits".
-	local callout = Widgets.Callout(f, "A moment awaits")
+	local callout = Widgets.Callout(f, "A moment awaits", { padX = L.calloutPadX })
 	callout:SetPoint("TOPLEFT", 0, -L.calloutTop)
 	callout:SetWidth(L.contentW)
-	-- The icon disc: a gold-edged dark disc with a gold jewel (the design's
-	-- four-point star is vector art).
+	-- The icon disc: a gold-edged dark disc with the design's sparkle (a line
+	-- icon, 22 px; a gold jewel where the client has no line regions).
 	callout.discEdge = Style.Disc(callout, "ARTWORK", 1, L.disc)
 	callout.discEdge:SetPoint("LEFT", L.calloutPadX, 0)
 	callout.disc = Style.Disc(callout, "ARTWORK", 2, L.disc - 2)
 	callout.disc:SetPoint("CENTER", callout.discEdge, "CENTER", 0, 0)
-	callout.jewel = Style.Solid(callout, "OVERLAY")
-	callout.jewel:SetSize(12, 12)
-	callout.jewel:SetPoint("CENTER", callout.discEdge, "CENTER", 0, 0)
-	if callout.jewel.SetRotation then callout.jewel:SetRotation(math.pi / 4) end
+	callout.icon = Style.LineIcon(callout, "sparkle", 22, nil, "OVERLAY")
+	if callout.icon then
+		callout.icon:SetPoint("CENTER", callout.discEdge, "CENTER", 0, 0)
+		Style.Register(callout.icon, function(t, theme) t:SetColor(Style.Tones(theme).accentBright) end)
+	else
+		callout.jewel = Style.Solid(callout, "OVERLAY")
+		callout.jewel:SetSize(12, 12)
+		callout.jewel:SetPoint("CENTER", callout.discEdge, "CENTER", 0, 0)
+		if callout.jewel.SetRotation then callout.jewel:SetRotation(math.pi / 4) end
+		Style.Register(callout.jewel, function(t, theme) Style.Color(t, Style.Tones(theme).accentBright) end)
+	end
 	Style.Register(callout.discEdge, function(t, theme) Style.Color(t, theme.border) end)
 	Style.Register(callout.disc, function(t, theme)
 		Style.Color(t, Style.Mix(Style.Tones(theme).calloutFill, theme.accent, 0.1))
 	end)
-	Style.Register(callout.jewel, function(t, theme) Style.Color(t, Style.Tones(theme).accentBright) end)
 	callout.title:ClearAllPoints()
 	callout.title:SetPoint("TOPLEFT", L.questionX, -L.calloutPadY)
 	callout.title:SetWidth(L.questionW)
@@ -719,9 +720,16 @@ local function create(parent)
 	-- Empty states: a card at the top of the list with the explanation.
 	section.emptyCard = Widgets.Card(f)
 	section.emptyCard:SetWidth(L.cardW)
+	-- A quiet book icon in gold over the explanation (the rail's Journal icon).
+	section.emptyIcon = Style.LineIcon(section.emptyCard, "journal", L.emptyIcon)
+	if section.emptyIcon then
+		section.emptyIcon:SetPoint("TOP", 0, -L.emptyPad)
+		Style.Register(section.emptyIcon, function(i, theme) i:SetColor(theme.accent) end)
+	end
+	L.emptyTextTop = L.emptyPad + (section.emptyIcon and (L.emptyIcon + 12) or 0)
 	section.empty = Widgets.Label(section.emptyCard, "reading", true, "muted")
 	section.empty:SetJustifyH("CENTER")
-	section.empty:SetPoint("TOP", 0, -24)
+	section.empty:SetPoint("TOP", 0, -L.emptyTextTop)
 	section.empty:SetWidth(L.cardW - 2 * 40)
 	section.empty:SetText(JournalView.EMPTY_TEXT)
 	section.emptyCard:Hide()
@@ -730,7 +738,6 @@ local function create(parent)
 
 	local function buildCard(parentFrame)
 		local row = Widgets.Card(parentFrame)
-		Style.Register(row, paintCard)
 		row:SetWidth(L.cardW)
 		row.date = Widgets.DateBlock(row)
 		row.date:SetWidth(L.dateW)
@@ -780,9 +787,8 @@ local function create(parent)
 		row.entryId = entry.id
 		row.entry = entry
 		if row.featured ~= featured then
-			row.featured = featured
+			row:SetFeatured(featured)
 			Widgets.SetTextRole(row.date.day, featured and "accentBright" or "ghostText")
-			Style.Repaint(row)
 		end
 		row:ClearAllPoints()
 		row:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -(item.top or 0))
@@ -797,6 +803,7 @@ local function create(parent)
 		for i, chip in ipairs(row.chips) do
 			local spec = chips[i]
 			if spec then
+				if (chip.icon and chip.icon.name) ~= spec.icon then chip:SetIcon(spec.icon) end
 				chip:SetChip(spec.text, spec.tone)
 				chip:ClearAllPoints()
 				chip:SetPoint("TOPRIGHT", row, "TOPRIGHT", -(L.padX + chipsWidth),
@@ -821,10 +828,14 @@ local function create(parent)
 		else
 			row.title:Hide()
 		end
-		row.meta:SetWidth(title and L.textW or headWidth)
+		-- An automatic entry has no footer (as the design's event card): its
+		-- only action, the Defining star, sits at the end of the meta line.
+		local footer = JournalView.HasFooter(entry)
+		row.meta:SetWidth((title and L.textW or headWidth) - (footer and 0 or (CONTROL.compact + L.actionGap)))
 		row.meta:SetText(meta)
 		row.meta:ClearAllPoints()
 		row.meta:SetPoint("TOPLEFT", L.textX, -cursor)
+		row.metaTop = cursor
 		cursor = cursor + math.max(textHeight(row.meta, L.metaLine), (not title and chipsWidth > 0) and CONTROL.chip or 0)
 		if body then
 			row.body:Show()
@@ -838,11 +849,17 @@ local function create(parent)
 		end
 
 		-- Footer: the entry's actions, from the right.
-		cursor = cursor + L.footerGap
-		if not measuring and section.updateRowActions then
-			section.updateRowActions(row, entry, cursor)
+		if footer then
+			cursor = cursor + L.footerGap
+		else
+			-- The star, centred on the meta line, needs its height.
+			cursor = math.max(cursor, row.metaTop + math.floor((L.metaLine + CONTROL.compact) / 2))
 		end
-		local height = math.max(cursor + L.footerH + padY, padY + 46 + padY)
+		if not measuring and section.updateRowActions then
+			section.updateRowActions(row, entry, footer and cursor or
+				(row.metaTop + math.floor((L.metaLine - CONTROL.compact) / 2)))
+		end
+		local height = math.max(cursor + (footer and L.footerH or 0) + padY, padY + 46 + padY)
 		row:SetHeight(height)
 		if not measuring then row:Show() end
 		return height
@@ -1030,7 +1047,7 @@ local function create(parent)
 		self.empty:SetText(total == 0 and JournalView.EMPTY_TEXT or JournalView.NO_MATCH_TEXT)
 		self.emptyCard:ClearAllPoints()
 		self.emptyCard:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, -top)
-		self.emptyCard:SetHeight(24 + textHeight(self.empty, 60) + 24)
+		self.emptyCard:SetHeight(L.emptyTextTop + textHeight(self.empty, 60) + L.emptyPad)
 
 		local offset = JournalView.ClampOffset(self.offset, self.totalHeight, self.viewH)
 		self.scroll:SetVerticalScroll(offset)
@@ -1072,6 +1089,12 @@ end
 
 local INSET = 8
 
+-- The entry editor's layout (UI units from the content area's top; bottom
+-- values from its bottom). Each field's error line (meta 14) fits in the gap
+-- below it.
+JournalView.EDITOR = { headingTop = 4, titleLabelTop = 40, titleTop = 60, textLabelTop = 120, areaTop = 140,
+	areaBottom = 66, buttonsBottom = 8, buttonW = 96 }
+
 local function preview(text)
 	text = text or ""
 	if #text > 120 then
@@ -1085,18 +1108,24 @@ function JournalView.AttachEditing(section)
 	local f = section.frame
 	local W = JournalView.ACTION_WIDTHS
 
-	section.newButton = Widgets.Button(section.toolbar, "+ New entry", L.newW, CONTROL.standard, "primary")
+	section.newButton = Widgets.Button(section.toolbar, "New entry", L.newW, CONTROL.standard, "primary")
+	-- The design's "+" icon; a "+" in the label where lines are unavailable.
+	if not section.newButton:SetIcon("plus") then section.newButton:SetText("+ New entry") end
 	section.newButton:SetPoint("LEFT", 0, 0)
 	section.newButton:SetScript("OnClick", function() section:OpenEditor(nil) end)
 	section.search:SetPoint("LEFT", section.newButton, "RIGHT", L.toolGap, 0)
 
+	local I = JournalView.ACTION_ICONS
 	function section.decorateRow(row)
 		row.delete = Widgets.Button(row, "Delete", W.Delete, CONTROL.compact, "danger")
+		row.delete:SetIcon(I.Delete)
 		row.delete:SetScript("OnClick", function() section:ConfirmDelete(row.entry) end)
 		row.edit = Widgets.Button(row, "Edit", W.Edit, CONTROL.compact)
+		row.edit:SetIcon(I.Edit)
 		row.edit:SetScript("OnClick", function() section:OpenEditor(row.entry) end)
 		-- Story drafts are Dawnward's words until the player approves them.
 		row.approve = Widgets.Button(row, "Approve", W.Approve, CONTROL.compact, "primary")
+		row.approve:SetIcon(I.Approve)
 		row.approve:SetScript("OnClick", function()
 			local _, message = Actions.ApproveEntry(ns.ctx, row.entryId)
 			MainWindow.SetStatus(message)
@@ -1104,8 +1133,13 @@ function JournalView.AttachEditing(section)
 		end)
 		Widgets.Tooltip(row.approve, "Approve draft",
 			"Accept this draft as part of your character's story. Mark it Defining to make it part of your profile.")
-		-- Any entry can be marked as a defining moment.
-		row.mark = Widgets.Button(row, "Defining", W.Defining, CONTROL.compact, "ghost")
+		-- Any entry can be marked as a defining moment: a star toggle (gold
+		-- while the entry is defining); the word where lines are unavailable.
+		row.mark = Widgets.Button(row, "", W.Defining, CONTROL.compact, "ghost")
+		if not row.mark:SetIcon(I.Defining) then
+			row.mark:SetText("Defining")
+			row.mark:SetWidth(W.DefiningText)
+		end
 		row.mark:SetScript("OnClick", function()
 			local _, message = Actions.SetEntryImportant(ns.ctx, row.entryId, not (row.entry and row.entry.important))
 			MainWindow.SetStatus(message)
@@ -1120,11 +1154,15 @@ function JournalView.AttachEditing(section)
 	-- Only entries the player wrote (or story entries) can be edited or deleted.
 	-- The shown actions line up from the card's right edge, at offset y.
 	function section.updateRowActions(row, entry, y)
-		local written = entry.kind == "note" or entry.kind == "story"
+		local written = JournalView.HasFooter(entry)
 		row.edit:SetShown(written)
 		row.delete:SetShown(written)
 		row.approve:SetShown(Journal.NeedsApproval(entry))
 		row.mark:SetSelected(entry.important)
+		if row.mark.icon then
+			row.mark.iconRole = entry.important and "accentBright" or nil
+			Style.Repaint(row.mark)
+		end
 		local x = L.padX
 		for _, button in ipairs(row.actions) do
 			if button:IsShown() then
@@ -1141,22 +1179,28 @@ function JournalView.AttachEditing(section)
 	editor:Hide()
 	section.editor = editor
 
+	-- The design system's form: Cinzel 18 heading, field labels in the warm
+	-- label tone (meta 14), 36 px inputs, 36 px buttons; error lines have
+	-- their own room under each field (JournalView.EDITOR).
+	local E = JournalView.EDITOR
 	editor.heading = Widgets.Label(editor, "GameFontNormalLarge", false, "title")
-	editor.heading:SetPoint("TOPLEFT", INSET, -10)
+	editor.heading:SetPoint("TOPLEFT", INSET, -E.headingTop)
 
-	editor.titleLabel = Widgets.Label(editor, "GameFontHighlightSmall", false, "muted")
-	editor.titleLabel:SetPoint("TOPLEFT", INSET, -40)
+	editor.titleLabel = Widgets.Label(editor, "meta", false, "muted")
+	Widgets.SetTextRole(editor.titleLabel, "label")
+	editor.titleLabel:SetPoint("TOPLEFT", INSET, -E.titleLabelTop)
 	editor.titleLabel:SetText("Title (optional)")
-	editor.title = Widgets.EditLine(editor, 101)
-	editor.title:SetPoint("TOPLEFT", INSET + 6, -56)
-	editor.title:SetPoint("TOPRIGHT", -INSET, -56)
+	editor.title = Widgets.EditLine(editor, 101, CONTROL.input)
+	editor.title:SetPoint("TOPLEFT", INSET, -E.titleTop)
+	editor.title:SetPoint("TOPRIGHT", -INSET, -E.titleTop)
 
-	editor.textLabel = Widgets.Label(editor, "GameFontHighlightSmall", false, "muted")
-	editor.textLabel:SetPoint("TOPLEFT", INSET, -100) -- below the title's error line
+	editor.textLabel = Widgets.Label(editor, "meta", false, "muted")
+	Widgets.SetTextRole(editor.textLabel, "label")
+	editor.textLabel:SetPoint("TOPLEFT", INSET, -E.textLabelTop) -- below the title's error line
 	editor.textLabel:SetText("Entry")
 	editor.area = Widgets.TextArea(editor, 2001, MainWindow.ContentWidth() - 2 * INSET)
-	editor.area.frame:SetPoint("TOPLEFT", INSET, -116)
-	editor.area.frame:SetPoint("BOTTOMRIGHT", -INSET, 62) -- room for an error line above the buttons
+	editor.area.frame:SetPoint("TOPLEFT", INSET, -E.areaTop)
+	editor.area.frame:SetPoint("BOTTOMRIGHT", -INSET, E.areaBottom) -- room for an error line above the buttons
 	Widgets.FieldError(editor.title, 560)
 	Widgets.FieldError(editor.area.edit, 560)
 	-- Keyboard: Tab moves between title and text, Enter on the title moves
@@ -1165,10 +1209,10 @@ function JournalView.AttachEditing(section)
 		onEscape = function(dirty) editor.chain.ConfirmDiscard(dirty, function() section:CloseEditor() end) end,
 	})
 
-	editor.cancel = Widgets.Button(editor, "Cancel", 90, 22)
-	editor.cancel:SetPoint("BOTTOMRIGHT", -INSET, 12)
-	editor.save = Widgets.Button(editor, "Save", 90, 22, "primary")
-	editor.save:SetPoint("RIGHT", editor.cancel, "LEFT", -6, 0)
+	editor.cancel = Widgets.Button(editor, "Cancel", E.buttonW, CONTROL.standard, "ghost")
+	editor.cancel:SetPoint("BOTTOMRIGHT", -INSET, E.buttonsBottom)
+	editor.save = Widgets.Button(editor, "Save", E.buttonW, CONTROL.standard, "primary")
+	editor.save:SetPoint("RIGHT", editor.cancel, "LEFT", -8, 0)
 
 	-- The dashboard's parts, hidden while the editor is open. Showing them
 	-- again is RenderList's job (the callout and empty state depend on data).

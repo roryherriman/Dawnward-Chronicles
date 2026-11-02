@@ -68,8 +68,16 @@ MainWindow.LAYOUT = {
 	contentBottom = 36,   -- content area bottom, above the bottom edge
 	statusBottom = 10,
 	statusHeight = 20,
-	grip = 16,
+	grip = 18,            -- the bottom-right ornament, which is also the resize grip
+	gripInset = 6,
+	wordmarkIcon = 18,    -- the four-point star, 4 in from the rail padding, 8 before DAWNWARD
+	wordmarkIndent = 4,
+	wordmarkGap = 8,
+	wordmarkTracking = 0.18,
 }
+
+-- The rail's line icon for each section (Style.ICONS), as in Main.dc.html.
+MainWindow.NAV_ICONS = { journal = "journal", character = "character", story = "sparkle", chronicle = "chronicle" }
 
 --- Pure layout maths: rectangles relative to the window's bottom-left corner.
 --- Resizing (bottom-right handle) -------------------------------------------------
@@ -198,9 +206,10 @@ local function paintTab(tab, theme)
 	tab.edges:Paint(theme.border, on and 1 or 0)
 	tab.underline:SetShown(on and true or false)
 	Style.Color(tab.underline, theme.surfaceHover)
-	Style.TextColor(tab.label, on and tones.accentBright or (tab.hover and theme.text or tones.navText))
+	local tint = on and tones.accentBright or (tab.hover and theme.text or tones.navText)
+	Style.TextColor(tab.label, tint)
+	if tab.lineIcon then tab.lineIcon:SetColor(tint) end
 	if tab.icon then
-		local tint = on and tones.accentBright or (tab.hover and theme.text or tones.navText)
 		tab.icon:SetVertexColor(tint[1], tint[2], tint[3])
 	end
 	Style.Color(tab.badgeBg, theme.accent)
@@ -279,16 +288,37 @@ end
 MainWindow.TRP3_HELP = "Optional. Open the Total RP 3 page to see its status, preview your profile there "
 	.. "and manage sync."
 
---- The Total RP 3 line in the rail: availability only (read-only). Pure.
-function MainWindow.TRP3Line(status)
+--- The Total RP 3 line in the rail (Main.dc.html "Total RP 3 · sync off"):
+-- availability, then whether this character's sync is on. syncOn is the
+-- Total RP 3 ledger's own answer (TRP3Commands.AnyManaged). Read-only. Pure.
+function MainWindow.TRP3Line(status, syncOn)
 	if type(status) ~= "table" or not status.installed then
 		return "Total RP 3 · not installed (optional)"
 	end
 	if not status.loaded then
 		return "Total RP 3 · installed, not loaded"
 	end
-	local profile = status.profile and status.profile.name
-	return profile and ("Total RP 3 · profile \"" .. profile .. "\"") or ("Total RP 3 " .. (status.version or ""))
+	if status.error then
+		return "Total RP 3 · status unavailable"
+	end
+	return syncOn and "Total RP 3 · sync on" or "Total RP 3 · sync off"
+end
+
+--- The line's tooltip detail: the active profile, when there is one. Pure.
+function MainWindow.TRP3Detail(status)
+	local profile = type(status) == "table" and status.profile and status.profile.name
+	return profile and ("Active profile: \"" .. profile .. "\"") or nil
+end
+
+-- Whether this character's Total RP 3 sync is on (read from the ledger; never
+-- writes). False whenever the integration is not there.
+local function trp3SyncOn(c)
+	local ok, on = pcall(function()
+		local d = c and c.trp3Deps and c.trp3Deps()
+		local entry = d and d.ledger and d.ledger.optIn and d.ledger.optIn[d.characterKey]
+		return entry and ns.TRP3Commands and ns.TRP3Commands.AnyManaged(entry) or false
+	end)
+	return ok and on and true or false
 end
 
 --- color lightened just enough to read at 4.5:1 on background (class
@@ -400,12 +430,16 @@ local function refreshRail(char)
 		tab.badgeBg:SetShown(count > 0)
 	end
 	local status = ctx().trp3Status and ctx().trp3Status() or nil
-	local line = MainWindow.TRP3Line(status)
+	local loaded = type(status) == "table" and status.loaded and not status.error
+	local syncOn = loaded and trp3SyncOn(ctx()) or false
+	local line = MainWindow.TRP3Line(status, syncOn)
 	frame.trp3:SetText(line)
-	frame.trp3Dot.active = type(status) == "table" and status.loaded and true or nil
+	-- The dot: gold while sync is on, quiet otherwise (the word says which).
+	frame.trp3Dot.active = syncOn or nil
 	Style.Repaint(frame.trp3Dot)
 	frame.trp3Link.tooltipTitle = "Total RP 3"
-	frame.trp3Link.tooltipText = line .. "\n" .. MainWindow.TRP3_HELP
+	local detail = MainWindow.TRP3Detail(status)
+	frame.trp3Link.tooltipText = line .. (detail and ("\n" .. detail) or "") .. "\n" .. MainWindow.TRP3_HELP
 end
 
 --- Re-reads data and redraws the visible parts. Cheap when hidden.
@@ -534,18 +568,36 @@ end
 -- grabber art (FloatingChatFrame.xml, UI-ChatIM-SizeGrabber), tinted gold.
 -- Work happens only while the button is held (an OnUpdate set on mouse down
 -- and removed on mouse up), and only when the cursor has moved.
+-- v0.10: the grip is drawn as the design's bottom-right corner ornament (the
+-- top-left double L turned 180 degrees, Main.dc.html .corner), gold, and
+-- brighter while hovered or held, so the corner reads as the approved frame
+-- and still invites a drag. The chat grabber art is kept only as the pushed
+-- state's texture name for older checks; it is never shown.
+MainWindow.GRIP_ORNAMENT = { { 0, 12 }, { 4, 5 } } -- { inset from the corner, leg length } per L
 local function buildResizeHandle()
+	local L = layout
 	local grip = CreateFrame("Button", nil, frame)
-	grip:SetSize(16, 16)
-	grip:SetPoint("BOTTOMRIGHT", -6, 6)
+	grip:SetSize(L.grip, L.grip)
+	grip:SetPoint("BOTTOMRIGHT", -L.gripInset, L.gripInset)
 	grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-	grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
-	grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+	if grip:GetNormalTexture() then grip:GetNormalTexture():SetAlpha(0) end
+	grip.legs = {}
+	for _, l in ipairs(MainWindow.GRIP_ORNAMENT) do
+		local h = Style.Solid(grip, "ARTWORK")
+		h:SetSize(l[2], Style.CHROME.thickness)
+		h:SetPoint("BOTTOMRIGHT", -l[1], l[1])
+		local v = Style.Solid(grip, "ARTWORK")
+		v:SetSize(Style.CHROME.thickness, l[2])
+		v:SetPoint("BOTTOMRIGHT", -l[1], l[1])
+		grip.legs[#grip.legs + 1] = h
+		grip.legs[#grip.legs + 1] = v
+	end
 	Style.Register(grip, function(g, theme)
-		for _, tex in ipairs({ g:GetNormalTexture(), g:GetPushedTexture() }) do
-			if tex and tex.SetVertexColor then tex:SetVertexColor(theme.ornament[1], theme.ornament[2], theme.ornament[3]) end
-		end
+		local color = (g.hover or g.held) and Style.Tones(theme).accentBright or theme.ornament
+		for _, leg in ipairs(g.legs) do Style.Color(leg, color, (g.hover or g.held) and 1 or Style.CHROME.ornamentAlpha) end
 	end)
+	grip:SetScript("OnEnter", function(self) self.hover = true; Style.Repaint(self) end)
+	grip:SetScript("OnLeave", function(self) self.hover = nil; Style.Repaint(self) end)
 	Widgets.Tooltip(grip, "Resize", "Drag to make the window larger or smaller. Settings → General → "
 		.. "Reset window size returns it to its design size.")
 	local level = frame.GetFrameLevel and frame:GetFrameLevel()
@@ -570,6 +622,8 @@ local function buildResizeHandle()
 	end
 	local function stop()
 		grip:SetScript("OnUpdate", nil)
+		grip.held = nil
+		Style.Repaint(grip)
 		if not drag then return end
 		drag = nil
 		if ctx() then Actions.SaveWindowScale(ctx(), frame:GetScale()) end
@@ -578,6 +632,8 @@ local function buildResizeHandle()
 	grip:SetScript("OnMouseDown", function()
 		local scale = frame:GetScale()
 		drag = { left = frame:GetLeft() * scale, top = frame:GetTop() * scale }
+		grip.held = true
+		Style.Repaint(grip)
 		grip:SetScript("OnUpdate", step)
 	end)
 	grip:SetScript("OnMouseUp", stop)
@@ -615,7 +671,13 @@ local function buildTab(index, def, r)
 	-- selected item's filled panel, inside its gold edge.
 	tab.underline = Widgets.Solid(tab, "BACKGROUND", 1)
 	tab.underline:SetAllPoints(tab)
-	if def.icon then
+	-- The design's line icon for the section (Style.ICONS); the section's game
+	-- icon, desaturated, where the client has no line regions.
+	local lineIcon = MainWindow.NAV_ICONS[def.id]
+	tab.lineIcon = lineIcon and Style.LineIcon(tab, lineIcon, L.navIconSize) or nil
+	if tab.lineIcon then
+		tab.lineIcon:SetPoint("LEFT", L.navIconLeft, 0)
+	elseif def.icon then
 		tab.icon = tab:CreateTexture(nil, "ARTWORK")
 		tab.icon:SetSize(L.navIconSize, L.navIconSize)
 		tab.icon:SetPoint("LEFT", L.navIconLeft, 0)
@@ -624,7 +686,7 @@ local function buildTab(index, def, r)
 		if tab.icon.SetDesaturated then tab.icon:SetDesaturated(true) end
 	end
 	tab.label = tab:CreateFontString(nil, "OVERLAY", Style.FontFor("nav"))
-	tab.label:SetPoint("LEFT", def.icon and L.navLabelLeft or 16, 0)
+	tab.label:SetPoint("LEFT", (tab.lineIcon or def.icon) and L.navLabelLeft or 16, 0)
 	tab.label:SetText(def.label)
 	-- Count badge: a round gold disc (a pill for two digits) with dark text.
 	tab.badgeBg = Style.Disc(tab, "ARTWORK", 0, L.navBadge)
@@ -649,19 +711,25 @@ local function buildRail(r)
 	frame.railLine:SetPoint("BOTTOMLEFT", layout.railWidth, layout.borderInset)
 	Style.Register(frame.railLine, function(t, theme) Style.Color(t, theme.edge) end)
 
-	-- Wordmark: a small gold jewel (a square turned 45 degrees; the design's
-	-- four-point star needs vector art) and DAWNWARD in Cinzel.
-	frame.jewel = Widgets.Solid(frame, "ARTWORK")
-	frame.jewel:SetSize(8, 8)
-	local jewelY = -(layout.wordmarkTop + layout.wordmarkHeight / 2)
-	frame.jewel:SetPoint("CENTER", frame, "TOPLEFT", r.wordmark.left + 12, jewelY)
-	if frame.jewel.SetRotation then frame.jewel:SetRotation(math.pi / 4) end
-	Style.Register(frame.jewel, function(t, theme) Style.Color(t, theme.accent) end)
-	frame.wordmark = Widgets.Label(frame, nil, false, "eyebrow")
-	Widgets.SetTextRole(frame.wordmark, "accent")
-	Widgets.Place(frame.wordmark, frame, { left = r.wordmark.left + 26, right = r.wordmark.right,
-		bottom = r.wordmark.bottom, top = r.wordmark.top })
-	frame.wordmark:SetJustifyV("MIDDLE")
+	-- Wordmark: the design's four-point star (a line icon, 18 px) and DAWNWARD
+	-- in tracked Cinzel capitals. Without line regions, a small gold jewel (a
+	-- square turned 45 degrees) stands in for the star.
+	local L0 = layout
+	local markY = -(L0.wordmarkTop + L0.wordmarkHeight / 2)
+	local markLeft = r.wordmark.left + L0.wordmarkIndent
+	frame.wordmarkIcon = Style.LineIcon(frame, "wordmark", L0.wordmarkIcon)
+	if frame.wordmarkIcon then
+		frame.wordmarkIcon:SetPoint("LEFT", frame, "TOPLEFT", markLeft, markY)
+		Style.Register(frame.wordmarkIcon, function(t, theme) t:SetColor(theme.accent) end)
+	else
+		frame.jewel = Widgets.Solid(frame, "ARTWORK")
+		frame.jewel:SetSize(8, 8)
+		frame.jewel:SetPoint("CENTER", frame, "TOPLEFT", markLeft + L0.wordmarkIcon / 2, markY)
+		if frame.jewel.SetRotation then frame.jewel:SetRotation(math.pi / 4) end
+		Style.Register(frame.jewel, function(t, theme) Style.Color(t, theme.accent) end)
+	end
+	frame.wordmark = Widgets.TrackedLabel(frame, "eyebrow", "accent", L0.wordmarkTracking)
+	frame.wordmark:SetPoint("LEFT", frame, "TOPLEFT", markLeft + L0.wordmarkIcon + L0.wordmarkGap, markY)
 	frame.wordmark:SetText("DAWNWARD")
 
 	-- Portrait: the game's round portrait inside a 2 px gold ring with a dark
@@ -722,7 +790,7 @@ local function buildRail(r)
 	frame.charName:SetWidth(width)
 	frame.charName:SetJustifyH("CENTER")
 	if frame.charName.SetMaxLines then frame.charName:SetMaxLines(L.nameLines) end
-	frame.charTitle = Widgets.Label(frame, "GameFontHighlight", false, "body")
+	frame.charTitle = Widgets.Label(frame, "italic", false, "body")
 	Widgets.SetTextRole(frame.charTitle, "label")
 	frame.charTitle:SetPoint("TOP", frame.charName, "BOTTOM", 0, -L.identityGap)
 	frame.charTitle:SetWidth(width)
@@ -736,6 +804,7 @@ local function buildRail(r)
 	frame.chipRow:SetPoint("TOP", frame.charLine, "BOTTOM", 0, -L.chipGap)
 	frame.homelandChip = Widgets.Chip(frame.chipRow, "", "accent")
 	frame.homelandChip:SetBase("panel")
+	frame.homelandChip:SetIcon("home")
 	-- Hover area over the name and title: the full text when either is cut.
 	frame.identityHover = CreateFrame("Frame", nil, frame)
 	frame.identityHover:SetPoint("TOPLEFT", frame.charName, "TOPLEFT", 0, 0)
@@ -761,6 +830,7 @@ local function buildRail(r)
 	Widgets.Tooltip(frame.trp3Link, "Total RP 3", MainWindow.TRP3_HELP)
 	frame.help = Widgets.Button(frame, "Guide", r.help.right - r.help.left, layout.railButtonHeight, "ghost")
 	Widgets.Place(frame.help, frame, r.help)
+	frame.help:SetIcon("guide")
 	frame.help:SetScript("OnClick", function()
 		if MainWindow.guide and MainWindow.guide:IsOpen() then
 			MainWindow.guide:Close()
@@ -771,6 +841,7 @@ local function buildRail(r)
 	Widgets.Tooltip(frame.help, "Guide and help", "A short tour of Dawnward, and a search for any feature or command.")
 	frame.gear = Widgets.Button(frame, "Settings", r.gear.right - r.gear.left, layout.railButtonHeight, "ghost")
 	Widgets.Place(frame.gear, frame, r.gear)
+	frame.gear:SetIcon("settings")
 	frame.gear:SetScript("OnClick", function() MainWindow.ToggleSettings() end)
 	Widgets.Tooltip(frame.gear, "Settings",
 		"Theme, story moments and pace, backup and import, simulation mode, Total RP 3 status.")
@@ -802,13 +873,16 @@ local function build()
 	buildRail(r)
 
 	-- Content column header: eyebrow, heading, close.
-	frame.eyebrow = Widgets.Label(frame, nil, false, "eyebrow")
-	Widgets.Place(frame.eyebrow, frame, r.eyebrow)
+	-- The eyebrow in tracked capitals (Main.dc.html .eyebrow: 0.16 em).
+	frame.eyebrow = Widgets.TrackedLabel(frame, "eyebrow", "eyebrow")
+	frame.eyebrow:SetPoint("LEFT", frame, "TOPLEFT", r.eyebrow.left, -(layout.headerTop + layout.eyebrowHeight / 2))
+	frame.eyebrow:SetWidth(r.eyebrow.right - r.eyebrow.left)
 	frame.title = Widgets.Label(frame, "GameFontNormalHuge", false, "title")
 	Widgets.Place(frame.title, frame, r.title)
 	frame.titleRect = r.title
 	frame.close = Widgets.IconButton(frame, "X", "Close", "Close the journal (Escape also works).")
 	Widgets.Place(frame.close, frame, r.close)
+	frame.close:SetSize(layout.iconSize, layout.iconSize)
 	frame.close:SetScript("OnClick", function() MainWindow.Hide() end)
 
 	frame.content = CreateFrame("Frame", nil, frame)

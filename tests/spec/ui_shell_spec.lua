@@ -80,8 +80,12 @@ return function(t, expect)
 			local ns = select(3, open())
 			expect.equal(ns.MainWindow.TRP3Line({ installed = false }), "Total RP 3 · not installed (optional)")
 			expect.equal(ns.MainWindow.TRP3Line({ installed = true, loaded = false }), "Total RP 3 · installed, not loaded")
-			expect.equal(ns.MainWindow.TRP3Line({ installed = true, loaded = true, profile = { name = "Aelin RP" } }),
-				'Total RP 3 · profile "Aelin RP"')
+			local loaded = { installed = true, loaded = true, profile = { name = "Aelin RP" } }
+			expect.equal(ns.MainWindow.TRP3Line(loaded), "Total RP 3 · sync off", "as the design's rail")
+			expect.equal(ns.MainWindow.TRP3Line(loaded, true), "Total RP 3 · sync on")
+			expect.equal(ns.MainWindow.TRP3Detail(loaded), 'Active profile: "Aelin RP"', "the profile in the tooltip")
+			expect.equal(ns.MainWindow.TRP3Line({ installed = true, loaded = true, error = "x" }),
+				"Total RP 3 · status unavailable")
 			expect.equal(ns.MainWindow.GetFrame().trp3:GetText(), "Total RP 3 · not installed (optional)")
 			click(ns.MainWindow.GetFrame().trp3Link)
 			expect.equal(ns.MainWindow.CurrentSection(), "settings", "the status line opens the Total RP 3 page")
@@ -468,7 +472,7 @@ return function(t, expect)
 			expect.truthy(values[2]:find("Mage", 1, true))
 			expect.equal(values[3], "GUILD=The Lantern Watch")
 			expect.equal(values[4], "REALM=Test Realm")
-			expect.equal(view.own.name:GetText(), "Aelin Brightwater")
+			expect.equal(view.own.name, nil, "the name is on the rail; the panel leads with the title (mockup)")
 			expect.equal(view.own.summary:GetText(), "Kind to strangers.")
 			expect.equal(view.own.chips, nil, "no \"Name is Private\" chips (v0.10)")
 			-- Nothing about the game is stored.
@@ -619,13 +623,31 @@ return function(t, expect)
 			mock.fontFails = "Cinzel"
 			local cinzel = 0
 			for _, f in ipairs(ns.Style.FONTS) do
-				if f.file == "display" then cinzel = cinzel + 1 end
+				if f.file == "display" or f.file == "displayBold" then cinzel = cinzel + 1 end
 			end
 			expect.equal(ns.Style.InitFonts(), #ns.Style.FONTS - cinzel, "the Cinzel fonts fall back")
 			expect.equal(ns.Style.Font("GameFontNormalLarge"), "GameFontNormalLarge")
 			expect.equal(ns.Style.Font("GameFontHighlight"), "DawnwardFontBody")
 			expect.equal(ns.Style.FontFor("railName"), "GameFontHighlightLarge", "a named style falls back to its game font")
 			expect.equal(ns.Style.FontFor("button"), "DawnwardFontButton")
+		end)
+
+		t:it("bundles the design's italic, medium and bold weights, each falling back to its v0.9 file", function()
+			local mock, _, ns = Boot.Load()
+			local S = ns.Style
+			expect.equal(S.FONT_BY_STYLE.italic.file, "italic", "the rail's title: Alegreya Sans Italic 15")
+			expect.equal(S.FONT_BY_STYLE.nav.file, "medium", "navigation: Alegreya Sans Medium 17 (500)")
+			expect.equal(S.FONT_BY_STYLE.chip.file, "medium", "chips: 13 / 500")
+			expect.equal(S.FONT_BY_STYLE.day.file, "displayBold", "dates: Cinzel Bold 24 (700)")
+			expect.truthy(S.FontObject("GameFontHighlight") ~= nil)
+			expect.truthy(S.fontObjects.DawnwardFontItalic.__font.file:find("AlegreyaSans-Italic.ttf", 1, true))
+			mock.fontFails = "Italic"
+			expect.equal(S.InitFonts(), #S.FONTS, "nothing drops to the game font")
+			expect.truthy(S.fontObjects.DawnwardFontItalic.__font.file:find("AlegreyaSans-Regular.ttf", 1, true))
+			expect.equal(S.styleFile.italic, "body", "widths are measured with the file in use")
+			mock.fontFails = "Cinzel-Bold"
+			S.InitFonts()
+			expect.truthy(S.fontObjects.DawnwardFontDay.__font.file:find("Cinzel-SemiBold.ttf", 1, true))
 		end)
 
 		t:it("follows the design system's type scale and never goes below the readable minimum", function()

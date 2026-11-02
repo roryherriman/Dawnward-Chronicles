@@ -28,6 +28,8 @@ function Methods:ClearFocus()
 end
 function Methods:HasFocus() return self.__mock.focus == self end
 function Methods:GetParent() return self.__parent end
+-- Like the client: a frame can move to another parent (pooled rows change columns).
+function Methods:SetParent(parent) self.__parent = parent end
 -- Shown, and every parent shown too.
 function Methods:IsVisible()
 	if not self.__shown then return false end
@@ -118,6 +120,8 @@ function Methods:SetUnit(unit, blend)
 	return true
 end
 function Methods:SetAlpha(a) self.__alpha = a end
+-- Textures: the file last set (state textures record theirs the same way).
+function Methods:SetTexture(file) self.__texture = file end
 function Methods:GetAlpha() return self.__alpha or 1 end
 function Methods:ClearModel() self.__unit = nil end
 function Methods:SetRotation(r) self.__rotation = r end
@@ -129,6 +133,16 @@ function Methods:CreateTexture(name, layer, _, sublevel)
 	self.__textures[#self.__textures + 1] = tex
 	return tex
 end
+
+-- Line regions (SimpleLineAPI): start and end points and thickness recorded.
+function Methods:CreateLine(name, layer, _, sublevel)
+	local line = self.__mock.newFrame("Line", name, self)
+	line.__layer, line.__sublevel = layer, sublevel
+	return line
+end
+function Methods:SetStartPoint(...) self.__start = { ... } end
+function Methods:SetEndPoint(...) self.__end = { ... } end
+function Methods:SetThickness(t) self.__thickness = t end
 
 -- Layout and layering state, recorded so UI tests can check it.
 function Methods:SetFrameStrata(strata) self.__strata = strata end
@@ -184,6 +198,8 @@ for _, state in ipairs({ "Normal", "Highlight", "Pushed" }) do
 	end
 	Methods["Get" .. state .. "Texture"] = function(self) return self["__" .. state] end
 end
+-- A texture's file (only recorded; nothing is drawn).
+function Methods:SetTexture(file) self.__texture = file end
 function Methods:SetTextColor(r, g, b) self.__textColor = { r, g, b } end
 function Methods:SetFontString(fs) self.__fontString = fs end
 function Methods:GetFontString()

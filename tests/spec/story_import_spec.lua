@@ -502,5 +502,31 @@ return function(t, expect)
 			end
 			expect.equal(w.close:GetWidth(), 36)
 		end)
+
+		t:it("v0.10: the two steps sit beside the eyebrow as in the setup rail, and each is a click away", function()
+			local _, _, ns2, w = start()
+			local I = ns2.ImportWizard
+			local L, S = I.LAYOUT, I.STEP
+			expect.truthy(ns2.Style.TextWidth("STORY IMPORT · STEP 2 OF 2", "eyebrow") + 16 <= S.x,
+				"the eyebrow ends before the steps")
+			expect.truthy(L.pad + S.x + 2 * S.width + S.gap <= L.width - L.pad - ns2.Style.CONTROL.icon - 12,
+				"the steps end before the close button")
+			for i, step in ipairs(w.steps) do
+				expect.truthy(ns2.Style.TextWidth(I.STEPS[i].label, "meta") <= step.label:GetWidth(), I.STEPS[i].label)
+				expect.equal(step.ring:GetWidth(), S.badge)
+			end
+			I.Show("text")
+			expect.equal(w.steps[1].state, "current")
+			expect.equal(w.steps[2].state, "future")
+			expect.equal(w.eyebrow:GetText(), "STORY IMPORT · STEP 1 OF 2")
+			click(w.steps[2])
+			expect.equal(w.page, "review")
+			expect.equal(w.steps[1].state, "done")
+			expect.truthy(w.steps[1].check:IsShown())
+			expect.equal(w.steps[2].state, "current")
+			expect.equal(w.eyebrow:GetText(), "STORY IMPORT · STEP 2 OF 2")
+			click(w.steps[1])
+			expect.equal(w.page, "text")
+		end)
 	end)
 end

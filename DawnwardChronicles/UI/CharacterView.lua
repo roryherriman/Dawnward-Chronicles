@@ -1,13 +1,21 @@
--- Character section (v0.7, refined in v0.8 towards the approved mockups
--- docs/design/mockups/character-profile.png and proposed-character-showcase.png;
--- the remaining differences are in docs/design/audit/character.md).
+-- Character section (v0.7, refined in v0.8 and v0.10 towards the approved
+-- mockups docs/design/mockups/character-profile.png and
+-- proposed-character-showcase.png; the remaining differences are in
+-- docs/design/audit/v10-character.md).
 --
 -- Two views of the same character, switched from the header:
---   Profile    field groups: Identity and Background & biography as tiles on
---              the window ground (three to a row), then Summary & motivation
---              as cards (each with its Edit button), and beside them
---              Personality (the six axes, real values, changes waiting for
---              approval) and Family & relationships (family and history).
+--   Profile    the left column scrolls (as the mockup): identity tiles on
+--              the window ground (three to a row), Summary and Motivation
+--              cards, Background & biography (tiles, Appearance and the
+--              imported story with "Read full story"), Details and History.
+--              The right column stands still: Personality (the six axes in
+--              compact rows, the player's own axis words, "changes need
+--              your approval") and Family (name and one meta line per
+--              member, "+N more" when the column is full).
+--              Race, class and first name read from the game until the
+--              player writes their own (Character.FieldOrGame); the game's
+--              value is only shown, never saved. An empty field is a dashed
+--              tile with "+ Add" (mockup: the Age tile).
 --              v0.10: the whole profile is what Total RP 3 shows once it is
 --              connected (Core/Publication.lua), so nothing here is sorted
 --              into Public / Private / Secret. A character an earlier version
@@ -15,8 +23,9 @@
 --              one-time "Publish whole profile..." confirmation.
 --   Showcase   the live model with what the game says about the character
 --              and what the player wrote, kept apart (UI/Showcase.lua).
--- Deliberately small: it is not a copy of Total RP 3's editor. All writes
--- go through Core/Actions.lua.
+-- A reader (the full imported story, or the whole family list) and the
+-- field editor cover the section while open. Deliberately small: it is not
+-- a copy of Total RP 3's editor. All writes go through Core/Actions.lua.
 local _, ns = ...
 local Widgets, MainWindow, Schema, Themes, Style = ns.Widgets, ns.MainWindow, ns.Schema, ns.Themes, ns.Style
 
@@ -25,33 +34,47 @@ ns.CharacterView = CharacterView
 
 CharacterView.FAMILY_HINT = "Parents, siblings, a lost cousin: anyone your character counts as family."
 CharacterView.HISTORY_HINT = "Moments from before the story Dawnward records, in your own words."
+CharacterView.STORY_EMPTY = "Paste a backstory you already wrote, or read your Total RP 3 About text. "
+	.. "It is kept exactly as written."
 CharacterView.INTRO = "Who your character is, in your own words. Once Total RP 3 is connected, this whole "
 	.. "profile is what it shows."
 -- The pending callout (Publication.Status "pending").
 CharacterView.PENDING_TEXT = "An earlier version of Dawnward kept part of this profile back from Total RP 3."
 CharacterView.PUBLISH_LABEL = "Publish whole profile…"
+-- A value the game supplies (race, class, first name) says so under it.
+CharacterView.GAME_HINT = "from the game"
+CharacterView.EMPTY_VALUE = "Not set"
+CharacterView.ADD_LABEL = "+ Add"
 
--- The profile's groups, in order (mockup: identity tiles, then background,
--- then the long texts). Any field not named here joins "background", so a
--- new profile field always appears.
+-- The profile's groups, in order (mockup: identity tiles, then the Summary
+-- and Motivation cards; then what the mockup predates). Any field not named
+-- here joins "background", so a new profile field always appears. story:
+-- the group ends with the imported-story card; list: the group is a list
+-- (History) with its Add line.
 CharacterView.GROUPS = {
-	{ id = "identity", title = "Identity", keys = { "name", "title", "pronouns", "race", "class", "age" } },
-	{ id = "background", title = "Background & biography", keys = { "homeland", "faith", "occupation", "appearance" } },
-	-- v0.9: the details Total RP 3 shows on its characteristics page.
-	{ id = "details", title = "Details", keys = { "firstName", "lastName", "honorific", "eyes", "height", "weight",
-		"residence", "relationship", "allegiance" } },
+	{ id = "identity", title = "Identity", heading = false, keys = { "name", "title", "pronouns", "race", "class",
+		"age" } },
 	-- The long texts carry their own labels (mockup: SUMMARY, MOTIVATION cards), so
 	-- this group shows no heading of its own.
 	{ id = "words", title = "Summary & motivation", heading = false, keys = { "summary", "motivation" } },
+	{ id = "background", title = "Background & biography", keys = { "homeland", "faith", "occupation", "appearance" },
+		story = true },
+	-- v0.9: the details Total RP 3 shows on its characteristics page.
+	{ id = "details", title = "Details", keys = { "firstName", "lastName", "honorific", "eyes", "height", "weight",
+		"residence", "relationship", "allegiance" } },
+	-- v0.10: History moved from the right column, so the right column fits
+	-- without a scroll bar of its own in typical use.
+	{ id = "history", title = "History", keys = {}, list = "history" },
 }
 do
-	local named = {}
+	local named, background = {}, nil
 	for _, group in ipairs(CharacterView.GROUPS) do
 		for _, key in ipairs(group.keys) do named[key] = true end
+		if group.id == "background" then background = group end
 	end
 	for _, field in ipairs(Schema.FIELDS) do
 		if not named[field.key] then
-			table.insert(CharacterView.GROUPS[2].keys, field.key)
+			table.insert(background.keys, field.key)
 		end
 	end
 end
@@ -77,24 +100,68 @@ local L = {
 	tilePadX = 12,
 	tilePadY = 10,
 	tileValueTop = 30,  -- the value under the tile's label
+	hintGap = 2,        -- "from the game" under the value
 	cardPadX = 18,
 	cardPadY = 16,
 	cardTextTop = 54,   -- card text under the label row (16 + 30 + 8)
 	editWidth = 48,
+	addWidth = 60,      -- "+ Add" (mockup: ghost sm with a plus)
 	cardEditWidth = 60,
+	storyButton = 132,  -- "Read full story"
 	controlHeight = Style.CONTROL.compact, -- 30: buttons inside tiles and cards
 	headerHeight = Style.CONTROL.standard, -- 36: header buttons, as the close button
 	headerOffset = 74,  -- header buttons above the content area, level with the close button
 	calloutHeight = 44, -- the pending callout over the profile (compact: one line and a button)
 	calloutGap = 10,
+	-- Personality (mockup: eyebrow and "changes need your approval" on one
+	-- row; poles 13 over a 6 px track, 12 apart; 14 px knob).
 	axisGap = 10,
+	axisTrackTop = 21,  -- the track under the poles (13 px text, 5 px gap)
 	knob = 14,          -- personality knob (mockup: 14 with a 2 px ring in the window colour)
 	track = 6,
+	statusGap = 10,     -- between the eyebrow and the short approval note
+	-- Family (mockup: FAMILY eyebrow with a ghost "Add" 28 high on its row).
+	famAddWidth = 60,
+	famAddHeight = 28,
+	famAddTop = 9,      -- the Add button, centred on the eyebrow
+	famHead = 47,       -- members start under the eyebrow row
+	-- Dashed edge of an empty field (mockup: border-style dashed).
+	dash = 6,
+	dashGap = 4,
+	-- The story card's excerpt (the first paragraphs, then "Read full story").
+	storyParagraphs = 2,
+	storyChars = 420,
+	paraGap = 10,       -- between paragraphs in the reader
+	readerTop = 64,     -- the reader's text under its heading and hint
 }
 CharacterView.LAYOUT = L
-local EMPTY_VALUE = "Not set"
+local EMPTY_VALUE = CharacterView.EMPTY_VALUE
 
 --- Display text for a family member.
+--- A reused action button that is drawn as the mockup's pencil whenever its
+-- label is "Edit" (the word moves to the tooltip), and as plain text for
+-- every other label ("+ Add", "Read full story"...). Where the client has no
+-- line regions it keeps the word "Edit".
+function CharacterView.PencilButton(button)
+	local setText, getText = button.SetText, button.GetText
+	function button.SetText(self, text)
+		if text == "Edit" and self:SetIcon("edit") then
+			setText(self, "")
+			if not self.tooltipTitle then Widgets.Tooltip(self, "Edit", nil) end
+			self.pencil = true
+		else
+			if self.pencil then self:SetIcon(nil) end
+			self.pencil = nil
+			setText(self, text)
+		end
+	end
+	function button.GetText(self)
+		return self.pencil and "Edit" or getText(self)
+	end
+	button:SetText("Edit")
+	return button
+end
+
 function CharacterView.FamilyText(item)
 	local relation = item.relation and (item.relation:sub(1, 1):upper() .. item.relation:sub(2)) or "Relative"
 	local status = item.status and item.status ~= "unknown" and (" (" .. item.status .. ")") or ""
@@ -133,8 +200,65 @@ function CharacterView.ItemParts(list, item)
 	return item.text or "", item.when, nil
 end
 
---- Rows to show, in order (pure; tested). Fields carry their group; family
--- and history are in the right-hand column.
+--- The one meta line of a family member in the right column (mockup:
+-- "Mother · innkeeper, Goldshire"): relation, status, then the first line of
+-- the notes. The full notes are in the member's tooltip and the family list.
+-- Pure.
+function CharacterView.FamilyMeta(item)
+	local _, meta, notes = CharacterView.ItemParts("family", item)
+	local first = type(notes) == "string" and (notes:match("^%s*([^\n]*)") or ""):gsub("%s+$", "") or nil
+	if first and first ~= "" then meta = meta .. " · " .. first end
+	return meta
+end
+
+--- A profile field as it reads on the profile: value, source ("player" |
+-- "game") or nil. Race, class and first name fall back to what the game
+-- says (Core/Character.lua FieldOrGame); nothing is written. Pure apart
+-- from the game's own functions.
+function CharacterView.FieldDisplay(char, key)
+	return ns.Character.FieldOrGame(char, key)
+end
+
+--- The first paragraphs of an imported story, for the Biography card:
+-- excerpt, truncated (true when the full story says more). TRP3 tags are
+-- removed for display (Sources.StripTags); the stored text is untouched.
+-- Pure.
+function CharacterView.StoryExcerpt(text, paragraphs, maxChars)
+	paragraphs, maxChars = paragraphs or L.storyParagraphs, maxChars or L.storyChars
+	local all = ns.Sources.Paragraphs(ns.Sources.StripTags(text))
+	local parts, used, truncated = {}, 0, #all > paragraphs
+	for i = 1, math.min(paragraphs, #all) do
+		local p = all[i]
+		local room = maxChars - used
+		if #p > room then
+			if room > 40 or i == 1 then
+				local cut = p:sub(1, math.max(room, 1)):gsub("%s+%S*$", "")
+				parts[#parts + 1] = cut .. "…"
+			end
+			truncated = true
+			break
+		end
+		parts[#parts + 1] = p
+		used = used + #p
+	end
+	return table.concat(parts, "\n\n"), truncated
+end
+
+-- How a saved story came to Dawnward (Schema.SOURCE_KINDS).
+CharacterView.STORY_KINDS = { trp3 = "Read from Total RP 3", paste = "Pasted", written = "Written in Dawnward",
+	answers = "From your answers" }
+
+--- "Read from Total RP 3 · 1240 words" for a saved story. Pure.
+function CharacterView.StoryMeta(source)
+	local words = 0
+	for _ in ns.Sources.StripTags(source.text or ""):gmatch("%S+") do words = words + 1 end
+	return (CharacterView.STORY_KINDS[source.kind] or "Saved story") .. " · " .. words
+		.. (words == 1 and " word" or " words")
+end
+
+--- Rows to show, in order (pure; tested). Each carries its group: the left
+-- column's groups (fields, the story card, History), then Family on the
+-- right.
 function CharacterView.BuildSpecs(char)
 	local specs = {}
 	for _, group in ipairs(CharacterView.GROUPS) do
@@ -145,19 +269,42 @@ function CharacterView.BuildSpecs(char)
 					entry = char and char.fields[field.key] }
 			end
 		end
+		if group.story then
+			specs[#specs + 1] = { kind = "story", group = group.id,
+				source = char and char.sources and ns.Sources.Current(char) or nil }
+		end
+		if group.list then
+			for _, item in ipairs(char and char[group.list] or {}) do
+				specs[#specs + 1] = { kind = "item", list = group.list, group = group.id, item = item,
+					text = CharacterView.HistoryText(item) }
+			end
+			specs[#specs + 1] = { kind = "add", list = group.list, group = group.id, text = CharacterView.HISTORY_HINT }
+		end
 	end
-	specs[#specs + 1] = { kind = "heading", text = "Family" }
 	for _, item in ipairs(char and char.family or {}) do
-		specs[#specs + 1] = { kind = "item", list = "family", item = item, text = CharacterView.FamilyText(item),
-			detail = item.notes }
+		specs[#specs + 1] = { kind = "item", list = "family", group = "family", item = item,
+			text = CharacterView.FamilyText(item), detail = item.notes }
 	end
-	specs[#specs + 1] = { kind = "add", list = "family", text = CharacterView.FAMILY_HINT }
-	specs[#specs + 1] = { kind = "heading", text = "History" }
-	for _, item in ipairs(char and char.history or {}) do
-		specs[#specs + 1] = { kind = "item", list = "history", item = item, text = CharacterView.HistoryText(item) }
-	end
-	specs[#specs + 1] = { kind = "add", list = "history", text = CharacterView.HISTORY_HINT }
+	specs[#specs + 1] = { kind = "add", list = "family", group = "family", text = CharacterView.FAMILY_HINT }
 	return specs
+end
+
+--- How many family members fit the room left in the right column, given
+-- their heights: shown, hidden. When some are hidden, room is kept for the
+-- "+N more" button. Pure.
+function CharacterView.FamilyFit(heights, room, gap, moreHeight)
+	local total = 0
+	for i, h in ipairs(heights) do
+		total = total + h + (i > 1 and gap or 0)
+	end
+	if total <= room then return #heights, 0 end
+	local shown, used = 0, 0
+	for i, h in ipairs(heights) do
+		local next = used + h + (i > 1 and gap or 0)
+		if next + gap + moreHeight > room then break end
+		shown, used = i, next
+	end
+	return shown, #heights - shown
 end
 
 --- Personality rows (pure; tested): one per axis, in registry order,
@@ -187,7 +334,7 @@ function CharacterView.PersonalityRows(char)
 	return rows, total
 end
 
---- The approval line over the personality axes. Pure.
+--- The approval sentence (the personality note's tooltip). Pure.
 function CharacterView.ApprovalText(char, waiting)
 	if waiting > 0 then
 		return waiting == 1 and "1 change waits for your approval in Story."
@@ -198,6 +345,17 @@ function CharacterView.ApprovalText(char, waiting)
 		return "Story changes apply on their own; you can reverse them in Story."
 	end
 	return "Changes from your story choices need your approval."
+end
+
+--- The short note beside the PERSONALITY eyebrow (mockup: "changes need
+-- your approval"). Pure.
+function CharacterView.ApprovalShort(char, waiting)
+	if waiting > 0 then
+		return waiting == 1 and "1 change waiting" or (waiting .. " changes waiting")
+	end
+	local approval = char and char.story and char.story.prefs and char.story.prefs.approval
+	if approval == "auto" then return "changes apply on their own" end
+	return "changes need your approval"
 end
 
 --- Whether the Character page shows the one-time publish callout: only for
@@ -221,16 +379,79 @@ function CharacterView.OpenTRP3()
 	end
 end
 
+--- Opens the import window on the saved story (or empty when none is saved).
+function CharacterView.OpenImport()
+	if not (ns.ImportWizard and ns.ImportWizard.Open) then return end
+	ns.ImportWizard.Open({ from = "character", page = "text" })
+	local char = ns.Actions.Character(ns.ctx)
+	if char and char.sources and ns.Sources.Current(char) and ns.ImportWizard.FillFromSaved then
+		ns.ImportWizard.FillFromSaved()
+	end
+end
+
+--- A dashed 1 px edge (mockup: the empty Age tile's border-style dashed):
+-- short textures along each side. :Layout(w, h) places them (only when the
+-- size changed; textures are created once and reused), :Paint(color, alpha),
+-- :SetShown(on). Built only for rows that have been empty.
+function CharacterView.DashedEdge(frame)
+	local d = { textures = {}, used = 0 }
+	local function dash(i)
+		local t = d.textures[i]
+		if not t then
+			t = Style.Solid(frame, "BORDER")
+			d.textures[i] = t
+		end
+		return t
+	end
+	-- Dashes along one side of length len, centred so both corners match.
+	local function side(i, len, place)
+		local n = math.max(1, math.floor((len + L.dashGap) / (L.dash + L.dashGap)))
+		local start = math.floor((len - (n * L.dash + (n - 1) * L.dashGap)) / 2)
+		for k = 0, n - 1 do
+			i = i + 1
+			place(dash(i), start + k * (L.dash + L.dashGap))
+		end
+		return i
+	end
+	function d.Layout(_, w, h)
+		if d.w == w and d.h == h then return end
+		d.w, d.h = w, h
+		local i = 0
+		i = side(i, w, function(t, x) t:ClearAllPoints(); t:SetPoint("TOPLEFT", x, 0); t:SetSize(L.dash, 1) end)
+		i = side(i, w, function(t, x) t:ClearAllPoints(); t:SetPoint("BOTTOMLEFT", x, 0); t:SetSize(L.dash, 1) end)
+		i = side(i, h, function(t, y) t:ClearAllPoints(); t:SetPoint("TOPLEFT", 0, -y); t:SetSize(1, L.dash) end)
+		i = side(i, h, function(t, y) t:ClearAllPoints(); t:SetPoint("TOPRIGHT", 0, -y); t:SetSize(1, L.dash) end)
+		d.used = i
+		for k, t in ipairs(d.textures) do t:SetShown(d.shown and k <= i) end
+		if d.color then d:Paint(d.color, d.alpha) end
+	end
+	function d.Paint(_, color, alpha)
+		d.color, d.alpha = color, alpha
+		for k = 1, d.used do Style.Color(d.textures[k], color, alpha) end
+	end
+	function d.SetShown(_, on)
+		d.shown = on and true or false
+		for k, t in ipairs(d.textures) do t:SetShown(d.shown and k <= d.used) end
+	end
+	return d
+end
+
 -- Field tiles and cards are entry cards (Widgets.Card) with one extra state:
--- an empty field (mockup: the dashed "Age" tile) has no fill and only its
+-- an empty field (mockup: the dashed "Age" tile) has no fill and a dashed
 -- edge, so set fields stand out. Same colours as Widgets.Card otherwise.
 local function paintFieldCard(c, theme)
 	local tones = Style.Tones(theme)
 	local boxed = not c.plain
-	local fillAlpha = boxed and not (c.emptyField and not c.hover) and 1 or 0
+	local dashed = boxed and c.emptyField and true or false
+	local fillAlpha = boxed and not (dashed and not c.hover) and 1 or 0
 	Style.Color(c.bg, c.hover and tones.cardHover or theme.surface, fillAlpha)
 	local edge = c.highlight and theme.accent or (c.hover and tones.selectedEdge or theme.edge)
-	c.edges:Paint(edge, boxed and 1 or 0)
+	c.edges:Paint(edge, (boxed and not dashed) and 1 or 0)
+	if dashed and not c.dashes then c.dashes = CharacterView.DashedEdge(c) end
+	if c.dashes then
+		c.dashes:SetShown(dashed)
+		c.dashes:Paint(c.hover and tones.selectedEdge or tones.edgeStrong, 1)
+	end
 	c.bar:SetShown(boxed and c.highlight and true or false)
 	Style.Color(c.bar, theme.accent)
 end
@@ -291,10 +512,10 @@ local function create(parent)
 	callout:Hide()
 	section.callout = callout
 
-	-- Profile: only the left column (the field groups) scrolls, with the slim
-	-- bar in the column gap; the right column (Personality, Family) and the
-	-- header stay put (mockup: character-profile.png). Both views have fixed
-	-- sizes in layout units, so the window's SetScale changes nothing here.
+	-- Profile: only the left column scrolls, with the slim bar in the column
+	-- gap; the right column (Personality, Family) and the header stay put
+	-- (mockup: character-profile.png). Both views have fixed sizes in layout
+	-- units, so the window's SetScale changes nothing here.
 	local viewHeight = contentHeight - L.scrollTop
 	local scroll = CreateFrame("ScrollFrame", Widgets.NextName("CharacterScroll"), f, "UIPanelScrollFrameTemplate")
 	scroll:SetPoint("TOPLEFT", 0, -L.scrollTop)
@@ -306,14 +527,14 @@ local function create(parent)
 	section.scrollBar = Widgets.SlimScrollBar(scroll, math.floor((L.colGap - Widgets.SLIM_BAR.width) / 2))
 	Widgets.WheelScroll(scroll)
 	section.viewHeight = viewHeight
+	section.sideHeight = viewHeight
 
-	-- The right column does not move with the left. It can still be taller
-	-- than the room (unset axes carry a note; family and history entries
-	-- have no limit), so it is a scroll frame of its own whose slim bar, in
-	-- the gutter at the window's right, shows only when it has something to
-	-- scroll. A "+N more" cap or a pager would hide entries (and History
-	-- under them) or add controls the design does not have; this way nothing
-	-- is cut off or overlaps.
+	-- The right column does not move with the left. It is laid out to fit
+	-- (compact personality rows; family members up to the room left, then
+	-- "+N more" opening the whole list), so in typical use it never scrolls.
+	-- It stays a scroll frame so that an extreme case (every axis with a
+	-- waiting change and a lock note) is still all in reach: its slim bar,
+	-- in the gutter at the window's right, shows only then.
 	local sideScroll = CreateFrame("ScrollFrame", Widgets.NextName("CharacterSide"), f, "UIPanelScrollFrameTemplate")
 	sideScroll:SetPoint("TOPLEFT", cols.rightX, -L.scrollTop)
 	sideScroll:SetSize(cols.right, viewHeight)
@@ -325,11 +546,11 @@ local function create(parent)
 	Widgets.WheelScroll(sideScroll)
 
 	-- Field groups: unboxed, so their tiles sit on the window ground as in the
-	-- mockup; a group names itself with an eyebrow (more fields than the
-	-- mockup's six, so they are grouped).
+	-- mockup; a group after the first ones names itself with an eyebrow (more
+	-- fields than the mockup's six, so they are grouped).
 	for _, group in ipairs(CharacterView.GROUPS) do
 		local g = CreateFrame("Frame", nil, child)
-		g.title = Widgets.Label(g, "GameFontNormalSmall", false, "eyebrow")
+		g.title = Widgets.TrackedLabel(g, "eyebrow", "eyebrow")
 		g.title:SetPoint("TOPLEFT", 0, 0)
 		g.title:SetText(group.title:upper())
 		g.title:SetShown(group.heading ~= false)
@@ -344,16 +565,27 @@ local function create(parent)
 		if type(level) == "number" and panel.SetFrameLevel then panel:SetFrameLevel(level) end
 		return panel
 	end
-	section.familyPanel = backPanel("Family & relationships")
+	-- Family (mockup: FAMILY with its Add on the eyebrow row).
+	section.familyPanel = backPanel("Family")
+	section.familyPanel.empty = Widgets.Label(section.familyPanel, "meta", true, "muted")
+	section.familyPanel.empty:SetPoint("TOPLEFT", L.pad, -L.famHead)
+	section.familyPanel.empty:SetWidth(cols.right - 2 * L.pad)
+	section.familyPanel.empty:SetText(CharacterView.FAMILY_HINT)
+	section.familyMore = Widgets.Button(side, "", cols.right - 2 * L.pad, L.controlHeight, "ghost")
+	section.familyMore:SetScript("OnClick", function() section:OpenReader("family") end)
+	section.familyMore:Hide()
 
 	-- Personality: the six axes with their real values (mockup: poles over a
 	-- 6 px track, a 14 px gold knob ringed in the window colour, the pole the
-	-- character leans to in bright gold).
+	-- character leans to in bright gold; an unset axis a hollow ring).
 	local pers = backPanel("Personality")
 	section.personality = pers
 	local innerRight = cols.right - 2 * L.pad
+	local eyebrowWidth = math.ceil(Style.TextWidth("PERSONALITY", "eyebrow"))
 	pers.status = Widgets.Label(pers, "GameFontHighlightSmall", true, "muted")
-	pers.status:SetWidth(innerRight)
+	pers.status:SetPoint("TOPRIGHT", -L.pad, -L.pad)
+	pers.status:SetWidth(innerRight - eyebrowWidth - L.statusGap)
+	pers.status:SetJustifyH("RIGHT")
 	pers.review = Widgets.Button(side, "Review in Story", 140, L.controlHeight, "primary")
 	pers.review:SetScript("OnClick", function() MainWindow.Select("story") end)
 	Widgets.Tooltip(pers.review, "Review in Story", "Approve or reject personality changes from your choices.")
@@ -371,8 +603,8 @@ local function create(parent)
 		a.right:SetWidth(innerRight / 2 - 4)
 		a.right:SetJustifyH("RIGHT")
 		a.track = Style.Solid(a, "ARTWORK")
-		a.track:SetPoint("TOPLEFT", 0, -21)
-		a.track:SetPoint("TOPRIGHT", 0, -21)
+		a.track:SetPoint("TOPLEFT", 0, -L.axisTrackTop)
+		a.track:SetPoint("TOPRIGHT", 0, -L.axisTrackTop)
 		a.track:SetHeight(L.track)
 		-- Where a waiting change would move the value (amber, under the knob).
 		a.pendingMark = Style.Disc(a, "ARTWORK", 2, 8)
@@ -381,7 +613,7 @@ local function create(parent)
 		a.knobDot = Style.Disc(a, "OVERLAY", 1, L.knob - 4)
 		a.knobDot:SetPoint("CENTER", a.knob, "CENTER", 0, 0)
 		a.note = Widgets.Label(a, "GameFontHighlightSmall", true)
-		a.note:SetPoint("TOPLEFT", 0, -33)
+		a.note:SetPoint("TOPLEFT", 0, -(L.axisTrackTop + L.track + 6))
 		a.note:SetWidth(innerRight)
 		a.axisIndex = i
 		-- Click: the player's own words, meaning and lock for this axis (#21).
@@ -404,9 +636,8 @@ local function create(parent)
 	-- The model card (kept as section.showcase for callers and tests).
 	section.showcase = section.showcaseView.model
 
-	-- column: the scroll child the row belongs in (child for fields, side
-	-- for family and history). Field rows come first and their number is
-	-- fixed, so a pooled row normally stays in its column.
+	-- column: the scroll child the row belongs in (child for the left
+	-- column, side for family). A pooled row normally stays in its column.
 	local function getRow(index, column)
 		column = column or child
 		local row = section.pool[index]
@@ -418,7 +649,7 @@ local function create(parent)
 		-- its Edit button inside it (Widgets.EntryRow).
 		row = Widgets.EntryRow(column)
 		Style.Register(row, paintFieldCard)
-		row.key = Widgets.Label(row, "GameFontNormalSmall", false, "eyebrow") -- field label, Cinzel 13
+		row.key = Widgets.TrackedLabel(row, "eyebrow", "eyebrow") -- field label, Cinzel 13
 		row.label = Widgets.Label(row, "GameFontNormal", true)                -- list headings, bold 14
 		row.value = Widgets.Label(row, "nav", true)                            -- tile value, 17
 		row.reading = Widgets.Label(row, "reading", true, "reading")           -- card text, 16 with leading
@@ -429,6 +660,13 @@ local function create(parent)
 		row.rule:SetPoint("BOTTOMLEFT", 0, 2)
 		row.rule:SetPoint("BOTTOMRIGHT", 0, 2)
 		row.rule:Hide()
+		-- An empty field's whole tile opens its editor, as its "+ Add" does.
+		row:SetScript("OnMouseUp", function(self)
+			local spec = self.spec
+			if self.emptyField and spec and spec.kind == "field" and section.OpenEditor then
+				section:OpenEditor(spec.field)
+			end
+		end)
 		if section.decorateRow then
 			section.decorateRow(row)
 		end
@@ -441,6 +679,7 @@ local function create(parent)
 		row:SetPoint("TOPLEFT", row:GetParent() or child, "TOPLEFT", x, -y)
 		row:SetWidth(width)
 		if height then row:SetHeight(height) end
+		if row.dashes then row.dashes:Layout(width, height or row:GetHeight()) end
 		row:Show()
 	end
 
@@ -449,38 +688,57 @@ local function create(parent)
 		for _, fs in ipairs({ row.key, row.label, row.value, row.reading, row.title, row.detail, row.notes }) do
 			fs:Hide()
 		end
+		row.title:SetWordWrap(true)
+		row.detail:SetWordWrap(true)
 		row.rule:Hide()
 		row.edit:Hide()
 		row.theme = theme
 		row.emptyField = nil
+		row.gameValue = nil
+		-- Tooltips are per use: a pooled row keeps none from an earlier one.
+		if row.tooltipHooked then row.tooltipTitle, row.tooltipText = nil, nil end
 		row:SetPlain(false)
 	end
 
-	local function fieldKey(row, spec, x, y)
+	local function fieldKey(row, text, x, y)
 		row.key:Show()
 		row.key:ClearAllPoints()
 		row.key:SetPoint("TOPLEFT", x, y)
-		row.key:SetText(spec.field.label:upper())
+		row.key:SetText(text:upper())
 	end
 
 	-- A short field: a tile in a three-column grid (label, value in title
-	-- white 17, then Edit along the bottom). Returns its height.
+	-- white 17, then Edit along the bottom). A value from the game reads in
+	-- body text with "from the game" under it; an empty field is a dashed
+	-- tile with "Not set" and "+ Add". Returns its height.
 	local function measureTile(row, spec, width, theme)
 		resetRow(row, spec, theme)
-		local entry = spec.entry
-		row.emptyField = entry == nil
+		local value, source = CharacterView.FieldDisplay(section.char, spec.field.key)
+		row.emptyField = value == nil
+		row.gameValue = source == "game" and value or nil
 		Style.Repaint(row)
-		fieldKey(row, spec, L.tilePadX, -L.tilePadY)
+		fieldKey(row, spec.field.label, L.tilePadX, -L.tilePadY)
 		row.key:SetWidth(width - 2 * L.tilePadX)
 		row.value:Show()
 		row.value:ClearAllPoints()
 		row.value:SetPoint("TOPLEFT", L.tilePadX, -L.tileValueTop)
 		row.value:SetWidth(width - 2 * L.tilePadX)
-		row.value:SetText(entry and entry.value or EMPTY_VALUE)
-		Widgets.SetTextRole(row.value, entry and "heading" or "muted")
+		row.value:SetText(value or EMPTY_VALUE)
+		Widgets.SetTextRole(row.value, source == "player" and "heading" or source == "game" and "text" or "muted")
+		local bottom = L.tileValueTop + math.max(row.value:GetStringHeight(), 20)
+		if row.gameValue then
+			row.notes:Show()
+			row.notes:ClearAllPoints()
+			row.notes:SetPoint("TOPLEFT", L.tilePadX, -(bottom + L.hintGap))
+			row.notes:SetWidth(width - 2 * L.tilePadX)
+			row.notes:SetText(CharacterView.GAME_HINT)
+			Widgets.SetTextRole(row.notes, "muted")
+			bottom = bottom + L.hintGap + math.max(row.notes:GetStringHeight(), 16)
+			Widgets.Tooltip(row, spec.field.label .. ": from the game", "The game says your character is \""
+				.. value .. "\". It is shown until you write your own with Edit; it is never saved for you.")
+		end
 		section.updateFieldActions(row, spec, "tile")
-		return math.max(L.tileMin,
-			L.tileValueTop + math.max(row.value:GetStringHeight(), 20) + 8 + L.controlHeight + L.tilePadY)
+		return math.max(L.tileMin, bottom + 8 + L.controlHeight + L.tilePadY)
 	end
 
 	-- A long field: a full-width card (label and Edit on one row, then the
@@ -490,7 +748,7 @@ local function create(parent)
 		local entry = spec.entry
 		row.emptyField = entry == nil
 		Style.Repaint(row)
-		fieldKey(row, spec, L.cardPadX, -(L.cardPadY + 7))
+		fieldKey(row, spec.field.label, L.cardPadX, -(L.cardPadY + 7))
 		row.reading:Show()
 		row.reading:ClearAllPoints()
 		row.reading:SetPoint("TOPLEFT", L.cardPadX, -L.cardTextTop)
@@ -501,11 +759,65 @@ local function create(parent)
 		return math.max(L.tileMin, L.cardTextTop + math.max(row.reading:GetStringHeight(), 20) + L.cardPadY)
 	end
 
+	-- The imported story (Biography): its first paragraphs in the reading
+	-- style, how it came and how long it is, and "Read full story" on the
+	-- label row. Without a story: a dashed card with "+ Import".
+	local function measureStory(row, spec, width, theme)
+		resetRow(row, spec, theme)
+		local source = spec.source
+		row.emptyField = source == nil
+		Style.Repaint(row)
+		fieldKey(row, "Biography", L.cardPadX, -(L.cardPadY + 7))
+		row.reading:Show()
+		row.reading:ClearAllPoints()
+		row.reading:SetPoint("TOPLEFT", L.cardPadX, -L.cardTextTop)
+		row.reading:SetWidth(width - 2 * L.cardPadX)
+		local h = L.cardTextTop
+		if source then
+			local excerpt, truncated = CharacterView.StoryExcerpt(source.text)
+			row.storyTruncated = truncated
+			row.reading:SetText(excerpt ~= "" and excerpt or EMPTY_VALUE)
+			Widgets.SetTextRole(row.reading, "reading")
+			h = h + math.max(row.reading:GetStringHeight(), 20)
+			row.detail:Show()
+			row.detail:ClearAllPoints()
+			row.detail:SetPoint("TOPLEFT", L.cardPadX, -(h + 8))
+			row.detail:SetWidth(width - 2 * L.cardPadX)
+			row.detail:SetText(CharacterView.StoryMeta(source))
+			Widgets.SetTextRole(row.detail, "muted")
+			h = h + 8 + row.detail:GetStringHeight()
+			row.edit:SetText("Read full story")
+			row.edit:SetVariant("default")
+			row.edit:SetSize(L.storyButton, L.controlHeight)
+			Widgets.Tooltip(row.edit, "Read full story", "Your whole imported story, exactly as you wrote it.")
+		else
+			row.reading:SetText(CharacterView.STORY_EMPTY)
+			Widgets.SetTextRole(row.reading, "muted")
+			h = h + math.max(row.reading:GetStringHeight(), 20)
+			row.edit:SetText("+ Import")
+			row.edit:SetVariant("ghost")
+			row.edit:SetSize(84, L.controlHeight)
+			Widgets.Tooltip(row.edit, "Import your story", "Opens Import story.")
+		end
+		row.edit:ClearAllPoints()
+		row.edit:SetPoint("TOPRIGHT", -L.cardPadX, -L.cardPadY)
+		row.edit:Show()
+		return math.max(L.tileMin, h + L.cardPadY)
+	end
+
 	-- A family member or history entry: a card with the name (or what
-	-- happened), a meta line and notes; Edit at the top right.
-	local function measureItem(row, spec, width, theme)
+	-- happened), a meta line and notes; Edit at the top right. compact (the
+	-- right column's family): the name and one meta line, never wrapped
+	-- (mockup: "Mother · innkeeper, Goldshire"); the full notes are the tooltip.
+	local function measureItem(row, spec, width, theme, compact)
 		resetRow(row, spec, theme)
 		local title, meta, notes = CharacterView.ItemParts(spec.list, spec.item)
+		if compact then
+			Widgets.Tooltip(row, title, meta .. (notes and notes ~= "" and ("\n\n" .. notes) or ""))
+			meta, notes = CharacterView.FamilyMeta(spec.item), nil
+			row.title:SetWordWrap(false)
+			row.detail:SetWordWrap(false)
+		end
 		local textWidth = width - 2 * 10 - L.editWidth - 8
 		local y = 10
 		row.title:Show()
@@ -531,33 +843,28 @@ local function create(parent)
 		return math.max(y + 10, 10 + L.controlHeight + 10)
 	end
 
-	-- Headings and the Add line inside the Family & relationships panel.
+	-- The History Add line (a hint and a quiet "+ Add"), or Family's Add on
+	-- its panel's eyebrow row (the button alone).
 	local function measurePlain(row, spec, width, theme)
 		resetRow(row, spec, theme)
 		row:SetPlain(true)
-		if spec.kind == "heading" then
-			row.label:Show()
-			row.label:ClearAllPoints()
-			row.label:SetPoint("TOPLEFT", 0, -4)
-			row.label:SetWidth(width)
-			row.label:SetText(spec.text)
-			Widgets.SetTextRole(row.label, "label")
-			row.rule:Show()
-			return row.label:GetStringHeight() + 14
-		end
-		row.notes:Show()
-		row.notes:ClearAllPoints()
-		row.notes:SetPoint("TOPLEFT", 0, -4)
-		row.notes:SetWidth(width - 64)
-		row.notes:SetText(spec.text)
-		Widgets.SetTextRole(row.notes, "muted")
-		row.edit:SetText("Add")
+		row.edit:SetText(CharacterView.ADD_LABEL)
 		row.edit:SetVariant("ghost")
-		row.edit:SetSize(56, L.controlHeight)
 		row.edit:ClearAllPoints()
 		row.edit:SetPoint("TOPRIGHT", 0, 0)
 		Widgets.Tooltip(row.edit, spec.list == "family" and "Add a family member" or "Add a history entry")
 		row.edit:Show()
+		if spec.list == "family" then
+			row.edit:SetSize(L.famAddWidth, L.famAddHeight)
+			return L.famAddHeight
+		end
+		row.edit:SetSize(L.addWidth, L.controlHeight)
+		row.notes:Show()
+		row.notes:ClearAllPoints()
+		row.notes:SetPoint("TOPLEFT", 0, -4)
+		row.notes:SetWidth(width - L.addWidth - 8)
+		row.notes:SetText(spec.text)
+		Widgets.SetTextRole(row.notes, "muted")
 		return math.max(row.notes:GetStringHeight() + 10, L.controlHeight + 4)
 	end
 
@@ -572,8 +879,6 @@ local function create(parent)
 		Style.TextColor(a.left, lean == "left" and tones.accentBright or theme.muted)
 		Style.TextColor(a.right, lean == "right" and tones.accentBright or theme.muted)
 		Style.Color(a.track, tones.track)
-		Style.Color(a.knob, theme.background)
-		Style.Color(a.knobDot, theme.accent)
 		Style.Color(a.pendingMark, waitingColor)
 		-- The knob's centre sits at the value along the track (mockup: left %).
 		local function centreAt(value)
@@ -583,28 +888,32 @@ local function create(parent)
 		a.knob:ClearAllPoints()
 		a.pendingMark:ClearAllPoints()
 		a.pendingMark:Hide()
+		local knobY = -(L.axisTrackTop + L.track / 2 - L.knob / 2)
+		a.unset = row.value == nil
 		if row.value then
-			a.knob:SetPoint("TOPLEFT", centreAt(row.value) - L.knob / 2, -(21 + L.track / 2 - L.knob / 2))
-			a.knob:Show()
-			a.knobDot:Show()
+			Style.Color(a.knob, theme.background)
+			Style.Color(a.knobDot, theme.accent)
+			a.knob:SetPoint("TOPLEFT", centreAt(row.value) - L.knob / 2, knobY)
 			if row.waiting > 0 and row.pending ~= 0 then
 				local target = math.max(0, math.min(20, row.value + row.pending))
 				a.pendingMark:SetPoint("CENTER", a.track, "LEFT", centreAt(target), 0)
 				a.pendingMark:Show()
 			end
 		else
-			a.knob:Hide()
-			a.knobDot:Hide()
+			-- Not set: a hollow ring in the middle (no value is invented); the
+			-- tooltip says "Not set". Keeps the row as compact as a set one.
+			Style.Color(a.knob, theme.muted)
+			Style.Color(a.knobDot, theme.background)
+			a.knob:SetPoint("TOPLEFT", centreAt(10) - L.knob / 2, knobY)
 		end
+		a.knob:Show()
+		a.knobDot:Show()
 		local note, noteColor
 		if row.waiting > 0 then
 			local toward = row.pending > 0 and axis.right or row.pending < 0 and axis.left or nil
 			note = (row.waiting == 1 and "1 change waiting" or (row.waiting .. " changes waiting"))
 				.. (toward and (": toward " .. toward) or "")
 			noteColor = waitingColor
-		elseif not row.value then
-			note = "Not set"
-			noteColor = theme.muted
 		end
 		if row.locked then
 			note = (note and (note .. " · ") or "") .. "Locked: story answers never change it"
@@ -620,9 +929,9 @@ local function create(parent)
 			.. (row.waiting > 0 and "\nA change from your story choices waits in Story." or "")
 			.. "\n\nClick to name this axis in your own words, say what it means, or lock it.")
 		if note then
-			return 33 + math.max(a.note:GetStringHeight(), 16) + 2
+			return L.axisTrackTop + L.track + 6 + math.max(a.note:GetStringHeight(), 16)
 		end
-		return 21 + L.track + 4
+		return L.axisTrackTop + L.track
 	end
 
 	-- Personality panel at (x, y); returns its height.
@@ -632,11 +941,11 @@ local function create(parent)
 		pers:ClearAllPoints()
 		pers:SetPoint("TOPLEFT", side, "TOPLEFT", x, -y)
 		pers:SetWidth(cols.right)
-		pers.status:ClearAllPoints()
-		pers.status:SetPoint("TOPLEFT", L.pad, -L.panelTop)
-		pers.status:SetText(CharacterView.ApprovalText(char, waiting))
+		pers.status:SetText(CharacterView.ApprovalShort(char, waiting))
 		Style.TextColor(pers.status, waiting > 0 and Themes.STATUS_COLORS.waiting or theme.muted)
-		local h = L.panelTop + pers.status:GetStringHeight() + 12
+		-- The full sentence on the panel (a font string takes no mouse input).
+		Widgets.Tooltip(pers, "Personality", CharacterView.ApprovalText(char, waiting))
+		local h = L.pad + math.max(18, pers.status:GetStringHeight()) + 12
 		pers.waiting = waiting
 		if waiting > 0 then
 			pers.review:ClearAllPoints()
@@ -661,15 +970,73 @@ local function create(parent)
 		return h
 	end
 
+	-- Family panel from famTop in the right column: the Add on the eyebrow
+	-- row, then as many members as fit the room left, then "+N more".
+	-- Returns its height.
+	local function layoutFamily(specs, first, rows, famTop, theme)
+		local panel = section.familyPanel
+		local itemWidth = cols.right - 2 * L.pad
+		local members, heights, addIndex = {}, {}, nil
+		for j = first, #specs do
+			local spec, row = specs[j], getRow(j, side)
+			rows[j] = row
+			if spec.kind == "item" then
+				members[#members + 1] = j
+				heights[#heights + 1] = measureItem(row, spec, itemWidth, theme, true)
+			else
+				addIndex = j
+				-- Only the button's size, so the row never covers the eyebrow.
+				measurePlain(row, spec, L.famAddWidth, theme)
+				place(row, L.pad + itemWidth - L.famAddWidth, famTop + L.famAddTop, L.famAddWidth, L.famAddHeight)
+			end
+		end
+		local gap = Widgets.ENTRY.gap
+		local room = section.sideHeight - famTop - L.famHead - L.pad
+		local shown, hidden = CharacterView.FamilyFit(heights, room, gap, L.controlHeight)
+		local y = L.famHead
+		for k, j in ipairs(members) do
+			local row = rows[j]
+			if k <= shown then
+				place(row, L.pad, famTop + y, itemWidth, heights[k])
+				y = y + heights[k] + gap
+			else
+				row:Hide()
+			end
+		end
+		panel.empty:SetShown(#members == 0)
+		if #members == 0 then
+			y = y + math.max(panel.empty:GetStringHeight(), 16) + gap
+		end
+		section.familyShown, section.familyHidden = shown, hidden
+		local more = section.familyMore
+		if hidden > 0 then
+			more:SetText("+" .. hidden .. " more")
+			Widgets.Tooltip(more, "Family", "Shows your whole family list, with Edit for each member.")
+			more:ClearAllPoints()
+			more:SetPoint("TOPLEFT", side, "TOPLEFT", L.pad, -(famTop + y))
+			more:Show()
+			y = y + L.controlHeight + gap
+		else
+			more:Hide()
+		end
+		local height = y - gap + L.pad
+		panel:ClearAllPoints()
+		panel:SetPoint("TOPLEFT", side, "TOPLEFT", 0, -famTop)
+		panel:SetSize(cols.right, height)
+		section.familyAdd = addIndex and rows[addIndex] or nil
+		return height
+	end
+
 	function section:RenderList(view)
 		local specs = CharacterView.BuildSpecs(view.char)
 		local theme = view.theme
+		self.char = view.char
 		self.child:SetWidth(cols.left)
 		self.side:SetWidth(cols.right)
 		local rows = {}
 		local tileWidth = CharacterView.TileWidth(contentWidth)
 
-		-- Left column: the field groups.
+		-- Left column: the field groups, the story card and History.
 		local y, i = 0, 1
 		for _, group in ipairs(CharacterView.GROUPS) do
 			local g = self.groups[group.id]
@@ -686,17 +1053,26 @@ local function create(parent)
 				inner = inner + h + L.tileGap
 				pending = {}
 			end
-			while specs[i] and specs[i].kind == "field" and specs[i].group == group.id do
+			while specs[i] and specs[i].group == group.id do
 				local spec, row = specs[i], getRow(i, child)
 				rows[i] = row
-				if spec.field.kind == "long" then
-					flush()
-					local h = measureCard(row, spec, cols.left, theme)
-					place(row, 0, top + inner, cols.left, h)
-					inner = inner + h + L.tileGap
-				else
+				if spec.kind == "field" and spec.field.kind ~= "long" then
 					pending[#pending + 1] = { row = row, height = measureTile(row, spec, tileWidth, theme) }
 					if #pending == L.tileCols then flush() end
+				else
+					flush()
+					local h
+					if spec.kind == "field" then
+						h = measureCard(row, spec, cols.left, theme)
+					elseif spec.kind == "story" then
+						h = measureStory(row, spec, cols.left, theme)
+					elseif spec.kind == "item" then
+						h = measureItem(row, spec, cols.left, theme)
+					else
+						h = measurePlain(row, spec, cols.left, theme)
+					end
+					place(row, 0, top + inner, cols.left, h)
+					inner = inner + h + L.tileGap
 				end
 				i = i + 1
 			end
@@ -709,31 +1085,9 @@ local function create(parent)
 		end
 		local leftHeight = y - L.groupGap
 
-		-- Right column (its own scroll child): Personality, then Family &
-		-- relationships.
-		local x = 0
-		local ry = layoutPersonality(view.char, x, 0, theme) + L.panelGap
-		local famTop = ry
-		local famInner = L.panelTop
-		local itemWidth = cols.right - 2 * L.pad
-		for j = i, #specs do
-			local spec, row = specs[j], getRow(j, side)
-			rows[j] = row
-			local h
-			if spec.kind == "item" then
-				h = measureItem(row, spec, itemWidth, theme)
-			else
-				h = measurePlain(row, spec, itemWidth, theme)
-			end
-			place(row, x + L.pad, famTop + famInner, itemWidth, h)
-			local boxed = spec.kind == "item"
-			famInner = famInner + h + (boxed and Widgets.ENTRY.gap or 8)
-		end
-		local famHeight = famInner + L.pad - 8
-		self.familyPanel:ClearAllPoints()
-		self.familyPanel:SetPoint("TOPLEFT", side, "TOPLEFT", x, -famTop)
-		self.familyPanel:SetSize(cols.right, famHeight)
-		local rightHeight = famTop + famHeight
+		-- Right column (its own scroll child): Personality, then Family.
+		local famTop = layoutPersonality(view.char, 0, 0, theme) + L.panelGap
+		local rightHeight = famTop + layoutFamily(specs, i, rows, famTop, theme)
 
 		for k = #specs + 1, #self.pool do
 			self.pool[k]:Hide()
@@ -759,6 +1113,7 @@ local function create(parent)
 		if self.calloutDrop == drop then return end
 		self.calloutDrop = drop
 		local height = self.viewHeight - drop
+		self.sideHeight = height
 		self.scroll:ClearAllPoints()
 		self.scroll:SetPoint("TOPLEFT", 0, -(L.scrollTop + drop))
 		self.scroll:SetSize(cols.left, height)
@@ -783,11 +1138,12 @@ local function create(parent)
 		if mode ~= "showcase" then mode = "profile" end
 		self.mode = mode
 		local showcase = mode == "showcase"
-		self.intro:SetShown(not showcase)
-		self.scroll:SetShown(not showcase)
-		self.sideScroll:SetShown(not showcase)
-		if showcase then self.callout:Hide() end
-		if showcase then
+		local reading = self.reader and self.reader:IsShown()
+		self.intro:SetShown(not showcase and not reading)
+		self.scroll:SetShown(not showcase and not reading)
+		self.sideScroll:SetShown(not showcase and not reading)
+		if showcase or reading then self.callout:Hide() end
+		if showcase and not reading then
 			self.showcaseView:Show()
 			self.showcase:Show()
 		else
@@ -820,9 +1176,12 @@ local function create(parent)
 			self.ThemeEditor(view.theme)
 			return
 		end
-		self.header:SetShown(not self.form:IsOpen())
+		local reading = self.reader:IsShown()
+		self.header:SetShown(not self.form:IsOpen() and not reading)
 		setEyebrow(self.mode)
-		if self.mode == "showcase" then
+		if reading then
+			self:RenderReader(view.char)
+		elseif self.mode == "showcase" then
 			self.showcaseView:Refresh(view.char, ns.Actions.ShowcasePortrait(ns.ctx))
 		else
 			self:LayoutCallout(view.char)
@@ -833,12 +1192,191 @@ local function create(parent)
 	section.getRow = getRow
 	section.BuildSpecs = CharacterView.BuildSpecs
 	CharacterView.AttachEditing(section)
+	CharacterView.AttachReader(section)
 	CharacterView.section = section
 	section:SetMode("profile", true)
 	return section
 end
 
+--- Reader ----------------------------------------------------------------------
+-- A full view over the section: the whole imported story ("Read full story")
+-- or the whole family list ("+N more"). One scrolling column with the slim
+-- bar; "Back to profile" returns. Paragraph labels and member cards are
+-- pooled and reused.
+
+CharacterView.READER = {
+	story = { heading = "Your story", action = "Open in Import story" },
+	family = { heading = "Family", action = "+ Add family member" },
+}
+
+function CharacterView.AttachReader(section)
+	local f = section.frame
+	local contentWidth, contentHeight = MainWindow.ContentWidth(), MainWindow.ContentHeight()
+	local B = Style.CONTROL.standard
+	local INSET = 8
+	local width = contentWidth - L.scrollBar
+	local reader = CreateFrame("Frame", nil, f)
+	reader:SetAllPoints(f)
+	reader:Hide()
+	section.reader = reader
+
+	reader.heading = Widgets.Label(reader, "GameFontNormalLarge", false, "title")
+	reader.heading:SetPoint("TOPLEFT", INSET, -10)
+	reader.hint = Widgets.Label(reader, "meta", true, "muted")
+	reader.hint:SetPoint("TOPLEFT", INSET, -36)
+	reader.hint:SetWidth(width - 2 * INSET)
+
+	local viewHeight = contentHeight - L.readerTop - (12 + B + 12)
+	reader.scroll = CreateFrame("ScrollFrame", Widgets.NextName("CharacterReader"), reader,
+		"UIPanelScrollFrameTemplate")
+	reader.scroll:SetPoint("TOPLEFT", 0, -L.readerTop)
+	reader.scroll:SetSize(width, viewHeight)
+	reader.child = CreateFrame("Frame", nil, reader.scroll)
+	reader.child:SetSize(width, 1)
+	reader.scroll:SetScrollChild(reader.child)
+	reader.bar = Widgets.SlimScrollBar(reader.scroll, math.floor((L.scrollBar - Widgets.SLIM_BAR.width) / 2))
+	Widgets.WheelScroll(reader.scroll)
+	reader.viewHeight = viewHeight
+
+	reader.back = Widgets.Button(reader, "Back to profile", 140, B)
+	reader.back:SetPoint("BOTTOMRIGHT", -INSET, 12)
+	reader.back:SetScript("OnClick", function() section:CloseReader() end)
+	reader.action = Widgets.Button(reader, "", 190, B, "ghost")
+	reader.action:SetPoint("BOTTOMLEFT", INSET, 12)
+	reader.action:SetScript("OnClick", function()
+		if section.readerKind == "story" then
+			CharacterView.OpenImport()
+		else
+			section:OpenItemForm("family")
+		end
+	end)
+
+	reader.paras, reader.cards = {}, {}
+	local function para(i)
+		local fs = reader.paras[i]
+		if not fs then
+			fs = Widgets.Label(reader.child, "reading", true, "reading")
+			reader.paras[i] = fs
+		end
+		return fs
+	end
+	local function card(i)
+		local c = reader.cards[i]
+		if not c then
+			c = Widgets.EntryRow(reader.child)
+			c.title = Widgets.Label(c, "GameFontHighlight", true, "body")
+			c.title:SetPoint("TOPLEFT", 10, -10)
+			c.detail = Widgets.Label(c, "meta", true, "muted")
+			c.notes = Widgets.Label(c, "meta", true, "muted")
+			c.edit = Widgets.Button(c, "Edit", L.editWidth, L.controlHeight, "ghost")
+			CharacterView.PencilButton(c.edit)
+			c.edit:SetPoint("TOPRIGHT", -10, -10)
+			c.edit:SetScript("OnClick", function() section:OpenItemForm("family", c.item) end)
+			reader.cards[i] = c
+		end
+		return c
+	end
+
+	--- Fills the reader for its kind from char.
+	function section:RenderReader(char)
+		local kind = self.readerKind
+		local def = CharacterView.READER[kind]
+		reader.heading:SetText(def.heading)
+		reader.action:SetText(def.action)
+		local y, p, c = 0, 0, 0
+		if kind == "story" then
+			local source = char and char.sources and ns.Sources.Current(char)
+			reader.hint:SetText(source and (CharacterView.StoryMeta(source) .. ". Kept exactly as you wrote it; "
+				.. "open it in Import story to add to it.") or "No story is saved yet.")
+			local paragraphs = source and ns.Sources.Paragraphs(ns.Sources.StripTags(source.text)) or {}
+			for _, text in ipairs(paragraphs) do
+				p = p + 1
+				local fs = para(p)
+				fs:ClearAllPoints()
+				fs:SetPoint("TOPLEFT", 0, -y)
+				fs:SetWidth(width - 8)
+				fs:SetText(text)
+				fs:Show()
+				y = y + fs:GetStringHeight() + L.paraGap
+			end
+		else
+			reader.hint:SetText(CharacterView.FAMILY_HINT)
+			for _, item in ipairs(char and char.family or {}) do
+				c = c + 1
+				local row = card(c)
+				row.item = item
+				local title, meta, notes = CharacterView.ItemParts("family", item)
+				local textWidth = width - 8 - 2 * 10 - L.editWidth - 8
+				local h = 10
+				row.title:SetWidth(textWidth)
+				row.title:SetText(title)
+				h = h + row.title:GetStringHeight()
+				for _, part in ipairs({ { row.detail, meta }, { row.notes, notes } }) do
+					local fs, text = part[1], part[2]
+					fs:ClearAllPoints()
+					if text and text ~= "" then
+						fs:SetPoint("TOPLEFT", 10, -(h + 2))
+						fs:SetWidth(textWidth)
+						fs:SetText(text)
+						fs:Show()
+						h = h + 2 + fs:GetStringHeight()
+					else
+						fs:Hide()
+					end
+				end
+				h = math.max(h + 10, 10 + L.controlHeight + 10)
+				row:ClearAllPoints()
+				row:SetPoint("TOPLEFT", 0, -y)
+				row:SetSize(width - 8, h)
+				row:Show()
+				Widgets.Tooltip(row.edit, "Edit " .. title)
+				y = y + h + Widgets.ENTRY.gap
+			end
+		end
+		for k = p + 1, #reader.paras do reader.paras[k]:Hide() end
+		for k = c + 1, #reader.cards do reader.cards[k]:Hide() end
+		reader.child:SetHeight(math.max(y, 1))
+		Widgets.ScrollTo(reader.scroll, reader.scroll:GetVerticalScroll())
+		reader.height = y
+	end
+
+	--- Opens the reader: "story" or "family".
+	function section:OpenReader(kind)
+		if not CharacterView.READER[kind] then return end
+		self.readerKind = kind
+		reader:Show()
+		Widgets.ScrollTo(reader.scroll, 0)
+		self.header:Hide()
+		self:SetMode(self.mode, true)
+		self:RenderReader(ns.Actions.Character(ns.ctx))
+		MainWindow.SetStatus("")
+	end
+
+	function section:CloseReader()
+		reader:Hide()
+		self.readerKind = nil
+		self.header:Show()
+		self:SetMode(self.mode)
+	end
+end
 --- Editing ---------------------------------------------------------------------
+
+--- The field editor's hint. A field the game knows (race, class, first
+-- name) says what the game shows while the player has written nothing, and
+-- that clearing their own brings it back. Pure.
+function CharacterView.EditorHint(field, entry, gameValue)
+	if gameValue then
+		if entry then
+			return "Your own words, shown instead of the game's \"" .. gameValue .. "\". Clear it to show the "
+				.. "game's again."
+		end
+		return "The game says \"" .. gameValue .. "\", and that is shown until you write your own (for example "
+			.. "a people, order or calling of your character's). Nothing is saved until you do."
+	end
+	return field.kind == "long"
+		and "A few sentences are plenty. Your profile is what Total RP 3 shows once it is connected."
+		or "One line. Your profile is what Total RP 3 shows once it is connected."
+end
 
 --- Adds per-field Edit buttons and the field editor.
 function CharacterView.AttachEditing(section)
@@ -847,10 +1385,13 @@ function CharacterView.AttachEditing(section)
 
 	function section.decorateRow(row)
 		row.edit = Widgets.Button(row, "Edit", L.editWidth, L.controlHeight, "ghost")
+		CharacterView.PencilButton(row.edit)
 		row.edit:SetScript("OnClick", function()
 			local spec = row.spec
 			if spec.kind == "field" then
 				section:OpenEditor(spec.field)
+			elseif spec.kind == "story" then
+				if spec.source then section:OpenReader("story") else CharacterView.OpenImport() end
 			else
 				section:OpenItemForm(spec.list, spec.item)
 			end
@@ -969,23 +1510,30 @@ function CharacterView.AttachEditing(section)
 		self.header:Hide()
 	end
 
-	-- Fields always offer Edit (Add while empty). shape: "tile" (a quiet
-	-- Edit at the bottom right, as the mockup's tiles) or "card" (a secondary
-	-- Edit on the label row, as the mockup's Summary card).
+	-- Fields always offer Edit ("+ Add" while empty; a value from the game
+	-- is edited to write the player's own). shape: "tile" (a quiet button at
+	-- the bottom right, as the mockup's tiles) or "card" (a secondary Edit on
+	-- the label row, as the mockup's Summary card).
 	function section.updateFieldActions(row, spec, shape)
-		local entry = spec.entry
-		row.edit:SetText(entry and "Edit" or "Add")
+		local empty = row.emptyField
+		row.edit:SetText(empty and CharacterView.ADD_LABEL or "Edit")
 		row.edit:ClearAllPoints()
+		local width = empty and L.addWidth or (shape == "card" and L.cardEditWidth or L.editWidth)
+		row.edit:SetSize(width, L.controlHeight)
 		if shape == "card" then
-			row.edit:SetVariant(entry and "default" or "ghost")
-			row.edit:SetSize(L.cardEditWidth, L.controlHeight)
+			row.edit:SetVariant(empty and "ghost" or "default")
 			row.edit:SetPoint("TOPRIGHT", -L.cardPadX, -L.cardPadY)
 		else
 			row.edit:SetVariant("ghost")
-			row.edit:SetSize(L.editWidth, L.controlHeight)
 			row.edit:SetPoint("BOTTOMRIGHT", -L.tilePadY, L.tilePadY)
 		end
-		Widgets.Tooltip(row.edit, (entry and "Edit " or "Add ") .. spec.field.label)
+		local label = spec.field.label
+		if row.gameValue then
+			Widgets.Tooltip(row.edit, "Write your own " .. label:lower(), "Shown instead of the game's \""
+				.. row.gameValue .. "\". Clear it later to show the game's again.")
+		else
+			Widgets.Tooltip(row.edit, (empty and "Add " or "Edit ") .. label)
+		end
 		row.edit:Show()
 	end
 
@@ -1047,9 +1595,7 @@ function CharacterView.AttachEditing(section)
 		local entry = char and char.fields[field.key]
 		editor.field = field
 		editor.heading:SetText(field.label)
-		editor.hint:SetText(field.kind == "long"
-			and "A few sentences are plenty. Your profile is what Total RP 3 shows once it is connected."
-			or "One line. Your profile is what Total RP 3 shows once it is connected.")
+		editor.hint:SetText(CharacterView.EditorHint(field, entry, ns.Character.GameValue(field.key)))
 		local long = field.kind == "long"
 		editor.area.frame:SetShown(long)
 		editor.line:SetShown(not long)
@@ -1061,6 +1607,7 @@ function CharacterView.AttachEditing(section)
 		section.scroll:Hide()
 		section.sideScroll:Hide()
 		section.callout:Hide()
+		section.reader:Hide()
 		section.showcase:Hide()
 		section.showcaseView:Hide()
 		section.intro:Hide()

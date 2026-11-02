@@ -68,7 +68,8 @@ return function(t, expect)
 
 		t:it("New entry opens the existing editor, and the dashboard comes back after", function()
 			local _, _, _, section = start()
-			expect.equal(section.newButton:GetText(), "+ New entry")
+			expect.equal(section.newButton:GetText(), "New entry")
+			expect.equal(section.newButton.icon.name, "plus", "the design's + is a line icon")
 			click(section.newButton)
 			expect.truthy(section.editor:IsShown())
 			for _, part in ipairs({ section.subline, section.toolbar, section.scroll, section.goals, section.places }) do
@@ -353,8 +354,14 @@ return function(t, expect)
 			-- Toolbar: New entry, then search, then the filter's track at the right edge.
 			local searchRight = section.newButton:GetWidth() + L.toolGap + section.search:GetWidth()
 			local seg = section.filters.buttons
-			local segWidth = #seg * seg[1]:GetWidth() + (#seg - 1) * L.segmentGap
+			local segWidth = (#seg - 1) * L.segmentGap
+			for i, b in ipairs(seg) do
+				segWidth = segWidth + b:GetWidth()
+				expect.equal(b:GetWidth(), L.segmentWidths[i], "each item sized to its word")
+				if i > 1 then expect.equal(lastPoint(b)[4], L.segmentGap) end
+			end
 			expect.equal(segWidth, L.segmentsW)
+			expect.truthy(seg[1]:GetWidth() < seg[2]:GetWidth(), "All is narrower than Defining, as in the design")
 			local trackLeft = W - section.filterTrack:GetWidth()
 			expect.equal(lastPoint(section.filterTrack)[1], "TOPRIGHT")
 			expect.truthy(searchRight + 10 <= trackLeft, "search and filter apart")
@@ -408,12 +415,15 @@ return function(t, expect)
 			expect.equal(section.filterTrack:GetHeight(), C.compact + 2 * ns.JournalView.LAYOUT.trackPad)
 			expect.equal(section.callout.answer:GetHeight(), C.standard)
 			expect.equal(section.callout.later:GetHeight(), C.standard)
-			expect.truthy(ns.Widgets.LabelFits("+ New entry", section.newButton:GetWidth(), C.standard, "primary"))
+			expect.truthy(ns.Widgets.LabelFits("New entry", section.newButton:GetWidth(), C.standard, "primary", true))
 			local row = section.rows[1]
 			for _, b in ipairs({ row.edit, row.delete, row.approve, row.mark }) do
 				expect.equal(b:GetHeight(), C.compact)
-				expect.truthy(ns.Widgets.LabelFits(b:GetText(), b:GetWidth(), b:GetHeight()), b:GetText() .. " fits")
+				expect.truthy(ns.Widgets.LabelFits(b:GetText(), b:GetWidth(), b:GetHeight(), nil, b.icon ~= nil),
+					b:GetText() .. " fits with its icon")
+				expect.truthy(b.icon ~= nil, "every footer action has the design's line icon")
 			end
+			expect.equal(row.mark:GetWidth(), C.compact, "Defining is a square star toggle")
 			expect.equal(row.vis, nil, "no visibility chip in the footer")
 		end)
 
@@ -477,7 +487,8 @@ return function(t, expect)
 			expect.truthy(L.questionX + c.question:GetWidth() + L.discGap + buttons <= ns.MainWindow.ContentWidth(),
 				"question never runs under Answer and Later")
 			expect.equal(lastPoint(c.later)[1], "RIGHT")
-			expect.truthy(c.discEdge and c.disc and c.jewel, "icon disc")
+			expect.truthy(c.discEdge and c.disc and c.icon, "icon disc with the sparkle")
+			expect.equal(c.icon.name, "sparkle")
 			-- The list starts below the callout with the design's gap.
 			expect.equal(section.listTop, L.calloutTop + c:GetHeight() + L.blockGap)
 		end)

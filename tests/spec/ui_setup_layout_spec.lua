@@ -87,13 +87,14 @@ return function(t, expect)
 	end)
 
 	t:describe("setup wizard v0.7: stages", function()
-		t:it("the Character stage shows the player's own portrait and game identity", function()
+		t:it("the Character stage names the game identity in the Name's hint (no portrait row, v0.10)", function()
 			local mock, _, ns = start()
 			mock.Slash("")
 			ns.SetupWizard.Go(2)
 			local w = wizard(ns)
-			expect.equal(w.portrait.portrait.__portrait, "player", "the client's own portrait")
-			expect.truthy(w.identity:GetText():find("Testchar", 1, true))
+			expect.falsy(w.portrait, "the mockup's grid starts with the fields")
+			expect.equal(w.identity, input(ns, "name").hint)
+			expect.truthy(w.identity:GetText():find("^Suggested from your character"), w.identity:GetText())
 			expect.truthy(input(ns, "name").hint:IsShown())
 			expect.truthy(input(ns, "pronouns").hint:IsShown())
 		end)
@@ -163,12 +164,15 @@ return function(t, expect)
 			input(ns, "homeland"):SetText("Goldshire")
 			ns.SetupWizard.Go(6)
 			local w = wizard(ns)
-			expect.truthy(w.summary:GetText():find("Homeland: Goldshire", 1, true))
-			expect.falsy(w.summary:GetText():find("Theme:", 1, true))
-			expect.truthy(w.choices:GetText():find("Theme: ", 1, true))
-			expect.truthy(w.choices:GetText():find("Minimap button: shown", 1, true))
+			local left, right = table.concat(w.summaryLines, "\n"), table.concat(w.choiceLines, "\n")
+			expect.truthy(left:find("Homeland: Goldshire", 1, true))
+			expect.falsy(left:find("Theme:", 1, true))
+			expect.truthy(right:find("Theme: ", 1, true))
+			expect.truthy(right:find("Minimap button: shown", 1, true))
+			expect.truthy(right:find("Backstory: none yet", 1, true), "v0.10: the backstory is reviewed too")
+			expect.truthy(w.summary:GetText():find("|r  Goldshire", 1, true), "the label in its own tone")
 			expect.truthy(w.finishNote:GetText():find("sent to Total RP 3", 1, true))
-			expect.falsy(w.choices:GetText():find("Total RP 3:", 1, true), "no Total RP 3 line without the stage")
+			expect.falsy(right:find("Total RP 3:", 1, true), "no Total RP 3 line without the stage")
 		end)
 	end)
 
@@ -242,18 +246,20 @@ return function(t, expect)
 			local name, pronouns = input(ns, "name"), input(ns, "pronouns")
 			expect.equal(name:GetHeight(), 40, "the mockup's 40 px wizard input (.inp)")
 			-- Row 1: the label 22 above the input, the hint (or error) below; row 2's label after that.
-			local hintBottom = -topOf(name) + name:GetHeight() + 4 + 17
+			local hintBottom = -topOf(name) + name:GetHeight() + 4 + 2 * 15
 			expect.truthy(hintBottom <= -topOf(pronouns) - 22, "row 1's hint ends above row 2's label")
 			local summary = input(ns, "summary").anchorRegion
 			local errorBottom = -topOf(summary) + summary:GetHeight() + 3 + 17
 			local note = wizard(ns).profileNote
 			expect.truthy(errorBottom <= -topOf(note), "the long field's error line ends above the note")
 			expect.truthy(-topOf(note) + note:GetHeight() <= L.height - L.bodyTop - L.footer - 8, "fits the body")
-			-- Hints are one line in their column.
-			expect.truthy(ns.Style.TextWidth(name.hint:GetText(), "small") <= name:GetWidth())
+			-- Hints are two lines at most in their column, even naming a long race and class.
+			expect.truthy(ns.Style.TextWidth("Suggested from your character (Night Elf · Warrior · she/her). Change it "
+				.. "if you like.", "small") <= 2 * name:GetWidth())
+			expect.equal(L.area, 96, "the mockup's About them box")
 		end)
 
-		t:it("footer and cycle labels fit their buttons", function()
+		t:it("footer and choice labels fit their buttons", function()
 			local mock, _, ns = start()
 			mock.Slash("")
 			local w = wizard(ns)
@@ -264,12 +270,14 @@ return function(t, expect)
 			expect.truthy(fits("Save choices", w.next:GetWidth(), w.next:GetHeight()))
 			expect.truthy(fits(w.discard:GetText(), w.discard:GetWidth(), w.discard:GetHeight()))
 			expect.truthy(fits(w.later:GetText(), w.later:GetWidth(), w.later:GetHeight()))
-			for _, b in ipairs(w.cycles) do
-				for _, v in ipairs(b.spec.values) do
-					-- Room is kept on the right for the chevron.
-					expect.truthy(fits(v[2], b:GetWidth() - 24, b:GetHeight(), "choice"), v[2])
+			-- v0.10: every choice is a segmented control; every option is shown and fits, the row fits the panel.
+			local inner = ns.SetupWizard.LAYOUT.bodyWidth - 2 * ns.Widgets.PANEL_PAD
+			for _, seg in ipairs(w.cycles) do
+				expect.equal(#seg.buttons, #seg.spec.values, seg.spec.key)
+				for _, b in ipairs(seg.buttons) do
+					expect.truthy(fits(b:GetText(), b:GetWidth(), b:GetHeight(), "segment"), b:GetText())
 				end
-				expect.truthy(b.chevron:GetText() ~= "")
+				expect.truthy(150 + #seg.buttons * (seg.buttons[1]:GetWidth() + 2) <= inner, seg.spec.key)
 			end
 			expect.truthy(fits(w.importStory:GetText(), w.importStory:GetWidth(), w.importStory:GetHeight()))
 		end)

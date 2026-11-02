@@ -38,7 +38,7 @@ Style.MIN_TEXT = 13
 -- Text roles: font template and colour (a theme role or a Style.Tones key).
 Style.TEXT = {
 	title = { font = "GameFontNormalLarge", color = "heading" },
-	eyebrow = { font = "GameFontNormalSmall", color = "ornament" },
+	eyebrow = { font = "GameFontNormalSmall", color = "eyebrowText" },
 	heading = { font = "GameFontNormal", color = "label" },
 	body = { font = "GameFontHighlight", color = "text" },
 	reading = { font = "GameFontHighlight", color = "reading" },
@@ -60,6 +60,30 @@ function Style.Lighten(color, amount)
 	return Style.Mix(color, { 1, 1, 1 }, amount)
 end
 
+--- color lightened in 5 % steps until it reads at ratio on background. Pure.
+function Style.Readable(color, background, ratio)
+	local c = color
+	for step = 1, 20 do
+		if Themes.Contrast(c, background) >= ratio then return c end
+		c = Style.Lighten(color, step * 0.05)
+	end
+	return c
+end
+
+--- color scaled by k, keeping its hue (channels capped at 1). Pure.
+function Style.Scale(color, k)
+	return { math.min(1, color[1] * k), math.min(1, color[2] * k), math.min(1, color[3] * k) }
+end
+
+--- color brightened keeping its hue: scaled until its strongest channel
+-- reaches peak (never darkened), then mixed toward white by amount. Mixing
+-- toward white alone greys a gold (v0.9 gave #E4C997 for the design's
+-- #F0D08E). Pure.
+function Style.Brighten(color, peak, amount)
+	local top = math.max(color[1], color[2], color[3], 0.001)
+	return Style.Lighten(Style.Scale(color, math.max(1, peak / top)), amount)
+end
+
 -- Secondary tones, derived from a theme's roles so every theme gets them. The
 -- formulas are tuned so Classic Dawnward lands on the design system's values
 -- (hex in the comments); tests/spec/ui_components_spec.lua checks contrast.
@@ -72,19 +96,26 @@ local function deriveTones(t)
 		label = Style.Mix(accent, text, 0.4),           -- D8C49A field labels, the rail's title
 		ghostText = Style.Mix(text, muted, 0.25),       -- D9D2C2 ghost button text
 		navText = Style.Mix(text, muted, 0.5),          -- C9C2B2 rail navigation
-		accentBright = Style.Lighten(accent, 0.3),      -- F0D08E primary edge, gold chips, dates
-		edgeStrong = Style.Lighten(edge, 0.1),          -- 3E4C66 secondary button edge
-		selectedFill = Style.Lighten(t.surfaceHover, 0.05), -- 2A3346 selected segment
-		selectedEdge = Style.Lighten(edge, 0.18),       -- 4A5874 selected segment, hovered card
+		accentBright = Style.Brighten(accent, 0.94, 0.15), -- F0D08E primary edge, gold chips, dates
+		-- Lighter edges keep the edge's blue (v0.10: scaled, not mixed with white).
+		edgeStrong = Style.Scale(edge, 1.4),            -- 3E4C66 secondary button edge
+		selectedFill = Style.Scale(t.surfaceHover, 1.27), -- 2A3346 selected segment
+		selectedEdge = Style.Scale(edge, 1.62),         -- 4A5874 selected segment, featured card
 		cardHover = Style.Mix(t.surface, t.surfaceHover, 0.5), -- 1A2230 hovered card
 		field = Style.Mix(t.background, t.panel, 0.3),  -- 0F141D input well
 		fieldFocus = Style.Mix(t.background, t.surfaceHover, 0.3), -- 141B27 focused input
-		fieldEdge = Style.Lighten(edge, 0.06),          -- 33405A input edge
+		fieldEdge = Style.Scale(edge, 1.22),            -- 33405A input edge
 		dangerText = Style.Lighten(t.danger, 0.25),     -- F0A39B danger button text
 		dangerEdge = Style.Mix(t.background, t.danger, 0.33), -- 5E3236 danger button edge
 		track = Style.Mix(edge, t.background, 0.3),     -- 232C3D progress track
-		calloutFill = Style.Mix(t.background, accent, 0.05), -- 1A1A17 "needs you" callout
-		dot = Style.Mix(muted, edge, 0.45),             -- 6E7891 neutral status dot
+		-- A warm dark (the background toward the dark accent text, a touch of gold).
+		calloutFill = Style.Mix(Style.Mix(t.background, t.accentText, 0.5), accent, 0.04), -- 1A1A17 callout
+		dot = Style.Mix(Style.Scale(edge, 2), muted, 0.25), -- 6E7891 neutral status dot
+		-- Eyebrows: the ornament colour (C9A55E), lightened only as far as 4.5:1
+		-- needs on the lightest surface they sit on (Shadowbound's crimson).
+		eyebrowText = Style.Readable(t.ornament, t.surfaceHover, 4.5),
+		-- Gold and amber chips: their colour darkened (Main.dc.html .goldtag #2A2213, .amber #2E2410).
+		accentWell = Style.Scale(accent, 0.2),
 	}
 end
 
@@ -118,7 +149,12 @@ end
 -- 0.16 em), so eyebrows are plain capitals one size up (13 instead of 12).
 Style.FONT_DIR = "Interface\\AddOns\\DawnwardChronicles\\Media\\Fonts\\"
 Style.FONT_FILES = { display = "Cinzel-SemiBold.ttf", body = "AlegreyaSans-Regular.ttf",
-	bold = "AlegreyaSans-Bold.ttf" }
+	bold = "AlegreyaSans-Bold.ttf", italic = "AlegreyaSans-Italic.ttf", medium = "AlegreyaSans-Medium.ttf",
+	displayBold = "Cinzel-Bold.ttf" }
+-- v0.10 weights (the design's italic title, medium navigation and chips, bold
+-- dates). If one of these files fails to load, its style uses the nearest
+-- v0.9 file instead of dropping to the game font.
+Style.FILE_FALLBACK = { italic = "body", medium = "body", displayBold = "display" }
 -- Clients whose script the bundled fonts cover.
 Style.LATIN_LOCALES = { enUS = true, enGB = true, deDE = true, frFR = true, esES = true, esMX = true, itIT = true,
 	ptBR = true, ptPT = true }
@@ -136,13 +172,19 @@ Style.FONTS = {
 	-- Named styles (Style.FontFor); fallback is the game font used without them.
 	{ name = "DawnwardFontRailName", file = "display", size = 21, fallback = "GameFontHighlightLarge",
 		style = "railName" },
-	{ name = "DawnwardFontDay", file = "display", size = 24, fallback = "GameFontNormalLarge", style = "day" },
+	{ name = "DawnwardFontDay", file = "displayBold", size = 24, fallback = "GameFontNormalLarge", style = "day" },
 	-- The setup wizard's stage heading (SetupWizard.dc.html h1: Cinzel 26).
 	{ name = "DawnwardFontStage", file = "display", size = 26, fallback = "GameFontNormalHuge", style = "stage" },
 	{ name = "DawnwardFontButton", file = "bold", size = 15, fallback = "GameFontHighlight", style = "button" },
 	{ name = "DawnwardFontButtonSmall", file = "bold", size = 14, fallback = "GameFontHighlightSmall",
 		style = "buttonSmall" },
-	{ name = "DawnwardFontNav", file = "body", size = 17, fallback = "GameFontHighlight", style = "nav" },
+	{ name = "DawnwardFontNav", file = "medium", size = 17, fallback = "GameFontHighlight", style = "nav" },
+	-- The rail's title line (Main.dc.html: 15 italic) and chip labels (13 / 500).
+	{ name = "DawnwardFontItalic", file = "italic", size = 15, fallback = "GameFontHighlight", style = "italic" },
+	{ name = "DawnwardFontChip", file = "medium", size = 13, fallback = "GameFontHighlightSmall", style = "chip" },
+	-- Placeholders in inputs (input.field: 15).
+	{ name = "DawnwardFontPlaceholder", file = "body", size = 15, fallback = "GameFontHighlightSmall",
+		style = "placeholder" },
 	{ name = "DawnwardFontReading", file = "body", size = 16, spacing = 4, fallback = "GameFontHighlight",
 		style = "reading" },
 	{ name = "DawnwardFontMeta", file = "body", size = 14, fallback = "GameFontHighlightSmall", style = "meta" },
@@ -155,10 +197,12 @@ for _, f in ipairs(Style.FONTS) do
 end
 local fontFor, styleFont = {}, {}
 Style.fontObjects = {}
+-- The file each style actually uses (its own, or Style.FILE_FALLBACK's).
+Style.styleFile = {}
 
 --- Creates the font objects. Safe to call again; returns the number loaded.
 function Style.InitFonts()
-	fontFor, styleFont = {}, {}
+	fontFor, styleFont, Style.styleFile = {}, {}, {}
 	if type(CreateFont) ~= "function" then
 		return 0
 	end
@@ -186,10 +230,15 @@ function Style.InitFonts()
 	local loaded = 0
 	for _, f in ipairs(Style.FONTS) do
 		local ok, set = pcall(function()
-			if not loads(f.file) then return false end
+			local file = f.file
+			if not loads(file) then
+				file = Style.FILE_FALLBACK[file]
+				if not (file and loads(file)) then return false end
+			end
 			local object = Style.fontObjects[f.name] or CreateFont(f.name)
 			Style.fontObjects[f.name] = object
-			object:SetFont(Style.FONT_DIR .. Style.FONT_FILES[f.file], f.size, "")
+			object:SetFont(Style.FONT_DIR .. Style.FONT_FILES[file], f.size, "")
+			Style.styleFile[f.style] = file
 			object:SetShadowOffset(1, -1)
 			object:SetShadowColor(0, 0, 0, 0.75)
 			if f.spacing and object.SetSpacing then object:SetSpacing(f.spacing) end
@@ -245,6 +294,24 @@ Style.ADVANCE = {
 		520,639,555,472,490,626,564,893,594,528,528,288,287,288,424,450,389,462,514,385,518,461,303,487,
 		520,242,265,456,247,800,516,491,509,510,323,370,319,510,423,674,435,427,412,288,314,288,480,
 	},
+	italic = {
+		147,260,279,513,416,829,635,162,287,308,374,477,229,308,230,288,532,343,454,411,479,416,468,416,
+		474,468,229,229,498,478,503,331,823,548,512,500,620,461,415,575,653,259,297,520,400,753,653,611,
+		498,608,529,451,467,597,534,849,561,502,503,288,291,288,423,451,402,439,441,336,441,378,280,441,
+		469,218,232,462,247,717,467,411,437,438,325,317,331,471,407,683,439,412,407,288,314,288,480,
+	},
+	medium = {
+		160,260,310,529,437,836,701,182,291,303,378,480,229,306,229,286,525,351,462,420,490,423,475,424,
+		482,475,229,229,480,480,480,335,833,587,554,519,650,493,443,599,689,279,321,563,423,792,688,639,
+		534,643,570,483,495,631,573,897,606,541,536,291,286,291,431,447,389,470,518,385,521,465,314,492,
+		525,250,275,472,254,803,521,492,513,514,334,376,327,515,433,685,446,435,417,291,311,291,480,
+	},
+	displayBold = {
+		250,269,363,575,558,740,807,200,423,423,388,481,231,380,222,426,653,393,617,563,619,554,630,544,
+		603,630,222,231,493,481,481,462,990,717,674,780,828,632,596,836,862,387,385,757,617,953,865,879,
+		656,883,747,578,667,821,728,971,729,702,661,417,426,417,553,500,537,644,604,683,748,564,535,730,
+		751,352,341,673,549,863,779,777,586,767,658,515,599,705,637,870,650,636,607,379,257,379,494,
+	},
 	bold = {
 		151,264,354,549,450,854,711,205,295,300,383,480,229,304,229,284,521,360,471,431,503,432,483,432,
 		493,483,229,229,480,480,480,340,844,600,579,517,655,509,456,598,696,295,335,584,433,797,695,643,
@@ -252,20 +319,33 @@ Style.ADVANCE = {
 		533,261,285,495,263,807,529,494,518,519,348,384,338,522,445,698,461,447,424,295,307,295,480,
 	},
 }
-local WIDE_CHAR = 600 -- any other character (·, ×, accented letters): a generous estimate
+local WIDE_CHAR = 600 -- any other character (accented letters): a generous estimate
+-- The few non-ASCII characters Dawnward itself writes (· separators, ×,
+-- …, —), from the same hmtx tables: display, displayBold, body, bold,
+-- italic, medium.
+Style.ADVANCE_EXTRA = {
+	["\194\183"] = { display = 202, displayBold = 219, body = 229, bold = 229, italic = 229, medium = 229 },
+	["\195\151"] = { display = 413, displayBold = 412, body = 480, bold = 480, italic = 481, medium = 480 },
+	["\226\128\166"] = { display = 638, displayBold = 673, body = 581, bold = 630, italic = 578, medium = 601 },
+	["\226\128\148"] = { display = 800, displayBold = 800, body = 929, bold = 889, italic = 932, medium = 912 },
+}
 
 --- Estimated width in UI units of text set in a Dawnward style (a
 -- Style.FONTS style name such as "button", "body", "eyebrow"). Colour codes
 -- are ignored. Pure.
 function Style.TextWidth(text, style)
 	local spec = Style.FONT_BY_STYLE[style or "body"] or Style.FONT_BY_STYLE.body
-	local advance = Style.ADVANCE[spec.file]
+	local file = Style.styleFile[spec.style] or spec.file
+	local advance = Style.ADVANCE[file]
 	text = tostring(text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
 	local units = 0
 	for char in text:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
 		local byte = char:byte()
+		local extra = Style.ADVANCE_EXTRA[char]
 		if #char == 1 and byte >= 32 and byte <= 126 then
 			units = units + advance[byte - 31]
+		elseif extra and extra[file] then
+			units = units + extra[file]
 		elseif #char >= 3 then
 			-- CJK and other 3- and 4-byte characters are full width (about one em)
 			-- in the game's fonts, which those clients use (Style.LATIN_LOCALES).
@@ -450,6 +530,112 @@ function Style.Pill(frame, height)
 		for _, t in ipairs(pill.parts) do t:SetShown(on and true or false) end
 	end
 	return pill
+end
+
+--- Line icons ---------------------------------------------------------------------
+-- The design's 24 px line icons (Main.dc.html, DesignSystem.dc.html), drawn
+-- with the client's Line regions (Frame:CreateLine, SimpleLineAPI in the
+-- 1.15.9 API documentation): each icon is a few straight strokes in a 24 x 24
+-- box, arcs and circles as short polylines. No art ships and every theme
+-- recolours them. Where a client has no CreateLine, Style.LineIcon returns
+-- nil and callers keep their text or glyph.
+--
+-- Each icon: polylines { x1, y1, x2, y2, ... } (y down, as in the SVGs),
+-- optional circles { cx, cy, r } and a stroke width in the 24 px box.
+local function arc(cx, cy, r, from, to, steps)
+	local out = {}
+	for i = 0, steps do
+		local a = math.rad(from + (to - from) * i / steps)
+		out[#out + 1] = cx + r * math.cos(a)
+		out[#out + 1] = cy + r * math.sin(a)
+	end
+	return out
+end
+-- A polyline from pieces: numbers and arc() results, in order.
+local function path(...)
+	local out = {}
+	for _, piece in ipairs({ ... }) do
+		if type(piece) == "table" then
+			for _, v in ipairs(piece) do out[#out + 1] = v end
+		else
+			out[#out + 1] = piece
+		end
+	end
+	return out
+end
+Style.ICONS = {
+	-- The wordmark's four-point star and the Story sparkle.
+	wordmark = { stroke = 1.6, { 12, 2, 15, 9, 22, 12, 15, 15, 12, 22, 9, 15, 2, 12, 9, 9, 12, 2 } },
+	sparkle = { stroke = 1.8, { 12, 3, 14.2, 8.8, 20, 11, 14.2, 13.2, 12, 19, 9.8, 13.2, 4, 11, 9.8, 8.8, 12, 3 } },
+	journal = { stroke = 1.8, path(4, 4, 14, 4, arc(14, 8, 4, -90, 0, 3), 18, 20, 8, 20, arc(8, 16, 4, 90, 180, 3), 4, 4),
+		{ 8, 8, 14, 8 }, { 8, 12, 14, 12 } },
+	character = { stroke = 1.8, arc(12, 21, 8, 180, 360, 10), circles = { { 12, 8, 4 } } },
+	chronicle = { stroke = 1.8, path(9, 8, 20, 8, 20, 6, arc(18, 6, 2, 0, -90, 2), 7, 4, arc(7, 6, 2, -90, -180, 2),
+		5, 18, arc(7, 18, 2, 180, 90, 2), 17, 20, arc(17, 18, 2, 90, 0, 2), 19, 8), { 9, 12, 16, 12 }, { 9, 16, 14, 16 } },
+	close = { stroke = 2, { 6, 6, 18, 18 }, { 18, 6, 6, 18 } },
+	plus = { stroke = 2.2, { 12, 5, 12, 19 }, { 5, 12, 19, 12 } },
+	search = { stroke = 2, { 20, 20, 16.2, 16.2 }, circles = { { 11, 11, 7 } } },
+	edit = { stroke = 2, { 4, 20, 8, 20, 19, 9, 15, 5, 4, 16, 4, 20 } },
+	delete = { stroke = 2, { 4, 7, 20, 7 }, { 10, 11, 10, 17 }, { 14, 11, 14, 17 }, { 6, 7, 7, 20, 17, 20, 18, 7 },
+		{ 9, 7, 9, 4, 15, 4, 15, 7 } },
+	check = { stroke = 2.2, { 5, 12, 10, 17, 19, 7 } },
+	guide = { stroke = 2, path(arc(12, 9.5, 2.5, 180, 360, 4), 14.3, 10.6, 12.6, 11.9, 12, 13, 12, 14),
+		{ 12, 17.3, 12, 18.2 }, circles = { { 12, 12, 9 } } },
+	settings = { stroke = 2, { 12, 2, 12, 5 }, { 12, 19, 12, 22 }, { 2, 12, 5, 12 }, { 19, 12, 22, 12 },
+		{ 4.9, 4.9, 7, 7 }, { 17, 17, 19.1, 19.1 }, { 4.9, 19.1, 7, 17 }, { 17, 7, 19.1, 4.9 },
+		circles = { { 12, 12, 3 } } },
+	home = { stroke = 2, { 3, 11, 12, 4, 21, 11, 21, 20, 20, 21, 15, 21, 15, 15, 9, 15, 9, 21, 4, 21, 3, 20, 3, 11 } },
+	star = { stroke = 2, { 12, 3, 14.7, 8.6, 20.8, 9.5, 16.4, 13.8, 17.4, 19.9, 12, 17, 6.6, 19.9, 7.6, 13.8, 3.2, 9.5,
+		9.3, 8.6, 12, 3 } },
+}
+
+--- The polylines of icon name with its circles expanded (24 px box). Pure.
+function Style.IconPaths(name)
+	local spec = Style.ICONS[name]
+	if not spec then return nil end
+	local out = {}
+	for _, line in ipairs(spec) do out[#out + 1] = line end
+	for _, c in ipairs(spec.circles or {}) do
+		out[#out + 1] = arc(c[1], c[2], c[3], 0, 360, c[3] >= 6 and 16 or 12)
+	end
+	return out
+end
+
+--- A line icon of size on parent (a Frame holding the strokes), or nil when
+-- the client cannot draw lines or the icon is unknown. icon:SetColor(color,
+-- alpha) paints every stroke; callers colour it from their own painter.
+-- thickness overrides the stroke width (UI units).
+function Style.LineIcon(parent, name, size, thickness, layer)
+	local paths = Style.IconPaths(name)
+	if not paths then return nil end
+	local icon = CreateFrame("Frame", nil, parent)
+	if type(icon.CreateLine) ~= "function" then
+		icon:Hide()
+		return nil
+	end
+	icon:SetSize(size, size)
+	icon.name, icon.lines = name, {}
+	local k = size / 24
+	local width = thickness or math.max(1, Style.ICONS[name].stroke * k)
+	for _, p in ipairs(paths) do
+		for i = 1, #p - 3, 2 do
+			if math.abs(p[i] - p[i + 2]) + math.abs(p[i + 1] - p[i + 3]) > 0.05 then
+				local line = icon:CreateLine(nil, layer or "ARTWORK")
+				if not line then
+					icon:Hide()
+					return nil
+				end
+				line:SetThickness(width)
+				line:SetStartPoint("TOPLEFT", icon, p[i] * k, -p[i + 1] * k)
+				line:SetEndPoint("TOPLEFT", icon, p[i + 2] * k, -p[i + 3] * k)
+				icon.lines[#icon.lines + 1] = line
+			end
+		end
+	end
+	function icon.SetColor(self, color, alpha)
+		for _, line in ipairs(self.lines) do Style.Color(line, color, alpha) end
+	end
+	return icon
 end
 
 --- Frame chrome ----------------------------------------------------------------

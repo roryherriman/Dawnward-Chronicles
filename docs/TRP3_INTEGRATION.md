@@ -421,7 +421,7 @@ Nothing below is verified. Use two accounts (A writes, B observes), both on Clas
 **Settings (Settings > Total RP 3 > Overview, or `/dawnward story set …`):**
 - **About page** (`trp3About`): **Auto** (the full profile for characters on the profile model, the v0.3 summary block for others), **Profile**, or **Summary**.
 - **Template** (`trp3Layout`): **Keep** your Total RP 3 template, or **Text** (1), **Frames** (2), **Sections** (3). Choosing one in Dawnward moves only Dawnward's content (the player's text in the old template is untouched) and switches TRP3's template; switching the template in TRP3 instead is a conflict, never overwritten.
-- **Style** (`trp3Style`): Neutral (plain headings), Silver Hand (gold headings, background 2), Arcane (violet headings with section icons).
+- **Style** (`trp3Style`): Neutral (plain headings), Silver Hand (gold headings, background 3: Marble), Arcane (violet headings with section icons).
 
 **Sections**, in order, each only when it has Public content: Character overview, Appearance, the biography (one section per heading of the player's own, the text before the first heading titled "Background"), Family, Beliefs and motivations, Personality, Defining experiences, Chronicle notes. Section titles are generic container names or the player's own headings; nothing is invented.
 
@@ -440,7 +440,7 @@ Nothing below is verified. Use two accounts (A writes, B observes), both on Clas
 
 **Never shortened:** a slot over 30 000 bytes is refused with the reason. The biography itself is stored up to 16 KB and is never cut. TRP3 has no hard size limit, only a "profile too heavy" warning when the profile would need more than 20 messages to send (`RegisterExchange.lua`); a long biography may trigger it.
 
-**Icons** are Total RP 3 3.4.1's own interface icons, the entry it uses on older clients (`DirectorySection`, `HistorySection`, `MiscInfoSection`, `PhysicalSection`, `TraitSection`, `TargetNotes`, `ProfileDefault`). **Backgrounds** are indices 1 and 2 of TRP3's tiled background list. Whether each icon and background renders on Classic Era is to be checked in game (L3).
+**Icons** are Total RP 3 3.4.1's own interface icons, the entry it uses on older clients (`DirectorySection`, `HistorySection`, `MiscInfoSection`, `PhysicalSection`, `TraitSection`, `TargetNotes`, `ProfileDefault`). **Backgrounds** are indices 1 (Dialog) and 3 (Marble) of TRP3's tiled background list (v0.10: Silver Hand moved from 2, Bank-Background, which the Classic Era 1.15.9 UI source does not use; every icon and background is on the allowlist in `Presentation.ICONS` / `Presentation.BACKGROUNDS`, checked by `tests/spec/trp3_presentation_allowlist_spec.lua`). Frames the player restyled keep their own icon and background on every update. Whether each icon and background renders on Classic Era is to be checked in game (L3).
 
 **Preview:** Overview > **Preview profile** (or `/dawnward trp3 profile`) shows everything that would be published, read only.
 

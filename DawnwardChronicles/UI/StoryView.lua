@@ -290,7 +290,14 @@ function StoryView.WrapLines(text, style, size, width, indent)
 		for word in paragraph:gmatch("%S+") do
 			local w = Style.TextWidth(word, style) * scale
 			if first then
-				x = x + w
+				-- After an indent (an inline label), a first word that does not
+				-- fit starts the next line.
+				if x > 0 and x + space + w > width then
+					lines = lines + 1
+					x = w
+				else
+					x = x + w
+				end
 				first = false
 			elseif x + space + w <= width then
 				x = x + space + w
@@ -312,6 +319,26 @@ end
 -- 16 px padding on each side. Pure.
 function StoryView.ButtonWidth(text)
 	return math.ceil(Style.TextWidth(text, "button")) + 2 * L.buttonPad
+end
+
+-- A no-break space: the client never breaks a line at it, and never drops it
+-- at the start of a line, so a run of them holds room for an inline label.
+StoryView.NBSP = "\194\160"
+
+--- Room for a label set in front of wrapping text in one font string: a
+-- run of no-break spaces (as wide as a space in the bundled reading font)
+-- about room wide, then a normal space, so the text's first line starts
+-- after the label and its other lines at the left edge. Returns the prefix
+-- and its width, or nil when the bundled font is not in use or the label
+-- takes most of the line (width). Pure apart from the font check.
+function StoryView.InlineIndent(room, width)
+	if not Style.UsesBundledFont("meta") or room > width * 0.7 then
+		return nil
+	end
+	local scale = L.why.size / Style.FONT_BY_STYLE.meta.size
+	local space = Style.TextWidth(" ", "meta") * scale
+	local n = math.max(1, math.floor((room - space) / space + 0.5))
+	return string.rep(StoryView.NBSP, n) .. " ", (n + 1) * space
 end
 
 --- Vertical layout of the moment card (distances down from its top edge).
@@ -614,7 +641,7 @@ local function create(parent)
 	function section.context.GetText()
 		local out = {}
 		for _, row in ipairs(section.whyRows) do
-			if row.shown then out[#out + 1] = row.label:GetText() .. " " .. row.text:GetText() end
+			if row.shown then out[#out + 1] = row.label:GetText() .. " " .. row.plain end
 		end
 		return table.concat(out, "\n")
 	end
@@ -819,6 +846,11 @@ local function create(parent)
 	end
 
 	-- Sets the "Why now" rows' text and measures them: { lines, stacked }.
+	-- As in the mockup, each row is one paragraph: the bold label, then the
+	-- reason running on after it and wrapping back to the well's left edge
+	-- (StoryView.InlineIndent). Where the bundled font is not in use (its
+	-- space width is unknown), or the label is very long, the text goes on
+	-- the line under the label instead.
 	local function measureWhy(lines)
 		local w = L.why
 		local rows = {}
@@ -830,14 +862,19 @@ local function create(parent)
 			if line then
 				row.label:SetText(line.label)
 				row.labelW = stringWidth(row.label, line.label, "label")
-				-- A long label ("Kyssarra Dawnwhisper remembers:") puts its text on
-				-- the next line rather than squeezing it into a narrow column.
-				row.stacked = row.labelW > L.whyInner * 0.45
-				row.textX = row.stacked and 0 or (row.labelW + w.labelGap)
-				row.text:SetWidth(L.whyInner - row.textX)
-				row.full = line.text
-				rows[i] = { lines = measure(row.text, safe(line.text), "meta", w.size, w.spacing,
-					L.whyInner - row.textX), stacked = row.stacked }
+				local text = safe(line.text)
+				row.full, row.plain = line.text, line.text
+				local prefix, indent = StoryView.InlineIndent(row.labelW + w.labelGap, L.whyInner)
+				row.stacked = prefix == nil
+				row.textX = 0
+				row.text:SetWidth(L.whyInner)
+				if prefix then
+					row.text:SetText(prefix .. text)
+					maxLines(row.text, 0)
+					rows[i] = { lines = StoryView.WrapLines(text, "meta", w.size, L.whyInner, indent), stacked = false }
+				else
+					rows[i] = { lines = measure(row.text, text, "meta", w.size, w.spacing, L.whyInner), stacked = true }
+				end
 			end
 		end
 		return rows
@@ -851,7 +888,7 @@ local function create(parent)
 			if row.shown and spec then
 				at(row.label, section.why, w.padX, -spec.top)
 				local textTop = spec.top + (row.stacked and (w.size + w.spacing) or 0)
-				at(row.text, section.why, w.padX + row.textX, -textTop)
+				at(row.text, section.why, w.padX, -textTop)
 				maxLines(row.text, spec.lines)
 				if spec.lines < (section.whyMeasured[i].lines or 1) then
 					cut[#cut + 1] = row.label:GetText() .. " " .. row.full
