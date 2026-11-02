@@ -251,7 +251,7 @@ return function(t, expect)
 
 		t:it("a stance's persona against a fact is flagged once both are in the published profile", function()
 			local ns, char = setup()
-			local i = ns.Identity.Add(char, { subject = "Stormwind", persona = "Loyal to Stormwind" }, 1)
+			assert(ns.Identity.Add(char, { subject = "Stormwind", persona = "Loyal to Stormwind" }, 1))
 			ns.Facts.Add(char, { category = "belief", statement = "Never loyal to Stormwind" }, nil, 3)
 			local function kinds()
 				local out = {}
@@ -267,6 +267,27 @@ return function(t, expect)
 	end)
 
 	t:describe("narrative commands (L2)", function()
+		t:it("retired visibility commands (record vis, stance private, biography) reply once and change nothing",
+			function()
+			local mock, env, ns = Boot.Start()
+			mock.Slash("set name Zanjin")
+			mock.Slash("memory add The flood")
+			mock.Slash("arc add Finding a home")
+			mock.Slash("goal add Master the songs")
+			mock.Slash("stance add Orgrimmar; Loyal; Doubts")
+			mock.Slash("person add npc Old Tom; Innkeeper")
+			ns.Actions.WithCharacter(ns.ctx, function(c) return ns.Sources.Capture(c, "paste", "A story.", nil, 1) end)
+			local key = "Testchar-TestRealm"
+			local before = ns.Util.DeepCopy(env.DawnwardChroniclesDB.characters[key])
+			for _, cmd in ipairs({ "memory vis 1 public", "arc vis 2 secret", "goal vis 3 public", "stance vis 4 public",
+				"stance private 4 public", "person vis 5 public", "biography public", "biography secret" }) do
+				local reply = mock.Slash(cmd)
+				expect.truthy(reply:find(ns.Commands.RETIRED_VISIBILITY, 1, true), cmd .. " -> " .. reply)
+				expect.falsy(reply:find("\n", 1, true), cmd .. ": one line")
+			end
+			expect.deepEqual(env.DawnwardChroniclesDB.characters[key], before, "nothing changed")
+		end)
+
 		t:it("memory, arc, goal, stance and continuity work from chat and persist", function()
 			local mock, env = Boot.Start()
 			mock.Slash("set name Zanjin")

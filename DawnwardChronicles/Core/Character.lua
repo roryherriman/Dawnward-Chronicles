@@ -154,22 +154,6 @@ function Character.RemoveItem(char, listName, id, now)
 	return item
 end
 
---- Counts facts by visibility, for summaries.
-function Character.CountByVisibility(char)
-	local counts = { public = 0, private = 0, secret = 0 }
-	for _, entry in pairs(char.fields) do
-		local level = Privacy.Normalize(entry.visibility)
-		counts[level] = counts[level] + 1
-	end
-	for _, listName in ipairs({ "family", "history", "journal", "facts" }) do
-		for _, item in ipairs(char[listName] or {}) do
-			local level = Privacy.Normalize(item.visibility)
-			counts[level] = counts[level] + 1
-		end
-	end
-	return counts
-end
-
 --- Character foundations summary: facts, open suggestions, whether a
 -- biography source is stored.
 function Character.FoundationCounts(char)

@@ -21,6 +21,11 @@ A character's history is the player's creative work. Some of it is meant for oth
 - **Reversible and lossless.** The confirmation does not change any record: old visibility values stay stored, and `/dawnward publish undo` returns the character to the model it had.
 - **Why this changed (v0.10).** In 0.9 a backstory imported during first-time setup was stored with the old Private default, because the wizard switched the character to the profile model only at Finish; the About page was then built from Public items only and stayed empty in game ("No description"). In v0.10 the profile publishes as a whole, so the order of setup steps no longer matters.
 
+- **Nothing to classify on screen.** No Dawnward screen shows Public, Private or Secret any more: no chips, dropdowns, cycles or "Make Public" confirmations, and the Character page has no public preview (the Total RP 3 page keeps its own **Preview profile** of what Total RP 3 receives). The only publication control is the one-time **Publish whole profile…** callout, shown on the Character page only while a character waits for the confirmation.
+- **Retired commands.** `vis`, `journal|fact|family|history|personality vis`, `memory|arc|goal|stance|person vis`, `stance private` and `biography public|private|secret` reply with one line ("Per-item visibility is no longer used…") and change nothing. Listings no longer show `[public]` / `[private]` tags.
+- **Personal backups hold everything** (`/dawnward export backup`, Settings > Data): every record whatever its old visibility, the story, suggestions, key memory, axis meanings and the stored biography. Keep a backup to yourself. The words `secrets` and `biography` after `export backup` are still accepted and change nothing. Backups made by earlier versions (without secrets, or without the biography) still import: what they left out is kept from the current character.
+- **Share exports** (`/dawnward export share`) hold the published profile (`Projection.GetPublic`): for a v0.10 character the whole profile; for one still waiting for the confirmation, what it marked Public.
+
 ## Visibility levels (legacy, before v0.10)
 
 Older saved data still carries a visibility on each record. It is kept for compatibility and for characters that have not confirmed yet:

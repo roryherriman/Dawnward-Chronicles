@@ -19,12 +19,23 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 ### Fixed: the Total RP 3 About page stayed empty ("No description")
 - **Cause:** a backstory imported during first-time setup was stored before Finish switched the character to the profile model, so it kept the old Private default. The About page was built only from items marked Public, so the story never reached Total RP 3, while the fields set at Finish (name, race, class, birthplace, pronouns) did. The mocked tests switched the model before importing, so they never took this path.
 - **Fix:** your Dawnward profile is published as a whole once Total RP 3 is connected; per-item visibility no longer decides what reaches Total RP 3 (see Publication below). A test now drives the real path (first login, setup, Import a story, Finish with Connect, the debounced sync) and the owner's 0.9 saved data.
-- **If you used 0.9:** your character waits for one confirmation before anything an earlier version kept back is published: `/dawnward publish confirm`, or **Publish whole profile…** on the Total RP 3 page. `/dawnward trp3 diagnose` shows exactly where the About page stands.
+- **If you used 0.9:** your character waits for one confirmation before anything an earlier version kept back is published: `/dawnward publish confirm`, or **Publish whole profile…** on the Character page or the Total RP 3 page. `/dawnward trp3 diagnose` shows exactly where the About page stands.
 - **Diagnostics:** `/dawnward trp3 diagnose` now traces the About page link by link (character, publication, biography size and paragraphs, whether it is in the profile, layout, composed sections, authorisation, Total RP 3's current template and size, the next run's state and reason, the last write and read-back). It never prints the story itself.
 
 ### Publication: no more Public / Private / Secret
 - What describes your character is your profile and is published when Total RP 3 is connected. Journal notes, drafts, story answers, memories and a stance's inner conviction are never part of it.
 - New characters start this way. A 0.9 character with nothing hidden moves over by itself. Any other character keeps publishing only what it did before until you confirm once; the confirmation changes no record and can be undone (`/dawnward publish undo`).
+- **Every screen, without the classification:**
+  - **Character:** tiles and cards show their value and Edit only; family and history entries their Edit only. **Preview public view** is gone (the Total RP 3 page keeps **Preview profile**). An older character shows one compact line at the top, "An earlier version of Dawnward kept part of this profile back from Total RP 3.", with **Publish whole profile…** (the same confirmation as the Total RP 3 page).
+  - **Journal:** no chip on entry cards or in the editor, and no "Make this entry Public?" dialog. Approve, then mark **Defining** to make a story entry part of the profile.
+  - **Chronicle:** no chips, no Visibility choice in the New forms, no "Inner: …" button. Stances read **Persona** and **Inner conviction**; the Review answer once called Secret is **Intended**; the check "a Public record linked to a Secret memory" is gone (memories are never published).
+  - **Import story:** no chip for the saved story or a piece, and no "Approve as Public?" question.
+  - **Rail:** the privacy chip is gone; the Total RP 3 status line stays.
+  - **Showcase, Places, Settings, Guide:** wording without Public / Private / Secret. The Guide's Privacy topic is now **Your profile**.
+- **Retired commands** (one reply line, nothing changes): `vis`, `journal|fact|family|history|personality vis`, `memory|arc|goal|stance|person vis`, `stance private`, `biography public|private|secret`. Listings no longer show visibility tags; `show public` is now `show profile` (the old spelling still works).
+- **Backups hold everything:** `export backup` (and Settings > Data) always includes every record, the story and the stored biography; `secrets` and `biography` are still accepted and change nothing. Backups from earlier versions still import. Export for sharing holds your published profile.
+- **Kept for compatibility:** stored visibility values are untouched and still normalised on load; they decide only what a character still waiting for the confirmation publishes.
+- **Tests:** a sweep opens every section, tab, form, full view and dialog of the main window, the story import window and the guide with a character holding every kind of record and every old visibility level, and finds no Public, Private or Secret on screen (the Total RP 3 page and the setup wizard are being reworked separately and are not swept yet).
 
 ## [Unreleased]: 0.9.0-dev (first login, complete Total RP 3 profile)
 
