@@ -53,10 +53,13 @@ return function(t, expect)
 			mock.Slash("")
 			ns.MainWindow.ToggleSettings()
 			local panel = ns.SettingsPanel.panel
-			expect.equal(panel.minimap:GetText(), "Minimap button: hidden")
-			click(panel.minimap)
+			-- v0.10: both states shown, the one in use selected.
+			expect.equal(panel.minimap.selected, "hidden")
+			click(panel.minimap.buttons[1])
 			expect.truthy(ns.MinimapButton.button:IsShown())
-			expect.equal(panel.minimap:GetText(), "Minimap button: shown")
+			expect.equal(panel.minimap.selected, "shown")
+			click(panel.minimap.buttons[2])
+			expect.falsy(ns.MinimapButton.button:IsShown())
 		end)
 
 		t:it("cleans bad saved settings", function()

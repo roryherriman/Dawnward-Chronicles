@@ -188,6 +188,8 @@ for _, state in ipairs({ "Normal", "Highlight", "Pushed" }) do
 	end
 	Methods["Get" .. state .. "Texture"] = function(self) return self["__" .. state] end
 end
+-- A texture's file (only recorded; nothing is drawn).
+function Methods:SetTexture(file) self.__texture = file end
 function Methods:SetTextColor(r, g, b) self.__textColor = { r, g, b } end
 function Methods:SetFontString(fs) self.__fontString = fs end
 function Methods:GetFontString()

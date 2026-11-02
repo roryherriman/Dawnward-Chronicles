@@ -1,7 +1,9 @@
--- The settings panel behind the gear button, in four pages (General, Story,
--- Data, Total RP 3) rather than a fourth section: theme gallery, minimap,
--- guide and setup; story moment settings; backup, import and simulation
--- mode; the Total RP 3 sync page (UI/TRP3Page.lua).
+-- The settings panel behind the gear button, in five pages organised by
+-- purpose (v0.10): General (theme, minimap button, window size), Story (how
+-- often and how moments come, and what is recorded), Data (backups, export,
+-- import, your story), Total RP 3 (UI/TRP3Page.lua) and Help (guide, setup,
+-- chat commands; simulation mode and the setup preview only in development
+-- builds, or while simulation is on so it can be turned off).
 -- Actions reuse the slash command code, so behaviour is identical.
 --
 -- Layout (v0.8, docs/design/mockups/proposed-trp3-sync.png and the design
@@ -9,8 +11,9 @@
 -- at its right; each page groups its controls in panels (the design's
 -- cards) with an eyebrow heading and a one-line description. A setting is a
 -- row: its name and a short description on the left, its control on the
--- right. Story settings show every option at once as a segmented control,
--- the one in use raised and edged (no hidden "click to cycle" state).
+-- right. Every choice shows all its options at once as a segmented control,
+-- the one in use raised and edged (no hidden "click to cycle" state); the
+-- minimap button too since v0.10.
 local _, ns = ...
 local Widgets, Style, MainWindow, Themes, Actions, Commands =
 	ns.Widgets, ns.Style, ns.MainWindow, ns.Themes, ns.Actions, ns.Commands
@@ -33,40 +36,48 @@ SettingsPanel.BACKUP_HINT = "A backup holds everything about this character, so 
 -- differs; short: the line under the name; help: the tooltip.
 -- tracking settings switch an event category.
 SettingsPanel.STORY_SETTINGS = {
-	{ key = "frequency", label = "Moments", values = { "rare", "normal", "frequent", "off" },
+	{ key = "frequency", group = "moments", label = "Moments", values = { "rare", "normal", "frequent", "off" },
 		short = "How often Dawnward may offer a story moment.",
 		help = "How often Dawnward may offer a story moment. Off still records events." },
-	{ key = "threshold", label = "Significance", values = { 1, 2, 3 },
+	{ key = "threshold", group = "moments", label = "Significance", values = { 1, 2, 3 },
 		short = "Which recorded events may become a moment.",
 		help = "1: any recorded event may become a moment. 3: only major ones." },
-	{ key = "places", label = "Places", values = { "on", "fewer", "off" },
+	{ key = "places", group = "moments", label = "Places", values = { "on", "fewer", "off" },
 		short = "Moments about beginnings, settlements and returns.",
 		help = "Moments about places: beginnings, settlements, returns. Fewer: notable places only. "
 			.. "Off: places are still recorded, never asked about." },
-	{ key = "pace", label = "Story pace", values = { "standard", "brisk", "slow" },
+	{ key = "pace", group = "moments", label = "Story pace", values = { "standard", "brisk", "slow" },
 		order = { "brisk", "standard", "slow" },
 		short = "How much play makes one narrative day.",
 		help = "How much play makes a narrative day: Brisk 1 hour, Standard 2 hours, Slow 4 hours. Returns to a "
 			.. "place and story cooldowns count only time you play, never time offline." },
-	{ key = "card", label = "Card", values = { true, false },
+	{ key = "card", group = "moments", label = "Card", values = { true, false },
 		short = "A small card when a moment waits (never in combat).",
 		help = "Show a small card when a moment is waiting (never in combat). Off: one chat line only." },
-	{ key = "flavor", label = "Class flavour", values = { true, false },
+	{ key = "flavor", group = "moments", label = "Class flavour", values = { true, false },
 		short = "One optional extra answer flavoured by your class.",
 		help = "Offer one optional extra answer flavoured by your class. Never changes the others." },
-	{ key = "approval", label = "Changes", values = { "ask", "auto" },
+	{ key = "approval", group = "answers", label = "Changes", values = { "ask", "auto" },
 		short = "Personality changes wait for you, or apply at once.",
 		help = "Ask: personality changes wait for your approval. Auto: applied at once, still reversible." },
-	{ key = "drafts", label = "Drafts", values = { true, false },
+	{ key = "drafts", group = "answers", label = "Drafts", values = { true, false },
 		short = "A journal draft for each answer.",
 		help = "Write a journal draft for each answer (only for you, never part of your profile)." },
-	{ tracking = "quest", label = "Quests", values = { true, false },
+	{ tracking = "quest", group = "answers", label = "Quests", values = { true, false },
 		short = "Record completed quests as story events.",
 		help = "Record completed quests as story events." },
-	{ key = "trp3Style", label = "TRP3 style", values = { "neutral", "silverhand", "arcane" },
-		short = "How Dawnward's own section looks in Total RP 3.",
-		help = "How Dawnward's own section looks in Total RP 3, once it is connected." },
 }
+-- The Total RP 3 style moved to Settings > Total RP 3 > Biography (v0.10),
+-- beside the template it styles.
+
+-- The Story page's two panels.
+SettingsPanel.STORY_GROUPS = {
+	{ id = "moments", title = "Story moments" },
+	{ id = "answers", title = "Your answers and records" },
+}
+
+-- The minimap button's two states (General > Interface).
+SettingsPanel.MINIMAP_OPTIONS = { { id = "shown", label = "Shown" }, { id = "hidden", label = "Hidden" } }
 
 local function currentValue(setting, prefs)
 	if setting.tracking then
@@ -145,6 +156,7 @@ SettingsPanel.PAGES = {
 	{ id = "story", label = "Story" },
 	{ id = "data", label = "Data" },
 	{ id = "trp3", label = "Total RP 3" },
+	{ id = "help", label = "Help" },
 }
 
 --- Building blocks ------------------------------------------------------------------
@@ -289,10 +301,10 @@ local function create(parent)
 	panel.themeDescription:SetWidth(innerW)
 	panel.themeDescription:SetMaxLines(2)
 
-	-- General: interface and help ----------------------------------------------------
+	-- General: interface ---------------------------------------------------------------
 	local interfaceY = -(appearanceH + LAY.gap)
-	local interface = section(panel.pages.general, W, "Interface and help", interfaceY,
-		PAD + TITLE_H + 4 * LAY.row + PAD - 6)
+	local interface = section(panel.pages.general, W, "Interface", interfaceY,
+		PAD + TITLE_H + 2 * LAY.row + PAD - 6)
 	panel.interface = interface
 	local rows = {}
 	local function generalRow(i, name, description, help)
@@ -301,23 +313,17 @@ local function create(parent)
 	end
 	generalRow(1, "Minimap button", "Show or hide the Dawnward button on the minimap.",
 		"Show or hide the Dawnward button on the minimap. Drag the button to move it.")
-	panel.minimap = rowButton(rows[1], "Minimap button: shown", LAY.button)
-	panel.minimap:SetScript("OnClick", function() run("minimap") end)
-	Widgets.Tooltip(panel.minimap, "Minimap button", "Show or hide the Dawnward button on the minimap. "
-		.. "Drag the button to move it.")
-	generalRow(2, "Guide", "How the journal, story moments, your profile and Total RP 3 work.")
-	panel.guide = rowButton(rows[2], "Open the guide", LAY.button)
-	panel.guide:SetScript("OnClick", function() run("guide") end)
-	generalRow(3, "First-time setup", "Walk through the setup steps again.",
-		"Walk through the setup steps again: name, story, appearance and Total RP 3. Nothing is saved until "
-			.. "you choose Finish.")
-	panel.setup = rowButton(rows[3], "Run setup", LAY.button)
-	panel.setup:SetScript("OnClick", function() run("setup") end)
-	Widgets.Tooltip(panel.setup, "First-time setup", "Walk through the setup steps again: name, story, "
-		.. "appearance and Total RP 3. Nothing is saved until you choose Finish.")
-	generalRow(4, "Window size", "Drag the gold grip in the bottom-right corner to resize.",
+	-- Both states visible, the one in use raised (was a "click to cycle" button).
+	panel.minimap = Widgets.Segmented(rows[1], SettingsPanel.MINIMAP_OPTIONS, LAY.button, Style.CONTROL.compact,
+		function(id) run(id == "hidden" and "minimap hide" or "minimap show") end)
+	panel.minimap.buttons[1]:SetPoint("TOPLEFT", rows[1].controlX, -math.floor((LAY.row - Style.CONTROL.compact) / 2))
+	for _, b in ipairs(panel.minimap.buttons) do
+		Widgets.Tooltip(b, "Minimap button: " .. b:GetText():lower(), "Show or hide the Dawnward button on the "
+			.. "minimap. Drag the button to move it.")
+	end
+	generalRow(2, "Window size", "Drag the gold grip in the bottom-right corner to resize.",
 		"Drag the gold grip in the bottom-right corner to resize the window. Reset returns it to its design size.")
-	panel.resetSize = rowButton(rows[4], "Reset window size", LAY.button)
+	panel.resetSize = rowButton(rows[2], "Reset window size", LAY.button)
 	panel.resetSize:SetScript("OnClick", function()
 		MainWindow.ResetSize()
 		MainWindow.SetStatus("The window is back to its design size (smaller if your screen needs it).")
@@ -326,36 +332,45 @@ local function create(parent)
 		.. "the window. This returns it to its design size.")
 	panel.generalRows = rows
 
-	-- Story ---------------------------------------------------------------------------
-	local storyH = PAD + TITLE_H + LINE + 10 + #SettingsPanel.STORY_SETTINGS * LAY.row + PAD - 6
-	local story, storyTop = section(panel.pages.story, W, "Story settings", 0, storyH,
-		"For this character only. Every option is shown; the highlighted one is in use. Hover a setting for details.")
-	panel.story = story
+	-- Story: two panels (moments, then answers and records) ----------------------------
 	panel.storyRows = {}
-	for i, setting in ipairs(SettingsPanel.STORY_SETTINGS) do
-		local row = settingRow(story.inner, storyTop - (i - 1) * LAY.row, innerW, setting.label, setting.short,
-			setting.help, LAY.control, i == 1)
-		row.setting = setting
-		local width = SettingsPanel.SegmentWidth(setting)
-		row.control = Widgets.Segmented(row, SettingsPanel.Options(setting), width, Style.CONTROL.compact,
-			function(value)
-				local _, message
-				if setting.tracking then
-					_, message = Actions.SetTracking(ns.ctx, setting.tracking, value)
-				else
-					_, message = Actions.SetStoryPref(ns.ctx, setting.key, value)
-				end
-				MainWindow.SetStatus(message)
-				MainWindow.Refresh()
-			end)
-		-- Every control starts at the same column, so the options line up.
-		row.control.buttons[1]:SetPoint("TOPLEFT", row.controlX, -math.floor((LAY.row - Style.CONTROL.compact) / 2))
-		row.control.width = width
-		for _, b in ipairs(row.control.buttons) do
-			Widgets.Tooltip(b, setting.label .. ": " .. SettingsPanel.ValueText(b.segmentId), setting.help)
+	panel.storyPanels = {}
+	local storyY = 0
+	for _, group in ipairs(SettingsPanel.STORY_GROUPS) do
+		local settings = {}
+		for _, setting in ipairs(SettingsPanel.STORY_SETTINGS) do
+			if setting.group == group.id then settings[#settings + 1] = setting end
 		end
-		panel.storyRows[i] = row
+		local h = PAD + TITLE_H + #settings * LAY.row + PAD - 6
+		local p = section(panel.pages.story, W, group.title, storyY, h)
+		panel.storyPanels[#panel.storyPanels + 1] = p
+		for i, setting in ipairs(settings) do
+			local row = settingRow(p.inner, -(i - 1) * LAY.row, innerW, setting.label, setting.short,
+				setting.help, LAY.control, i == 1)
+			row.setting = setting
+			local width = SettingsPanel.SegmentWidth(setting)
+			row.control = Widgets.Segmented(row, SettingsPanel.Options(setting), width, Style.CONTROL.compact,
+				function(value)
+					local _, message
+					if setting.tracking then
+						_, message = Actions.SetTracking(ns.ctx, setting.tracking, value)
+					else
+						_, message = Actions.SetStoryPref(ns.ctx, setting.key, value)
+					end
+					MainWindow.SetStatus(message)
+					MainWindow.Refresh()
+				end)
+			-- Every control starts at the same column, so the options line up.
+			row.control.buttons[1]:SetPoint("TOPLEFT", row.controlX, -math.floor((LAY.row - Style.CONTROL.compact) / 2))
+			row.control.width = width
+			for _, b in ipairs(row.control.buttons) do
+				Widgets.Tooltip(b, setting.label .. ": " .. SettingsPanel.ValueText(b.segmentId), setting.help)
+			end
+			panel.storyRows[#panel.storyRows + 1] = row
+		end
+		storyY = storyY - h - LAY.gap
 	end
+	panel.story = panel.storyPanels[1]
 
 	-- Data ------------------------------------------------------------------------------
 	local dataH = PAD + TITLE_H + 2 * LINE + 10 + Style.CONTROL.compact + PAD
@@ -382,14 +397,51 @@ local function create(parent)
 	local storyPanel = section(panel.pages.data, W, "Your story", -(dataH + LAY.gap), dataH, "")
 	panel.storyPanel = storyPanel
 	panel.storyState = storyPanel.description
-	panel.importStory = Widgets.Button(storyPanel.inner, "Import a story...", 170, Style.CONTROL.compact)
+	panel.importStory = Widgets.Button(storyPanel.inner, "Import a story…", 170, Style.CONTROL.compact)
 	panel.importStory:SetPoint("TOPLEFT", 0, by)
 	panel.importStory:SetScript("OnClick", function() ns.ImportWizard.Open({ from = "settings" }) end)
 	Widgets.Tooltip(panel.importStory, "Import a story", "Paste a backstory you already wrote, or read your Total RP 3 "
 		.. "About text. It is kept exactly as written; you approve each piece before it becomes part of your "
 		.. "character.")
 
-	local sim = section(panel.pages.data, W, "Simulation mode", -2 * (dataH + LAY.gap), dataH, "")
+	-- Total RP 3 ------------------------------------------------------------------------
+	-- Built by UI/TRP3Page.lua; it reuses the /dawnward trp3 functions.
+	panel.trp3Page = ns.TRP3Page.Build(panel.pages.trp3, W, H)
+	-- The detected status lines (also shown when Total RP 3 is absent).
+	panel.trp3 = panel.trp3Page.absentStatus
+
+	-- Help ------------------------------------------------------------------------------
+	local helpH = PAD + TITLE_H + 3 * LAY.row + PAD - 6
+	local help = section(panel.pages.help, W, "Help and setup", 0, helpH)
+	panel.helpPanel = help
+	local helpRows = {}
+	local function helpRow(i, name, description, tip)
+		helpRows[i] = settingRow(help.inner, -(i - 1) * LAY.row, innerW, name, description, tip, LAY.button, i == 1)
+		return helpRows[i]
+	end
+	helpRow(1, "Guide", "How the journal, story moments, your profile and Total RP 3 work.")
+	panel.guide = rowButton(helpRows[1], "Open the guide", LAY.button)
+	panel.guide:SetScript("OnClick", function() run("guide") end)
+	helpRow(2, "First-time setup", "Walk through the setup steps again; your answers are kept.",
+		"Walk through the setup steps again: name, story, appearance and Total RP 3. Nothing is saved until "
+			.. "you choose Finish.")
+	panel.setup = rowButton(helpRows[2], "Run setup", LAY.button)
+	panel.setup:SetScript("OnClick", function() run("setup") end)
+	Widgets.Tooltip(panel.setup, "First-time setup", "Walk through the setup steps again: name, story, "
+		.. "appearance and Total RP 3. Nothing is saved until you choose Finish.")
+	helpRow(3, "Chat commands", "Everything in this window can also be typed after /dawnward.",
+		"Lists the chat commands in your chat window. /dawnward help all shows every one.")
+	panel.commands = rowButton(helpRows[3], "List the commands", LAY.button)
+	panel.commands:SetScript("OnClick", function() run("help") end)
+	panel.helpRows = helpRows
+	panel.version = Widgets.Label(panel.pages.help, "meta", false, "muted")
+	panel.version:SetPoint("TOPLEFT", PAD, -(helpH + 10))
+	panel.version:SetWidth(innerW)
+
+	-- Testing: simulation mode. Only in development builds, or while it is on
+	-- (so it can always be turned off again).
+	local simTop = helpH + 10 + LINE + LAY.gap
+	local sim = section(panel.pages.help, W, "Testing", -simTop, dataH, "")
 	panel.simPanel = sim
 	panel.simState = sim.description
 	panel.simToggle = Widgets.Button(sim.inner, "Turn on", 150, Style.CONTROL.compact)
@@ -403,12 +455,11 @@ local function create(parent)
 		Widgets.Confirm("Delete ALL simulation test data for every character?\n\nYour real data is not affected.",
 			"Reset", function() run("sim reset confirm") end)
 	end)
-
-	-- Total RP 3 ------------------------------------------------------------------------
-	-- Built by UI/TRP3Page.lua; it reuses the /dawnward trp3 functions.
-	panel.trp3Page = ns.TRP3Page.Build(panel.pages.trp3, W, H)
-	-- The detected status lines (also shown when Total RP 3 is absent).
-	panel.trp3 = panel.trp3Page.absentStatus
+	panel.setupPreview = Widgets.Button(sim.inner, "Preview setup", 150, Style.CONTROL.compact, "ghost")
+	panel.setupPreview:SetPoint("LEFT", panel.simReset, "RIGHT", 8, 0)
+	panel.setupPreview:SetScript("OnClick", function() run("dev setup") end)
+	Widgets.Tooltip(panel.setupPreview, "Preview setup", "Opens the setup as a preview: nothing is saved unless you "
+		.. "choose Save choices. Development builds only.")
 
 	-- Every part paints itself (UI/Style.lua).
 	function panel.ApplyTheme() end
@@ -427,10 +478,15 @@ local function create(parent)
 		self.themeDescription:SetText(current.name .. " (current): " .. current.description)
 
 		local simulation = view.ctx.store:IsSimulation()
+		local dev = ns.SetupCommands and ns.SetupCommands.DevEnabled(view.ctx) or false
+		self.simPanel:SetShown(dev or simulation)
+		self.setupPreview:SetShown(dev)
 		self.simState:SetText(simulation
-			and "ON: changes go to separate test data. Your real journal is untouched."
-			or "OFF: you are using your real journal. Turn on to experiment safely.")
+			and "Simulation mode is ON: changes go to separate test data. Your real journal is untouched."
+			or "Simulation mode is OFF: you are using your real journal. Turn it on to try things safely.")
 		self.simToggle:SetText(simulation and "Turn off" or "Turn on")
+		self.version:SetText("Dawnward Chronicles " .. tostring(view.ctx.version or "")
+			.. " · Total RP 3 is optional; see Settings > Total RP 3.")
 		local lines = ns.StoryImport.StatusLines(view.char)
 		self.storyState:SetText(table.concat(lines, " "))
 
@@ -440,8 +496,7 @@ local function create(parent)
 			Widgets.Tooltip(row.hover, row.setting.label, SettingsPanel.ButtonHelp(row.setting, prefs))
 		end
 
-		self.minimap:SetText(Actions.MinimapSettings(view.ctx).hidden and "Minimap button: hidden"
-			or "Minimap button: shown")
+		self.minimap:Select(Actions.MinimapSettings(view.ctx).hidden and "hidden" or "shown")
 
 		-- Only while its page is open (it reads Total RP 3); read-only either way.
 		if self.page == "trp3" then
@@ -460,7 +515,7 @@ end
 MainWindow.createSettings = create
 
 --- Opens the main window on Settings with the given page selected
--- ("general", "story", "data" or "trp3"). Returns true when it is shown.
+-- ("general", "story", "data", "trp3" or "help"). Returns true when it is shown.
 function SettingsPanel.OpenPage(pageId)
 	local known = false
 	for _, page in ipairs(SettingsPanel.PAGES) do
