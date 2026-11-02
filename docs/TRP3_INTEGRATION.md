@@ -232,6 +232,23 @@ What the existing bridge and sync did, checked against the code and the 3.4.1 so
 | Shared profiles | One character per profile and feature. Correct. | Extended per mapping; the page warns before authorising. |
 | Opt-in | Two booleans per character, bound to one profile. | Replaced by per-mapping policies (booleans kept in step for older builds). |
 
+## The empty About page found in game (0.9) and its fix (v0.10)
+
+**Observed (owner, Classic Era, TRP3 3.4.1):** Characteristics showed the synced name, race, class, birthplace and pronouns, but the About tab said "No description" although the whole backstory had been imported during first-time setup.
+
+**Verified cause:**
+1. The setup wizard's **Import a story** stores the text at once (`ImportWizard.Save` → `StoryImport.Import` → `Sources.Capture`), which set the biography's visibility from `Privacy.DefaultFor(char, "biography")`.
+2. The character was switched to the profile model only at **Finish** (`Actions.CompleteSetup` → `Publication.Adopt`), after the import, so the biography was stored **Private**.
+3. `Projection.GetPublic` left a non-Public biography out, so `AboutDoc.Build` composed nothing for the About page and no About write happened. Total RP 3 3.4.1 shows "No description" exactly when the active template's text is empty (`RegisterAbout.lua` `shouldShowTemplate1/2/3`, `REG_PLAYER_ABOUT_EMPTY`).
+4. The fields were set at Finish, under the profile model, so they were Public and synced.
+5. The mocked tests adopted the model before importing, so they never took the real order of steps.
+
+The write driver itself was checked against the TRP3 3.4.1 source (`CurrentUser:GetProfile` returns `getPlayerCurrentProfile().player`; the About tab draws `T1.TX` / `T2` / `T3`): it matches, so missing data was the only cause.
+
+**Fix (v0.10):** the character profile publishes as a whole (`Core/Publication.lua` version 2); per-item visibility no longer decides what reaches Total RP 3. New characters start this way however they are created. A 0.9 character with something kept back (such as that biography) waits for one confirmation (`/dawnward publish confirm` or **Publish whole profile…**), which changes no record and can be undone. `tests/spec/trp3_about_ingame_repro_spec.lua` drives the real path and the owner's 0.9 saved-data shape.
+
+**Diagnosing in game:** `/dawnward trp3 diagnose` (read-only) prints, without the story text: the character, the publication state, the biography's version, bytes and paragraphs, whether it is in the profile Dawnward publishes, the About content, layout and style, the number of composed sections, whether About sync is authorised and for which profile, Total RP 3's current About template, version and size, the next run's state and reason, the last About write and the last read-back result. **Note:** Total RP 3 draws your own About tab when it opens; if it was already open during a write, close and reopen it.
+
 ## Field mappings
 
 Verified against the Total RP 3 source at tag **`3.4.1`** (commit `4c25cb0`): `Core/Player.lua` (public getters and setters, `UpdateProfileField`), `Modules/Register/Characters/RegisterCharacteristics.lua` (`saveInDraft`, `saveCharacteristics`, `sanitizeCharacteristics`), `Modules/Register/Characters/RegisterMain.lua` (`cleanupMyProfiles`, `saveInformation`), `Modules/Register/MSP/RegisterMSP.lua`, `Modules/Dashboard/Dashboard.lua` and `Currently.lua`, `Core/ProfileUtil.lua` (misc info types), `UI/Widgets.xml` (`letters="0"`).

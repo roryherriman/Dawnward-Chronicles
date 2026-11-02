@@ -694,6 +694,9 @@ local function create(parent)
 		row.edit:Hide()
 		row.theme = theme
 		row.emptyField = nil
+		-- A pooled row takes the mouse only for what it shows now (a click on an
+		-- empty field, or a tooltip); a Frame's OnMouseUp needs EnableMouse.
+		if row.EnableMouse then row:EnableMouse(row.tooltipHooked == true) end
 		row.gameValue = nil
 		-- Tooltips are per use: a pooled row keeps none from an earlier one.
 		if row.tooltipHooked then row.tooltipTitle, row.tooltipText = nil, nil end
@@ -715,6 +718,7 @@ local function create(parent)
 		resetRow(row, spec, theme)
 		local value, source = CharacterView.FieldDisplay(section.char, spec.field.key)
 		row.emptyField = value == nil
+		if row.emptyField and row.EnableMouse then row:EnableMouse(true) end
 		row.gameValue = source == "game" and value or nil
 		Style.Repaint(row)
 		fieldKey(row, spec.field.label, L.tilePadX, -L.tilePadY)
@@ -747,6 +751,7 @@ local function create(parent)
 		resetRow(row, spec, theme)
 		local entry = spec.entry
 		row.emptyField = entry == nil
+		if row.emptyField and row.EnableMouse then row:EnableMouse(true) end
 		Style.Repaint(row)
 		fieldKey(row, spec.field.label, L.cardPadX, -(L.cardPadY + 7))
 		row.reading:Show()

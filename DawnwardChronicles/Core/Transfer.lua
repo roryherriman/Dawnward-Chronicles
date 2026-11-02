@@ -115,8 +115,11 @@ function Transfer.Export(char, kind, opts)
 		-- The living chronicle travels only in personal backups
 		-- (Transfer.StoryForBackup).
 		data.story = Transfer.StoryForBackup(char, includesSecrets)
-		-- The player's own axis words and locks (#21): private, backups only.
+		-- The player's own axis words and locks (#21).
 		data.axisMeanings = Util.DeepCopy(char.axisMeanings or {})
+		-- The publication model (v0.10), so a restore never puts back an
+		-- earlier model (cleaned by Schema.CleanPublication on decode).
+		data.publication = Util.DeepCopy(char.publication or {})
 		-- At First Glance entries the player wrote for Total RP 3 (v0.9): backups only.
 		data.glance = Util.DeepCopy(char.glance or {})
 		-- With no stored story there is nothing to carry: such a backup then
@@ -286,6 +289,13 @@ function Transfer.MergeForImport(current, imported, includesSecrets, now, includ
 		-- Likewise a backup from before At First Glance entries (v0.9).
 		if next(result.glance or {}) == nil and next(current.glance or {}) ~= nil then
 			result.glance = Util.DeepCopy(current.glance)
+		end
+		-- The publication model never goes backwards on a restore: once the
+		-- whole profile publishes (Publication.IsComplete), a restore keeps it
+		-- (an older backup has no model, or an earlier one); a backup taken
+		-- after the confirmation brings it back to a character still waiting.
+		if ns.Publication.IsComplete(current) or not ns.Publication.IsComplete(result) then
+			result.publication = Util.DeepCopy(current.publication or {})
 		end
 		if current.story then
 			if not includesStory then
