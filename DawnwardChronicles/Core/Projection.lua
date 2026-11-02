@@ -64,6 +64,14 @@ local function profile(char)
 		end
 	end
 	out.stances = stances
+	-- The player's own words for personality axes (#21), shown as the trait names.
+	local words = {}
+	for axisId, entry in pairs(char.axisMeanings or {}) do
+		if type(entry) == "table" and (entry.left or entry.right) then
+			words[axisId] = { left = entry.left, right = entry.right }
+		end
+	end
+	out.axisWords = words
 	local current = char.sources and ns.Sources and ns.Sources.Current(char)
 	if current then
 		out.biography = { text = current.text, hash = current.hash }

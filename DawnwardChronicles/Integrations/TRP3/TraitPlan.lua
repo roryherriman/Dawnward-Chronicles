@@ -46,7 +46,10 @@ function TraitPlan.Desired(public)
 	for axisId, entry in pairs(public and public.personality or {}) do
 		local axis = Schema.PERSONALITY_AXIS_BY_ID[axisId]
 		if axis then
-			out[axisId] = { LT = axis.left, RT = axis.right, V2 = TraitPlan.ToTRP3(entry.value) }
+			-- The player's own words for the axis (#21), when the profile has them.
+			local words = public.axisWords and public.axisWords[axisId] or {}
+			out[axisId] = { LT = words.left or axis.left, RT = words.right or axis.right,
+				V2 = TraitPlan.ToTRP3(entry.value) }
 		end
 	end
 	return out
@@ -118,6 +121,11 @@ function TraitPlan.Plan(characteristics, record, desired, maxTraits)
 		local d = desired[axisId]
 		local trait = list[index[axisId]]
 		if d then
+			if trait.LT ~= d.LT or trait.RT ~= d.RT then
+				-- The player renamed the axis in Dawnward: the same trait, new words.
+				trait.LT, trait.RT = d.LT, d.RT
+				changes[#changes + 1] = "renamed " .. axisId
+			end
 			if trait.V2 ~= d.V2 then
 				trait.V2 = d.V2
 				-- A trait written before Dawnward set icons gets TRP3's own

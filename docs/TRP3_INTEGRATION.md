@@ -267,7 +267,7 @@ Verified line by line against Total RP 3 **3.4.1** (tag `3.4.1`, commit `4c25cb0
 | game race, class, name (no Public value of the player's) | `RA`, `CL`, `FN` | TRP3's default profile `RC.lua` 44–51 = `UnitRace`/`UnitClass`/`UnitNameUnmodified` (`Globals.lua` 48–51) | **never owned**; counts as replaceable; restored when Dawnward takes its own value out | yes | Race "Human", Class "Paladin" after making a Dawnward race Private |
 | `pronouns` | `MI` entry `{ ID = 7, NA = localised "Pronouns", VA, IC = preset icon }`; MSP `PN` | `ProfileUtil.lua` 9–21, 143, 157; `miscAdd` `RC.lua` 602, 650; `RegisterMSP.lua` 145 | type + exact `VA` (an ID-less entry typed by its English or localised name is recognised: never duplicated) | yes | pronouns row with its icon; MSP `PN` |
 | `faith`, `occupation`, `allegiance` | custom `MI` entries `{ ID = 1, NA = "Faith" …, VA, IC = TRP3_InterfaceIcons.Default }` | `RC.lua` 644 ("Create new"), `CreateMiscFieldInfo` `ProfileUtil.lua` 103 | name + exact `VA`; `IC` never compared | yes | three rows, question-mark icon, restylable |
-| Public personality axes (6) | custom `PS` traits `{ LT, LI, RT, RI, V2 }`, `V2 = 20 − value` | `refreshPsycho` `RC.lua` 186–191; `psychoAdd` 685 (icons `INV_Misc_QuestionMark`); `Globals.lua` 68–69; MSP `Fields.lua` 146 | `LT`/`RT` pair + `V2` | yes | bar leans to the right pole for a high Dawnward value |
+| Personality axes (6), named with the player's own axis words when set (v0.10) | custom `PS` traits `{ LT, LI, RT, RI, V2 }`, `V2 = 20 − value`; a renamed axis renames the same owned trait in place | `refreshPsycho` `RC.lua` 186–191; `psychoAdd` 685 (icons `INV_Misc_QuestionMark`); `Globals.lua` 68–69; MSP `Fields.lua` 146 | `LT`/`RT` pair + `V2` | yes | bar leans to the right pole for a high Dawnward value |
 | About page | `about` T1 / T2 / T3 | see "The About page (v0.9)" | owned block / frames / slots | yes | see that section |
 | At First Glance entries the player wrote (`/dawnward trp3 glance`) | `misc.PE["1".."5"] = { TI, TX, IC, AC }` | `applyPeekSlot` `RM.lua` 332; default `RM.lua` 18; five slots `RM.lua` 254, 457; inactive dropped from exchange `getMiscExchangeData` 452 and MSP `RegisterMSP.lua` 167–189 | per slot, exact `TI`/`TX`/`IC`/`AC`; only free slots; no duplicate titles+texts | yes (feature `glance`, off by default) | slot on the Miscellaneous tab; glance icon on others' target frame; hidden entry not visible to others |
 
@@ -291,9 +291,8 @@ Verified line by line against Total RP 3 **3.4.1** (tag `3.4.1`, commit `4c25cb0
 | Item | Why |
 |---|---|
 | Relationships with other players (`story.people`) → TRP3 relations | TRP3 relations describe *other* characters' profiles, not the player's own |
-| Custom axis words (`axisMeanings`) as trait labels | Private by design; traits keep Dawnward's labels so ownership stays provable |
 | Name (one field) split into first/last | It would be a guess; first and last name are their own Dawnward fields |
-| Memories, arcs, goals, places, people, journal | Private story records; never published (PRIVACY.md) |
+| Memories, arcs, goals, places, people, journal notes | Story records, not profile content; never published (PRIVACY.md) |
 
 **Not applicable**
 
