@@ -13,12 +13,14 @@ ns.TRP3Commands = TRP3Commands
 local HELP = {
 	"Total RP 3 sync (EXPERIMENTAL, off by default; Total RP 3 3.4.1 only):",
 	"  trp3 preview | trp3 profile (everything you would publish) | trp3 sync | trp3 paste | trp3 backups | trp3 log",
-	"  trp3 enable about|traits confirm | trp3 disable about|traits",
+	"  trp3 enable about|traits|glance confirm | trp3 disable about|traits|glance",
 	"  trp3 fields (each mapping, who manages it, and what Total RP 3 holds vs your Public value)",
 	"  trp3 field <name> dawnward confirm | trp3 field <name> trp3|off   (names: see trp3 fields)",
 	"  trp3 import <field> [private|public|secret] confirm (copy Total RP 3's value into Dawnward)",
-	"  trp3 release about|traits|fields confirm | trp3 rollback [#] [exact] confirm",
-	"  trp3 resolve about|traits|<field> keep|reclaim",
+	"  trp3 release about|traits|fields|glance confirm | trp3 rollback [#] [exact] confirm",
+	"  trp3 resolve about|traits|glance|<field> keep|reclaim",
+	"  trp3 glance (your At First Glance entries, 1-5) | trp3 glance title|text <n> <words> (|n: new line)",
+	"  trp3 glance icon <n> <icon name>|default | trp3 glance show|hide <n> | trp3 glance clear <n> confirm",
 	"  trp3 diagnose (read-only: which guard is holding each feature back)",
 }
 
@@ -40,14 +42,23 @@ local function featureArg(word)
 		return "traits"
 	elseif word == "fields" then
 		return "fields"
+	elseif word == "glance" then
+		return "glance"
 	end
 	return nil
 end
 
--- A field mapping id ("race", "title", ...), or nil.
+-- A field or additional-information mapping id ("race", "pronouns", ...),
+-- in any case ("firstname" -> "firstName"), or nil.
 local function fieldArg(word)
-	word = (word or ""):lower()
-	return FieldPlan.BY_ID[word] and word or nil
+	word = ns.Schema.FieldKey(word or "")
+	return Sync.MappingOf(word) and word or nil
+end
+
+-- A field with a TRP3 characteristics key (importable), or nil.
+local function importArg(word)
+	local id = fieldArg(word)
+	return id and FieldPlan.BY_ID[id] and id or nil
 end
 
 -- Dawnward fields and where they go in TRP3's editor (manual path only).
@@ -164,6 +175,10 @@ local function diagnose(ctx, deps)
 				.. "edit frame shown %s", section, flag(e.open), tostring(e.why), tostring(e.pageId),
 				flag(e.hasContext), flag(e.editMode), flag(e.tabShown), flag(e.editShown)))
 		end
+	end
+	local glanceEditor = probe.editorState and probe.editorState.misc
+	if glanceEditor then
+		out(ctx, "  At First Glance editor: open " .. flag(glanceEditor.open))
 	end
 	out(ctx, string.format("  simulation: %s, saved data read-only: %s, ledger read-only: %s, in combat: %s",
 		flag(deps.store:IsSimulation()), flag(deps.store.realReadOnly == true), flag(deps.ledgerReadOnly ~= nil),
@@ -359,6 +374,14 @@ function TRP3Commands.ProfilePreview(char, template)
 		lines[#lines + 1] = string.format("%s %d / %d %s", tr.LT, tr.V2, 20 - tr.V2, tr.RT)
 	end
 	if #preview.traits == 0 then lines[#lines + 1] = "(nothing Public)" end
+	lines[#lines + 1] = ""
+	lines[#lines + 1] = "AT FIRST GLANCE (only the entries you wrote; hidden ones are kept in Total RP 3 but not shown)"
+	local glance = ns.Glance.Published(char)
+	for _, g in ipairs(glance) do
+		lines[#lines + 1] = string.format("%d. %s%s", g.n, g.TI or "(no title)", g.AC and "" or " (hidden)")
+		if g.TX then lines[#lines + 1] = g.TX end
+	end
+	if #glance == 0 then lines[#lines + 1] = "(none written)" end
 	return table.concat(lines, "\n")
 end
 
@@ -743,6 +766,60 @@ function TRP3Commands.Import(ctx, id, level)
 	end)
 end
 
+--- At First Glance (v0.9) ---------------------------------------------------
+
+--- Lines listing the player's At First Glance entries. Pure.
+function TRP3Commands.GlanceLines(char)
+	local lines = { "Your At First Glance entries for Total RP 3 (written only while At First Glance sync is on):" }
+	local any = false
+	for n = 1, ns.Glance.SLOTS do
+		local e = char and char.glance and char.glance[n]
+		if e then
+			any = true
+			local text = e.text and e.text:gsub("\n", " / ") or ""
+			if #text > 60 then text = text:sub(1, 57) .. "..." end
+			lines[#lines + 1] = string.format("  %d. %s%s%s [%s, icon %s]", n, e.title or "(no title)",
+				text ~= "" and " - " or "", text, e.active and "shown" or "hidden", e.icon or ns.Glance.DEFAULT_ICON)
+		end
+	end
+	if not any then
+		lines[#lines + 1] = "  (none yet: /dawnward trp3 glance title 1 <words>)"
+	end
+	return lines
+end
+
+--- Changes the player's At First Glance entry n, through the normal Actions
+-- write path (read-only check, sync request). what: "title" | "text" |
+-- "icon" | "show" | "hide" | "clear". Never touches Total RP 3 directly.
+-- Returns ok, message.
+function TRP3Commands.SetGlance(ctx, what, n, value)
+	local index = ns.Glance.Index(n)
+	if not index then
+		return nil, "choose an At First Glance entry from 1 to " .. ns.Glance.SLOTS
+	end
+	return ns.Actions.WithCharacter(ctx, function(char)
+		local Glance, now = ns.Glance, ctx.now()
+		local e = char.glance and char.glance[index]
+		local ok, err
+		if what == "title" then
+			ok, err = Glance.Set(char, index, value, e and e.text, now)
+		elseif what == "text" then
+			ok, err = Glance.Set(char, index, e and e.title, value, now)
+		elseif what == "icon" then
+			ok, err = Glance.SetIcon(char, index, (value ~= "default" and value ~= "") and value or nil, now)
+		elseif what == "show" or what == "hide" then
+			ok, err = Glance.SetActive(char, index, what == "show", now)
+		elseif what == "clear" then
+			ok, err = Glance.Clear(char, index, now)
+		else
+			return ns.Actions.Fail("unknown change")
+		end
+		if not ok then return ns.Actions.Fail(err) end
+		return true, "At First Glance " .. index .. ": " .. (what == "clear" and "removed" or "saved")
+			.. ". Total RP 3 follows on the next sync while At First Glance sync is on."
+	end)
+end
+
 --- Switches a feature on or off: Sync.SetOptIn, then (when turning on) the
 -- same debounced automatic run request the command makes. Returns ok, message.
 function TRP3Commands.SetFeature(ctx, deps, feature, on)
@@ -937,7 +1014,7 @@ local function command(ctx, rest)
 	elseif sub == "enable" or sub == "disable" then
 		local feature = featureArg(word1)
 		if not feature then
-			out(ctx, "Usage: /dawnward trp3 enable about|traits confirm | trp3 disable about|traits")
+			out(ctx, "Usage: /dawnward trp3 enable about|traits|glance confirm | trp3 disable about|traits|glance")
 			return
 		end
 		if sub == "enable" and not confirmed then
@@ -952,8 +1029,8 @@ local function command(ctx, rest)
 		local id = fieldArg(word1)
 		local policy = word2
 		if not id or not Ledger.POLICIES[policy] then
-			out(ctx, "Usage: /dawnward trp3 field <title|race|class|age|homeland> dawnward|trp3|off "
-				.. "(dawnward needs the word confirm)")
+			out(ctx, "Usage: /dawnward trp3 field <name> dawnward|trp3|off (names: see /dawnward trp3 fields; "
+				.. "dawnward needs the word confirm)")
 			return
 		end
 		if policy == "dawnward" and not confirmed then
@@ -975,7 +1052,7 @@ local function command(ctx, rest)
 		end
 		out(ctx, message or "Not changed.")
 	elseif sub == "import" then
-		local id = fieldArg(word1)
+		local id = importArg(word1)
 		local level = (word2 ~= "" and word2 ~= "confirm") and word2 or "private"
 		if not id or not confirmed then
 			out(ctx, "This copies Total RP 3's value of a field into your Dawnward profile (Private unless you say "
@@ -989,7 +1066,7 @@ local function command(ctx, rest)
 		local feature = featureArg(word1)
 		if not feature or not confirmed then
 			out(ctx, "This removes Dawnward's own content from Total RP 3 (your text stays) and turns sync off. "
-				.. "Type: /dawnward trp3 release about|traits|fields confirm")
+				.. "Type: /dawnward trp3 release about|traits|fields|glance confirm")
 			return
 		end
 		local _, message = Sync.Release(deps, feature)
@@ -1019,6 +1096,27 @@ local function command(ctx, rest)
 	elseif sub == "resolve" then
 		local feature = featureArg(word1) or fieldArg(word1)
 		local _, message = Sync.Resolve(deps, feature, word2)
+		out(ctx, message)
+	elseif sub == "glance" then
+		local what = word1:lower()
+		local n, value = Util.NextWord(tail)
+		if what == "" or what == "list" then
+			local char = deps.store.real.characters[deps.characterKey]
+			for _, line in ipairs(TRP3Commands.GlanceLines(char)) do out(ctx, line) end
+			return
+		end
+		if what ~= "title" and what ~= "text" and what ~= "icon" and what ~= "show" and what ~= "hide"
+			and what ~= "clear" then
+			out(ctx, "Usage: /dawnward trp3 glance [title|text <n> <words> | icon <n> <name>|default | show|hide <n> "
+				.. "| clear <n> confirm]")
+			return
+		end
+		if what == "clear" and not confirmed then
+			out(ctx, "This removes your At First Glance entry " .. n .. " from Dawnward, and Dawnward's copy of it "
+				.. "from Total RP 3 on the next sync. Type: /dawnward trp3 glance clear " .. n .. " confirm")
+			return
+		end
+		local _, message = TRP3Commands.SetGlance(ctx, what, n, value)
 		out(ctx, message)
 	elseif sub == "log" then
 		if #deps.ledger.log == 0 then

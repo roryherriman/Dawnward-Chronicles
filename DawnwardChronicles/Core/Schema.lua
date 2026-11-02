@@ -202,6 +202,8 @@ function Schema.NewCharacter(now)
 		personality = {},
 		-- Player-defined axis words, meanings and locks (#21, Core/AxisMeanings.lua).
 		axisMeanings = {},
+		-- At First Glance entries the player wrote for Total RP 3 (v0.9, Core/Glance.lua).
+		glance = {},
 		wizard = {},
 		-- The publication model (v0.9, Privacy.ProfileModel): {} is the
 		-- original model (everything starts Private).
@@ -843,6 +845,7 @@ function Schema.NormalizeCharacter(raw, report)
 	char.facts = normalizeFacts(raw.facts, report, usedIds)
 	char.personality = normalizePersonality(raw.personality)
 	char.axisMeanings = ns.AxisMeanings.Clean(raw.axisMeanings)
+	char.glance = ns.Glance.Clean(raw.glance)
 	char.sources = normalizeSources(raw.sources, report)
 	char.interpretationKeys = normalizeInterpretationKeys(raw.interpretationKeys, report)
 	char.interpretations = normalizeInterpretations(raw.interpretations, char.interpretationKeys, report)

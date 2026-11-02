@@ -22,7 +22,8 @@ local Util, Status, VersionProfiles, Shape = ns.Util, ns.TRP3Status, ns.TRP3Vers
 local Adapter = {}
 ns.TRP3Adapter = Adapter
 
-Adapter.SECTIONS = { about = true, characteristics = true }
+-- v0.9: "misc" (player.misc), for Dawnward's own At First Glance slots.
+Adapter.SECTIONS = { about = true, characteristics = true, misc = true }
 
 -- How TRP3 3.4.1 holds an unsaved About or characteristics draft
 -- (RegisterAbout.lua, RegisterCharacteristics.lua, RegisterMain.lua,
@@ -41,6 +42,14 @@ Adapter.EDITOR_FRAMES = {
 	about = { tab = "TRP3_RegisterAbout", edit = "TRP3_RegisterAbout_AboutPanel_Edit" },
 	characteristics = { tab = "TRP3_RegisterCharact", edit = "TRP3_RegisterCharact_Edit_NamePanel" },
 }
+
+-- The At First Glance editor (RegisterUIMisc.xml, declared hidden="true",
+-- so its shown flag is reliable from login). It has no draft: its Apply
+-- writes the slot straight into the live misc section (RegisterMisc.lua
+-- applyPeekSlot), so while it is open Dawnward waits rather than change a
+-- slot under it. A missing frame counts as closed: the worst case is the
+-- player's own Apply winning, which the next run reports as a conflict.
+Adapter.GLANCE_EDITOR = "TRP3_AtFirstGlanceEditor"
 
 -- Official setters for whole sections, by name on CurrentUser. Empty: TRP3
 -- 3.4.1 and main have none (docs/TRP3_INTEGRATION.md, issue #8).
@@ -175,8 +184,8 @@ end
 --- Everything a sync decision needs, read fresh. Never writes.
 -- Returns { status, profile = { id, name, isDefault, characterId, sharedWith },
 --   versionProfile, experimental = { allowed, reasons = {...} },
---   editorOpen = { about, characteristics } (nil = unknown),
---   editorState = { about, characteristics } (see EditorState) }.
+--   editorOpen = { about, characteristics, misc } (nil = unknown),
+--   editorState = { about, characteristics, misc } (see EditorState) }.
 function Adapter.Probe(env)
 	local probe = { status = Status.Read(env), experimental = { allowed = false, reasons = {} } }
 	local reasons = probe.experimental.reasons
@@ -228,6 +237,10 @@ function Adapter.Probe(env)
 				reasons[#reasons + 1] = "Dawnward cannot tell whether the Total RP 3 editor is open"
 			end
 		end
+		local glanceOpen = shownFlag(env, Adapter.GLANCE_EDITOR) == true
+		probe.editorOpen.misc = glanceOpen
+		probe.editorState.misc = { open = glanceOpen, editShown = glanceOpen,
+			why = glanceOpen and "the At First Glance editor is open" or "the At First Glance editor is closed" }
 	end)
 	if not ok then
 		reasons[#reasons + 1] = "Total RP 3 behaved unexpectedly (" .. tostring(err) .. ")"

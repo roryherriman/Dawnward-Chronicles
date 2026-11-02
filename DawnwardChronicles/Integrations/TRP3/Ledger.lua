@@ -23,7 +23,11 @@ ns.TRP3Ledger = Ledger
 
 -- 2 (v0.9): additional-information entries (misc) and the full-profile About
 -- record (slots, frames, mode). An older build sees a newer ledger and
--- pauses sync instead of misreading it (and duplicating content).
+-- pauses sync instead of misreading it (and duplicating content). Still 2
+-- (v0.9 is unreleased): Dawnward's At First Glance slots (glance, in TRP3's
+-- misc section); a v0.9 build without them drops that record, and the
+-- glance plan never adds an entry a slot already shows, so nothing is
+-- duplicated even then.
 Ledger.VERSION = 2
 Ledger.LIMITS = {
 	backups = 20,          -- section backups kept in total, oldest unpinned dropped first
@@ -37,8 +41,8 @@ Ledger.LIMITS = {
 	text = 200,            -- short labels and reasons
 }
 
-Ledger.SECTIONS = { about = true, characteristics = true }
-Ledger.FEATURES = { about = true, traits = true, fields = true, misc = true }
+Ledger.SECTIONS = { about = true, characteristics = true, misc = true }
+Ledger.FEATURES = { about = true, traits = true, fields = true, misc = true, glance = true }
 
 -- Ownership policies. "dawnward": Dawnward writes it automatically (set
 -- only by an explicit authorisation). "trp3": Total RP 3 manages it and
@@ -53,11 +57,13 @@ end
 for _, m in ipairs(MiscPlan.MAPPINGS) do
 	Ledger.MAPPINGS[#Ledger.MAPPINGS + 1] = m.id
 end
+-- v0.9: At First Glance, a block feature (on or off) like the biography.
+Ledger.MAPPINGS[#Ledger.MAPPINGS + 1] = "glance"
 Ledger.MAPPING_SET = {}
 for _, id in ipairs(Ledger.MAPPINGS) do
 	Ledger.MAPPING_SET[id] = true
 end
-Ledger.BLOCK_FEATURES = { about = true, traits = true }
+Ledger.BLOCK_FEATURES = { about = true, traits = true, glance = true }
 
 --- The policy of one mapping for an opt-in entry (nil entry = defaults).
 -- Biography and traits default to "off" (sync off), fields to "trp3".
@@ -226,6 +232,33 @@ local function normalizeMisc(raw)
 	return next(out) and out or nil
 end
 
+-- { slots = { [slotKey] = { n, TI, TX, IC, AC } } }: what Dawnward last
+-- wrote into each At First Glance slot it owns (GlancePlan.lua).
+local function normalizeGlance(raw)
+	if type(raw) ~= "table" or type(raw.slots) ~= "table" then
+		return nil
+	end
+	local Glance = ns.Glance
+	local slots, seen = {}, {}
+	for key, slot in pairs(raw.slots) do
+		if type(key) == "string" and key:match("^[1-5]$") and type(slot) == "table" then
+			local n = Glance.Index(slot.n)
+			local ti, tx = slot.TI, slot.TX
+			local okTitle = ti == nil or (type(ti) == "string" and ti ~= "" and #ti <= Glance.LIMITS.title)
+			local okText = tx == nil or (type(tx) == "string" and tx ~= "" and #tx <= Glance.LIMITS.text)
+			if n and not seen[n] and okTitle and okText and (ti or tx) and Glance.CleanIcon(slot.IC)
+				and type(slot.AC) == "boolean" then
+				seen[n] = true
+				slots[key] = { n = n, TI = ti, TX = tx, IC = slot.IC, AC = slot.AC }
+			end
+		end
+	end
+	if not next(slots) then
+		return nil
+	end
+	return { slots = slots, at = timestamp(raw.at) }
+end
+
 local function normalizeProfile(raw)
 	local out = { conflicts = {}, fieldConflicts = {} }
 	if type(raw) ~= "table" then
@@ -235,6 +268,7 @@ local function normalizeProfile(raw)
 	out.traits = normalizeTraits(raw.traits)
 	out.fields = normalizeFields(raw.fields)
 	out.misc = normalizeMisc(raw.misc)
+	out.glance = normalizeGlance(raw.glance)
 	if type(raw.conflicts) == "table" then
 		for feature in pairs(Ledger.BLOCK_FEATURES) do
 			out.conflicts[feature] = shortText(raw.conflicts[feature])
@@ -252,7 +286,7 @@ local function normalizeProfile(raw)
 end
 
 local OWNER_NORMALIZERS = { about = normalizeAbout, traits = normalizeTraits, fields = normalizeFields,
-	misc = normalizeMisc }
+	misc = normalizeMisc, glance = normalizeGlance }
 
 -- { [feature] = owner record } saved with a backup (all features of its section).
 local function normalizeOwners(raw)
@@ -410,7 +444,7 @@ function Ledger.Log(ledger, now, text)
 end
 
 --- Stores a backup of a whole TRP3 section. meta: { reason, characterKey,
--- ownerFeature ("about" | "traits" | "fields"), owner (that feature's
+-- ownerFeature ("about" | "traits" | "fields" | "glance"), owner (that feature's
 -- ownership record), owners ({ [feature] = record } for every feature of the
 -- section) }. Returns the backup, or nil plus a reason (for example too
 -- large), in which case the caller must not write.
