@@ -67,7 +67,7 @@ local function build()
 	end
 	Style.Chrome(card, "background")
 	card.background = card.chrome.fill
-	card.title = Widgets.Label(card, nil, false, "eyebrow")
+	card.title = Widgets.TrackedLabel(card, "eyebrow", "eyebrow")
 	card.title:SetPoint("TOPLEFT", L.pad, -L.top)
 	card.title:SetText("A MOMENT FOR YOUR STORY")
 	-- Where and what happened, as chips under the eyebrow (the Story

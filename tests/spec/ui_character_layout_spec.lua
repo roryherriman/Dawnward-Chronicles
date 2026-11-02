@@ -99,7 +99,8 @@ return function(t, expect)
 			expect.equal(name.edges.top.__color[4], 1)
 			expect.truthy(age.dashes and age.dashes.shown, "dashes drawn")
 			expect.equal(age.key:GetText(), "AGE")
-			expect.equal(age.key.__template, ns.Style.Font("GameFontNormalSmall"))
+			-- v0.10: a tracked eyebrow (letter-spaced capitals, one string per letter).
+			expect.equal(age.key.letters[1].__template, ns.Style.Font("GameFontNormalSmall"))
 		end)
 
 		t:it("puts a card's Edit on its label row, and its text in the reading style", function()

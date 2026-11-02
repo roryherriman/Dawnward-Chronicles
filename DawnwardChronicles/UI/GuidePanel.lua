@@ -57,7 +57,7 @@ local function create(parent)
 	panel.body:SetWidth(BODY_WIDTH)
 	panel.body:SetHeight(300)
 
-	local heading = Widgets.Label(f, "GameFontNormalSmall", false, "eyebrow")
+	local heading = Widgets.TrackedLabel(f, "eyebrow", "eyebrow")
 	heading:SetPoint("TOPLEFT", INSET, -12)
 	heading:SetText("GUIDE")
 	panel.heading = heading

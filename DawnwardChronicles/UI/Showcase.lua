@@ -597,7 +597,7 @@ function Showcase.View(parent, width, height, opts)
 	for i = 1, 4 do
 		local top = P.rowsTop + (i - 1) * P.rowHeight
 		local row = { top = top }
-		row.key = Widgets.Label(v.game, "GameFontNormalSmall", false, "eyebrow")
+		row.key = Widgets.TrackedLabel(v.game, "eyebrow", "eyebrow")
 		row.key:SetPoint("TOPLEFT", P.padX, -(top + 12))
 		row.key:SetWidth(P.keyWidth)
 		row.value = Widgets.Label(v.game, "reading", false, "title")

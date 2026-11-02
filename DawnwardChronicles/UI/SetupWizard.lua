@@ -491,7 +491,7 @@ local function buildRail()
 	wizard.jewel:SetPoint("CENTER", wizard, "TOPLEFT", 30, -L.top - 8)
 	if wizard.jewel.SetRotation then wizard.jewel:SetRotation(math.pi / 4) end
 	Style.Register(wizard.jewel, function(t, theme) Style.Color(t, theme.accent) end)
-	wizard.brand = Widgets.Label(wizard, nil, false, "eyebrow")
+	wizard.brand = Widgets.TrackedLabel(wizard, "eyebrow", "eyebrow")
 	Widgets.SetTextRole(wizard.brand, "accent")
 	wizard.brand:SetPoint("TOPLEFT", 42, -L.top)
 	wizard.brand:SetText("DAWNWARD")
@@ -581,7 +581,7 @@ local function build()
 	local x = L.rail + L.pad
 	-- Header (SetupWizard.dc.html): STEP n OF 6, the stage title in Cinzel
 	-- (the shell's screen title style), a one-line subtitle; the 36 px close.
-	wizard.stepLabel = Widgets.Label(wizard, "GameFontNormalSmall", false, "eyebrow")
+	wizard.stepLabel = Widgets.TrackedLabel(wizard, "eyebrow", "eyebrow")
 	wizard.stepLabel:SetPoint("TOPLEFT", x, -L.top)
 	wizard.title = Widgets.Label(wizard, "stage", false, "title")
 	wizard.title:SetPoint("TOPLEFT", x, -L.top - 20)
@@ -1057,7 +1057,7 @@ function SetupWizard.Open(opts)
 	wizard.eyebrow:SetText(wizard.test and "PREVIEW · TEST MODE"
 		or wizard.simulation and "SIMULATION · PREVIEW ONLY"
 		or wizard.readOnly and "READ-ONLY · NOTHING SAVED" or "FIRST-TIME SETUP")
-	wizard.eyebrow.textRole = (wizard.test or wizard.readOnly) and "danger" or "ornament"
+	wizard.eyebrow.textRole = (wizard.test or wizard.readOnly) and "danger" or "eyebrowText"
 	Style.Repaint(wizard.eyebrow)
 	fill()
 	wizard.chain.SetFields(wizard.inputs) -- the starting text, for comparison

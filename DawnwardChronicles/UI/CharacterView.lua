@@ -138,6 +138,30 @@ CharacterView.LAYOUT = L
 local EMPTY_VALUE = CharacterView.EMPTY_VALUE
 
 --- Display text for a family member.
+--- A reused action button that is drawn as the mockup's pencil whenever its
+-- label is "Edit" (the word moves to the tooltip), and as plain text for
+-- every other label ("+ Add", "Read full story"...). Where the client has no
+-- line regions it keeps the word "Edit".
+function CharacterView.PencilButton(button)
+	local setText, getText = button.SetText, button.GetText
+	function button.SetText(self, text)
+		if text == "Edit" and self:SetIcon("edit") then
+			setText(self, "")
+			if not self.tooltipTitle then Widgets.Tooltip(self, "Edit", nil) end
+			self.pencil = true
+		else
+			if self.pencil then self:SetIcon(nil) end
+			self.pencil = nil
+			setText(self, text)
+		end
+	end
+	function button.GetText(self)
+		return self.pencil and "Edit" or getText(self)
+	end
+	button:SetText("Edit")
+	return button
+end
+
 function CharacterView.FamilyText(item)
 	local relation = item.relation and (item.relation:sub(1, 1):upper() .. item.relation:sub(2)) or "Relative"
 	local status = item.status and item.status ~= "unknown" and (" (" .. item.status .. ")") or ""
@@ -526,7 +550,7 @@ local function create(parent)
 	-- fields than the mockup's six, so they are grouped).
 	for _, group in ipairs(CharacterView.GROUPS) do
 		local g = CreateFrame("Frame", nil, child)
-		g.title = Widgets.Label(g, "GameFontNormalSmall", false, "eyebrow")
+		g.title = Widgets.TrackedLabel(g, "eyebrow", "eyebrow")
 		g.title:SetPoint("TOPLEFT", 0, 0)
 		g.title:SetText(group.title:upper())
 		g.title:SetShown(group.heading ~= false)
@@ -625,7 +649,7 @@ local function create(parent)
 		-- its Edit button inside it (Widgets.EntryRow).
 		row = Widgets.EntryRow(column)
 		Style.Register(row, paintFieldCard)
-		row.key = Widgets.Label(row, "GameFontNormalSmall", false, "eyebrow") -- field label, Cinzel 13
+		row.key = Widgets.TrackedLabel(row, "eyebrow", "eyebrow") -- field label, Cinzel 13
 		row.label = Widgets.Label(row, "GameFontNormal", true)                -- list headings, bold 14
 		row.value = Widgets.Label(row, "nav", true)                            -- tile value, 17
 		row.reading = Widgets.Label(row, "reading", true, "reading")           -- card text, 16 with leading
@@ -1245,6 +1269,7 @@ function CharacterView.AttachReader(section)
 			c.detail = Widgets.Label(c, "meta", true, "muted")
 			c.notes = Widgets.Label(c, "meta", true, "muted")
 			c.edit = Widgets.Button(c, "Edit", L.editWidth, L.controlHeight, "ghost")
+			CharacterView.PencilButton(c.edit)
 			c.edit:SetPoint("TOPRIGHT", -10, -10)
 			c.edit:SetScript("OnClick", function() section:OpenItemForm("family", c.item) end)
 			reader.cards[i] = c
@@ -1360,6 +1385,7 @@ function CharacterView.AttachEditing(section)
 
 	function section.decorateRow(row)
 		row.edit = Widgets.Button(row, "Edit", L.editWidth, L.controlHeight, "ghost")
+		CharacterView.PencilButton(row.edit)
 		row.edit:SetScript("OnClick", function()
 			local spec = row.spec
 			if spec.kind == "field" then

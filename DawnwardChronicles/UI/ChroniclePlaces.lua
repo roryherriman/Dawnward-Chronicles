@@ -364,7 +364,7 @@ function ChroniclePlaces.Create(parent, width, api)
 	d.nameHover = CreateFrame("Frame", nil, d)
 	Widgets.Tooltip(d.nameHover, nil)
 	d.sub = Widgets.Label(d, "GameFontHighlight", false, "muted")
-	d.means = Widgets.Label(d, nil, false, "eyebrow")
+	d.means = Widgets.TrackedLabel(d, "eyebrow", "eyebrow")
 	d.means:SetText("WHAT IT MEANS TO YOUR CHARACTER")
 	d.chips = {}
 	for i = 1, 3 do
@@ -375,7 +375,7 @@ function ChroniclePlaces.Create(parent, width, api)
 	for i, label in ipairs(ChroniclePlaces.STATS) do
 		d.stats[i] = statTile(d, label, L)
 	end
-	d.tiedLabel = Widgets.Label(d, nil, false, "eyebrow")
+	d.tiedLabel = Widgets.TrackedLabel(d, "eyebrow", "eyebrow")
 	d.tiedLabel:SetText("TIED MEMORIES")
 	for i = 1, L.tied do
 		local row = Widgets.Card(d)
