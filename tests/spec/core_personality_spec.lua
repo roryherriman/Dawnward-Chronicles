@@ -1,7 +1,7 @@
 -- L1: personality axes (data model only).
 local Loader = require("support.loader")
 
-return function(t, expect)
+local function legacySpec(t, expect)
 	local ns = Loader.Core()
 	local Schema, Personality, Projection, Util = ns.Schema, ns.Personality, ns.Projection, ns.Util
 
@@ -53,17 +53,23 @@ return function(t, expect)
 			local ctx = { store = store, characterKey = "A-R", now = function() return 1 end,
 				print = function(l) lines[#lines + 1] = l end }
 			ns.Commands.Execute(ctx, "personality set courage 15")
-			ns.Commands.Execute(ctx, "personality vis courage public")
+			ns.Commands.Execute(ctx, "personality vis courage public") -- retired: changes nothing
 			ns.Commands.Execute(ctx, "personality set luck 3")
 			ns.Commands.Execute(ctx, "personality clear courage")
 			local text = table.concat(lines, "\n")
 			expect.truthy(text:find("courage: 15/20"), text)
 			expect.truthy(text:find("unknown axis"))
 			expect.truthy(text:find("confirm"))
-			expect.equal(store.real.characters["A-R"].personality.courage.visibility, "public")
+			expect.truthy(text:find(ns.Commands.RETIRED_VISIBILITY, 1, true))
+			expect.equal(store.real.characters["A-R"].personality.courage.visibility, "private")
 			lines = {}
 			ns.Commands.Execute(ctx, "personality list")
-			expect.truthy(table.concat(lines, "\n"):find("courage: Cautious 15/20 Bold %[public%]"))
+			expect.truthy(table.concat(lines, "\n"):find("courage: Cautious 15/20 Bold$"))
 		end)
 	end)
+end
+
+-- These specs model characters an earlier version created (Loader.Legacy).
+return function(t, expect)
+	Loader.Legacy(function() legacySpec(t, expect) end)
 end

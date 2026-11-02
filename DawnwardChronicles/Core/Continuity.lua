@@ -2,7 +2,8 @@
 -- worth a second look, and ask the player what each one is:
 --   growth       the character changed; both records stay true for their time
 --   unreliable   the character believes something that is not so
---   secret       it is deliberate and should stay hidden
+--   secret       it is intended (shown as "Intended"; the stored answer
+--                keeps its old name)
 --   correction   a mistake the player will fix themselves
 --   ignore       not a problem
 --   explained    the player's own explanation, kept with the answer (a note
@@ -10,7 +11,7 @@
 --
 -- The player can also:
 --   examine      see the records behind a finding side by side, with their
---                dates, where they came from, canon status and visibility
+--                dates, where they came from and canon status
 --                (Continuity.Examine)
 --   correct      open either record's own edit form (UI) or chat command;
 --                Continuity never edits a record itself
@@ -70,7 +71,7 @@ end
 -- personality, objective).
 local RULES = {}
 
--- A public persona that differs from a private conviction, not marked as deliberate.
+-- A stance's persona that differs from its inner conviction, not marked as deliberate.
 RULES[#RULES + 1] = function(char)
 	local out = {}
 	for _, i in ipairs(char.story.identity) do
@@ -112,23 +113,31 @@ RULES[#RULES + 1] = function(char)
 	return out
 end
 
--- A public stance about a subject, and a public fact about the same subject,
--- where one says it the other way round (a "not", "never", "against" in one
--- and not the other). Both are public, so readers would see both.
+-- Whether a record with this (old) visibility is part of the published
+-- profile: always under the v0.10 model (Core/Publication.lua), otherwise
+-- only what an earlier version marked Public.
+local function published(char, level)
+	return ns.Publication.IsComplete(char) or level == Privacy.PUBLIC
+end
+
+-- A stance's persona about a subject, and a fact about the same subject,
+-- both in the published profile, where one says it the other way round (a
+-- "not", "never", "against" in one and not the other): readers would see both.
 RULES[#RULES + 1] = function(char)
 	local out = {}
 	for _, i in ipairs(char.story.identity) do
-		if i.status == "established" and i.persona and i.visibility == Privacy.PUBLIC and not i.deliberate then
+		if i.status == "established" and i.persona and published(char, i.visibility) and not i.deliberate then
 			local subject = lower(i.subject)
 			for _, fact in ipairs(char.facts) do
 				local about = fact.subject and lower(fact.subject) == subject
 					or (#subject >= 4 and lower(fact.statement):find(subject, 1, true) ~= nil)
-				if fact.visibility == Privacy.PUBLIC and about and negated(fact.statement) ~= negated(i.persona) then
+				if published(char, fact.visibility) and about and negated(fact.statement) ~= negated(i.persona) then
 					out[#out + 1] = { key = string.format("publicfact:%d:%d:%s", i.id, fact.id,
 						ns.Util.Checksum(i.persona .. "|" .. fact.statement)), kind = "publicfact",
 						refs = { identity = i.id, fact = fact.id },
 						sides = { { list = "identity", id = i.id, part = "persona" }, { list = "facts", id = fact.id } },
-						message = string.format("Both public: about %s, their stance says \"%s\", but a fact says \"%s\".",
+						message = string.format("Both in your profile: about %s, their stance says \"%s\", but a fact "
+							.. "says \"%s\".",
 							i.subject, i.persona, fact.statement) }
 				end
 			end
@@ -250,29 +259,9 @@ RULES[#RULES + 1] = function(char)
 	return out
 end
 
--- A public record linked to a secret memory: the link itself could hint at it.
-RULES[#RULES + 1] = function(char)
-	local out = {}
-	local secret = {}
-	for _, m in ipairs(char.story.memories) do
-		if m.visibility == Privacy.SECRET then secret[m.id] = true end
-	end
-	for _, listName in ipairs({ "memories", "arcs", "goals" }) do
-		for _, r in ipairs(char.story[listName]) do
-			if Records.IsPublic(r) then
-				for _, mid in ipairs(r.links.memories) do
-					if secret[mid] then
-						out[#out + 1] = { key = string.format("publicsecret:%s:%d:%d", listName, r.id, mid), kind = "privacy",
-							refs = { [listName] = r.id },
-							sides = { { list = listName, id = r.id }, { list = "memories", id = mid } },
-							message = string.format("Public %s #%d is linked to a secret memory (#%d).", listName, r.id, mid) }
-					end
-				end
-			end
-		end
-	end
-	return out
-end
+-- (v0.10: the check "a Public record linked to a Secret memory" is gone with
+-- per-item visibility. Memories, arcs and goals are never part of the
+-- profile, so a link between them cannot reveal anything.)
 
 local function allFindings(char)
 	local out = {}
@@ -332,10 +321,10 @@ local function sideView(char, side)
 		if list == "identity" then
 			v.title = r.subject
 			if side.part == "conviction" then
-				v.label = "Stance, privately"
+				v.label = "Stance, inner conviction"
 				v.text, v.visibility = r.conviction, r.convictionVisibility
 			elseif side.part == "persona" then
-				v.label = "Stance, in public"
+				v.label = "Stance, persona"
 				v.text = r.persona
 			else
 				v.text = r.persona or r.conviction

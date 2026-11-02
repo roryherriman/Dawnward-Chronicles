@@ -2,7 +2,7 @@
 local Loader = require("support.loader")
 local Fake = require("fakes.trp3_341")
 
-return function(t, expect)
+local function legacySpec(t, expect)
 	local KEY = "Testchar-TestRealm"
 
 	local function world(fakeOpts)
@@ -121,4 +121,9 @@ return function(t, expect)
 			expect.equal(w.fake.profile.player.about.v, version)
 		end)
 	end)
+end
+
+-- These specs model characters an earlier version created (Loader.Legacy).
+return function(t, expect)
+	Loader.Legacy(function() legacySpec(t, expect) end)
 end

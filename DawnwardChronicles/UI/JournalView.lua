@@ -11,8 +11,7 @@
 --                (the same postpone as the reaction card). Hidden when none.
 --   cards        entries newest first in one scrolling list: date block,
 --                title with its status chips, meta line, the story text and a
---                footer with the visibility chip and the entry's actions, all
---                inside the card. Defining moments use the design's featured
+--                footer with the entry's actions, all inside the card. Defining moments use the design's featured
 --                card (lighter fill, stronger edge, gold day).
 --   right column Active goals (milestones and verified progress) and Recent
 --                places (from the places log, with Homeland / Meaningful chips)
@@ -92,7 +91,6 @@ local L = {
 	maxChips = 3,
 	chipMaxW = 200,
 	actionGap = 8,
-	visW = 72,
 	titleLine = 22,         -- Cinzel 18
 	metaLine = 17,          -- 14
 	readingLine = 20,       -- 16 + 4 spacing
@@ -756,22 +754,6 @@ local function create(parent)
 			return row
 		end
 		row = buildCard(child)
-		row.vis = Widgets.VisibilityButton(row, function(level)
-			local function apply()
-				local _, message = Actions.SetEntryVisibility(ns.ctx, row.entryId, level)
-				MainWindow.SetStatus(message)
-				MainWindow.Refresh()
-			end
-			-- Publishing is explicit (#13): show exactly what becomes public first.
-			local char = Actions.Character(ns.ctx)
-			local entry = char and ns.Journal.Find(char, row.entryId)
-			if level == "public" and entry and not ns.Journal.NeedsApproval(entry) then
-				Widgets.Confirm(ns.Journal.PublicPreview(entry), "Make Public", apply)
-			else
-				apply()
-			end
-		end)
-		row.vis:SetSize(L.visW, CONTROL.chip)
 		if section.decorateRow then
 			section.decorateRow(row)
 		end
@@ -855,13 +837,8 @@ local function create(parent)
 			row.body:Hide()
 		end
 
-		-- Footer: the visibility chip on the left, the entry's actions on the right.
+		-- Footer: the entry's actions, from the right.
 		cursor = cursor + L.footerGap
-		if row.vis then
-			row.vis:ClearAllPoints()
-			row.vis:SetPoint("TOPLEFT", L.textX, -(cursor + (L.footerH - CONTROL.chip) / 2))
-			row.vis:SetLevel(entry.visibility)
-		end
 		if not measuring and section.updateRowActions then
 			section.updateRowActions(row, entry, cursor)
 		end
@@ -1126,7 +1103,7 @@ function JournalView.AttachEditing(section)
 			MainWindow.Refresh()
 		end)
 		Widgets.Tooltip(row.approve, "Approve draft",
-			"Accept this draft as part of your character's story. It stays private until you change its visibility.")
+			"Accept this draft as part of your character's story. Mark it Defining to make it part of your profile.")
 		-- Any entry can be marked as a defining moment.
 		row.mark = Widgets.Button(row, "Defining", W.Defining, CONTROL.compact, "ghost")
 		row.mark:SetScript("OnClick", function()
@@ -1135,8 +1112,8 @@ function JournalView.AttachEditing(section)
 			MainWindow.Refresh()
 		end)
 		Widgets.Tooltip(row.mark, "Defining moment",
-			"Mark or unmark this entry as an important memory. Approved, public defining moments can appear in "
-				.. "Total RP 3 if you turned biography sync on.")
+			"Mark or unmark this entry as an important memory. Approved defining moments are part of your profile "
+				.. "and appear in Total RP 3 once it is connected.")
 		row.actions = { row.delete, row.edit, row.approve, row.mark } -- right to left
 	end
 
@@ -1188,8 +1165,6 @@ function JournalView.AttachEditing(section)
 		onEscape = function(dirty) editor.chain.ConfirmDiscard(dirty, function() section:CloseEditor() end) end,
 	})
 
-	editor.vis = Widgets.VisibilityButton(editor, function(level, button) button:SetLevel(level) end)
-	editor.vis:SetPoint("BOTTOMLEFT", INSET, 12)
 	editor.cancel = Widgets.Button(editor, "Cancel", 90, 22)
 	editor.cancel:SetPoint("BOTTOMRIGHT", -INSET, 12)
 	editor.save = Widgets.Button(editor, "Save", 90, 22, "primary")
@@ -1219,7 +1194,6 @@ function JournalView.AttachEditing(section)
 		editor.heading:SetText(entry and "Edit entry" or "New entry")
 		editor.title:SetText(entry and entry.title or "")
 		editor.area.edit:SetText(entry and entry.text or "")
-		editor.vis:SetLevel(entry and entry.visibility or "private")
 		section.search:ClearFocus()
 		listParts(false)
 		editor:Show()
@@ -1246,9 +1220,9 @@ function JournalView.AttachEditing(section)
 		local text = editor.area.edit:GetText()
 		local ok, message
 		if editor.entryId then
-			ok, message = Actions.UpdateNote(ns.ctx, editor.entryId, title, text, editor.vis.level)
+			ok, message = Actions.UpdateNote(ns.ctx, editor.entryId, title, text)
 		else
-			ok, message = Actions.AddNote(ns.ctx, title, text, editor.vis.level)
+			ok, message = Actions.AddNote(ns.ctx, title, text)
 			if ok then
 				self.offset = 0 -- the new entry is at the top
 			end

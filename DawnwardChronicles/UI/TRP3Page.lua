@@ -68,8 +68,8 @@ TRP3Page.BLOCK_CHOICES = { { id = "dawnward", label = "Dawnward" }, { id = "off"
 TRP3Page.FIELD_CHOICES = { { id = "dawnward", label = "Dawnward" }, { id = "trp3", label = "TRP3" },
 	{ id = "off", label = "Off" } }
 
-TRP3Page.MAPPINGS_EXPLAIN = "Choose who keeps each part up to date. Only Public information is written, never "
-	.. "over your own Total RP 3 text, and nothing changes until you Authorize."
+TRP3Page.MAPPINGS_EXPLAIN = "Choose who keeps each part up to date. Dawnward writes from your character profile, "
+	.. "never over your own Total RP 3 text, and nothing changes until you Authorize."
 
 TRP3Page.RIGHT_WIDTH = 258
 TRP3Page.GAP = 12          -- between the callout and the backups
@@ -108,17 +108,17 @@ TRP3Page.OPTIONAL_TEXT = "Total RP 3 is optional. Dawnward works fully without i
 TRP3Page.EXPLAIN = {
 	about = "Dawnward only writes its own block inside your \"About\" text. Everything you wrote in Total RP 3 "
 		.. "yourself stays exactly as it is.",
-	traits = "Dawnward only adds and updates its own personality traits, one per Public axis. Preset traits and "
-		.. "traits you made yourself are never changed.",
+	traits = "Dawnward only adds and updates its own personality traits, one per personality axis you set. "
+		.. "Preset traits and traits you made yourself are never changed.",
 	glance = "Dawnward only writes the At First Glance entries you wrote for it (/dawnward trp3 glance), into "
 		.. "free slots. Slots you filled in Total RP 3 are never changed.",
 }
 
 TRP3Page.UNSUPPORTED_TEXT = "Title, race, class, age and homeland: only if you hand them over on Mappings; "
 	.. "name, pronouns and the other fields never."
-TRP3Page.UNSUPPORTED_DETAIL = "Only Public facts, stances and defining moments go into the biography block, and "
-	.. "Public personality axes into traits. Title, race, class, age and homeland are written only if you hand them "
-	.. "to Dawnward on the Mappings tab; name, pronouns and the other fields never."
+TRP3Page.UNSUPPORTED_DETAIL = "Your story, profile details, family, beliefs, stances and defining moments go into "
+	.. "the About page, and your personality axes into traits. Title, race, class, age and homeland are written "
+	.. "only if you hand them to Dawnward on the Mappings tab; name, pronouns and the other fields never."
 
 TRP3Page.BACKUP_NOTE = "A backup is taken before every write, and each write is read back and undone at once if "
 	.. "anything differs. Older backups: /dawnward trp3 backups."
@@ -136,64 +136,20 @@ local function excerpt(s, n)
 	return plain(s)
 end
 
-local function listText(items)
-	if #items == 1 then return items[1] end
-	return table.concat(items, ", ", 1, #items - 1) .. " and " .. items[#items]
-end
-
 local function plural(n, one, many)
 	return n .. " " .. (n == 1 and one or many)
 end
 
--- What is NOT shared, as counts only: never names, statements or titles.
-local COUNTED = {
-	{ list = "facts", one = "fact", many = "facts" },
-	{ list = "personality", one = "personality axis", many = "personality axes", map = true },
-	{ list = "journal", one = "journal entry", many = "journal entries" },
-	{ list = "history", one = "history entry", many = "history entries" },
-	{ list = "family", one = "family entry", many = "family entries" },
-}
-
---- Counts of Private and Secret items (no content). Pure.
-function TRP3Page.HiddenCounts(char)
-	local counts = { private = {}, secret = {} }
-	if not char then
-		return counts
+--- What never reaches Total RP 3, and anything an earlier version kept
+-- back (counts only, never content). Pure apart from reading char.
+function TRP3Page.HiddenText(char)
+	local text = "Journal notes, drafts, story answers, memories and inner convictions are never sent."
+	if char and ns.Publication.Status(char) == "pending" then
+		local n = ns.Publication.HiddenCount(char)
+		text = text .. " " .. plural(n, "item", "items") .. " an earlier version kept back "
+			.. (n == 1 and "waits" or "wait") .. " for your one-time confirmation (Publish whole profile…)."
 	end
-	for level in pairs(counts) do
-		local view = ns.Projection.Filter(char, { [level] = true })
-		for _, c in ipairs(COUNTED) do
-			local n = 0
-			if c.map then
-				for _ in pairs(view[c.list] or {}) do n = n + 1 end
-			else
-				n = #(view[c.list] or {})
-			end
-			counts[level][c.list] = n
-		end
-	end
-	return counts
-end
-
---- The "Never shared" sentence, from HiddenCounts. Pure.
-function TRP3Page.HiddenText(counts)
-	local parts = {}
-	for _, level in ipairs({ "private", "secret" }) do
-		local items, total = {}, 0
-		for _, c in ipairs(COUNTED) do
-			local n = counts[level][c.list] or 0
-			if n > 0 then
-				items[#items + 1] = plural(n, c.one, c.many)
-				total = total + n
-			end
-		end
-		if #items > 0 then
-			parts[#parts + 1] = listText(items) .. (total == 1 and " is " or " are ")
-				.. (level == "private" and "Private" or "Secret")
-		end
-	end
-	local head = #parts > 0 and (table.concat(parts, "; ") .. ".") or "Nothing is Private or Secret yet."
-	return head .. " Only items marked Public can be written."
+	return text
 end
 
 --- Summary strip texts. Pure. view = TRP3Commands.Overview (or nil).
@@ -450,11 +406,11 @@ function TRP3Page.Build(parent, width, height)
 	page.preview:SetSize(innerW, 28 + TRP3Page.PREVIEW_LINES * 16 + 8)
 	page.previewHead = Widgets.Label(page.preview, "GameFontNormalSmall", false, "eyebrow")
 	page.previewHead:SetPoint("TOPLEFT", 10, -9)
-	page.previewHead:SetText("WHAT WOULD BE WRITTEN · PUBLIC ONLY")
+	page.previewHead:SetText("WHAT WOULD BE WRITTEN")
 	Style.Register(page.previewHead, function(fs) Style.TextColor(fs, ns.Themes.VISIBILITY_COLORS.public) end)
 	page.copy = Widgets.Button(page.preview, "Copy text", 92, 24, "ghost")
 	page.copy:SetPoint("TOPRIGHT", -5, -4)
-	Widgets.Tooltip(page.copy, "Copy text", "Show this text (public facts only) to paste into Total RP 3 "
+	Widgets.Tooltip(page.copy, "Copy text", "Show this text (your character profile) to paste into Total RP 3 "
 		.. "yourself. Same as /dawnward trp3 paste. Nothing is written.")
 	page.copy:SetScript("OnClick", function()
 		Commands.Execute(ns.ctx, "trp3 paste")
@@ -475,7 +431,7 @@ function TRP3Page.Build(parent, width, height)
 	page.unsupported:SetPoint("TOPLEFT", 10, -64)
 	page.unsupported:SetText(TRP3Page.UNSUPPORTED_TEXT)
 	page.hiddenHover = hoverOver(page.hidden, page.hidden)
-	Widgets.Tooltip(page.hiddenHover, "Never shared", TRP3Page.UNSUPPORTED_DETAIL)
+	Widgets.Tooltip(page.hiddenHover, "Never sent", TRP3Page.UNSUPPORTED_DETAIL)
 
 	local A = TRP3Page.ACTION_HEIGHT
 	local rule = Widgets.Divider(body)
@@ -636,9 +592,9 @@ function TRP3Page.Build(parent, width, height)
 		"ghost")
 	page.exact:SetPoint("LEFT", page.rollback, "RIGHT", 6, 0)
 	Widgets.Tooltip(page.rollback, "Roll back (safe)", "Restores your own text from the backup; Dawnward's part is "
-		.. "rebuilt from what is Public now. Same as /dawnward trp3 rollback [#] confirm.")
+		.. "rebuilt from your profile as it is now. Same as /dawnward trp3 rollback [#] confirm.")
 	Widgets.Tooltip(page.exact, "Exact restore", "Restores the section exactly as it was, including Dawnward "
-		.. "content that may no longer be Public. Same as /dawnward trp3 rollback [#] exact confirm.")
+		.. "content your profile no longer has. Same as /dawnward trp3 rollback [#] exact confirm.")
 	page.backupNote = paragraph(page.backups.inner, "muted", colInner, 4, "small")
 	page.backupNote:SetPoint("TOPLEFT", page.rollback, "BOTTOMLEFT", 0, -8)
 	page.backupNote:SetText(TRP3Page.BACKUP_NOTE)
@@ -747,15 +703,15 @@ local function previewText(feature, preview)
 	local lines = {}
 	if feature == "about" then
 		if preview.about == "" then
-			return "(Nothing Public yet. Mark facts, stances or important approved story entries Public to "
-				.. "include them.)"
+			return "(Nothing to write yet. Import your story, or add details, facts, stances or defining "
+				.. "moments to your character.)"
 		end
 		for line in (preview.about .. "\n"):gmatch("([^\n]*)\n") do
 			lines[#lines + 1] = plain(line)
 		end
 	else
 		if #preview.traits == 0 then
-			return "(No Public personality axes yet. Make an axis Public on the Character page to include it.)"
+			return "(No personality axes set yet. Set one on the Character page to include it.)"
 		end
 		for _, t in ipairs(preview.traits) do
 			lines[#lines + 1] = plain(string.format("%s %d / %d %s", t.LT, t.V2, 20 - t.V2, t.RT))
@@ -943,7 +899,7 @@ function TRP3Page.Refresh(page)
 		TRP3Page.RefreshOverview(page, view)
 		return
 	end
-	Widgets.Tooltip(page.hiddenHover, "Never shared", TRP3Page.HiddenText(TRP3Page.HiddenCounts(realChar()))
+	Widgets.Tooltip(page.hiddenHover, "Never sent", TRP3Page.HiddenText(realChar())
 		.. "\n\n" .. TRP3Page.UNSUPPORTED_DETAIL)
 	local check = view.checks[feature]
 	local optedIn = view.bound and view.policies[feature] == "dawnward"
@@ -957,7 +913,7 @@ function TRP3Page.Refresh(page)
 		or "Status", plain(reasons))
 	page.keepText:SetText(keepText(feature, check, view))
 	page.previewText:SetText(previewText(feature, view.preview))
-	page.hiddenText:SetText(TRP3Page.HiddenText(TRP3Page.HiddenCounts(realChar())))
+	page.hiddenText:SetText(TRP3Page.HiddenText(realChar()))
 
 	-- Approve only for an opted-in feature with a change and no conflict;
 	-- the click still goes through every guard in Sync.RunFeature.
@@ -1264,18 +1220,7 @@ end
 --- The one-time confirmation for a character an earlier version kept
 -- partly back (Publication.Status "pending").
 function TRP3Page.AskSwitchModel()
-	local char = realChar()
-	if not char or ns.Publication.Status(char) ~= "pending" then return end
-	local lines = ns.Publication.PreviewLines(char)
-	Widgets.Confirm("Publish your whole character profile?\n\nAn earlier version of Dawnward kept part of this "
-		.. "character back from Total RP 3:\n\n" .. table.concat(lines, "\n")
-		.. "\n\nFrom now on your whole Dawnward profile is the source for Total RP 3. You can undo this with "
-		.. "/dawnward publish undo.", "Publish", function()
-		act(function()
-			local _, message = ns.Actions.TransitionPublication(ns.ctx)
-			return message
-		end)
-	end)
+	ns.MainWindow.AskPublishWholeProfile()
 end
 
 function TRP3Page.ShortDate(at)
@@ -1335,7 +1280,7 @@ local function fieldProposal(view, m)
 		return "not writable: " .. excerpt(row.unwritable, 80)
 	end
 	if not public then
-		return "nothing Public to write"
+		return "nothing to write"
 	elseif current == nil then
 		return "writes \"" .. excerpt(public, 40) .. "\""
 	elseif current == public then
@@ -1363,7 +1308,7 @@ function TRP3Page.RowText(page, id)
 		local check = view.checks[id]
 		if policy == "dawnward" then
 			local chipDef = TRP3Page.STATE_CHIP[check.state]
-			detail = staged and "Dawnward's own block, from Public data (after you authorize)"
+			detail = staged and "Dawnward's own block, from your profile (after you authorize)"
 				or ("Managed by Dawnward · " .. (chipDef and chipDef[1] or check.state))
 		else
 			detail = "Not synchronised · Total RP 3 keeps yours"
@@ -1375,7 +1320,7 @@ function TRP3Page.RowText(page, id)
 	local conflict = view.fieldConflicts[id]
 	local risk = view.risks and view.risks[id]
 	if staged and policy ~= "dawnward" and risk then
-		detail = "Dawnward's old value will be removed from TRP3 first (no longer Public)"
+		detail = "Dawnward's old value will be removed from TRP3 first (no longer in your profile)"
 	elseif policy == "off" then
 		detail = "Not synchronised"
 	elseif conflict then
@@ -1435,7 +1380,7 @@ function TRP3Page.RefreshMappings(page, view)
 		local about = m and (where .. (m.msp and (" (MSP " .. m.msp .. "). ") or ". ")
 			.. (m.risk == "high" and "Players usually write this themselves in Total RP 3; it stays managed by "
 				.. "Total RP 3 unless you choose otherwise. " or "")
-			.. "Dawnward writes it only from your Public " .. m.label .. ", only while Total RP 3 still holds the "
+			.. "Dawnward writes it only from your " .. m.label .. ", only while Total RP 3 still holds the "
 			.. "value Dawnward last wrote.") or TRP3Page.EXPLAIN[row.id]
 		-- The detail line may be cut on the page; the tooltip has it whole.
 		Widgets.Tooltip(row.hover, name, detail .. "\n\n" .. about)
@@ -1443,7 +1388,7 @@ function TRP3Page.RefreshMappings(page, view)
 			local diff = diffRow(view, row.id)
 			row.import:SetEnabled(diff ~= nil and diff.importable == true)
 			Widgets.Tooltip(row.import, "Import into Dawnward", "Copies Total RP 3's " .. m.trp3 .. " into your "
-				.. "Dawnward " .. m.label .. " as a Private value (you confirm first). Never automatic.")
+				.. "Dawnward " .. m.label .. " (you confirm first). Never automatic.")
 		end
 	end
 	page.authorize:SetEnabled(next(page.staged) ~= nil)
@@ -1466,11 +1411,11 @@ function TRP3Page.AuthorizeText(page)
 				if m then
 					what = fieldProposal(view, m)
 				elseif id == "about" then
-					what = view.preview.about == "" and "nothing Public yet" or "adds Dawnward's own block to your About"
+					what = view.preview.about == "" and "nothing to write yet" or "adds Dawnward's own block to your About"
 				elseif id == "glance" then
 					what = "writes the At First Glance entries you wrote for it, into free slots"
 				else
-					what = #view.preview.traits == 0 and "nothing Public yet"
+					what = #view.preview.traits == 0 and "nothing to write yet"
 						or ("adds " .. plural(#view.preview.traits, "trait", "traits") .. " of its own")
 				end
 				lines[#lines + 1] = "+ " .. itemLabel .. ": managed by Dawnward - " .. what
@@ -1492,8 +1437,8 @@ function TRP3Page.AuthorizeText(page)
 			.. "; they will show the same content."
 	end
 	lines[#lines + 1] = ""
-	lines[#lines + 1] = "EXPERIMENTAL: uses Total RP 3 internals with no official support. Only Public "
-		.. "information is written, a backup is taken before every write, and every write can be rolled back."
+	lines[#lines + 1] = "EXPERIMENTAL: uses Total RP 3 internals with no official support. Dawnward writes "
+		.. "from your character profile, a backup is taken before every write, and every write can be rolled back."
 	return table.concat(lines, "\n")
 end
 
@@ -1522,8 +1467,7 @@ function TRP3Page.AskImport(page, id)
 		return
 	end
 	Widgets.Confirm("Copy Total RP 3's " .. m.trp3 .. " \"" .. plain(row.trp3) .. "\" into your Dawnward "
-		.. m.label .. "?\n\nIt is saved as Private; change its visibility on the Character page if you want it "
-		.. "shared. Nothing is written to Total RP 3.", "Import", function()
+		.. m.label .. "?\n\nIt becomes part of your Dawnward profile. Nothing is written to Total RP 3.", "Import", function()
 		act(function()
 			local _, message = ns.TRP3Commands.Import(ns.ctx, id, "private")
 			return message
@@ -1532,14 +1476,14 @@ function TRP3Page.AskImport(page, id)
 end
 
 --- The rollback confirmation for a mode ("own" or "exact"), naming what an
--- exact restore would bring back that is no longer Public.
+-- exact restore would bring back that your profile no longer has.
 function TRP3Page.RollbackText(preview, mode, id)
 	local head = id and ("Restore your Total RP 3 section from Dawnward's backup #" .. id .. "?")
 		or TRP3Page.ROLLBACK_NEWEST
 	local lines = { head, "" }
 	if mode == "own" then
 		lines[#lines + 1] = "Safe restore: your own text comes back from the backup; Dawnward's part is rebuilt from "
-			.. "what is Public now. Other edits made to that section since then are undone. The current state is "
+			.. "your profile as it is now. Other edits made to that section since then are undone. The current state is "
 			.. "backed up first."
 	else
 		lines[#lines + 1] = "Exact restore: the section comes back exactly as it was, including what Dawnward "

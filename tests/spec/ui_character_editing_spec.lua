@@ -1,4 +1,5 @@
 -- L2: editing profile fields from the Character section.
+local Loader = require("support.loader")
 local Boot = require("support.boot")
 
 local CHAR = "Testchar-TestRealm"
@@ -22,9 +23,9 @@ local function rowFor(section, key)
 	end
 end
 
-return function(t, expect)
+local function legacySpec(t, expect)
 	t:describe("character editing (L2)", function()
-		t:it("edits a short field on one line and saves it as private", function()
+		t:it("edits a short field on one line and saves it (the stored default visibility is untouched)", function()
 			local _, env, _, section = openCharacter()
 			click(rowFor(section, "name").edit)
 			expect.truthy(section.editor:IsShown())
@@ -63,14 +64,13 @@ return function(t, expect)
 			expect.equal(env.DawnwardChroniclesDB.characters[CHAR], nil, "no empty character created")
 		end)
 
-		t:it("shows visibility only for set fields and cycles it", function()
-			local mock, env, _, section = openCharacter()
-			expect.falsy(rowFor(section, "name").vis:IsShown())
+		t:it("offers Add on an empty field and Edit on a set one, and nothing to classify", function()
+			local mock, _, _, section = openCharacter()
+			expect.equal(rowFor(section, "name").edit:GetText(), "Add")
 			mock.Slash("set name Aelin")
 			local row = rowFor(section, "name")
-			expect.truthy(row.vis:IsShown())
-			click(row.vis)
-			expect.equal(env.DawnwardChroniclesDB.characters[CHAR].fields.name.visibility, "public")
+			expect.equal(row.edit:GetText(), "Edit")
+			expect.equal(row.vis, nil, "no visibility chip")
 		end)
 
 		t:it("clears a field only after confirmation", function()
@@ -101,7 +101,7 @@ return function(t, expect)
 			expect.deepEqual(env.DawnwardChroniclesDB, { schemaVersion = 99, characters = {} })
 		end)
 
-		t:it("adds, edits, hides and removes family and history from forms (#17)", function()
+		t:it("adds, edits and removes family and history from forms (#17)", function()
 			local mock, env, ns, section = openCharacter()
 			local function specRow(kind, list)
 				for i, spec in ipairs(section.specs) do
@@ -133,8 +133,7 @@ return function(t, expect)
 			fill({ relation = "", name = "", notes = "" })
 			expect.truthy(section.form:IsOpen(), "an edit cannot empty the entry")
 			click(section.form.cancel)
-			click(specRow("item", "family").vis)
-			expect.equal(char.family[1].visibility, "public")
+			expect.equal(specRow("item", "family").vis, nil, "no visibility chip")
 
 			-- Long notes written from chat survive an edit of another field.
 			local long = string.rep("n", 1500)
@@ -159,4 +158,9 @@ return function(t, expect)
 			expect.falsy(ns.CharacterView.section.form:IsOpen())
 		end)
 	end)
+end
+
+-- These specs model characters an earlier version created (Loader.Legacy).
+return function(t, expect)
+	Loader.Legacy(function() legacySpec(t, expect) end)
 end

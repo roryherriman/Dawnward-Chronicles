@@ -38,7 +38,7 @@ Publication.CATEGORIES = {
 	{ id = "biography", label = "Biography" },
 	{ id = "facts", label = "Facts about the character" },
 	{ id = "personality", label = "Personality values" },
-	{ id = "stances", label = "Public personas (stances)" },
+	{ id = "stances", label = "Stance personas" },
 	{ id = "family", label = "Family" },
 	{ id = "history", label = "History" },
 	{ id = "moments", label = "Defining moments" },

@@ -15,20 +15,20 @@ end
 
 return function(t, expect)
 	t:describe("journal editing (L2)", function()
-		t:it("writes a new entry with title, text and visibility", function()
+		t:it("writes a new entry with title and text, nothing to classify", function()
 			local _, env, _, section = openJournal()
 			click(section.newButton)
 			expect.truthy(section.editor:IsShown())
 			expect.falsy(section.scroll:IsShown(), "the list is replaced by the editor")
 			section.editor.title:SetText("Arrival")
 			section.editor.area.edit:SetText("The road to Goldshire was quiet.")
-			click(section.editor.vis) -- private -> public
+			expect.equal(section.editor.vis, nil, "no visibility chip in the editor")
 			click(section.editor.save)
 			expect.falsy(section.editor:IsShown())
 			local entry = env.DawnwardChroniclesDB.characters[CHAR].journal[1]
 			expect.equal(entry.title, "Arrival")
 			expect.equal(entry.text, "The road to Goldshire was quiet.")
-			expect.equal(entry.visibility, "public")
+			expect.equal(entry.visibility, "private", "journal notes are never part of the profile")
 			expect.equal(section.rows[1].entry.id, entry.id, "shown at the top of the list")
 		end)
 
@@ -97,7 +97,8 @@ return function(t, expect)
 			expect.falsy(byKind.event.edit:IsShown())
 			expect.falsy(byKind.event.delete:IsShown())
 			expect.truthy(byKind.note.edit:IsShown())
-			expect.truthy(byKind.event.vis:IsShown(), "visibility can still change")
+			expect.truthy(byKind.event.mark:IsShown(), "an event can still be marked as defining")
+			expect.equal(byKind.event.vis, nil, "no visibility chip")
 		end)
 
 		t:it("a milestone arriving while editing does not discard the draft", function()

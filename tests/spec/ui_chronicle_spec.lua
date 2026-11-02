@@ -1,4 +1,5 @@
 -- L2: the Chronicle section (narrative records in the window). Mocked client.
+local Loader = require("support.loader")
 local Boot = require("support.boot")
 
 local CHAR = "Testchar-TestRealm"
@@ -7,7 +8,7 @@ local function click(button)
 	button:GetScript("OnClick")(button)
 end
 
-return function(t, expect)
+local function legacySpec(t, expect)
 	local function start()
 		local mock, env, ns = Boot.Start()
 		mock.Slash("set name Lirael")
@@ -86,7 +87,7 @@ return function(t, expect)
 				return left, { "remove", "Remove" }
 			end,
 			function(read)
-				local left = { { "edit", "Edit" }, { "dispute", "Dispute" }, { "inner", "Inner: Private" } }
+				local left = { { "edit", "Edit" }, { "dispute", "Dispute" }, { "steps", "Steps" } }
 				if read then left[#left + 1] = { "read", "Read" } end
 				return left, { "remove", "Remove" }
 			end,
@@ -344,7 +345,7 @@ return function(t, expect)
 	end)
 
 	t:describe("Chronicle section (L2)", function()
-		t:it("adds a memory from a form and shows its provenance, status and visibility", function()
+		t:it("adds a memory from a form and shows its provenance and status, nothing to classify", function()
 			local _, env, _, section = start()
 			expect.truthy(section.empty:IsShown())
 			click(section.new)
@@ -358,8 +359,7 @@ return function(t, expect)
 			expect.equal(row.text:GetText(), "The day the grove burned")
 			expect.equal(row.chip.label:GetText(), "Ordinary")
 			expect.deepEqual(chips(row), { "Your words", "Established" })
-			expect.truthy(row.vis:IsShown())
-			expect.equal(row.vis:GetText(), "Private")
+			expect.equal(row.vis, nil, "no visibility chip")
 		end)
 
 		t:it("keeps a form open with the reason when saving is refused", function()
@@ -373,18 +373,45 @@ return function(t, expect)
 			expect.equal(#env.DawnwardChroniclesDB.characters[CHAR].story.memories, 0)
 		end)
 
-		t:it("accepts a suggestion; public is refused until then", function()
+		t:it("accepts a suggestion", function()
 			local _, env, ns, section = start()
 			local char = env.DawnwardChroniclesDB.characters[CHAR]
 			ns.Memories.Add(char, { text = "Suggested" }, "suggested", 1)
 			ns.MainWindow.Refresh()
 			local row = section.rows[1]
-			click(button(row, "Private")) -- private -> public: refused for a proposal
-			expect.equal(char.story.memories[1].visibility, "private")
 			click(button(row, "Accept"))
 			expect.equal(char.story.memories[1].status, "established")
-			click(button(section.rows[1], "Private"))
-			expect.equal(char.story.memories[1].visibility, "public")
+			expect.equal(char.story.memories[1].visibility, "private", "the stored value is left alone")
+		end)
+
+		t:it("offers no visibility form field, chip or Inner button on any tab", function()
+			local mock, _, _, section = start()
+			mock.Slash("stance add The Circle; Loyal; Doubts its leaders")
+			mock.Slash("goal add Find a ship")
+			mock.Slash("arc add Belonging")
+			for _, id in ipairs({ "memories", "arcs", "goals", "identity", "people" }) do
+				tab(section, id)
+				click(section.new)
+				for _, r in ipairs(section.form.rows) do
+					if r.field then
+						expect.falsy(r.field.key == "visibility", id .. ": no Visibility field")
+						expect.falsy(r.field.label:find("Private", 1, true) or r.field.label:find("Public", 1, true),
+							id .. ": " .. r.field.label)
+					end
+				end
+				click(section.form.cancel)
+				for _, row in ipairs(section.rows) do
+					if row:IsShown() then
+						for _, b in ipairs(row.buttons) do
+							if b:IsShown() then
+								local text = b:GetText() or ""
+								expect.falsy(text:find("Inner", 1, true) or text:find("Private", 1, true)
+									or text:find("Public", 1, true) or text:find("Secret", 1, true), id .. ": " .. text)
+							end
+						end
+					end
+				end
+			end
 		end)
 
 		t:it("creates and edits arcs, goals, stances and people without slash commands", function()
@@ -506,8 +533,8 @@ return function(t, expect)
 			expect.equal(d.back:GetText(), "<  Back to memories")
 			expect.falsy(pcall(button, d, "Read"), "no Read inside the full view")
 			-- The record's own actions work from the full view.
-			click(button(d, "Private"))
-			expect.equal(char.story.memories[1].visibility, "public")
+			click(button(d, "Dispute"))
+			expect.equal(char.story.memories[1].status, "disputed")
 			expect.truthy(d:IsShown(), "the full view stays on its record after an action")
 			click(button(d, "Edit"))
 			expect.truthy(section.form:IsOpen())
@@ -549,9 +576,9 @@ return function(t, expect)
 			mock.Slash("stance add The Cenarion Circle; Loyal; Doubts its leaders")
 			tab(section, "review")
 			expect.truthy(section.rows[1]:IsShown())
-			local answer = button(section.rows[1], "Secret")
+			local answer = button(section.rows[1], "Intended")
 			expect.equal(answer.variant, "default", "a real button (filled, with an edge), not a quiet label")
-			expect.truthy(answer.tooltipText:find("hides", 1, true) or answer.tooltipText:find("hidden", 1, true))
+			expect.truthy(answer.tooltipText:find("means it", 1, true))
 			click(answer)
 			local story = env.DawnwardChroniclesDB.characters[CHAR].story
 			expect.equal(story.reviews[1].choice, "secret")
@@ -559,4 +586,9 @@ return function(t, expect)
 			expect.falsy(section.rows[1]:IsShown())
 		end)
 	end)
+end
+
+-- These specs model characters an earlier version created (Loader.Legacy).
+return function(t, expect)
+	Loader.Legacy(function() legacySpec(t, expect) end)
 end

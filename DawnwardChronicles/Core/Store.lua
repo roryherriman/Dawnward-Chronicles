@@ -46,6 +46,10 @@ function Store:GetCharacter(key)
 	return self:Root().characters[key]
 end
 
+-- New characters start on the whole-profile model. Tests that model data
+-- saved by an earlier version turn this off to create characters as 0.9 did.
+Store.ADOPT_NEW_CHARACTERS = true
+
 local function ensureIn(root, readOnlyReason, key, now)
 	local char = root.characters[key]
 	if char then
@@ -58,6 +62,12 @@ local function ensureIn(root, readOnlyReason, key, now)
 		return nil, "the character limit (" .. Schema.LIMITS.characters .. ") has been reached"
 	end
 	char = Schema.NewCharacter(now)
+	-- A character first seen by this version has nothing an earlier version
+	-- kept back: its whole profile publishes (Core/Publication.lua), however
+	-- it is created (setup, a command, an automatic event).
+	if Store.ADOPT_NEW_CHARACTERS then
+		ns.Publication.Adopt(char, now)
+	end
 	root.characters[key] = char
 	return char
 end

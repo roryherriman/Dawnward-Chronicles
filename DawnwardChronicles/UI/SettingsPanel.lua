@@ -25,8 +25,8 @@ SettingsPanel.LAYOUT = { navHeight = 36, navItem = 104, done = 96, pageTop = 50,
 	control = 360, button = 200, tile = 40, minSegment = 64, segmentPad = 20 }
 local LAY = SettingsPanel.LAYOUT
 
-SettingsPanel.BACKUP_HINT = "A backup includes private entries but not secrets "
-	.. "(to include them: /dawnward export backup secrets). Sharing exports contain public facts only."
+SettingsPanel.BACKUP_HINT = "A backup holds everything about this character, so keep it to yourself. "
+	.. "An export for sharing holds your profile only."
 
 -- Story settings, each shown as a segmented control. values: the cycle order
 -- (NextValue, the chat commands' order); order: the order on screen when it
@@ -58,14 +58,14 @@ SettingsPanel.STORY_SETTINGS = {
 		short = "Personality changes wait for you, or apply at once.",
 		help = "Ask: personality changes wait for your approval. Auto: applied at once, still reversible." },
 	{ key = "drafts", label = "Drafts", values = { true, false },
-		short = "A private journal draft for each answer.",
-		help = "Write a private journal draft for each answer." },
+		short = "A journal draft for each answer.",
+		help = "Write a journal draft for each answer (only for you, never part of your profile)." },
 	{ tracking = "quest", label = "Quests", values = { true, false },
 		short = "Record completed quests as story events.",
 		help = "Record completed quests as story events." },
 	{ key = "trp3Style", label = "TRP3 style", values = { "neutral", "silverhand", "arcane" },
 		short = "How Dawnward's own section looks in Total RP 3.",
-		help = "How Dawnward's own section looks in Total RP 3 (only if you turned biography sync on)." },
+		help = "How Dawnward's own section looks in Total RP 3, once it is connected." },
 }
 
 local function currentValue(setting, prefs)
@@ -305,16 +305,16 @@ local function create(parent)
 	panel.minimap:SetScript("OnClick", function() run("minimap") end)
 	Widgets.Tooltip(panel.minimap, "Minimap button", "Show or hide the Dawnward button on the minimap. "
 		.. "Drag the button to move it.")
-	generalRow(2, "Guide", "How the journal, story moments, privacy and Total RP 3 work.")
+	generalRow(2, "Guide", "How the journal, story moments, your profile and Total RP 3 work.")
 	panel.guide = rowButton(rows[2], "Open the guide", LAY.button)
 	panel.guide:SetScript("OnClick", function() run("guide") end)
 	generalRow(3, "First-time setup", "Walk through the setup steps again.",
-		"Walk through the setup steps again: name, story moments, privacy and appearance. Nothing is saved until "
+		"Walk through the setup steps again: name, story, appearance and Total RP 3. Nothing is saved until "
 			.. "you choose Finish.")
 	panel.setup = rowButton(rows[3], "Run setup", LAY.button)
 	panel.setup:SetScript("OnClick", function() run("setup") end)
-	Widgets.Tooltip(panel.setup, "First-time setup", "Walk through the setup steps again: name, story moments, "
-		.. "privacy and appearance. Nothing is saved until you choose Finish.")
+	Widgets.Tooltip(panel.setup, "First-time setup", "Walk through the setup steps again: name, story, "
+		.. "appearance and Total RP 3. Nothing is saved until you choose Finish.")
 	generalRow(4, "Window size", "Drag the gold grip in the bottom-right corner to resize.",
 		"Drag the gold grip in the bottom-right corner to resize the window. Reset returns it to its design size.")
 	panel.resetSize = rowButton(rows[4], "Reset window size", LAY.button)
@@ -367,11 +367,12 @@ local function create(parent)
 	panel.exportBackup = Widgets.Button(backup.inner, "Export backup", 150, Style.CONTROL.compact)
 	panel.exportBackup:SetPoint("TOPLEFT", 0, by)
 	panel.exportBackup:SetScript("OnClick", function() run("export backup") end)
-	Widgets.Tooltip(panel.exportBackup, "Export backup", "Everything except secrets, as text to copy and keep.")
+	Widgets.Tooltip(panel.exportBackup, "Export backup", "Everything about this character, as text to copy and "
+		.. "keep. Keep it to yourself.")
 	panel.exportShare = Widgets.Button(backup.inner, "Export for sharing", 170, Style.CONTROL.compact)
 	panel.exportShare:SetPoint("LEFT", panel.exportBackup, "RIGHT", 8, 0)
 	panel.exportShare:SetScript("OnClick", function() run("export share") end)
-	Widgets.Tooltip(panel.exportShare, "Export for sharing", "Public facts only, as text to give to someone.")
+	Widgets.Tooltip(panel.exportShare, "Export for sharing", "Your profile only, as text to give to someone.")
 	panel.import = Widgets.Button(backup.inner, "Import backup", 150, Style.CONTROL.compact)
 	panel.import:SetPoint("LEFT", panel.exportShare, "RIGHT", 8, 0)
 	panel.import:SetScript("OnClick", function() run("import") end)

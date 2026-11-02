@@ -17,7 +17,7 @@ end
 
 local function click(b) b:GetScript("OnClick")(b) end
 
-return function(t, expect)
+local function legacySpec(t, expect)
 	local ns = Loader.WithTRP3()
 	local Schema, AxisMeanings, Evolution, Arcs, Goals = ns.Schema, ns.AxisMeanings, ns.Evolution, ns.Arcs, ns.Goals
 
@@ -215,8 +215,12 @@ return function(t, expect)
 				expect.falsy(about:find(text, 1, true), text .. " not in the Total RP 3 block")
 			end
 			expect.falsy(public.story)
-			-- A personal backup without secrets keeps the private ones and leaves the secret arc out.
-			local backup = ns.Transfer.Decode(ns.Transfer.Export(c, "backup", {})).character
+			-- A personal backup (v0.10) holds every arc and goal.
+			local full = ns.Transfer.Decode(ns.Transfer.Export(c, "backup", {})).character
+			expect.equal(#full.story.arcs, 2)
+			expect.equal(#full.story.goals, 2)
+			-- A backup as older versions made it (no secrets) kept the private ones and left the secret arc out.
+			local backup = ns.Transfer.Decode(ns.Transfer.Export(c, "backup", { includeSecrets = false })).character
 			local titles = {}
 			for _, a in ipairs(backup.story.arcs) do titles[a.title] = true end
 			expect.truthy(titles["Become a paladin"])
@@ -250,17 +254,20 @@ return function(t, expect)
 
 	--- #13 ----------------------------------------------------------------------------------
 
-	t:describe("publishing a journal entry (#13, L1)", function()
-		t:it("the preview names exactly the entry text and where it can appear", function()
-			local note = { kind = "note", title = "The bridge", text = "We held it." }
-			local text = ns.Journal.PublicPreview(note)
-			expect.truthy(text:find("The bridge\nWe held it.", 1, true))
-			expect.truthy(text:find("share exports", 1, true))
-			expect.falsy(text:find("Total RP 3", 1, true), "a plain note never reaches Total RP 3")
-			local moment = { kind = "story", status = "approved", important = true, title = "T", text = "x" }
-			expect.truthy(ns.Journal.PublicPreview(moment):find("Total RP 3 biography block", 1, true))
-			local long = { kind = "note", text = string.rep("y", 2000) }
-			expect.truthy(#ns.Journal.PublicPreview(long) < 1000)
+	t:describe("journal entries and the profile (#13, v0.10, L1)", function()
+		t:it("a journal note never reaches the published profile; an approved defining moment does", function()
+			local c = fresh()
+			ns.Publication.Adopt(c, 1)
+			local note = ns.Journal.AddNote(c, { title = "The bridge", text = "We held it." }, 2)
+			ns.Journal.SetVisibility(c, note.id, "public", 3)
+			local draft = ns.Journal.AddStoryDraft(c, { title = "The vow", text = "I swore it." }, 4)
+			local public = ns.Projection.GetPublic(c)
+			expect.equal(#public.journal, 0, "a note, even one an older version marked Public, and a draft")
+			ns.Journal.Approve(c, draft.id, 5)
+			ns.Journal.SetImportant(c, draft.id, true, 6)
+			public = ns.Projection.GetPublic(c)
+			expect.equal(#public.journal, 1)
+			expect.equal(public.journal[1].title, "The vow")
 		end)
 	end)
 
@@ -271,11 +278,11 @@ return function(t, expect)
 		local mock, env, ns2 = Boot.Start()
 		mock.Slash("set name Aelin")
 		mock.Slash("set summary A |cff00ff00green|r line\nwith a break and \195\169")
-		mock.Slash("vis summary public")
+		mock.Vis("vis summary public")
 		mock.Slash("fact add origin Born in Lordaeron")
-		mock.Slash("fact vis 1 public")
+		mock.Vis("fact vis 1 public")
 		mock.Slash("fact add fear Deep water")
-		mock.Slash("fact vis 2 secret")
+		mock.Vis("fact vis 2 secret")
 		mock.Slash("family add sister Ilsa")
 		mock.Slash("history add as a child; Saw the Plague")
 		mock.Slash("journal add The bridge")
@@ -334,9 +341,9 @@ return function(t, expect)
 			expect.deepEqual(comparable(ns3, env2.DawnwardChroniclesDB.characters[CHAR]), comparable(ns2, char))
 		end)
 
-		t:it("a backup without secrets restores the rest and keeps the current secrets", function()
+		t:it("an older backup without secrets restores the rest and keeps the current secrets", function()
 			local mock, env, ns2, char = richCharacter()
-			local text = ns2.Transfer.Export(char, "backup", { characterKey = CHAR })
+			local text = ns2.Transfer.Export(char, "backup", { characterKey = CHAR, includeSecrets = false })
 			expect.falsy(text:find("Deep water", 1, true))
 			mock.Slash("fact add belief Added after the backup")
 			ns2.Commands.StageImport(ns2.ctx, text)
@@ -492,4 +499,9 @@ return function(t, expect)
 			expect.truthy(#char.story.events > 0, "tracking continues")
 		end)
 	end)
+end
+
+-- These specs model characters an earlier version created (Loader.Legacy).
+return function(t, expect)
+	Loader.Legacy(function() legacySpec(t, expect) end)
 end

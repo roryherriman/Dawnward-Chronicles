@@ -79,7 +79,7 @@ This checklist will be filled in for each release from v0.1 onward. For each run
 | 2 | Log in | No Lua errors. No chat messages from Dawnward unless something needed repairing. | |
 | 3 | `/dawnward` | Status: version 0.1.0, "WoW Classic Era", real data, "Profile: none yet", a TRP3 line | |
 | 4 | `/dawnward set name <name>`, then `/dawnward show` | Name shown as `[private]` | |
-| 5 | `/dawnward vis name public`, `/dawnward set summary Some text`, `/dawnward show public` | Only the name is listed | |
+| 5 | `/dawnward vis name public`, `/dawnward set summary Some text`, `/dawnward show profile` | v0.10: `vis` replies "Per-item visibility is no longer used" and changes nothing; `show profile` lists what Total RP 3 receives (everything once the profile is published; before `/dawnward publish confirm` an older character lists only what it marked Public) | |
 | 6 | `/dawnward family add mother Test Name`, `/dawnward family set 1 status living`, `/dawnward family list` | `#1 mother: Test Name (living) [private]` | |
 | 7 | `/dawnward history add Joined the guard`, `/dawnward history set 2 when Year 3` | Listed as `#2 Year 3: Joined the guard` | |
 | 8 | `/dawnward family remove 1` | Asks for `confirm` and nothing is removed. Then `... remove 1 confirm` removes it. | |
@@ -223,7 +223,7 @@ This covers v0.3 M1 (character foundations) and the **experimental** Total RP 3 
 |---|---|---|
 | A1 | With the game closed, back up `WTF/Account/<account>/SavedVariables/DawnwardChronicles.lua` and `totalRP3.lua` (copy them somewhere safe). Install the build. | Copies exist |
 | A2 | Log in on the character with v0.2 data. `/dawnward status`, `/dawnward show`, open the journal. | No errors. Status says 0.3.0-dev and shows `Foundations: 0 facts, 0 suggestions, biography stored: no`. All v0.2 data unchanged. Chat may say "upgraded from schema 2". |
-| A3 | `/dawnward fact add belief Protect those who cannot protect themselves`, `/dawnward fact list`, `/dawnward fact vis 1 public` | Added as private, listed under Belief, then public |
+| A3 | `/dawnward fact add belief Protect those who cannot protect themselves`, `/dawnward fact list`, `/dawnward fact vis 1 public` | Added, listed under Belief with no visibility tag; `fact vis` replies that per-item visibility is no longer used (v0.10) |
 | A4 | `/reload`, then `/dawnward fact list`; log out and in, then list again | The fact and its visibility persist |
 | A5 | `/dawnward export share`, then `/dawnward export backup` | Share contains the public fact. Backup contains it, and the window title has **no** "(with stored biography)". |
 | A6 | `/dawnward fact remove 1`, then `/dawnward fact remove 1 confirm` | Asks first, then removes it |
@@ -620,7 +620,7 @@ Build: **0.7.0-dev** from `main`. Everything here has passed automated tests (L2
 | S4.1 | Character: three left panels (Identity, Background & biography, Summary & motivation), tiles three to a row; Personality and Family & relationships on the right; each set field has a visibility chip and Edit inside its tile. |
 | S4.2 | Click a chip to cycle; Edit a field: Enter saves, Escape cancels, empty value shows its error under the field; Add opens the editor on an empty field. |
 | S4.3 | Answer a moment that proposes a personality change (approval "ask"): "1 change waits…", per-axis note; "Review in Story" opens Story. |
-| S4.4 | Name Public, faith Secret, then "Preview public view": only public data, matching /dawnward show public; "Back to profile" returns. |
+| S4.4 | v0.10: no visibility chips and no "Preview public view". An older character shows the one-line callout with "Publish whole profile…"; confirming publishes the whole profile and the callout goes. |
 | S4.5 | "Total RP 3…" opens Settings → Total RP 3. |
 | S4.6 | "Showcase": live model in current gear; turn with < >, drag, wheel; zoom - +; equip another item and the model updates. |
 | S4.7 | "In game": level, race, class (class colour), guild (or "No guild"), realm; "Your character": only what you wrote, with visibility chips. |
@@ -751,7 +751,7 @@ Parts **T** (the 0.7.1 fixes) and **Q** (gameplay time) still apply; the steps b
 | # | Area | Steps | Pass when |
 |---|---|---|---|
 | U1 | New-character onboarding | Log in on a brand-new character | The setup wizard opens by itself once. Go through all six steps, and on the Character step use **Import a story...** with a short backstory. Close it mid-way, `/reload`: it resumes where you left off. Finish: the journal opens; nothing is sent to Total RP 3 |
-| U2 | Character profile | Character: fill name, title, pronouns, homeland, faith, summary; set some Public, one Secret; **Preview public view** | The preview shows only Public fields; the Secret one appears nowhere |
+| U2 | Character profile | Character: fill name, title, pronouns, homeland, faith, summary | Tiles and cards show the value and Edit only; no Public / Private / Secret anywhere; an older character shows the "Publish whole profile…" callout until confirmed |
 | U3 | Story import | `/dawnward biography`: approve one piece (edited), skip one, keep one for later; approve one as Public | Only approved pieces become facts (Private by default). Public asks first and shows the exact text. Re-saving the same story suggests only new sentences |
 | U4 | Character Showcase | Character → **Showcase** | The live model in your gear (else run `/dawnward dev showcase` and send the lines). Portrait ↔ live model switches every time (part T1–T6) |
 | U5 | Resizable window | Drag the gold grip; `/reload`; Settings → General → Reset window size | Part T7–T10 |

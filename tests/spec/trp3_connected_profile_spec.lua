@@ -2,6 +2,7 @@
 -- Overview), the one-step connection, automatic updates after it, the
 -- profile preview and the biography's own visibility, through the whole
 -- addon under the WoW mock and the TRP3 3.4.1 fake (not in-game evidence).
+local Loader = require("support.loader")
 local Boot = require("support.boot")
 local Fake = require("fakes.trp3_341")
 
@@ -56,7 +57,7 @@ local function newCharacter(mock, ns)
 	return char
 end
 
-return function(t, expect)
+local function legacySpec(t, expect)
 	t:describe("connected profile: Overview and one-step connection (L2)", function()
 		t:it("shows the profile at a glance, and connects everything after one confirmation", function()
 			-- A fresh Total RP 3 profile: the first name is the game's own (replaceable).
@@ -163,7 +164,7 @@ return function(t, expect)
 			local mock, env, ns = start()
 			mock.Slash("set name Lirael")
 			mock.Slash("set faith The Light")
-			mock.Slash("vis faith secret")
+			mock.Vis("vis faith secret")
 			local page = open(ns)
 			expect.truthy(page.switchModel:IsShown())
 			click(page.switchModel)
@@ -177,21 +178,32 @@ return function(t, expect)
 			expect.falsy(page.switchModel:IsShown(), "only once")
 		end)
 
-		t:it("sets the biography's own visibility, and only a Public one reaches Total RP 3", function()
+		t:it("keeps an older character's story back until the one-time confirmation; the retired "
+			.. "visibility command changes nothing", function()
 			local mock, env, ns, fake = start()
 			mock.Slash("set name Lirael")
 			ns.Actions.WithCharacter(ns.ctx, function(c)
 				return ns.Sources.Capture(c, "paste", "An older story.", nil, 5)
 			end)
-			expect.truthy(mock.Slash("biography status"):find("saved verbatim; private", 1, true))
+			expect.truthy(mock.Slash("biography status"):find("saved verbatim.", 1, true))
 			mock.Slash("trp3 enable about confirm")
 			mock.Slash("story set trp3About profile")
 			mock.RunTimers()
-			expect.falsy(fake.profile.player.about.T1.TX:find("An older story", 1, true), "Private: never sent")
-			expect.truthy(mock.Slash("biography public"):find("now Public", 1, true))
+			expect.falsy(fake.profile.player.about.T1.TX:find("An older story", 1, true), "kept back: never sent")
+			expect.truthy(mock.Slash("biography public"):find(ns.Commands.RETIRED_VISIBILITY, 1, true))
+			mock.RunTimers()
+			expect.falsy(fake.profile.player.about.T1.TX:find("An older story", 1, true), "still kept back")
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			expect.equal(char.sources.visibility, "private", "nothing changed")
+			mock.Slash("publish confirm")
 			mock.RunTimers()
 			expect.truthy(fake.profile.player.about.T1.TX:find("An older story.", 1, true))
-			expect.equal(env.DawnwardChroniclesDB.characters[CHAR].sources.visibility, "public")
+			expect.equal(char.sources.visibility, "private", "the stored value is kept; it no longer decides")
 		end)
 	end)
+end
+
+-- These specs model characters an earlier version created (Loader.Legacy).
+return function(t, expect)
+	Loader.Legacy(function() legacySpec(t, expect) end)
 end

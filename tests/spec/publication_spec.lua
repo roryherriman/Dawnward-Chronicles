@@ -5,7 +5,7 @@
 local Loader = require("support.loader")
 local Boot = require("support.boot")
 
-return function(t, expect)
+local function legacySpec(t, expect)
 	local function legacy(ns)
 		local char = ns.Schema.NewCharacter(1)
 		ns.Character.SetField(char, "name", "Lirael", 2)
@@ -165,7 +165,7 @@ return function(t, expect)
 			local mock, env, ns = Boot.Start()
 			mock.Slash("set name Lirael")
 			mock.Slash("set faith The Light")
-			mock.Slash("vis faith secret")
+			mock.Vis("vis faith secret")
 			local before = ns.Util.DeepCopy(env.DawnwardChroniclesDB.characters["Testchar-TestRealm"])
 			local reply = mock.Slash("publish")
 			expect.truthy(reply:find("Nothing changes until you confirm", 1, true))
@@ -181,4 +181,9 @@ return function(t, expect)
 			expect.falsy(ns.Publication.IsComplete(env.DawnwardChroniclesDB.characters["Testchar-TestRealm"]))
 		end)
 	end)
+end
+
+-- These specs model characters an earlier version created (Loader.Legacy).
+return function(t, expect)
+	Loader.Legacy(function() legacySpec(t, expect) end)
 end

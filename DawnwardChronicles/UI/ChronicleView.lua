@@ -5,8 +5,7 @@
 --   Memories, Arcs, Goals, Stances, People   records as cards in two
 --       columns, each card as tall as its content: a status chip and the
 --       date on top, the title, a meta line, the text, chips (where it came
---       from, canon status, visibility; the visibility chip is a button that
---       cycles it), a goal's progress from its real milestones or verified
+--       from, canon status), a goal's progress from its real milestones or verified
 --       objective, and the record's actions in a row at the bottom (Remove on
 --       the right). A card that cannot show everything offers Read, the full
 --       view of the record with the same actions. New and Edit open a form,
@@ -16,9 +15,9 @@
 --       (UI/ChroniclePlaces.lua): mark a place as meaningful, link it as the
 --       homeland, or write a memory there
 --   Review                                   continuity findings as cards,
---       answered as growth / unreliable / secret / correction / ignore.
+--       answered as growth / unreliable / intended / correction / ignore.
 --       Examine (top right of a finding) shows the records behind it side
---       by side, with their dates, origin, canon status and visibility;
+--       by side, with their dates, origin and canon status;
 --       Edit opens a record's own form (Dawnward never corrects it for you);
 --       Explain keeps the player's note with an answer. "Answered" lists
 --       the answers given, each with Undo answer.
@@ -48,24 +47,24 @@ ChronicleView.TABS = {
 }
 ChronicleView.REVIEW_CHOICES = { "growth", "unreliable", "secret", "correction", "ignore" }
 -- How each answer reads on its button, and what it means (tooltip).
-ChronicleView.REVIEW_LABELS = { growth = "Growth", unreliable = "Unreliable", secret = "Secret",
+-- ("secret" is the stored id of the Intended answer.)
+ChronicleView.REVIEW_LABELS = { growth = "Growth", unreliable = "Unreliable", secret = "Intended",
 	correction = "Correct it", ignore = "Ignore" }
 ChronicleView.REVIEW_HELP = {
 	growth = "Your character changed: both records stay true for their time.",
 	unreliable = "Your character believes something that is not so.",
-	secret = "Deliberate: it stays, and its private side stays hidden.",
+	secret = "Intended: your character means it. Both records stay as they are.",
 	correction = "A mistake you will fix yourself. Nothing is changed for you.",
 	ignore = "Not a problem. The finding is set aside.",
 	explained = "Your own explanation, kept with the answer.",
 }
 -- Answers as they read on an answered card (and in the Explain form).
-ChronicleView.ANSWER_LABELS = { growth = "Growth", unreliable = "Unreliable", secret = "Secret",
+ChronicleView.ANSWER_LABELS = { growth = "Growth", unreliable = "Unreliable", secret = "Intended",
 	correction = "Correction", ignore = "Ignored", explained = "Explained" }
 ChronicleView.EXAMINE_HELP = "See the records behind this finding side by side, with their dates and where they came "
 	.. "from, and edit either one yourself."
 ChronicleView.UNDO_HELP = "Takes this answer back. The finding returns if the records still disagree, and anything "
-	.. "the answer changed is put back, except that nothing becomes Public again: a hidden side that was Public "
-	.. "comes back as Private."
+	.. "the answer changed is put back."
 
 -- Layout in section units (the content area is 772 x 588, the mockup's main
 -- column; ChronicleMemories.dc.html). Tabs on top (a 34 px segmented row on
@@ -199,16 +198,9 @@ function ChronicleView.ChipWidth(text)
 	return math.ceil(ns.Style.TextWidth(text, "small") * 1.04) + 2 * ns.Widgets.CHIP_PAD + 2
 end
 
---- Width of the visibility chip (a button) for a level. Pure.
-function ChronicleView.VisibilityWidth(level)
-	local label = ns.Themes.VISIBILITY_LABELS[level] or level or "Private"
-	return math.ceil(ns.Style.TextWidth(label, "buttonSmall")) + 26
-end
-
---- Places chips ({ { text, tone } }) and then the visibility chip (vis, a
--- level, or nil) in rows of width. Returns { items = { { x, y, w } }, vis =
--- { x, y, w } or nil, rows, height }. Pure.
-function ChronicleView.ChipRows(chips, vis, width, L)
+--- Places chips ({ { text, tone } }) in rows of width. Returns { items =
+-- { { x, y, w } }, rows, height }. Pure.
+function ChronicleView.ChipRows(chips, width, L)
 	L = L or ChronicleView.LAYOUT
 	local out = { items = {} }
 	local x, row = 0, 0
@@ -223,8 +215,7 @@ function ChronicleView.ChipRows(chips, vis, width, L)
 		if i > L.chips then break end
 		out.items[i] = put(ChronicleView.ChipWidth(c[1]))
 	end
-	if vis then out.vis = put(ChronicleView.VisibilityWidth(vis)) end
-	local any = #out.items > 0 or out.vis ~= nil
+	local any = #out.items > 0
 	out.rows = any and row + 1 or 0
 	out.height = any and (out.rows * L.chipRow + row * L.chipGap) or 0
 	return out
@@ -232,7 +223,7 @@ end
 
 --- Rectangles of one card's parts, relative to its top-left corner (y grows
 -- downwards), and its height. content is CardContent's result, plus
--- content.vis (the record's visibility, for its chip) and content.examine
+-- content.examine
 -- (a finding: the Examine button in the top row). actions(read) returns the
 -- card's buttons (left, right; see ChronicleView.Actions); read is true when
 -- the card cannot show everything. Pure.
@@ -276,9 +267,9 @@ function ChronicleView.CardLayout(content, actions, L)
 		r.progress = { x = pad, y = y, w = inner, h = L.progressHeight }
 		y = y + L.progressHeight + L.gap
 	end
-	local chips = ChronicleView.ChipRows(content.chips, content.vis, inner, L)
+	local chips = ChronicleView.ChipRows(content.chips, inner, L)
 	if chips.rows > 0 then
-		r.chips = { x = pad, y = y, w = inner, h = chips.height, items = chips.items, vis = chips.vis }
+		r.chips = { x = pad, y = y, w = inner, h = chips.height, items = chips.items }
 		y = y + chips.height + L.gap
 	end
 	r.truncated = cut
@@ -349,7 +340,7 @@ local ARC_KIND = { growth = "Growth", goal = "Goal", conflict = "Conflict", conv
 	relationship = "Relationship", other = "Other" }
 local PERSON = { npc = "Someone in the world", player = "Player character", family = "Family", other = "Other" }
 local FINDING = { persona = "Stance", personality = "Personality", disputed = "Disputed record", goal = "Goal",
-	duplicate = "Possible duplicate", privacy = "Privacy", publicfact = "Public stance and fact", date = "Dates",
+	duplicate = "Possible duplicate", publicfact = "Stance and fact", date = "Dates",
 	replaced = "Replaced record" }
 local SIDE_STATUS = { established = "Established", proposed = "Suggested", disputed = "Disputed",
 	superseded = "Superseded", observed = "Observed", verified = "Verified", partial = "Partial" }
@@ -411,11 +402,10 @@ function ChronicleView.CardContent(listId, r, char, now)
 		if r.deliberate then
 			c.chip = c.chip or { "Deliberate contradiction", "accent" }
 		elseif ns.Identity.Contradicts(r) then
-			c.chip = c.chip or { "Public and private differ", "muted" }
+			c.chip = c.chip or { "Persona and conviction differ", "muted" }
 		end
 		c.title = r.subject
-		c.text = string.format("In public: %s\nPrivately (%s): %s", r.persona or "-",
-			ns.Themes.VISIBILITY_LABELS[r.convictionVisibility] or r.convictionVisibility, r.conviction or "-")
+		c.text = string.format("Persona: %s\nInner conviction: %s", r.persona or "-", r.conviction or "-")
 	elseif listId == "people" then
 		c.chip = c.chip or { PERSON[r.kind] or r.kind, r.kind == "family" and "accent" or "muted" }
 		c.title = r.name .. (r.realm and ("-" .. r.realm) or "")
@@ -452,10 +442,6 @@ function ChronicleView.ReviewContent(item, now)
 		end
 		if side.where then meta[#meta + 1] = "edit it in " .. side.where end
 		c.meta = #meta > 0 and table.concat(meta, " · ") or nil
-		if side.visibility then
-			c.chips[#c.chips + 1] = { ns.Themes.VISIBILITY_LABELS[side.visibility] or side.visibility,
-				side.visibility == "secret" and "secret" or "muted" }
-		end
 		return c
 	elseif kind == "explain" then
 		c.chip = { "Explain", "accent" }
@@ -471,7 +457,7 @@ function ChronicleView.ReviewContent(item, now)
 		c.meta = review.note and ("Your note: " .. review.note) or "No note"
 		return c
 	end
-	c.chip = { FINDING[item.kind] or "Continuity", item.kind == "privacy" and "secret" or "accent" }
+	c.chip = { FINDING[item.kind] or "Continuity", "accent" }
 	c.text = item.message
 	c.meta = kind == "finding" and "Examined: the records are shown side by side above."
 		or "What is it? Choose how your story reads it; canon is not changed."
@@ -514,8 +500,8 @@ function ChronicleView.ReviewItems(char, mode, key, findings)
 	return findings or ns.Continuity.Findings(char)
 end
 
---- Whether a record (or finding) matches a search, ignoring case. Private
--- feelings are not searched (they are not shown on the card). Pure.
+--- Whether a record (or finding) matches a search, ignoring case. A
+-- person's feelings are not searched (they are not shown on the card). Pure.
 function ChronicleView.Matches(listId, r, query)
 	if not query or query == "" then return true end
 	local fields
@@ -542,19 +528,16 @@ ChronicleView.EMPTY = {
 		.. "relationship. Start one with New arc; you decide when it turns, pauses or ends." },
 	goals = { "No goals yet", "Add what your character wants with New goal. A target level, or a standing with a "
 		.. "faction Dawnward has seen, shows verified progress; only you decide when it is achieved." },
-	identity = { "No stances yet", "A stance records how your character presents themselves about something, "
-		.. "and what they privately believe. The private side stays private unless you change it." },
+	identity = { "No stances yet", "A stance records how your character presents themselves about something "
+		.. "(the persona, part of your profile), and the inner conviction behind it (only for you)." },
 	people = { "No people yet", "Add someone your character knows with New person. Only you write this; nothing "
 		.. "is read from other players' profiles." },
 	review = { "Nothing to review", "Nothing to review: your story is consistent as far as Dawnward can tell. "
-		.. "Contradictions, duplicates and privacy risks appear here for you to answer." },
+		.. "Contradictions and duplicates appear here for you to answer." },
 	answered = { "No answers yet", "Findings you answer are listed here, with your notes. Any answer can be "
 		.. "taken back with Undo answer." },
 }
 
-local CYCLE = { private = "public", public = "secret", secret = "private" }
-
-local VISIBILITY = { { "private", "Private" }, { "public", "Public" }, { "secret", "Secret" } }
 local ARC_KINDS = { { "growth", "Growth" }, { "goal", "Goal" }, { "conflict", "Conflict" },
 	{ "conviction", "Conviction" }, { "relationship", "Relationship" }, { "other", "Other" } }
 local ARC_STATES = { { "active", "Active" }, { "paused", "Paused" }, { "concluded", "Concluded" },
@@ -578,7 +561,6 @@ FORMS.memories = function(r)
 			{ key = "title", label = "Title", kind = "line", errors = { "memory needs" } },
 			{ key = "text", label = "What happened", kind = "area" },
 			{ key = "importance", label = "Importance", kind = "cycle", values = IMPORTANCE },
-			not r and { key = "visibility", label = "Visibility", kind = "cycle", values = VISIBILITY } or nil,
 			not r and { key = "zone", label = "Where", kind = "line" } or nil,
 		},
 		values = r and { title = r.title, text = r.text, importance = r.importance } or {},
@@ -601,8 +583,7 @@ FORMS.arcs = function(r)
 			{ key = "title", label = "Title", kind = "line", errors = { "needs a title" } },
 			{ key = "summary", label = "Summary", kind = "area" },
 			{ key = "kind", label = "Kind", kind = "cycle", values = ARC_KINDS },
-			r and { key = "state", label = "State", kind = "cycle", values = ARC_STATES }
-				or { key = "visibility", label = "Visibility", kind = "cycle", values = VISIBILITY },
+			r and { key = "state", label = "State", kind = "cycle", values = ARC_STATES } or nil,
 		},
 		values = r and { title = r.title, summary = r.summary, kind = r.kind, state = r.state } or {},
 		save = function(char, v, now)
@@ -641,8 +622,7 @@ FORMS.goals = function(r)
 			{ key = "faction", label = "Or a faction", kind = "line",
 				errors = { "not both", "has not seen", "name a faction", "the standing must" } },
 			{ key = "standing", label = "Standing", kind = "cycle", values = STANDINGS },
-			r and { key = "state", label = "State", kind = "cycle", values = GOAL_STATES }
-				or { key = "visibility", label = "Visibility", kind = "cycle", values = VISIBILITY },
+			r and { key = "state", label = "State", kind = "cycle", values = GOAL_STATES } or nil,
 		},
 		values = r and { title = r.title, text = r.text, state = r.state,
 			target = o and o.kind == "level" and o.target or nil,
@@ -650,7 +630,7 @@ FORMS.goals = function(r)
 			standing = o and o.kind == "reputation" and o.target or nil } or {},
 		save = function(char, v, now)
 			if not r then
-				local g, err = ns.Goals.Add(char, { title = v.title, text = v.text, visibility = v.visibility }, now)
+				local g, err = ns.Goals.Add(char, { title = v.title, text = v.text }, now)
 				if not g then return nil, err end
 				local ok, why = objective(char, g.id, v, now)
 				if not ok then
@@ -672,12 +652,12 @@ end
 FORMS.identity = function(r)
 	return {
 		title = r and "Edit stance" or "New stance",
-		hint = "How your character presents themselves about something, and what they privately believe. "
-			.. "The private side stays private unless you change it.",
+		hint = "How your character presents themselves about something (the persona, part of your profile), and "
+			.. "the inner conviction behind it (never part of your profile).",
 		fields = {
 			{ key = "subject", label = "About", kind = "line", errors = { "needs a subject" } },
-			{ key = "persona", label = "In public", kind = "line", errors = { "public stance or a private conviction" } },
-			{ key = "conviction", label = "Privately", kind = "line" },
+			{ key = "persona", label = "Persona", kind = "line", errors = { "persona or an inner conviction" } },
+			{ key = "conviction", label = "Inner conviction", kind = "line" },
 			{ key = "deliberate", label = "Contradiction", kind = "cycle", values = YES_NO },
 		},
 		-- Adding with neither side gives one message for two causes: point at the empty one.
@@ -704,7 +684,7 @@ FORMS.people = function(r)
 			{ key = "kind", label = "Who", kind = "cycle", values = PERSON_KINDS },
 			{ key = "realm", label = "Realm (players)", kind = "line", errors = { "needs a realm" } },
 			{ key = "relation", label = "Relation", kind = "line" },
-			{ key = "feelings", label = "Private feelings", kind = "area" },
+			{ key = "feelings", label = "Their feelings", kind = "area" },
 		},
 		values = r and { name = r.name, kind = r.kind, realm = r.realm, relation = r.relation,
 			feelings = r.feelings } or { kind = "npc" },
@@ -757,7 +737,7 @@ end
 
 -- The Explain form: the player's note, kept with the answer they choose.
 local EXPLAIN_ANSWERS = { { "explained", "Explained: keep my note" }, { "growth", "Growth" },
-	{ "unreliable", "Unreliable" }, { "secret", "Secret" }, { "correction", "Correction" }, { "ignore", "Ignore" } }
+	{ "unreliable", "Unreliable" }, { "secret", "Intended" }, { "correction", "Correction" }, { "ignore", "Ignore" } }
 
 function ChronicleView.ExplainForm(finding)
 	return {
@@ -776,7 +756,6 @@ function ChronicleView.ExplainForm(finding)
 end
 
 ChronicleView.FORMS = FORMS
-ChronicleView.CYCLE = CYCLE
 ChronicleView.MilestoneForm = milestoneForm
 ChronicleView.TurningPointForm = turningPointForm
 
@@ -838,8 +817,6 @@ function ChronicleView.Actions(tabId, item, opts)
 	if item.status == "established" and m.Dispute then add("dispute") end
 	if tabId == "arcs" then add("turn")
 	elseif tabId == "goals" then add("steps")
-	elseif tabId == "identity" then
-		add("inner", "Inner: " .. (ns.Themes.VISIBILITY_LABELS[item.convictionVisibility] or item.convictionVisibility))
 	end
 	if opts.read then add("read") end
 	local right = (item.provenance == "player" or item.status == "proposed") and { "remove", A.remove } or nil
@@ -857,11 +834,10 @@ function ChronicleView.ClientCut(row, layout)
 	return false
 end
 
---- What a card shows for an item and where: content (CardContent plus vis
--- and examine) and layout (CardLayout). Pure.
+--- What a card shows for an item and where: content (CardContent plus
+-- examine) and layout (CardLayout). Pure.
 function ChronicleView.ItemLayout(tabId, item, char, now, L)
 	local content = ChronicleView.CardContent(tabId, item, char, now)
-	if tabId ~= "review" then content.vis = item.visibility or "private" end
 	content.examine = tabId == "review" and item.reviewKind == nil or nil
 	local layout = ChronicleView.CardLayout(content, function(read)
 		return ChronicleView.Actions(tabId, item, { read = read })
@@ -1032,7 +1008,7 @@ local function create(parent)
 	section.empty:SetWidth(L.width - 2 * Widgets.PANEL_PAD)
 
 	-- The parts every record view has (a card, and the full view): status
-	-- chip, date, title, meta, text, progress, chips, visibility, divider,
+	-- chip, date, title, meta, text, progress, chips, divider,
 	-- Examine and the action buttons. width: the text width.
 	local function addParts(row, width)
 		row.chip = Widgets.Chip(row, "", "muted")
@@ -1042,10 +1018,6 @@ local function create(parent)
 		row.progress = Widgets.ProgressBar(row, width, Style.CONTROL.progress)
 		row.chips = {}
 		for c = 1, L.chips do row.chips[c] = Widgets.Chip(row, "", "muted") end
-		row.vis = Widgets.VisibilityButton(row, function(level)
-			if row.onVisibility then row.onVisibility(level) end
-		end)
-		row.vis:SetHeight(L.chipRow)
 		row.divider = Widgets.Divider(row)
 		-- Review findings only: Examine, where a record card shows its date.
 		local er = ChronicleView.EXAMINE_RECT
@@ -1059,8 +1031,6 @@ local function create(parent)
 			row.actions[b] = button
 			row.buttons[b] = button
 		end
-		-- The visibility chip is one of the record's buttons too.
-		row.buttons[#row.buttons + 1] = row.vis
 	end
 
 	-- The card pool.
@@ -1130,11 +1100,6 @@ local function create(parent)
 			Widgets.Tooltip(button, "Read", ChronicleView.READ_HELP)
 		elseif id == "edit" and item.reviewKind == "side" then
 			Widgets.Tooltip(button, "Edit", "Correct this record yourself, in its own form.")
-		elseif id == "inner" then
-			Widgets.Tooltip(button, "Private side", string.format("Who may see what your character privately "
-				.. "believes: now %s. Click to change it to %s.",
-				ns.Themes.VISIBILITY_LABELS[item.convictionVisibility] or item.convictionVisibility,
-				ns.Themes.VISIBILITY_LABELS[ChronicleView.CYCLE[item.convictionVisibility]] or "Private"))
 		else
 			Widgets.Tooltip(button, nil)
 		end
@@ -1170,11 +1135,6 @@ local function create(parent)
 			return function() section:OpenForm(ChronicleView.TurningPointForm(r)) end
 		elseif id == "steps" then
 			return function() section:OpenForm(ChronicleView.MilestoneForm(r)) end
-		elseif id == "inner" then
-			return function()
-				act(function(char, now) return ns.Identity.SetConvictionVisibility(char, r.id,
-					ChronicleView.CYCLE[r.convictionVisibility], now) end)
-			end
 		elseif id == "read" then
 			return function() section.detailKey = itemKey(r); MainWindow.Refresh() end
 		elseif id == "remove" then
@@ -1209,16 +1169,10 @@ local function create(parent)
 				section.reviewMode, section.examineKey, section.page, section.detailKey = "examine", item.key, 1, nil
 				MainWindow.Refresh()
 			end)
-			row.onVisibility = nil
-		else
-			local m = ns[tabSpec(tabId).module]
-			row.onVisibility = function(level)
-				act(function(char, now) return m.SetVisibility(char, item.id, level, now) end)
-			end
 		end
 	end
 
-	-- Chips and the visibility chip at the positions of rect (= layout.chips).
+	-- Chips at the positions of rect (= layout.chips).
 	local function fillChips(row, rect, content)
 		for c, chip in ipairs(row.chips) do
 			local spec, at = content.chips[c], rect and rect.items[c]
@@ -1229,14 +1183,6 @@ local function create(parent)
 				chip:ClearAllPoints()
 				chip:SetPoint("TOPLEFT", rect.x + at.x, -(rect.y + at.y))
 			end
-		end
-		local vis = rect and rect.vis
-		row.vis:SetShown(vis ~= nil)
-		if vis then
-			row.vis:SetLevel(content.vis)
-			row.vis:SetWidth(vis.w)
-			row.vis:ClearAllPoints()
-			row.vis:SetPoint("TOPLEFT", rect.x + vis.x, -(rect.y + vis.y))
 		end
 	end
 
@@ -1307,7 +1253,6 @@ local function create(parent)
 	--- The full view of item: everything a card shows, nothing cut.
 	function section:ShowDetail(tabId, item, char, now)
 		local content = ChronicleView.CardContent(tabId, item, char, now)
-		if tabId ~= "review" then content.vis = item.visibility or "private" end
 		local d = self.detail
 		d.item, d.content = item, content
 		local spec = tabSpec(tabId)
@@ -1361,11 +1306,10 @@ local function create(parent)
 			bottom = bottom - L.gap
 		end
 		d.divider:SetShown(buttons ~= nil)
-		local chipRows = ChronicleView.ChipRows(content.chips, content.vis, dInner, L)
+		local chipRows = ChronicleView.ChipRows(content.chips, dInner, L)
 		local chips
 		if chipRows.rows > 0 then
-			chips = { x = DP, y = bottom - chipRows.height, w = dInner, h = chipRows.height, items = chipRows.items,
-				vis = chipRows.vis }
+			chips = { x = DP, y = bottom - chipRows.height, w = dInner, h = chipRows.height, items = chipRows.items }
 			bottom = chips.y - L.gap
 		end
 		d.progress:SetShown(content.progress ~= nil)

@@ -113,7 +113,22 @@ function Loader.Load(files, env, ns)
 		setfenv(chunk, env)
 		chunk(Loader.ADDON_NAME, ns)
 	end
+	-- Specs about data saved by an earlier version create characters as 0.9
+	-- did (Loader.Legacy), without the v0.10 whole-profile default.
+	if Loader.legacyCharacters and ns.Store then
+		ns.Store.ADOPT_NEW_CHARACTERS = false
+	end
 	return ns, env
+end
+
+--- Runs fn with new characters created as an earlier version did (the
+-- original publication model), for specs that model older saved data.
+function Loader.Legacy(fn)
+	local before = Loader.legacyCharacters
+	Loader.legacyCharacters = true
+	local ok, err = pcall(fn)
+	Loader.legacyCharacters = before
+	if not ok then error(err, 0) end
 end
 
 --- Fresh namespace with every core module loaded and a deterministic clock.

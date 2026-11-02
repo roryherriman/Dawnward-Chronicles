@@ -471,12 +471,10 @@ function ChroniclePlaces.Create(parent, width, api)
 		local field = char.fields and char.fields.homeland
 		local note
 		if homeland and field then
-			note = string.format("Your Homeland field reads \"%s\" and stays %s. Setting a homeland never "
-				.. "changes its visibility.", field.value, ns.Themes.VISIBILITY_LABELS[field.visibility]
-				or field.visibility)
+			note = string.format("Your Homeland field reads \"%s\". Edit it on the Character page.", field.value)
 		else
-			note = "Set as homeland writes this place into your Homeland field; the field's visibility "
-				.. "stays as it is. Only you decide what a place means."
+			note = "Set as homeland writes this place into your Homeland field, part of your profile. Only you "
+				.. "decide what a place means."
 		end
 		local play = ns.NarrativeClock.Current(char, ns.ctx)
 		local values = { tostring(e.visits or 0), ChroniclePlaces.ShortDate(e.last, now) or "Unknown",
@@ -566,7 +564,7 @@ function ChroniclePlaces.Create(parent, width, api)
 		d.homeland:SetScript("OnClick", function()
 			if ns.Places.IsHomeland(char, e) then return end
 			Widgets.Confirm(string.format("Set your Homeland to %s? This replaces the Homeland on your "
-				.. "profile; its visibility stays as it is.", label), "Set", function()
+				.. "profile.", label), "Set", function()
 				api.act(function(c, now2)
 					local place, err = this(c, e)
 					if not place then return nil, err end

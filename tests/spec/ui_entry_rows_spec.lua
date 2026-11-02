@@ -62,7 +62,7 @@ return function(t, expect)
 						expect.truthy(spans[a2][2] <= spans[b2][1] or spans[b2][2] <= spans[a2][1], "buttons never overlap")
 					end
 				end
-				expect.equal(row.vis:GetParent(), row, "the visibility chip belongs to its card")
+				expect.equal(row.vis, nil, "no visibility chip on a record card")
 			end
 		end)
 
@@ -108,7 +108,8 @@ return function(t, expect)
 			mock.AcceptPopup()
 			expect.deepEqual(chipTexts(), { "Homeland", "Marked meaningful", "No memories tied to it" })
 			expect.falsy(d.homeland:IsEnabled(), "no action offered for what is already so")
-			expect.truthy(d.note:GetText():find("stays Private", 1, true), "the note gives the field's real visibility")
+			expect.truthy(d.note:GetText():find("Your Homeland field reads", 1, true), "the note names the field")
+			expect.falsy(d.note:GetText():find("Private", 1, true) or d.note:GetText():find("visibility", 1, true))
 			-- The status sits above the stats; the actions below the divider.
 			local L = ns.ChroniclePlaces.LAYOUT
 			local chipY = -d.chips[1].__points[1][3]
@@ -188,7 +189,7 @@ return function(t, expect)
 			return mock, env, ns, ns.CharacterView.section
 		end
 
-		t:it("puts each field's Edit and visibility controls inside that field's panel", function()
+		t:it("puts each field's Edit inside that field's panel", function()
 			local _, _, _, section = open()
 			local checked = 0
 			for i, spec in ipairs(section.specs) do
@@ -198,9 +199,7 @@ return function(t, expect)
 						expect.equal(row.edit:GetParent(), row, "Edit belongs to its own entry")
 						checked = checked + 1
 					end
-					if row.vis:IsShown() then
-						expect.equal(row.vis:GetParent(), row, "visibility belongs to its own entry")
-					end
+					expect.equal(row.vis, nil, "no visibility chip")
 					expect.falsy(row.plain, "fields and items are boxed panels")
 				end
 			end

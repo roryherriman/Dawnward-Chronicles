@@ -254,16 +254,31 @@ return function(t, expect)
 			expect.truthy(share:find("Known in town", 1, true))
 			expect.falsy(share:find("Public fact", 1, true), "the source quote is not published with it")
 			expect.falsy(share:find("Secret past", 1, true))
-			-- A backup without secrets leaves the secret fact out; the source only with the biography option.
+			-- A personal backup holds everything, the stored story included.
 			local backup = ns.Transfer.Decode(ns.Transfer.Export(c, "backup", {}))
-			for _, f in ipairs(backup.character.facts) do
+			expect.equal(#backup.character.facts, 3)
+			expect.equal(#backup.character.sources.versions, 1)
+			-- An older backup (no secrets, no biography) left the secret fact and the source out.
+			local old = ns.Transfer.Decode(ns.Transfer.Export(c, "backup", { includeSecrets = false,
+				includeBiography = false }))
+			for _, f in ipairs(old.character.facts) do
 				expect.falsy(f.statement:find("Secret past", 1, true))
 			end
-			expect.equal(#backup.character.sources.versions, 0)
+			expect.equal(#old.character.sources.versions, 0)
 		end)
 
-		t:it("the public-approval preview shows exactly the statement and its category", function()
-			expect.equal(StoryImport.PublicPreview("  Born in Lordaeron. ", "origin"), "Origin: Born in Lordaeron.")
+		t:it("v0.10: an approved piece is part of the profile; a waiting one never is", function()
+			local c = fresh()
+			ns.Publication.Adopt(c, 1)
+			local v = StoryImport.Capture(c, "paste", "Raised by the sea. Fears the dark.", nil, 1)
+			StoryImport.Propose(c, v, "sentence", 1)
+			StoryImport.Approve(c, StoryImport.Waiting(c)[1].key, { statement = "Raised by the sea" }, 2)
+			local public = ns.Projection.GetPublic(c)
+			expect.equal(#public.facts, 1)
+			expect.equal(public.facts[1].statement, "Raised by the sea")
+			local plan = ns.Transfer.Decode(ns.Transfer.Export(c, "share", {}))
+			expect.equal(#plan.character.facts, 1, "the waiting piece is not a fact")
+			expect.equal(#plan.character.interpretations, 0, "suggestions are never shared")
 		end)
 	end)
 
@@ -319,12 +334,12 @@ return function(t, expect)
 			expect.truthy(w.progress:GetText():find("Piece 1 of", 1, true))
 			expect.equal(w.excerpt:GetText(), "Aelin was born in Lordaeron, the youngest of three.")
 			expect.truthy(w.category:GetText():find("Origin (suggested)", 1, true))
-			-- Edit, then approve: a private fact.
+			-- Edit, then approve: a fact, with nothing to classify.
+			expect.equal(w.vis, nil, "no visibility chip")
 			w.statement:SetText("Born in Lordaeron, youngest of three.")
 			click(w.approve)
 			expect.equal(#char.facts, 1)
 			expect.equal(char.facts[1].statement, "Born in Lordaeron, youngest of three.")
-			expect.equal(char.facts[1].visibility, "private")
 			-- Skip the next; Later moves on without deciding.
 			local skipped = w.excerpt:GetText()
 			click(w.skip)
@@ -335,20 +350,18 @@ return function(t, expect)
 			expect.equal(#char.facts, 1)
 		end)
 
-		t:it("approving as Public asks first and shows exactly what becomes public", function()
-			local mock, env, ns2 = start()
+		t:it("approving adds the piece at once, with no visibility question", function()
+			local _, env, ns2 = start()
 			ns2.ImportWizard.Open({})
 			local w = ns2.ImportWizard.Frame()
 			w.edit:SetText("She keeps a lantern lit.")
 			click(w.primary)
-			click(w.vis) -- private -> public
-			expect.equal(w.vis.level, "public")
+			expect.equal(w.bioVis, nil, "no visibility chip for the saved story")
 			click(w.approve)
 			local char = env.DawnwardChroniclesDB.characters[CHAR]
-			expect.equal(#char.facts, 0, "not before the player confirms")
-			local asked = mock.AcceptPopup()
-			expect.truthy(asked.text:find("\"Other: She keeps a lantern lit.\"", 1, true))
-			expect.equal(char.facts[1].visibility, "public")
+			expect.equal(#char.facts, 1)
+			expect.falsy(ns2.Widgets.dialog and ns2.Widgets.dialog:IsShown(), "nothing to confirm")
+			expect.falsy(w.status:GetText():find("Public", 1, true) or w.status:GetText():find("Private", 1, true))
 		end)
 
 		t:it("refuses an over-long paste with its size and saves nothing", function()

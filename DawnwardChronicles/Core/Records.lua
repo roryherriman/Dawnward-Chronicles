@@ -182,11 +182,6 @@ function Records.SetVisibility(record, level, now)
 	return record
 end
 
---- Whether a record may appear in any public output.
-function Records.IsPublic(record)
-	return record.visibility == Privacy.PUBLIC and Records.PUBLIC_STATUS[record.status] == true
-end
-
 --- Records of a list that pass a filter { status, provenance, visibility, tag }.
 function Records.Filter(list, filter)
 	filter = filter or {}
@@ -206,11 +201,6 @@ function Records.Filter(list, filter)
 		end
 	end
 	return out
-end
-
---- Short labels for display: "suggested, proposed, private".
-function Records.Label(record)
-	return string.format("%s, %s, %s", record.provenance, record.status, record.visibility)
 end
 
 --- List operations shared by every record type ----------------------------------

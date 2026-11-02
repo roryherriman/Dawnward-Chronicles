@@ -147,10 +147,10 @@ return function(t, expect)
 			expect.equal(env.DawnwardChroniclesDB.characters[KEY], nil)
 		end)
 
-		t:it("person commands work and keep feelings private", function()
+		t:it("person commands work; feelings are never part of the profile", function()
 			local mock, env = start()
 			expect.truthy(mock.Slash("person add player Elra-ArgentDawn; Saved my life in Stratholme"):find("Added"))
-			expect.truthy(mock.Slash("person feel 1 Owes her more than she knows"):find("private"))
+			expect.truthy(mock.Slash("person feel 1 Owes her more than she knows"):find("Noted how they feel"))
 			local p = env.DawnwardChroniclesDB.characters[KEY].story.people[1]
 			expect.equal(p.realm, "ArgentDawn")
 			expect.equal(p.feelingsVisibility, "private")

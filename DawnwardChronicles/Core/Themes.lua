@@ -105,10 +105,11 @@ Themes.LIST = {
 Themes.ROLES = { "background", "panel", "surface", "surfaceHover", "edge", "ornament", "text", "muted", "accent",
 	"accentText", "danger", "border" }
 
--- Visibility labels use fixed meanings across themes, so "Secret" always
--- looks like a warning. Values from the design system's visibility chips
--- (Private #B4C6EA, Public #93D9BB, Secret #EFA9A9). Checked for contrast on
--- every theme's surfaces and on their own chip fills.
+-- Fixed colours across themes, from the design system's former visibility
+-- chips (#B4C6EA, #93D9BB, #EFA9A9). Since v0.10 no screen classifies
+-- anything; they remain chip tones (the Total RP 3 page's green "Connected",
+-- the simulation marker's rose). Checked for contrast on every theme's
+-- surfaces and on their own chip fills.
 Themes.VISIBILITY_COLORS = {
 	public = hex("#93D9BB"),
 	private = hex("#B4C6EA"),
@@ -121,8 +122,6 @@ Themes.VISIBILITY_COLORS = {
 Themes.STATUS_COLORS = {
 	waiting = hex("#F2C46B"),
 }
-
-Themes.VISIBILITY_LABELS = { public = "Public", private = "Private", secret = "Secret" }
 
 Themes.BY_ID = {}
 for _, theme in ipairs(Themes.LIST) do
