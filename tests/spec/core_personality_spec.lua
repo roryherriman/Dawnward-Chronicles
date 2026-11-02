@@ -1,7 +1,7 @@
 -- L1: personality axes (data model only).
 local Loader = require("support.loader")
 
-return function(t, expect)
+local function legacySpec(t, expect)
 	local ns = Loader.Core()
 	local Schema, Personality, Projection, Util = ns.Schema, ns.Personality, ns.Projection, ns.Util
 
@@ -67,4 +67,9 @@ return function(t, expect)
 			expect.truthy(table.concat(lines, "\n"):find("courage: Cautious 15/20 Bold$"))
 		end)
 	end)
+end
+
+-- These specs model characters an earlier version created (Loader.Legacy).
+return function(t, expect)
+	Loader.Legacy(function() legacySpec(t, expect) end)
 end

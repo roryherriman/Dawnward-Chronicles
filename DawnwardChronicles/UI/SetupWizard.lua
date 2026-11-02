@@ -101,7 +101,7 @@ SetupWizard.GUIDE_ROLE = { danger = "dangerText", waiting = "accent", muted = "m
 
 -- The Character stage's note (v0.9: the profile model; no classification).
 SetupWizard.PROFILE_NOTE = "This is your character's profile. If you connect Total RP 3, it is what other "
-	.. "players see. Keep any detail to yourself later with its Private button."
+	.. "players see there. Leave anything blank that you would rather not show."
 
 local wizard           -- the frame and its parts, built once
 local autoShown = {}   -- characters the wizard opened for by itself this session

@@ -3,6 +3,7 @@
 -- personality with waiting changes, the one-time publish callout for an
 -- older character and the Total RP 3 button.
 -- The mock proves wiring and layout maths, not the look in game.
+local Loader = require("support.loader")
 local Boot = require("support.boot")
 
 local CHAR = "Testchar-TestRealm"
@@ -31,7 +32,7 @@ local function pos(frame)
 	return p[4] or 0, -(p[5] or 0)
 end
 
-return function(t, expect)
+local function legacySpec(t, expect)
 	t:describe("character profile (v0.7, L2)", function()
 		t:it("puts every profile field in exactly one group", function()
 			local ns = select(3, Boot.Load())
@@ -237,4 +238,9 @@ return function(t, expect)
 			expect.truthy(persY < panelY, "personality first")
 		end)
 	end)
+end
+
+-- These specs model characters an earlier version created (Loader.Legacy).
+return function(t, expect)
+	Loader.Legacy(function() legacySpec(t, expect) end)
 end

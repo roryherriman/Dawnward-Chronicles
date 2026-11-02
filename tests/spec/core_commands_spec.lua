@@ -1,6 +1,6 @@
 local Loader = require("support.loader")
 
-return function(t, expect)
+local function legacySpec(t, expect)
 	local function setup(opts)
 		opts = opts or {}
 		local ns = Loader.Core()
@@ -386,4 +386,9 @@ return function(t, expect)
 			expect.equal(ns.Sources.Current(restored).text, "Stored after the backup")
 		end)
 	end)
+end
+
+-- These specs model characters an earlier version created (Loader.Legacy).
+return function(t, expect)
+	Loader.Legacy(function() legacySpec(t, expect) end)
 end

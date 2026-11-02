@@ -1,4 +1,5 @@
 -- L2: the Chronicle section (narrative records in the window). Mocked client.
+local Loader = require("support.loader")
 local Boot = require("support.boot")
 
 local CHAR = "Testchar-TestRealm"
@@ -7,7 +8,7 @@ local function click(button)
 	button:GetScript("OnClick")(button)
 end
 
-return function(t, expect)
+local function legacySpec(t, expect)
 	local function start()
 		local mock, env, ns = Boot.Start()
 		mock.Slash("set name Lirael")
@@ -585,4 +586,9 @@ return function(t, expect)
 			expect.falsy(section.rows[1]:IsShown())
 		end)
 	end)
+end
+
+-- These specs model characters an earlier version created (Loader.Legacy).
+return function(t, expect)
+	Loader.Legacy(function() legacySpec(t, expect) end)
 end

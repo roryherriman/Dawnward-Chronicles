@@ -1,6 +1,7 @@
 -- L2: Settings -> Total RP 3 sync page, under the WoW mock and the TRP3
 -- 3.4.1 fake (mocked client; not in-game evidence). The page must only read
 -- on open, and every write must go through the guarded /dawnward trp3 path.
+local Loader = require("support.loader")
 local Boot = require("support.boot")
 local Fake = require("fakes.trp3_341")
 
@@ -56,7 +57,7 @@ local function status(ns)
 	return ns.MainWindow.GetFrame().status:GetText() or ""
 end
 
-return function(t, expect)
+local function legacySpec(t, expect)
 	t:describe("Total RP 3 page (L2)", function()
 		t:it("OpenPage opens the window on Settings with that page selected", function()
 			local _, _, ns = Boot.Start()
@@ -234,8 +235,8 @@ return function(t, expect)
 			click(page.exact)
 			expect.truthy(ns.Widgets.dialog:IsShown())
 			expect.truthy(ns.Widgets.dialog.text:GetText():find("#1", 1, true))
-			expect.truthy(ns.Widgets.dialog.text:GetText():find("since made Private or Secret", 1, true),
-				"the player is warned that a restore brings back what was public then")
+			expect.truthy(ns.Widgets.dialog.text:GetText():find("that your profile no longer has", 1, true),
+				"the player is warned that a restore brings back what was written then")
 			expect.equal(fake.profile.player.about.T1.TX, written, "nothing restored before confirming")
 			click(ns.Widgets.dialog.cancel)
 			expect.equal(fake.profile.player.about.T1.TX, written)
@@ -279,9 +280,9 @@ return function(t, expect)
 			end
 			click(page.nav.buttons[2])
 			expect.truthy(page.previewText:GetText():find("Born in Stormwind", 1, true))
-			expect.truthy(page.hiddenText:GetText():find("1 fact and 1 personality axis are Private", 1, true),
+			expect.truthy(page.hiddenText:GetText():find("3 items an earlier version kept back", 1, true),
 				page.hiddenText:GetText())
-			expect.truthy(page.hiddenText:GetText():find("1 fact is Secret", 1, true))
+			expect.falsy(page.hiddenText:GetText():find("Duskwood", 1, true), "counts only, never content")
 			click(page.nav.buttons[3])
 			expect.truthy(page.previewText:GetText():find(" 5 / 15 ", 1, true), page.previewText:GetText())
 		end)
@@ -392,7 +393,7 @@ return function(t, expect)
 			expect.truthy(mock.Slash("trp3 sync"):find("already up to date (nothing written)", 1, true))
 			expect.truthy(mock.Slash("trp3 backups"):find("  #1 about, profile " .. fake.profileId, 1, true))
 			local rollback = mock.Slash("trp3 rollback")
-			expect.truthy(rollback:find("newest backup (see /dawnward trp3 backups). Privacy:", 1, true))
+			expect.truthy(rollback:find("newest backup (see /dawnward trp3 backups). By default", 1, true))
 			expect.truthy(rollback:find("Type: /dawnward trp3 rollback [#] confirm", 1, true))
 			expect.truthy(rollback:find("/dawnward trp3 rollback [#] exact confirm", 1, true))
 		end)
@@ -469,7 +470,7 @@ return function(t, expect)
 			local all = table.concat(shown, "\n")
 			expect.falsy(all:find("SECRETRACE", 1, true))
 			expect.falsy(all:find("PRIVATEAGE", 1, true))
-			expect.truthy(all:find("nothing Public to write", 1, true))
+			expect.truthy(all:find("nothing to write", 1, true))
 		end)
 
 		t:it("warns when the profile is shared with other characters", function()
@@ -590,4 +591,9 @@ return function(t, expect)
 			expect.equal(requests, 1, "a refused change asks for nothing")
 		end)
 	end)
+end
+
+-- These specs model characters an earlier version created (Loader.Legacy).
+return function(t, expect)
+	Loader.Legacy(function() legacySpec(t, expect) end)
 end

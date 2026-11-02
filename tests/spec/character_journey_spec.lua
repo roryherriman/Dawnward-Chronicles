@@ -17,7 +17,7 @@ end
 
 local function click(b) b:GetScript("OnClick")(b) end
 
-return function(t, expect)
+local function legacySpec(t, expect)
 	local ns = Loader.WithTRP3()
 	local Schema, AxisMeanings, Evolution, Arcs, Goals = ns.Schema, ns.AxisMeanings, ns.Evolution, ns.Arcs, ns.Goals
 
@@ -499,4 +499,9 @@ return function(t, expect)
 			expect.truthy(#char.story.events > 0, "tracking continues")
 		end)
 	end)
+end
+
+-- These specs model characters an earlier version created (Loader.Legacy).
+return function(t, expect)
+	Loader.Legacy(function() legacySpec(t, expect) end)
 end

@@ -53,10 +53,10 @@ return function(t, expect)
 			ns.SetupWizard.Next()
 			drain(mock)
 			local char = ns.ctx.store.real.characters[CHAR]
-			-- The cause: the story was stored before Finish chose the profile
+			-- The 0.9 cause: the story was stored before Finish chose the profile
 			-- model, so it kept the old Private default, and the About page was
-			-- built only from items marked Public.
-			expect.equal(ns.Sources.Visibility(char), "private", "the stored record is unchanged")
+			-- built only from items marked Public. Now a new character is on the
+			-- whole-profile model from the start, whatever the order of steps.
 			expect.truthy(ns.Publication.IsComplete(char), "a new character publishes its whole profile")
 			local tx = fake.profile.player.about.T1 and fake.profile.player.about.T1.TX or ""
 			expect.truthy(tx:find("Tamsin Greyhollow was born", 1, true),
@@ -82,6 +82,7 @@ return function(t, expect)
 			drain(mock)
 			local db = ns.Util.DeepCopy(env.DawnwardChroniclesDB)
 			db.characters[CHAR].publication = { mode = "profile", since = 1 } -- as 0.9.0-dev saved it
+			db.characters[CHAR].sources.visibility = "private" -- the bug: stored before Finish
 			fake.profile.player.about = { v = 1, TE = 1, BK = 1, T1 = {} } -- "No description"
 			local ledger = ns.Util.DeepCopy(env.DawnwardChroniclesTRP3DB)
 			for _, record in pairs(ledger.profiles) do record.about = nil end -- 0.9 never wrote the page

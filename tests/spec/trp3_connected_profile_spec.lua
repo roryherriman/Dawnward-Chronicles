@@ -2,6 +2,7 @@
 -- Overview), the one-step connection, automatic updates after it, the
 -- profile preview and the biography's own visibility, through the whole
 -- addon under the WoW mock and the TRP3 3.4.1 fake (not in-game evidence).
+local Loader = require("support.loader")
 local Boot = require("support.boot")
 local Fake = require("fakes.trp3_341")
 
@@ -56,7 +57,7 @@ local function newCharacter(mock, ns)
 	return char
 end
 
-return function(t, expect)
+local function legacySpec(t, expect)
 	t:describe("connected profile: Overview and one-step connection (L2)", function()
 		t:it("shows the profile at a glance, and connects everything after one confirmation", function()
 			-- A fresh Total RP 3 profile: the first name is the game's own (replaceable).
@@ -200,4 +201,9 @@ return function(t, expect)
 			expect.equal(char.sources.visibility, "private", "the stored value is kept; it no longer decides")
 		end)
 	end)
+end
+
+-- These specs model characters an earlier version created (Loader.Legacy).
+return function(t, expect)
+	Loader.Legacy(function() legacySpec(t, expect) end)
 end

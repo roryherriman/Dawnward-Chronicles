@@ -1,4 +1,5 @@
 -- L2: editing profile fields from the Character section.
+local Loader = require("support.loader")
 local Boot = require("support.boot")
 
 local CHAR = "Testchar-TestRealm"
@@ -22,7 +23,7 @@ local function rowFor(section, key)
 	end
 end
 
-return function(t, expect)
+local function legacySpec(t, expect)
 	t:describe("character editing (L2)", function()
 		t:it("edits a short field on one line and saves it (the stored default visibility is untouched)", function()
 			local _, env, _, section = openCharacter()
@@ -157,4 +158,9 @@ return function(t, expect)
 			expect.falsy(ns.CharacterView.section.form:IsOpen())
 		end)
 	end)
+end
+
+-- These specs model characters an earlier version created (Loader.Legacy).
+return function(t, expect)
+	Loader.Legacy(function() legacySpec(t, expect) end)
 end

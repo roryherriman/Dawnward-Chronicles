@@ -8,9 +8,8 @@
 -- every kind of record and legacy visibility values of every level, and
 -- reads every visible font string, button label and tooltip.
 --
--- Not swept (owned by parallel work, listed in the v0.10 hand-over):
--- Settings > Total RP 3 (UI/TRP3Page.lua) and the setup wizard
--- (UI/SetupWizard.lua).
+-- Settings > Total RP 3 and the setup wizard: ui_no_privacy_trp3_spec.lua.
+local Loader = require("support.loader")
 local Boot = require("support.boot")
 
 local CHAR = "Testchar-TestRealm"
@@ -98,7 +97,7 @@ local function sample()
 	return mock, env, ns, char
 end
 
-return function(t, expect)
+local function legacySpec(t, expect)
 	t:describe("no Public / Private / Secret on any screen (v0.10, L2)", function()
 		local mock, ns, char
 		local function check(where)
@@ -268,4 +267,9 @@ return function(t, expect)
 			expect.equal(#hits(mock), 0, "hidden text is not on screen")
 		end)
 	end)
+end
+
+-- These specs model characters an earlier version created (Loader.Legacy).
+return function(t, expect)
+	Loader.Legacy(function() legacySpec(t, expect) end)
 end

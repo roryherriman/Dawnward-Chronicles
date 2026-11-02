@@ -4,7 +4,7 @@
 local Loader = require("support.loader")
 local Fake = require("fakes.trp3_341")
 
-return function(t, expect)
+local function legacySpec(t, expect)
 	local KEY = "Testchar-TestRealm"
 
 	local function world(fakeOpts)
@@ -282,7 +282,7 @@ return function(t, expect)
 			expect.equal(w.char().fields.race.value, "Elf")
 		end)
 
-		t:it("imports one field explicitly through the Actions path, as Private by default", function()
+		t:it("imports one field explicitly through the Actions path, into the profile", function()
 			local w = world({ characteristics = { v = 3, FN = "Aelin", CL = "Lightbringer", PS = {} } })
 			local ctx = w.ctx()
 			local requests = 0
@@ -290,13 +290,13 @@ return function(t, expect)
 			local before = w.fake.snapshot()
 			local ok, message = w.ns.TRP3Commands.Import(ctx, "class")
 			expect.truthy(ok, message)
-			expect.deepEqual(w.char().fields.class, { value = "Lightbringer", visibility = "private" })
+			expect.deepEqual(w.char().fields.class, { value = "Lightbringer", visibility = "public" })
 			expect.equal(requests, 1, "the normal write path asks sync to catch up")
 			expect.deepEqual(w.fake.snapshot(), before, "nothing written to TRP3")
 			assert(w.ns.TRP3Commands.Import(ctx, "class", "public"))
 			expect.equal(w.char().fields.class.visibility, "public")
 			expect.falsy(w.ns.TRP3Commands.Import(ctx, "age"), "TRP3 has no age")
-			expect.falsy(w.ns.TRP3Commands.Import(ctx, "class", "everyone"))
+			expect.truthy(w.ns.TRP3Commands.Import(ctx, "class", "everyone"), "an unknown level is ignored")
 			w.store.realReadOnly = "test"
 			expect.falsy(w.ns.TRP3Commands.Import(ctx, "class"))
 		end)
@@ -498,7 +498,7 @@ return function(t, expect)
 			w.ns.Character.SetFieldVisibility(w.char(), "age", "private", 2) -- no run yet
 			local ok, message, risk = w.Sync.SetPolicy(w.deps, "age", "trp3")
 			expect.falsy(ok)
-			expect.truthy(risk and message:find("no longer your Public Age", 1, true), message)
+			expect.truthy(risk and message:find("no longer in your profile (Age)", 1, true), message)
 			expect.equal(w.ns.TRP3Ledger.Policy(w.deps.ledger.optIn[KEY], "age"), "dawnward", "unchanged")
 			assert(w.Sync.SetPolicy(w.deps, "age", "off", { release = true }))
 			expect.equal(w.ch().AG, nil, "removed before Dawnward let go")
@@ -610,4 +610,9 @@ return function(t, expect)
 			expect.equal(w.deps.cache, nil, "the caller's deps are not cached")
 		end)
 	end)
+end
+
+-- These specs model characters an earlier version created (Loader.Legacy).
+return function(t, expect)
+	Loader.Legacy(function() legacySpec(t, expect) end)
 end

@@ -14,9 +14,9 @@ local HELP = {
 	"Total RP 3 sync (EXPERIMENTAL, off by default; Total RP 3 3.4.1 only):",
 	"  trp3 preview | trp3 profile (everything you would publish) | trp3 sync | trp3 paste | trp3 backups | trp3 log",
 	"  trp3 enable about|traits|glance confirm | trp3 disable about|traits|glance",
-	"  trp3 fields (each mapping, who manages it, and what Total RP 3 holds vs your Public value)",
+	"  trp3 fields (each mapping, who manages it, and what Total RP 3 holds vs your Dawnward value)",
 	"  trp3 field <name> dawnward confirm | trp3 field <name> trp3|off   (names: see trp3 fields)",
-	"  trp3 import <field> [private|public|secret] confirm (copy Total RP 3's value into Dawnward)",
+	"  trp3 import <field> confirm (copy Total RP 3's value into your Dawnward profile)",
 	"  trp3 release about|traits|fields|glance confirm | trp3 rollback [#] [exact] confirm",
 	"  trp3 resolve about|traits|glance|<field> keep|reclaim",
 	"  trp3 glance (your At First Glance entries, 1-5) | trp3 glance title|text <n> <words> (|n: new line)",
@@ -80,7 +80,7 @@ function TRP3Commands.ManualText(char)
 	local public = char and Projection.GetPublic(char) or { facts = {}, personality = {} }
 	local lines = { "-- Paste this at the end of your Total RP 3 About text --", "" }
 	local block = AboutBlock.Compose(public)
-	lines[#lines + 1] = block ~= "" and block or "(no public facts yet)"
+	lines[#lines + 1] = block ~= "" and block or "(no facts yet)"
 	lines[#lines + 1] = ""
 	lines[#lines + 1] = "-- Suggested Total RP 3 personality traits (custom traits; left / right) --"
 	local any = false
@@ -92,12 +92,12 @@ function TRP3Commands.ManualText(char)
 		end
 	end
 	if not any then
-		lines[#lines + 1] = "(no public personality values yet)"
+		lines[#lines + 1] = "(no personality values yet)"
 	end
 	-- Profile fields: every Public Dawnward field with a TRP3 place to type
 	-- it, including those Dawnward never writes itself.
 	lines[#lines + 1] = ""
-	lines[#lines + 1] = "-- Public profile fields (type them into Total RP 3's characteristics yourself) --"
+	lines[#lines + 1] = "-- Profile fields (type them into Total RP 3's characteristics yourself) --"
 	local shown = false
 	for _, f in ipairs(TRP3Commands.MANUAL_FIELDS) do
 		local entry = public.fields and public.fields[f.source]
@@ -107,7 +107,7 @@ function TRP3Commands.ManualText(char)
 		end
 	end
 	if not shown then
-		lines[#lines + 1] = "(no public profile fields yet)"
+		lines[#lines + 1] = "(no profile fields yet)"
 	end
 	return table.concat(lines, "\n")
 end
@@ -132,7 +132,7 @@ end
 
 local ROW_STATE = {
 	write = "will write", clear = "will clear (no longer Public)", noop = "up to date",
-	matches = "Total RP 3 already shows the same text (yours, not managed)", empty = "nothing Public to write",
+	matches = "Total RP 3 already shows the same text (yours, not managed)", empty = "nothing to write",
 	conflict = "PAUSED", unwritable = "not writable",
 }
 
@@ -352,14 +352,14 @@ function TRP3Commands.ProfilePreview(char, template)
 			for _, part in ipairs({ { "PH", "Physical description" }, { "PS", "Personality traits" },
 				{ "HI", "History" } }) do
 				lines[#lines + 1] = "--- " .. part[2] .. " ---"
-				lines[#lines + 1] = rendered[part[1]] ~= "" and rendered[part[1]] or "(nothing Public)"
+				lines[#lines + 1] = rendered[part[1]] ~= "" and rendered[part[1]] or "(nothing yet)"
 			end
 		else
-			lines[#lines + 1] = rendered.T1 ~= "" and rendered.T1 or "(nothing Public)"
+			lines[#lines + 1] = rendered.T1 ~= "" and rendered.T1 or "(nothing yet)"
 		end
 	else
 		lines[#lines + 1] = "ABOUT PAGE (summary block)"
-		lines[#lines + 1] = AboutBlock.Compose(public) ~= "" and AboutBlock.Compose(public) or "(nothing Public)"
+		lines[#lines + 1] = AboutBlock.Compose(public) ~= "" and AboutBlock.Compose(public) or "(nothing yet)"
 	end
 	lines[#lines + 1] = ""
 	lines[#lines + 1] = "PROFILE FIELDS"
@@ -367,13 +367,13 @@ function TRP3Commands.ProfilePreview(char, template)
 	for _, f in ipairs(preview.fields) do
 		lines[#lines + 1] = f.trp3 .. ": " .. tostring(f.value)
 	end
-	if #preview.fields == 0 then lines[#lines + 1] = "(nothing Public)" end
+	if #preview.fields == 0 then lines[#lines + 1] = "(nothing yet)" end
 	lines[#lines + 1] = ""
 	lines[#lines + 1] = "PERSONALITY TRAITS"
 	for _, tr in ipairs(preview.traits) do
 		lines[#lines + 1] = string.format("%s %d / %d %s", tr.LT, tr.V2, 20 - tr.V2, tr.RT)
 	end
-	if #preview.traits == 0 then lines[#lines + 1] = "(nothing Public)" end
+	if #preview.traits == 0 then lines[#lines + 1] = "(nothing yet)" end
 	lines[#lines + 1] = ""
 	lines[#lines + 1] = "AT FIRST GLANCE (only the entries you wrote; hidden ones are kept in Total RP 3 but not shown)"
 	local glance = ns.Glance.Published(char)
@@ -682,7 +682,7 @@ end
 function TRP3Commands.EnableWarning(feature)
 	local m = FieldPlan.BY_ID[feature]
 	if m then
-		return "EXPERIMENTAL: this lets Dawnward keep your Total RP 3 " .. m.trp3 .. " equal to your Public "
+		return "EXPERIMENTAL: this lets Dawnward keep your Total RP 3 " .. m.trp3 .. " equal to your Dawnward "
 			.. m.label .. ", automatically, using Total RP 3 internals with no official support. It writes only "
 			.. "while Total RP 3 still holds the value Dawnward last wrote; if it already holds your own value, "
 			.. "nothing is overwritten until you choose. A backup is taken before every write."
@@ -698,10 +698,9 @@ end
 -- the player's own content and rebuilds Dawnward's part from what is
 -- Public now; an exact restore is offered separately, naming what it would
 -- bring back.
-TRP3Commands.ROLLBACK_PRIVACY = "Privacy: by default only your own text comes back from the backup and "
-	.. "Dawnward's part is rebuilt from what is Public now. An exact restore brings the section back exactly as it "
-	.. "was then: anything Dawnward had written from items you have since made Private or Secret would be "
-	.. "visible again."
+TRP3Commands.ROLLBACK_PRIVACY = "By default only your own text comes back from the backup and Dawnward's "
+	.. "part is rebuilt from your profile as it is now. An exact restore brings the section back exactly as it was "
+	.. "then, including anything Dawnward wrote that your profile no longer has."
 TRP3Commands.ROLLBACK_WARNING = "This restores a Total RP 3 section from Dawnward's newest backup "
 	.. "(see /dawnward trp3 backups). " .. TRP3Commands.ROLLBACK_PRIVACY
 
@@ -710,12 +709,12 @@ TRP3Commands.ROLLBACK_WARNING = "This restores a Total RP 3 section from Dawnwar
 function TRP3Commands.RollbackRiskLines(preview, max)
 	local lines = {}
 	if #preview.items == 0 then
-		lines[1] = "Nothing in this backup's Dawnward part is hidden now: an exact restore brings back no Private "
-			.. "or Secret item."
+		lines[1] = "Everything in this backup's Dawnward part is still in your profile: an exact restore brings back "
+			.. "nothing you have since removed."
 		return lines
 	end
-	lines[1] = "An exact restore would make visible again " .. #preview.items .. " item(s) that are no longer "
-		.. "Public in Dawnward:"
+	lines[1] = "An exact restore would bring back " .. #preview.items .. " item(s) that are no longer in your "
+		.. "Dawnward profile:"
 	max = max or #preview.items
 	for i = 1, math.min(max, #preview.items) do
 		lines[#lines + 1] = "  - " .. preview.items[i]
@@ -736,10 +735,8 @@ function TRP3Commands.Import(ctx, id, level)
 	if not m then
 		return nil, "unknown field '" .. tostring(id) .. "'"
 	end
-	level = level or "private"
-	if not ns.Privacy.IsValid(level) then
-		return nil, "choose private, public or secret"
-	end
+	-- An imported value is part of the profile (older callers may still pass a level).
+	level = ns.Privacy.IsValid(level) and level or "public"
 	local deps = ctx.trp3Deps()
 	local section, err = ns.TRP3Adapter.ReadAudited(deps.env, "characteristics")
 	if not section then
@@ -762,7 +759,7 @@ function TRP3Commands.Import(ctx, id, level)
 		if not ok then return ns.Actions.Fail(ferr) end
 		local vok, verr = ns.Character.SetFieldVisibility(char, m.source, level, ctx.now())
 		if not vok then return ns.Actions.Fail(verr) end
-		return true, "Imported Total RP 3's " .. m.trp3 .. " into your Dawnward " .. m.label .. " (" .. level .. ")."
+		return true, "Imported Total RP 3's " .. m.trp3 .. " into your Dawnward " .. m.label .. "."
 	end)
 end
 
@@ -938,7 +935,7 @@ function TRP3Commands.RollbackPreviewLines(deps, id, formatTime)
 		end
 	end
 	lines[#lines + 1] = "Type: /dawnward trp3 rollback [#] confirm (your own text only; Dawnward's part rebuilt "
-		.. "from what is Public now) or /dawnward trp3 rollback [#] exact confirm (everything exactly as it was)"
+		.. "from your profile as it is now) or /dawnward trp3 rollback [#] exact confirm (everything exactly as it was)"
 	return lines
 end
 
@@ -957,7 +954,7 @@ function TRP3Commands.FieldsReport(ctx, deps)
 	if diff.reason then
 		out(ctx, "Differences unavailable: " .. tostring(diff.reason))
 	else
-		out(ctx, "Total RP 3 vs your Public Dawnward value:")
+		out(ctx, "Total RP 3 vs your Dawnward value:")
 		for _, row in ipairs(diff.rows) do
 			out(ctx, string.format("  %s (%s): Total RP 3 '%s' / Dawnward %s%s%s", row.label, row.trp3Label,
 				row.trp3 or "-", row.dawnward and ("'" .. row.dawnward .. "'") or (row.hidden and "(not Public)" or "-"),
@@ -995,7 +992,7 @@ local function command(ctx, rest)
 		-- v0.9: everything Dawnward would publish, in one window (read only).
 		local text = TRP3Commands.ProfilePreview(deps.store.real.characters[deps.characterKey])
 		if ctx.ui and ctx.ui.ShowExport then
-			ctx.ui.ShowExport("Your public Total RP 3 profile - preview, nothing is written", text)
+			ctx.ui.ShowExport("Your Total RP 3 profile - preview, nothing is written", text)
 		else
 			for line in (text .. "\n"):gmatch("([^\n]*)\n") do out(ctx, line) end
 		end
@@ -1006,7 +1003,7 @@ local function command(ctx, rest)
 	elseif sub == "paste" then
 		local text = TRP3Commands.ManualText(deps.store.real.characters[deps.characterKey])
 		if ctx.ui and ctx.ui.ShowExport then
-			ctx.ui.ShowExport("Total RP 3 text to paste - public facts only", text)
+			ctx.ui.ShowExport("Total RP 3 text to paste - your character profile", text)
 			out(ctx, "Copy the text from the window (Ctrl+C) and paste it into Total RP 3 yourself.")
 		else
 			out(ctx, "No window is available to show the text.")
@@ -1053,14 +1050,12 @@ local function command(ctx, rest)
 		out(ctx, message or "Not changed.")
 	elseif sub == "import" then
 		local id = importArg(word1)
-		local level = (word2 ~= "" and word2 ~= "confirm") and word2 or "private"
 		if not id or not confirmed then
-			out(ctx, "This copies Total RP 3's value of a field into your Dawnward profile (Private unless you say "
-				.. "otherwise). Type: /dawnward trp3 import <title|race|class|age|homeland> [private|public|secret] "
-				.. "confirm")
+			out(ctx, "This copies Total RP 3's value of a field into your Dawnward profile. Type: /dawnward trp3 "
+				.. "import <title|race|class|age|homeland> confirm")
 			return
 		end
-		local _, message = TRP3Commands.Import(ctx, id, level)
+		local _, message = TRP3Commands.Import(ctx, id)
 		out(ctx, message)
 	elseif sub == "release" then
 		local feature = featureArg(word1)

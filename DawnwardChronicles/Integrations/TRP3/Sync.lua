@@ -555,7 +555,7 @@ function Sync.FieldRisk(deps, id)
 	end
 	return { value = owned.value, reason = "Total RP 3 still shows \"" .. tostring(FieldPlan.Display(m, owned.value))
 		.. "\" as your " .. m.trp3
-		.. ", which Dawnward wrote but which is no longer your Public " .. m.label }
+		.. ", which Dawnward wrote but which is no longer in your profile (" .. m.label .. ")" }
 end
 
 --- Removes Dawnward's value of one field from Total RP 3 (a guarded,
@@ -1214,7 +1214,7 @@ function Sync.Rollback(deps, backupId, mode)
 	local note = notifyErr and " Total RP 3 could not be notified; /reload to refresh it." or ""
 	if mode == "own" then
 		return true, string.format("Restored your own Total RP 3 %s text from backup #%d. Dawnward's part was "
-			.. "rebuilt from what is Public now. The state before this rollback is backup #%d.%s", backup.section,
+			.. "rebuilt from your profile as it is now. The state before this rollback is backup #%d.%s", backup.section,
 			backup.id, safety.id, note)
 	end
 	return true, string.format("Restored your Total RP 3 %s from backup #%d (this also undoes any other edits "
@@ -1288,7 +1288,7 @@ function Sync.Resolve(deps, feature, choice)
 		record[rowFeature] = record[rowFeature] or {}
 		record[rowFeature][feature] = current and { value = current } or nil
 		if not next(record[rowFeature]) then record[rowFeature] = nil end
-		return true, "Dawnward will write its Public " .. m.label .. " to Total RP 3 on the next sync (a backup is "
+		return true, "Dawnward will write your " .. m.label .. " to Total RP 3 on the next sync (a backup is "
 			.. "taken first, so a rollback can bring yours back)."
 	end
 	if feature == "fields" then
@@ -1327,7 +1327,7 @@ function Sync.Resolve(deps, feature, choice)
 		end
 		record[feature] = next(owned) and { owned = owned, at = deps.now() } or nil
 		record.conflicts[feature] = nil
-		return true, "Dawnward again manages the traits carrying its own labels (for your public axes) and will "
+		return true, "Dawnward again manages the traits carrying its own labels (one per personality axis you set) and will "
 			.. "update them on the next sync."
 	end
 	record.conflicts[feature] = nil

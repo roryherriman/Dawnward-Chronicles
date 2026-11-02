@@ -3,6 +3,7 @@
 -- column (Personality, Family) and the header stay put. Mocked client: the
 -- scroll range is the scroll child's height less the frame's, as the client
 -- computes it; whether it feels right is the in-game check.
+local Loader = require("support.loader")
 local Boot = require("support.boot")
 
 local LONG = string.rep("Raised above the Lion's Pride Inn by a widowed innkeeper who kept the lamps lit. ", 12)
@@ -31,7 +32,7 @@ local function top(region)
 	return -((type(p[2]) == "number" and p[3]) or p[5] or 0)
 end
 
-return function(t, expect)
+local function legacySpec(t, expect)
 	t:describe("character profile: only the left column scrolls (L2)", function()
 		t:it("puts the fields in the left scroll frame and the right column beside it", function()
 			local mock, _, ns, section = openCharacter()
@@ -237,4 +238,9 @@ return function(t, expect)
 			plain:GetScript("OnMouseWheel")(plain, -1)
 		end)
 	end)
+end
+
+-- These specs model characters an earlier version created (Loader.Legacy).
+return function(t, expect)
+	Loader.Legacy(function() legacySpec(t, expect) end)
 end

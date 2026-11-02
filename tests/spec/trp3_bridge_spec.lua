@@ -1,9 +1,10 @@
 -- L2: TRP3 sync through the whole addon under the WoW mock and the 3.4.1
 -- fake (mocked client; not in-game evidence).
+local Loader = require("support.loader")
 local Boot = require("support.boot")
 local Fake = require("fakes.trp3_341")
 
-return function(t, expect)
+local function legacySpec(t, expect)
 	local function start(fakeOpts, savedVariables)
 		local fake = Fake.new(fakeOpts or {})
 		local extra = {}
@@ -175,4 +176,9 @@ return function(t, expect)
 			expect.truthy(fake.profile.player.about.T1.TX:find("Chronicle", 1, true))
 		end)
 	end)
+end
+
+-- These specs model characters an earlier version created (Loader.Legacy).
+return function(t, expect)
+	Loader.Legacy(function() legacySpec(t, expect) end)
 end
