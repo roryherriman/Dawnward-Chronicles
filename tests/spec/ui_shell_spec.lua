@@ -468,7 +468,7 @@ return function(t, expect)
 			expect.truthy(values[2]:find("Mage", 1, true))
 			expect.equal(values[3], "GUILD=The Lantern Watch")
 			expect.equal(values[4], "REALM=Test Realm")
-			expect.equal(view.own.name:GetText(), "Aelin Brightwater")
+			expect.equal(view.own.name, nil, "the name is on the rail; the panel leads with the title (mockup)")
 			expect.equal(view.own.summary:GetText(), "Kind to strangers.")
 			expect.equal(view.own.chips, nil, "no \"Name is Private\" chips (v0.10)")
 			-- Nothing about the game is stored.

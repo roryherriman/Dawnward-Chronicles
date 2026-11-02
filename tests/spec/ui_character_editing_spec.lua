@@ -66,7 +66,7 @@ local function legacySpec(t, expect)
 
 		t:it("offers Add on an empty field and Edit on a set one, and nothing to classify", function()
 			local mock, _, _, section = openCharacter()
-			expect.equal(rowFor(section, "name").edit:GetText(), "Add")
+			expect.equal(rowFor(section, "name").edit:GetText(), "+ Add")
 			mock.Slash("set name Aelin")
 			local row = rowFor(section, "name")
 			expect.equal(row.edit:GetText(), "Edit")

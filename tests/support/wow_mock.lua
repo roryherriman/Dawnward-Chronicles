@@ -28,6 +28,8 @@ function Methods:ClearFocus()
 end
 function Methods:HasFocus() return self.__mock.focus == self end
 function Methods:GetParent() return self.__parent end
+-- Like the client: a frame can move to another parent (pooled rows change columns).
+function Methods:SetParent(parent) self.__parent = parent end
 -- Shown, and every parent shown too.
 function Methods:IsVisible()
 	if not self.__shown then return false end
@@ -118,6 +120,8 @@ function Methods:SetUnit(unit, blend)
 	return true
 end
 function Methods:SetAlpha(a) self.__alpha = a end
+-- Textures: the file last set (state textures record theirs the same way).
+function Methods:SetTexture(file) self.__texture = file end
 function Methods:GetAlpha() return self.__alpha or 1 end
 function Methods:ClearModel() self.__unit = nil end
 function Methods:SetRotation(r) self.__rotation = r end

@@ -50,7 +50,7 @@ local function legacySpec(t, expect)
 			expect.equal(section.sideScroll:GetParent(), section.frame, "not inside the left scroll frame")
 			expect.equal(section.header:GetParent(), section.frame, "the header stays out of both")
 			for i, spec in ipairs(section.specs) do
-				local column = spec.kind == "field" and section.child or section.side
+				local column = spec.group == "family" and section.side or section.child
 				expect.equal(section.rows[i]:GetParent(), column, spec.kind)
 			end
 			expect.equal(section.personality:GetParent(), section.side)
@@ -71,7 +71,7 @@ local function legacySpec(t, expect)
 			local function check(what)
 				local bottom = 0
 				for i, spec in ipairs(section.specs) do
-					if spec.kind == "field" then
+					if spec.group ~= "family" then
 						local row = section.rows[i]
 						bottom = math.max(bottom, top(row) + row:GetHeight())
 					end
@@ -123,21 +123,26 @@ local function legacySpec(t, expect)
 			local frame = ns.MainWindow.GetFrame()
 			expect.truthy(frame:IsMouseWheelEnabled(), "the window takes the wheel everywhere else")
 			wheel(frame, -1)
-			-- Many family members: the right column scrolls by itself, nothing is cut off.
+			-- v0.10: many family members never make the right column scroll: as
+			-- many as fit, then "+N more" opens the whole list.
 			for i = 1, 14 do mock.Slash("family add cousin Cousin" .. i) end
-			local range = side:GetVerticalScrollRange()
-			expect.truthy(range > 0, "a long family list scrolls")
+			expect.equal(side:GetVerticalScrollRange(), 0, "no secondary scroll bar")
 			local panelBottom = top(section.familyPanel) + section.familyPanel:GetHeight()
 			expect.equal(section.side:GetHeight(), panelBottom, "the whole family panel is in reach")
+			expect.truthy(panelBottom <= side:GetHeight(), "and inside the column")
+			expect.truthy(section.familyMore:IsShown())
+			expect.equal(section.familyMore:GetText(), "+" .. section.familyHidden .. " more")
+			expect.equal(section.familyShown + section.familyHidden, 14)
+			expect.truthy(top(section.familyMore) + section.familyMore:GetHeight() <= panelBottom)
 			for i, spec in ipairs(section.specs) do
-				if spec.kind ~= "field" then
+				if spec.group == "family" and section.rows[i]:IsShown() then
 					local row = section.rows[i]
-					expect.truthy(top(row) + row:GetHeight() <= panelBottom, "inside the panel")
+					expect.truthy(top(row) + row:GetHeight() <= top(section.familyMore), "above +N more")
 				end
 			end
 			local left = section.scroll:GetVerticalScroll()
 			for _ = 1, 100 do wheel(side, -1) end
-			expect.equal(side:GetVerticalScroll(), range)
+			expect.equal(side:GetVerticalScroll(), 0)
 			expect.equal(section.scroll:GetVerticalScroll(), left, "the left column does not move")
 		end)
 

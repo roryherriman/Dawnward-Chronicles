@@ -5,6 +5,9 @@
 -- the player wrote ("In your own words"), kept visibly apart. v0.8 brings the
 -- card, the panels and the portrait fallback closer to the mockup
 -- (docs/design/audit/character.md); the model's loading is unchanged.
+-- v0.10 (docs/design/audit/v10-character.md): the turn buttons show the
+-- client's own rotate arrows, and "In your own words" leads with the title
+-- the player wrote, as the mockup.
 --
 -- Client APIs (checked against the Classic Era 1.15.9.70576 UI source,
 -- /home/user/gethe/wow-ui-source):
@@ -23,6 +26,11 @@
 --                                           MODELFRAME_MAX_ZOOM 0.7, steps of 0.15
 --                                           (Model_OnMouseWheel)
 --   ClearModel                              releases the model when hidden
+--   Interface\Buttons\UI-RotationLeft-Button-Up / UI-RotationRight-Button-Up
+--                                           the turn arrows of Classic's own model
+--                                           panels (TabardFrame.xml, PetStable.xml;
+--                                           "RotationLeft" turns the model with a
+--                                           falling rotation, as Model_RotateRight)
 --   UNIT_MODEL_CHANGED                      gear or form changed
 --   GetGuildInfo("player")                  TabardFrame.lua, FriendsFrame.lua
 --   GetRealmName()                          FriendsFrame.lua
@@ -49,6 +57,10 @@ Showcase.DRAG_SPEED = 0.01 -- radians per pixel of mouse movement
 Showcase.ZOOM_MIN, Showcase.ZOOM_MAX, Showcase.ZOOM_STEP = 0, 0.7, 0.15
 Showcase.RING = "Interface\\Minimap\\MiniMap-TrackingBorder"
 Showcase.BAR_HEIGHT = 56 -- the control bar under the model (mockup: 36 px buttons, 10 px padding)
+-- The turn buttons' arrows: the client's own art (see the API list above).
+Showcase.ROTATE_ICONS = { left = "Interface\\Buttons\\UI-RotationLeft-Button-Up",
+	right = "Interface\\Buttons\\UI-RotationRight-Button-Up" }
+Showcase.ROTATE_ICON_SIZE = 30
 Showcase.BAR_NOTE = "Drag to turn, scroll to zoom. Shows the gear you are wearing now."
 Showcase.MODEL_WIDTH = 330 -- the model card in the showcase view
 Showcase.GAP = 18
@@ -313,10 +325,20 @@ function Showcase.Model(parent, width, height)
 		Widgets.Tooltip(b, title, tip)
 		return b
 	end
-	f.left = controlButton("<", C.button, "ghost", "Turn left", "Dragging the model also turns it.")
+	-- The turn buttons show the client's rotate arrows (mockup: rotate icons
+	-- in 36 px icon buttons), not text glyphs.
+	local function rotateButton(side, title)
+		local b = controlButton("", C.button, "ghost", title, "Dragging the model also turns it.")
+		b.icon = b:CreateTexture(nil, "ARTWORK")
+		b.icon:SetTexture(Showcase.ROTATE_ICONS[side])
+		b.icon:SetSize(Showcase.ROTATE_ICON_SIZE, Showcase.ROTATE_ICON_SIZE)
+		b.icon:SetPoint("CENTER", 0, 0)
+		return b
+	end
+	f.left = rotateButton("left", "Turn left")
 	f.left:SetPoint("BOTTOMLEFT", C.pad, (bar - C.button) / 2)
 	f.left:SetScript("OnClick", function() f:Rotate(-Showcase.ROTATE_STEP) end)
-	f.right = controlButton(">", C.button, "ghost", "Turn right", "Dragging the model also turns it.")
+	f.right = rotateButton("right", "Turn right")
 	f.right:SetPoint("LEFT", f.left, "RIGHT", C.gap, 0)
 	f.right:SetScript("OnClick", function() f:Rotate(Showcase.ROTATE_STEP) end)
 	-- Zoom: filled buttons over the stage (readable over the model).
@@ -339,7 +361,11 @@ function Showcase.Model(parent, width, height)
 
 	function f.UpdateControls()
 		local on = f.modelShown and true or false
-		for _, b in ipairs({ f.left, f.right }) do b:SetEnabled(on) end
+		for _, b in ipairs({ f.left, f.right }) do
+			b:SetEnabled(on)
+			if b.icon.SetDesaturated then b.icon:SetDesaturated(not on) end
+			b.icon:SetAlpha(on and 1 or Widgets.BUTTON.disabledAlpha)
+		end
 		f.zoomOut:SetEnabled(on and f.zoom > Showcase.ZOOM_MIN)
 		f.zoomIn:SetEnabled(on and f.zoom < Showcase.ZOOM_MAX)
 		-- The zoom buttons sit over the stage: only while the model shows, so
@@ -514,17 +540,19 @@ local function shorten(s, max)
 	return cut .. "..."
 end
 
---- The "Your character" content, from the player's own profile fields:
--- { name, title, pronouns, summary, empty }. Pure.
+--- The "In your own words" content, from the player's own profile fields:
+-- { heading, summary, empty }. The heading is the title the player wrote
+-- (mockup: "Keeper of the Lantern Road" in Cinzel), else their name; the
+-- name and pronouns are on the rail beside it. Pure.
 function Showcase.OwnWords(char)
 	local fields = char and char.fields or {}
 	local function value(key)
 		return fields[key] and text(fields[key].value)
 	end
-	local out = { name = value("name"), title = value("title"), pronouns = value("pronouns") }
+	local out = { heading = value("title") or value("name") }
 	local summary = value("summary")
 	out.summary = summary and shorten(summary, Showcase.SUMMARY_MAX)
-	out.empty = not (out.name or out.title or out.pronouns or out.summary)
+	out.empty = not (out.heading or out.summary)
 	return out
 end
 
@@ -588,12 +616,9 @@ function Showcase.View(parent, width, height, opts)
 	-- In your own words: written by the player.
 	v.own = panel("In your own words")
 	v.own:SetPoint("TOPLEFT", v.game, "BOTTOMLEFT", 0, -P.gap)
-	v.own.name = Widgets.Label(v.own, "GameFontNormalLarge", true, "title")
-	v.own.name:SetWidth(innerWidth)
-	v.own.title = Widgets.Label(v.own, "GameFontHighlight", true, "heading")
+	-- Mockup: the title in Cinzel (title white), then the summary at 16.
+	v.own.title = Widgets.Label(v.own, "GameFontNormalLarge", true, "title")
 	v.own.title:SetWidth(innerWidth)
-	v.own.pronouns = Widgets.Label(v.own, "meta", true, "muted")
-	v.own.pronouns:SetWidth(innerWidth)
 	v.own.summary = Widgets.Label(v.own, "reading", true, "reading")
 	v.own.summary:SetWidth(innerWidth)
 	v.own.edit = Widgets.Button(v.own, "Edit", 56, Style.CONTROL.compact, "ghost")
@@ -672,11 +697,9 @@ function Showcase.View(parent, width, height, opts)
 		if own.empty then
 			place(v.own.summary, "You have not written your character's name, title or summary yet. "
 				.. "Add them under Profile fields.", 10)
-			v.own.name:Hide(); v.own.title:Hide(); v.own.pronouns:Hide()
+			v.own.title:Hide()
 		else
-			place(v.own.name, own.name, 4)
-			place(v.own.title, own.title, 4)
-			place(v.own.pronouns, own.pronouns, 10)
+			place(v.own.title, own.heading, 8)
 			place(v.own.summary, own.summary, 10)
 		end
 		v.own:SetHeight(y + P.padY)

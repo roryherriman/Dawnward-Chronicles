@@ -71,7 +71,7 @@ local function legacySpec(t, expect)
 			-- Each group wraps its fields.
 			local panel = section.groups.identity
 			local _, top = pos(panel)
-			expect.truthy(ny > top and ry + rowFor(section, "race"):GetHeight() <= top + panel:GetHeight())
+			expect.truthy(ny >= top and ry + rowFor(section, "race"):GetHeight() <= top + panel:GetHeight())
 		end)
 
 		t:it("shows each tile's value and Edit, whatever its old visibility, and Add on an empty one", function()
@@ -85,7 +85,7 @@ local function legacySpec(t, expect)
 			expect.equal(faith.edit:GetText(), "Edit")
 			local age = rowFor(section, "age")
 			expect.equal(age.value:GetText(), "Not set")
-			expect.equal(age.edit:GetText(), "Add")
+			expect.equal(age.edit:GetText(), "+ Add")
 			click(age.edit)
 			expect.truthy(section.editor:IsShown(), "Add opens the same editor")
 		end)
@@ -102,8 +102,11 @@ local function legacySpec(t, expect)
 			expect.equal(courage.left:GetText(), "Cautious")
 			expect.equal(courage.right:GetText(), "Bold")
 			expect.truthy(courage.knob:IsShown())
-			expect.falsy(pers.axes[2].knob:IsShown(), "an unset axis has no knob")
-			expect.equal(pers.axes[2].note:GetText(), "Not set")
+			-- v0.10: an unset axis is a hollow ring in the middle, with no note line.
+			expect.truthy(pers.axes[2].unset, "an unset axis is marked as such")
+			expect.falsy(pers.axes[1].unset)
+			expect.falsy(pers.axes[2].note:IsShown(), "no note line: the rows stay compact")
+			expect.truthy(pers.axes[2].tooltipText:find("^Not set"), "the tooltip says it")
 			local x6 = pers.axes[6].knob.__points[1][2]
 			local x1 = courage.knob.__points[1][2]
 			expect.truthy(x1 > x6, "the knob sits at the value")
@@ -119,7 +122,8 @@ local function legacySpec(t, expect)
 			ns.MainWindow.Refresh()
 			local pers = section.personality
 			expect.equal(pers.waiting, 1)
-			expect.equal(pers.status:GetText(), "1 change waits for your approval in Story.")
+			expect.equal(pers.status:GetText(), "1 change waiting")
+			expect.equal(pers.tooltipText, "1 change waits for your approval in Story.")
 			expect.equal(pers.axes[2].note:GetText(), "1 change waiting: toward Compassionate")
 			expect.truthy(pers.review:IsShown())
 			click(pers.review)
@@ -217,7 +221,7 @@ local function legacySpec(t, expect)
 			expect.truthy(section.header:IsShown())
 		end)
 
-		t:it("keeps family and history in the Family & relationships panel", function()
+		t:it("keeps family in the right column's Family panel and History in the left column", function()
 			local mock, _, ns, section = openCharacter()
 			mock.Slash("family add sister Mira")
 			mock.Slash("history add Took the oath")
@@ -228,7 +232,9 @@ local function legacySpec(t, expect)
 			expect.equal(section.familyPanel:GetParent(), section.side)
 			expect.equal(section.sideScroll.__points[1][2], cols.rightX)
 			for i, spec in ipairs(section.specs) do
-				if spec.kind ~= "field" then
+				if spec.group == "history" then
+					expect.equal(section.rows[i]:GetParent(), section.child, "History scrolls with the left column")
+				elseif spec.kind ~= "field" and spec.kind ~= "story" then
 					local x, y = pos(section.rows[i])
 					expect.truthy(x >= panelX and x + section.rows[i]:GetWidth() <= panelX + cols.right, spec.kind)
 					expect.truthy(y >= panelY and y + section.rows[i]:GetHeight() <= panelY + section.familyPanel:GetHeight())
