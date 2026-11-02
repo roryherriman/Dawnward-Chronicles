@@ -1,6 +1,6 @@
 # Total RP 3 integration
 
-**Status (v0.9-dev):** read-only status (tested in game, v0.1/v0.2), plus **experimental automatic sync** of the character's whole public profile: the About page (the whole biography and every Public section, in templates 1, 2 and 3), Dawnward-owned personality traits, thirteen profile fields, four additional-information entries and the At First Glance entries the player writes for it, each under a per-item ownership policy. Connecting is **one authorisation** (the setup wizard's Total RP 3 stage, or Overview > Connect everything); after that, changes in Dawnward reach Total RP 3 automatically.
+**Status (v0.9-dev):** read-only status (tested in game, v0.1/v0.2), plus **experimental automatic sync** of the character's whole public profile: the About page (the character overview, the whole biography and the sections the player chose, in templates 1, 2 and 3), Dawnward-owned personality traits, thirteen profile fields, four additional-information entries and the At First Glance entries the player writes for it, each under a per-item ownership policy. Connecting is **one authorisation** (the setup wizard's Total RP 3 stage, or Overview > Connect everything); after that, changes in Dawnward reach Total RP 3 automatically.
 
 The sync is **built and tested against mocks only (L2)**:
 - It is **off by default**. A character connects once (setup's Total RP 3 stage, or Settings > Total RP 3 > Overview > **Connect everything…**), or authorises single mappings on the Mappings tab, or with `/dawnward trp3 enable about|traits|glance confirm` and `/dawnward trp3 field <name> dawnward confirm`.
@@ -123,13 +123,15 @@ All of them are under `Integrations/TRP3/`:
 |---|---|
 | `Adapter.lua` | **The only module that touches TRP3 for sync.** `Probe` re-reads everything on every call: version, profile ID, default, linked characters, update-event API and editor state. `ReadSection` returns validated deep copies. `WriteSection` is the experimental driver. `Listen` registers the hints. |
 | `Shape.lua` | Fail-closed layout checks for About, characteristics and (v0.9) misc (unknown extra fields are preserved), and the version rule |
-| `AboutBlock.lua` | Composes the Dawnward section from public facts, and plans insert, replace, remove, no-op or conflict (pure) |
+| `AboutBlock.lua` | The v0.3-v0.8 summary block (`Compose`, `Plan`): kept to read and replace what those versions wrote; no longer published (pure) |
 | `TraitPlan.lua` | Maps public Dawnward personality axes to owned custom traits, and plans changes (pure) |
 | `FieldPlan.lua` | Profile field mappings (13 fields, below), the value cleaner, the game's own defaults and the per-field plan (pure) |
 | `MiscPlan.lua` | v0.9: Dawnward-owned entries in TRP3's additional-information list (pronouns, faith, occupation, allegiance) (pure) |
 | `GlancePlan.lua` | v0.9: Dawnward-owned At First Glance slots in TRP3's misc section, from the entries the player wrote (pure) |
 | `Core/Glance.lua` | v0.9: the player's own At First Glance entries (`char.glance`, five at most), `/dawnward trp3 glance` |
-| `AboutDoc.lua` | v0.9: the full-profile About document (the whole biography and Public sections), rendered for templates 1, 2 and 3, and its plan (pure) |
+| `AboutDoc.lua` | The About page (v0.10.1: overview, the whole biography, the player's optional sections; deduplicated), rendered for templates 1, 2 and 3, and its plan (pure) |
+| `Presentation.lua` | Styles, body colour, headings, verified icons and backgrounds, and the preview model (pure) |
+| `UI/TRP3BiographyPanel.lua` | v0.10.1: the About choices and the live preview (embedded in Settings > Total RP 3 > Biography) |
 | `Ledger.lua` | `DawnwardChroniclesTRP3DB`: ownership policies per character and profile, ownership records, conflicts, backups and log |
 | `Sync.lua` | The transaction, plus rollback, release and resolve |
 | `Commands.lua` | `/dawnward trp3 …` |
@@ -285,7 +287,7 @@ Verified line by line against Total RP 3 **3.4.1** (tag `3.4.1`, commit `4c25cb0
 | `pronouns` | `MI` entry `{ ID = 7, NA = localised "Pronouns", VA, IC = preset icon }`; MSP `PN` | `ProfileUtil.lua` 9–21, 143, 157; `miscAdd` `RC.lua` 602, 650; `RegisterMSP.lua` 145 | type + exact `VA` (an ID-less entry typed by its English or localised name is recognised: never duplicated) | yes | pronouns row with its icon; MSP `PN` |
 | `faith`, `occupation`, `allegiance` | custom `MI` entries `{ ID = 1, NA = "Faith" …, VA, IC = TRP3_InterfaceIcons.Default }` | `RC.lua` 644 ("Create new"), `CreateMiscFieldInfo` `ProfileUtil.lua` 103 | name + exact `VA`; `IC` never compared | yes | three rows, question-mark icon, restylable |
 | Personality axes (6), named with the player's own axis words when set (v0.10) | custom `PS` traits `{ LT, LI, RT, RI, V2 }`, `V2 = 20 − value`; a renamed axis renames the same owned trait in place | `refreshPsycho` `RC.lua` 186–191; `psychoAdd` 685 (icons `INV_Misc_QuestionMark`); `Globals.lua` 68–69; MSP `Fields.lua` 146 | `LT`/`RT` pair + `V2` | yes | bar leans to the right pole for a high Dawnward value |
-| About page | `about` T1 / T2 / T3 | see "The About page (v0.9)" | owned block / frames / slots | yes | see that section |
+| About page | `about` T1 / T2 / T3 | see "The About page (v0.10.1)" | owned block / frames / slots | yes | see that section |
 | At First Glance entries the player wrote (`/dawnward trp3 glance`) | `misc.PE["1".."5"] = { TI, TX, IC, AC }` | `applyPeekSlot` `RM.lua` 332; default `RM.lua` 18; five slots `RM.lua` 254, 457; inactive dropped from exchange `getMiscExchangeData` 452 and MSP `RegisterMSP.lua` 167–189 | per slot, exact `TI`/`TX`/`IC`/`AC`; only free slots; no duplicate titles+texts | yes (feature `glance`, off by default) | slot on the Miscellaneous tab; glance icon on others' target frame; hidden entry not visible to others |
 
 **Supported by TRP3, not implemented** (Dawnward has no source data, or the value is the player's live choice)
@@ -375,10 +377,10 @@ Nothing below is verified. Use two accounts (A writes, B observes), both on Clas
 
 1. **Baseline.** On A, `/dawnward trp3 diagnose` (all guards pass). On B, target A and open A's TRP3 profile: note About, traits, Full title, Race, Class, Age, Birthplace. `/reload` B afterwards so its cache is fresh but kept.
 2. **Public profile propagation.** On A, make Race and Age Public in Dawnward, Mappings → Race and Age → Dawnward → Authorize. Wait 5 s. On A, `/dawnward trp3 log` shows one `fields` write. On B, mouse over / target A (wait at least 10 s between checks): Race and Age show A's Dawnward values; nothing else changed.
-3. **Biography rendering.** Authorize Biography with two Public facts and one defining moment in each presentation style (`/dawnward story set trp3Style neutral|silverhand|arcane`). On B, the headings, colours and icon render; no raw `{h3}` or `{col:…}` text; the player's own text above is intact (templates 1, 2 and 3).
+3. **Biography rendering.** Authorize Biography with a summary, an imported story with two chapter headings and an appearance, in each presentation style. On B, the body text is ivory or parchment (not gold), the headings and icons render; no raw `{h2}` or `{col:…}` text; no sentence twice; the player's own text above is intact (templates 1, 2 and 3).
 4. **Trait direction.** Make Courage 15 (Bold side) Public; authorise Traits. On B, the Cautious/Bold bar leans **Bold** (5 / 15).
 5. **Names and titles.** With Title managed: B shows the full title under A's name; first and last name are unchanged (never written).
-6. **Updates after changes.** Change A's Public Age; within one minute B sees the new value after re-targeting. Make Age Private: B sees the age field empty. Make a fact Private: the line disappears from B's view of the biography.
+6. **Updates after changes.** Change A's Public Age; within one minute B sees the new value after re-targeting. Make Age Private: B sees the age field empty. Hide the Appearance section in Dawnward: it disappears from B's view of the About page.
 7. **Conflict.** On A, edit Race in TRP3's editor and Save. Change Dawnward's Race. A shows the conflict once; B keeps showing A's TRP3 value. Keep yours → never overwritten again.
 8. **Shared-profile isolation.** Link a second character C of A's account to the same TRP3 profile. On C, Authorize Race: refused, naming A. Switch A to another TRP3 profile: no write lands on it (`/dawnward trp3 log` unchanged), and B sees the other profile untouched.
 9. **MSP interoperability.** With B running MyRolePlay or XRP (no TRP3): B sees A's description (`DE`) including Dawnward's block, and `RA`, `AG`, `NT`, `HB` with Dawnward's values after re-targeting.
@@ -386,7 +388,7 @@ Nothing below is verified. Use two accounts (A writes, B observes), both on Clas
 11. **No duplication.** After `/reload` and a second sync on A: exactly one Dawnward block, one trait per axis, `log` shows no write.
 12. **No unrelated modifications.** Compare A's TRP3 profile before and after (A's own About text, preset traits, icon, colours, misc info, Currently, RP status): unchanged except the authorised mappings.
 13. **At First Glance.** On A, `/dawnward trp3 glance title 1 Silver scar`, `… text 1 Across the jaw.`, `trp3 enable glance confirm`. On A's Miscellaneous tab the entry shows in the first free slot with its icon; A's own slots are unchanged. On B (and an MSP client), the glance icon appears on A's tooltip/target frame and the slot reads the same. `glance hide 1`: B no longer sees it (A still does, greyed). Edit the slot in TRP3: `/dawnward trp3 preview` shows the conflict; nothing is overwritten.
-14. **Rollback.** On A, make a fact Secret, then **Exact restore…** shows the fact; cancel. **Roll back…** (safe): B never sees the Secret fact.
+14. **Rollback.** On A, hide a section that was published, then **Exact restore…** names its lines; cancel. **Roll back…** (safe): B never sees them again.
 
 ## Internal dependencies and their risk
 
@@ -431,39 +433,67 @@ Nothing below is verified. Use two accounts (A writes, B observes), both on Clas
 - Do At First Glance slots written by Dawnward show on the player's own Miscellaneous tab immediately, and on other clients after their next misc version query?
 - Does the page-context edit-mode check match what TRP3 does in every path (cancel, tab switch, closing the window mid-edit, `/reload` while editing)? Check with `/dawnward trp3 diagnose`.
 
-## The About page (v0.9)
+## The About page (v0.10.1)
 
-`Integrations/TRP3/AboutDoc.lua` builds the document, `Presentation.lua` styles it, and the plan follows the same ownership rules as before.
+The About page is the character's **public narrative**, not a list of Dawnward's records. `Integrations/TRP3/AboutDoc.lua` decides what is on it, `Presentation.lua` how it looks, and the plan follows the same ownership rules as every other part of the sync. Dawnward's own records (facts, family, stances, history entries, personality axes, journal) stay in Dawnward, untouched; only what is published changed.
 
-**Settings (Settings > Total RP 3 > Overview, or `/dawnward story set …`):**
-- **About page** (`trp3About`): **Auto** (the full profile for characters on the profile model, the v0.3 summary block for others), **Profile**, or **Summary**.
-- **Template** (`trp3Layout`): **Keep** your Total RP 3 template, or **Text** (1), **Frames** (2), **Sections** (3). Choosing one in Dawnward moves only Dawnward's content (the player's text in the old template is untouched) and switches TRP3's template; switching the template in TRP3 instead is a conflict, never overwritten.
-- **Style** (`trp3Style`): Neutral (plain headings), Silver Hand (gold headings, background 3: Marble), Arcane (violet headings with section icons).
+**What the page holds**, in the player's order (default order below), each only when the player wrote it:
 
-**Sections**, in order, each only when it has Public content: Character overview, Appearance, the biography (one section per heading of the player's own, the text before the first heading titled "Background"), Family, Beliefs and motivations, Personality, Defining experiences, Chronicle notes. Section titles are generic container names or the player's own headings; nothing is invented.
+| Section (default title) | Source | Default |
+|---|---|---|
+| Character overview | the Summary field, in the player's words | on |
+| Biography | the current biography, **word for word**: every paragraph and line break, and the player's own chapter headings (`# Title` or `{h2}Title{/h2}` lines become chapter titles) | on |
+| Appearance | the Appearance field | on |
+| Personality | a personality *description* field. Dawnward has none yet, so this section never appears; nothing is ever generated from personality axes, traits or facts | on |
+| Motivation | the Motivation field | **off** |
+| New developments | approved defining moments (journal entries the player approved and marked important) that the biography does not already tell | **off** |
+
+Never published any more: facts and their "Origin:" / "Relationship:" lists, family lists, "Beliefs and motivations", stance or persona lines, "Defining experiences", "Chronicle notes", history entries. No section is ever empty, and no text is invented to fill one: every heading is a section title (the player may rename it) or one of the player's own chapter titles.
+
+**No repetition** (`AboutDoc.Dedupe`, pure, `tests/spec/trp3_about_v0101_spec.lua`): the biography is never changed. A sentence of the overview, an optional section or a development that the biography (or an earlier section) already says is left out; sentences are compared without case, spacing, punctuation or TRP3 tags, and a sentence of 24 characters or more also counts as said when it appears inside a longer one. The rest of the player's text stays exactly as written, paragraph breaks included. A section left with nothing (for example an overview that only repeats the biography's opening) is not shown.
+
+**Choices** (saved per character in the story preferences; Settings > Total RP 3 > Biography, `UI/TRP3BiographyPanel.lua`, with a live preview):
+- **Template** (`trp3Layout`): **Keep** Total RP 3's own, **Text** (1), **Frames** (2), **Sections** (3). Choosing one moves only Dawnward's content and switches TRP3's template; switching it in TRP3 instead is a conflict, never overwritten.
+- **Style** (`trp3Style`): **Neutral** (ivory body text, TRP3's own white headings), **Silver Hand** (parchment body text, gold headings, muted gold chapter titles, Marble frames), **Arcane** (cool ivory body text, light violet headings with the section's icon).
+- **Heading colour** (`trp3Accent`): the style's own, or gold, silver, crimson, azure, violet or verdant for section and chapter titles.
+- **Sections** (`trp3Sections`): shown or hidden, title (60 characters), order (Up / Down), and for template 2 each frame's icon and background, picked from the verified lists only.
+- **Content** (`trp3About`, chat only): `summary` publishes the overview alone; `auto` and `profile` the whole page.
 
 **Templates:**
 | Template | Where Dawnward writes |
 |---|---|
-| 1 | One text after the player's own `T1.TX` (each section a `{h2}` heading and its text) |
-| 2 | One frame per section after the player's frames: `{ TX, IC = the section icon, BK = the style's background }`. A frame the player restyles keeps their icon and background; only its text is updated |
-| 3 | `PH`: the appearance (TRP3 titles it); `PS`: beliefs and personality; `HI`: overview, biography, family, experiences, notes; each after the player's own text in that part |
+| 1 | One text after the player's own `T1.TX`: each section a `{h2}` title, chapters `{h3}` |
+| 2 | One frame per section after the player's frames, `{ TX, IC, BK }` from the section's icon and background (or the style's). The biography stays **one** frame; only when it is over 30 000 bytes is it split, and then only at the player's own chapter headings (never inside a chapter, never losing text) |
+| 3 | `PH`: the appearance alone (TRP3 titles the part); `PS`: a personality description alone (none today, so the player's own `PS` text is all that shows); `HI`: the overview, the biography and the other chosen sections. Each after the player's own text in that part |
 
 **Ownership modes:**
 - **Append** (default): the player's own text and frames are never changed.
 - **Adopt**: the player chose "Replace it with Dawnward's" when connecting. The first write takes over each slot it uses after a backup (the player's previous text stays in that backup); afterwards an edit in TRP3 is a conflict.
 
+**Frames and the player's styling:** the record keeps, for each of Dawnward's frames, the section it holds (`frameIds`) and the icon and background Dawnward gave it (`frameStyles`, both v0.10.1, additive in the ledger). A frame still in Dawnward's style takes a newly chosen icon or background; a frame the player restyled in TRP3 keeps the player's choice, and moves with its section when the order changes. A restyled frame that is no longer needed is a **conflict** (never dropped). For a record written before v0.10.1 the style is unknown: such frames keep the icon and background they have, and count as restyled when they carry an icon or background Dawnward never writes.
+
+**Upgrading from v0.9 / v0.10:** nothing to do. The next sync finds Dawnward's old text exactly (the ledger's `slots` and `frames`) and replaces it in place with the new page, in one backed-up, read-back write: no conflict, no duplicate. In template 2 each old frame is matched to a section by its heading ("Character overview", "Appearance", the first chapter for the biography); frames no longer needed are removed (Dawnward's only). In template 3 the old beliefs and personality text leaves `PS`. The player's own text and frames are untouched. `tests/spec/trp3_about_v0101_spec.lua` replays exactly what v0.10.0 wrote (`tests/fixtures/about_v010.lua`).
+
 **Never duplicated:** content is found by exact match; missing, duplicated or edited content is a conflict. Text identical to Dawnward's that Dawnward has no record of writing (for example after a lost ledger) is also a conflict, so the About page is never written twice.
 
-**Never shortened:** a slot over 30 000 bytes is refused with the reason. The biography itself is stored up to 16 KB and is never cut. TRP3 has no hard size limit, only a "profile too heavy" warning when the profile would need more than 20 messages to send (`RegisterExchange.lua`); a long biography may trigger it.
+**Never shortened:** a slot or frame over 30 000 bytes is refused with the reason. The biography itself is stored up to 16 KB and is never cut. TRP3 has no hard size limit, only a "profile too heavy" warning when the profile would need more than 20 messages to send (`RegisterExchange.lua`); a long biography may trigger it.
 
-**Icons** are Total RP 3 3.4.1's own interface icons, the entry it uses on older clients (`DirectorySection`, `HistorySection`, `MiscInfoSection`, `PhysicalSection`, `TraitSection`, `TargetNotes`, `ProfileDefault`). **Backgrounds** are indices 1 (Dialog) and 3 (Marble) of TRP3's tiled background list (v0.10: Silver Hand moved from 2, Bank-Background, which the Classic Era 1.15.9 UI source does not use; every icon and background is on the allowlist in `Presentation.ICONS` / `Presentation.BACKGROUNDS`, checked by `tests/spec/trp3_presentation_allowlist_spec.lua`). Frames the player restyled keep their own icon and background on every update. Whether each icon and background renders on Classic Era is to be checked in game (L3).
+**Why the body text was yellow, and the fix (v0.10.1).** Total RP 3 3.4.1 draws the About text in a SimpleHTML frame (`RegisterAbout.lua` `setupHTMLFonts`, lines 67-75): paragraphs use `TRP3_AboutParagraphFont`, a copy of `SystemFont_Shadow_Med1` (line 55), and headings `h1`-`h3` use Huge3, Huge1 and Large. It sets the three heading colours to white (`SetTextColor("h1", 1, 1, 1)` …) but **never sets the paragraph colour**, so every paragraph keeps the system font's normal gold. Dawnward wrote plain text, so all of it showed in that gold. The only colour mechanism in the About text is the `{col:RRGGBB}` tag: `convertTextTag` (`Core/Utils.lua` 441-455) turns it into `|cffRRGGBB … |r` after the HTML is built, so it colours text inside one paragraph but cannot span block elements. Dawnward now wraps **every non-empty body line** it writes in its style's body colour, and re-opens that colour after a `{/col}` of the player's own, so no line falls back to gold. Headings stay TRP3's white unless the style or heading colour sets one.
 
-**Preview:** Overview > **Preview profile** (or `/dawnward trp3 profile`) shows everything that would be published, read only.
+**What Total RP 3 cannot do (limits):**
+- **No dividers.** `toHTML` converts only `h1`-`h3` and `p` (`structureTags`), and SimpleHTML has no `<hr>`; sections are separated by their title and one blank line.
+- **No fonts or sizes** beyond `h1`-`h3`; the sizes are the player's own TRP3 settings (`CONFIG_REGISTER_ABOUT_*_SIZE`).
+- **High contrast:** with TRP3's high-contrast option, `convertTextToHTML` strips every `{col}` tag (lines 115-127) and draws its own backgrounds, so the page shows in TRP3's own colours, as that player chose.
+- **Colour tags are visible in TRP3's editor:** the player sees `{col:…}` around Dawnward's lines when editing the About text in TRP3. Editing Dawnward's part there is a conflict anyway (nothing is overwritten).
+- **Other clients via MSP** (MyRolePlay, XRP): TRP3 sends the About text through `removeTextTags` (`RegisterMSP.lua` 64-93), which turns `{col}` into the client's own colour codes; headings stay as written, as for any TRP3 profile.
+- **Template 3's titles and icons** are TRP3's own ("Physical Description", "Personality Traits", "History"); Dawnward cannot rename them.
+- **Frame icons and backgrounds** are limited to the verified lists (`Presentation.ICONS`, `Presentation.BACKGROUNDS`): Total RP 3 3.4.1's own interface icons, the entry it uses on older clients (`DirectorySection`, `HistorySection`, `MiscInfoSection`, `PhysicalSection`, `TraitSection`, `TargetNotes`, `ProfileDefault`), and backgrounds 1 (Dialog), 3 (Marble) and 4 (Rock), each checked in the Classic Era 1.15.9 UI source (`tests/spec/trp3_presentation_allowlist_spec.lua`). Whether each renders on Classic Era is to be checked in game (L3).
+
+**Preview:** Settings > Total RP 3 > Biography draws the page as Total RP 3 does (white headings, coloured body text, TRP3's gold for any uncoloured paragraph, frames with their icon and tiled background, template 3's titled parts). Connection > **Preview profile** (or `/dawnward trp3 profile`) shows everything that would be published, read only.
 
 ## Presentation and supported markup (v0.4)
 
-`Integrations/TRP3/Presentation.lua` formats Dawnward's own section; `AboutBlock` decides what is in it. Markup confirmed in TRP3 3.4.1's source (`totalRP3/Core/Utils.lua`: `convertTextTags`, `structureTags` and the HTML conversion) **S**:
+`Integrations/TRP3/Presentation.lua` formats Dawnward's own content; `AboutDoc` decides what is in it. Markup confirmed in TRP3 3.4.1's source (`totalRP3/Core/Utils.lua`: `convertTextTags`, `structureTags` and the HTML conversion) **S**:
 
 | Markup | Effect |
 |---|---|
@@ -474,6 +504,6 @@ Nothing below is verified. Use two accounts (A writes, B observes), both on Clas
 | `{img:<path>:<w>:<h>[:align]}` | An image |
 | `{link*<url>*<text>}`, `[text](url)` | Links |
 
-TRP3 has **no font tags**: headings use TRP3's own heading fonts. Dawnward uses only headings, colour and icons. Its styles are Neutral (the default, exactly the v0.3 block), Silver Hand (gold headings) and Arcane (violet headings, book icon). How they render in game is **not yet verified** (v0.4 checklist I3). Player text is always escaped (`{` and `}` become brackets), so it can never become markup.
+TRP3 has **no font tags**: headings use TRP3's own heading fonts. Dawnward uses only headings, colour and icons (the styles are described in "The About page" above). How they render in game is **not yet verified** (v0.4 checklist I3). Titles and the player's field text are always escaped (`{` and `}` become brackets), so they can never become markup; the biography is kept exactly as written.
 
-**What reaches TRP3:** public facts (as in v0.3); public personality axes (traits sync); and, new in v0.4, the titles of journal entries the player approved, marked as defining moments and made public. Drafts cannot be public. The story table (events, decisions, private answers) is never part of a projection.
+**What reaches TRP3 (v0.10.1):** the published profile (`Projection.GetPublic`, `docs/PRIVACY.md`): on the About page the overview, the biography, the appearance and, when switched on, the motivation and the defining moments the player approved; personality axes as traits (traits sync); the mapped profile fields. Drafts are never published. The story table (events, decisions, private answers) is never part of a projection. (Until v0.10.0 the About page also listed facts and stances; it no longer does.)

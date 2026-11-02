@@ -1,22 +1,37 @@
 -- How Dawnward's narrative data is formatted for TRP3, kept apart from the
--- data itself. AboutBlock decides *what* is public; a style decides only
+-- data itself. AboutDoc decides *what* is published; a style decides only
 -- how it looks.
 --
 -- Only markup confirmed in TRP3 3.4.1's source (Core/Utils.lua,
 -- convertTextTags and toHTML; docs/TRP3_INTEGRATION.md) is used:
 --   {h1}..{h3} headings (optionally :c / :r), {p:c} / {p:r} paragraphs,
 --   {col:RRGGBB}...{/col} colour, {icon:<icon name>:<size>} icons.
--- TRP3 has no font tags; headings use TRP3's own heading fonts
--- (RegisterAbout.lua: h1 SystemFont_Shadow_Huge3, h2 Huge1, h3 Large, all
--- white unless a {col} says otherwise). toHTML drops the line break right
--- after a heading, and a blank line between paragraphs shows as one empty
--- line, so sections are separated by one blank line and nothing more.
+-- TRP3 has no font tags and no divider (toHTML's structureTags are only
+-- h1-h3 and p; SimpleHTML has no <hr>), so sections are separated by their
+-- heading and one blank line. toHTML drops the line break right after a
+-- heading (its "()>?()\n" rule), and a blank line between paragraphs shows
+-- as one empty line.
+--
+-- Colours (v0.10.1). RegisterAbout.lua setupHTMLFonts (lines 67-75) gives
+-- the About text TRP3's own fonts: paragraphs TRP3_AboutParagraphFont, a
+-- copy of SystemFont_Shadow_Med1 (line 55), headings h1-h3 Huge3/Huge1/
+-- Large. It sets h1, h2 and h3 to white (SetTextColor, lines 73-75) but
+-- never sets the paragraph colour, so body text keeps the system font's own
+-- colour: the game's normal gold (NORMAL_FONT_COLOR, 1, 0.82, 0). That is
+-- the bright yellow the owner saw on every line Dawnward wrote. The only
+-- colour mechanism the About text has is the {col:RRGGBB} tag, which
+-- convertTextTag (Utils.lua 441-455) turns into |cffRRGGBB ... |r AFTER the
+-- HTML is built, so it colours text inside a paragraph but cannot span
+-- block elements. Dawnward therefore wraps every non-empty body line it
+-- writes in its style's body colour (a neutral ivory or parchment), and
+-- re-opens it after a {/col} of the player's own. With TRP3's high
+-- contrast option, convertTextToHTML strips every {col} tag (lines
+-- 115-127), and the text shows in TRP3's own colours, as the player chose.
 --
 -- v0.10 (Phase 7): every icon and frame background Dawnward writes is on an
 -- allowlist checked against the sources (Presentation.ICONS,
 -- Presentation.BACKGROUNDS; tests/spec/trp3_presentation_allowlist_spec.lua).
--- Neutral is unchanged, so a profile synced by v0.3 is not rewritten.
--- Silver Hand frames now use background 3 (Marble), which the Classic Era
+-- Silver Hand frames use background 3 (Marble), which the Classic Era
 -- 1.15.9 UI itself uses; background 2 (Bank-Background) appears only in a
 -- later client's bank frame and could not be verified for Classic Era.
 -- Frames the player restyled in TRP3 keep their own icon and background
@@ -25,7 +40,7 @@
 --
 -- How the About page will look is also modelled here (Presentation.Display)
 -- for Dawnward's preview: the same headings, order, frames and colours TRP3
--- draws, as plain data for UI/TRP3Page.lua.
+-- draws, as plain data for UI/TRP3BiographyPanel.lua and UI/TRP3Page.lua.
 local _, ns = ...
 
 local Presentation = {}
@@ -33,6 +48,11 @@ ns.TRP3Presentation = Presentation
 
 Presentation.DEFAULT = "neutral"
 
+-- Each style: body (the paragraph colour, always set: see above), color
+-- (section titles; nil keeps TRP3's white), chapter (the player's own
+-- chapter titles; nil keeps TRP3's white), background (template 2 frames),
+-- icons (an inline icon before each section title). The heading/moments/
+-- stances strings are the v0.3 summary block's (AboutBlock.Compose).
 Presentation.STYLES = {
 	neutral = {
 		label = "Neutral",
@@ -40,7 +60,7 @@ Presentation.STYLES = {
 		momentsHeading = "Defining moments:",
 		momentPrefix = "- ",
 		stancesHeading = "Where they stand:",
-		-- v0.9 full profile: plain headings, TRP3's first background.
+		body = "e8e0d0",       -- soft ivory
 		background = 1,
 	},
 	silverhand = {
@@ -49,7 +69,9 @@ Presentation.STYLES = {
 		momentsHeading = "{col:e6c35c}Defining moments{/col}",
 		momentPrefix = "- ",
 		stancesHeading = "{col:e6c35c}Where they stand{/col}",
-		color = "e6c35c",
+		color = "e6c35c",      -- gold section titles
+		chapter = "d9c38a",    -- muted gold chapter titles
+		body = "efe4c9",       -- warm parchment
 		background = 3,
 	},
 	arcane = {
@@ -58,26 +80,55 @@ Presentation.STYLES = {
 		momentsHeading = "{col:b89cff}Defining moments{/col}",
 		momentPrefix = "- ",
 		stancesHeading = "{col:b89cff}Where they stand{/col}",
-		color = "b89cff",
+		color = "c4adff",      -- a lighter violet, readable on TRP3's dark backgrounds
+		chapter = "b6a6dc",
+		body = "e6e1f0",       -- cool ivory
 		icons = true,
 		background = 1,
 	},
 }
 
--- Section icons (v0.9 full profile): template 2 frame icons, and inline
--- icons in the Arcane style. Each is one of Total RP 3 3.4.1's own
--- interface icons, the entry TRP3 itself resolves to on Classic Era
--- (Resources/InterfaceIcons.lua takes the first candidate the client has;
--- these are the only or the oldest candidates, shipped for every client).
+-- Heading colours the player may choose instead of the style's
+-- (StorySchema.TRP3_ACCENTS; "style" keeps the style's own).
+Presentation.ACCENTS = {
+	{ id = "style", label = "Style" },
+	{ id = "gold", label = "Gold", hex = "e6c35c" },
+	{ id = "silver", label = "Silver", hex = "d6dce6" },
+	{ id = "crimson", label = "Crimson", hex = "e08a7c" },
+	{ id = "azure", label = "Azure", hex = "8fbfee" },
+	{ id = "violet", label = "Violet", hex = "c4adff" },
+	{ id = "verdant", label = "Verdant", hex = "a3d69d" },
+}
+Presentation.ACCENT_BY_ID = {}
+for _, a in ipairs(Presentation.ACCENTS) do Presentation.ACCENT_BY_ID[a.id] = a end
+
+--- The style to render with: the named style, its heading colours replaced
+-- by the accent when one is chosen. Returns a new table. Pure.
+function Presentation.Resolve(styleId, accentId)
+	local base = Presentation.Get(styleId)
+	local out = {}
+	for k, v in pairs(base) do out[k] = v end
+	local accent = Presentation.ACCENT_BY_ID[accentId or "style"]
+	if accent and accent.hex then
+		out.color, out.chapter = accent.hex, accent.hex
+	end
+	return out
+end
+
+-- Section icons: the default template 2 frame icon of each About section,
+-- and the inline icon in the Arcane style. Each is one of Total RP 3
+-- 3.4.1's own interface icons, the entry TRP3 itself resolves to on Classic
+-- Era (Resources/InterfaceIcons.lua takes the first candidate the client
+-- has; these are the only or the oldest candidates, shipped for every
+-- client). "bio" is the v0.9/v0.10 name of the biography.
 Presentation.SECTION_ICONS = {
 	overview = "inv_misc_book_09",
-	appearance = "spell_nature_strength",
+	biography = "inv_misc_book_12",
 	bio = "inv_misc_book_12",
-	family = "inv_misc_grouplooking",
-	beliefs = "inv_misc_note_06",
+	appearance = "spell_nature_strength",
 	personality = "spell_arcane_mindmastery",
-	experiences = "inv_scroll_02",
-	notes = "inv_misc_note_06",
+	motivation = "inv_misc_note_06",
+	developments = "inv_scroll_02",
 }
 
 -- The allowlist: every icon Dawnward names in Total RP 3, with where it was
@@ -115,23 +166,94 @@ Presentation.T3_PARTS = {
 	{ slot = "HI", title = "History", icon = "inv_misc_book_12" },
 }
 
+-- Readable names for the allowlisted icons and backgrounds (the panel's picker).
+Presentation.ICON_CHOICES = {
+	{ id = "inv_misc_book_09", label = "Closed book" },
+	{ id = "inv_misc_book_12", label = "Old tome" },
+	{ id = "inv_scroll_02", label = "Scroll" },
+	{ id = "inv_misc_note_06", label = "Note" },
+	{ id = "spell_nature_strength", label = "Strength" },
+	{ id = "spell_arcane_mindmastery", label = "Mind" },
+	{ id = "inv_misc_grouplooking", label = "Company" },
+}
+Presentation.BACKGROUND_CHOICES = {
+	{ id = 1, label = "Dialog" },
+	{ id = 3, label = "Marble" },
+	{ id = 4, label = "Rock" },
+}
+
 function Presentation.SectionIcon(id)
-	return Presentation.SECTION_ICONS[id] or Presentation.SECTION_ICONS.bio
+	return Presentation.SECTION_ICONS[id] or Presentation.SECTION_ICONS.biography
+end
+
+--- An allowlisted icon: the chosen one when it is on the list, else the
+-- section's default. Pure.
+function Presentation.SafeIcon(chosen, id)
+	if type(chosen) == "string" and Presentation.ICONS[chosen:lower()] then
+		return chosen:lower()
+	end
+	return Presentation.SectionIcon(id)
+end
+
+--- An allowlisted background index: the chosen one, else the style's. Pure.
+function Presentation.SafeBackground(chosen, style)
+	if Presentation.BACKGROUNDS[chosen] then
+		return chosen
+	end
+	return style and Presentation.BACKGROUNDS[style.background] and style.background or 1
 end
 
 --- A section heading line: {h2} (or {h3}) with the style's colour and, in
 -- the Arcane style, the section's icon. title is escaped (a player's own
--- heading can never become markup).
-function Presentation.SectionHeading(style, title, level, id)
+-- heading can never become markup). icon: the section's chosen icon.
+function Presentation.SectionHeading(style, title, level, id, icon)
 	level = level == 3 and 3 or 2
 	local text = Presentation.Escape(title)
 	if style.color then
 		text = "{col:" .. style.color .. "}" .. text .. "{/col}"
 	end
 	if style.icons then
-		text = "{icon:" .. Presentation.SectionIcon(id) .. ":18} " .. text
+		text = "{icon:" .. Presentation.SafeIcon(icon, id) .. ":18} " .. text
 	end
 	return "{h" .. level .. "}" .. text .. "{/h" .. level .. "}"
+end
+
+--- A chapter heading from the player's own biography ({h3}, the style's
+-- chapter colour). Escaped like every title.
+function Presentation.ChapterHeading(style, title)
+	local text = Presentation.Escape(title)
+	if style.chapter then
+		text = "{col:" .. style.chapter .. "}" .. text .. "{/col}"
+	end
+	return "{h3}" .. text .. "{/h3}"
+end
+
+--- Body text in the style's paragraph colour: every line with text is
+-- wrapped in {col:body}...{/col} (a colour cannot span TRP3's block
+-- elements, see above), and re-opened after any {/col} the line already
+-- has, so the rest of the line never falls back to TRP3's gold. Blank and
+-- whitespace-only lines stay exactly as they are; nothing else changes.
+function Presentation.Body(style, text)
+	local body = style and style.body
+	if not body then
+		return text
+	end
+	local open = "{col:" .. body .. "}"
+	local out = {}
+	for line in (tostring(text or ""):gsub("\r\n", "\n") .. "\n"):gmatch("([^\n]*)\n") do
+		if line:match("%S") then
+			out[#out + 1] = open .. line:gsub("{/col}", "{/col}" .. open) .. "{/col}"
+		else
+			out[#out + 1] = line
+		end
+	end
+	return table.concat(out, "\n")
+end
+
+--- The text a reader sees: Dawnward's colour tags removed (the player's
+-- own braces are escaped or kept as written, so only markup goes). Pure.
+function Presentation.Visible(text)
+	return (tostring(text or ""):gsub("{col:%x%x%x%x%x%x}", ""):gsub("{/col}", ""))
 end
 
 function Presentation.Get(id)

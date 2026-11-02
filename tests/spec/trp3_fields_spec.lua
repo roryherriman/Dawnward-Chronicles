@@ -26,7 +26,10 @@ local function legacySpec(t, expect)
 			assert(ns.Character.SetField(w.char(), key, value, 1))
 			assert(ns.Character.SetFieldVisibility(w.char(), key, level or "public", 1))
 		end
+		-- A public fact, and (v0.10.1: facts stay in Dawnward; the About page
+		-- is the narrative) the same words as the public summary.
 		function w.publicFact(category, statement)
+			w.field("summary", statement .. ".")
 			return ns.Facts.Add(w.char(), { category = category, statement = statement, visibility = "public" })
 		end
 		function w.manage(...)
@@ -352,15 +355,18 @@ local function legacySpec(t, expect)
 	end)
 
 	t:describe("TRP3 rollback: visibility-aware (L2)", function()
+		-- v0.10.1: the About page is the narrative (overview, biography,
+		-- appearance), so what stops being Public here is the biography.
 		local function setup()
 			local w = world()
-			w.publicFact("origin", "Born in Stormwind")
-			local secretFact = w.publicFact("belief", "Loves the Duke")
+			w.field("summary", "Born in Stormwind.")
+			assert(w.ns.Sources.Capture(w.char(), "paste", "Loves the Duke.", nil, 1))
+			assert(w.ns.Sources.SetVisibility(w.char(), "public", 1))
 			assert(w.Sync.SetPolicy(w.deps, "about", "dawnward"))
 			w.Sync.Run(w.deps)                       -- backup #1: before insert
-			w.publicFact("event", "Saved a village")
-			w.Sync.Run(w.deps)                       -- backup #2: holds both lines
-			w.ns.Facts.SetVisibility(w.char(), secretFact.id, "secret", 2)
+			w.field("appearance", "Saved a village, and it shows.")
+			w.Sync.Run(w.deps)                       -- backup #2: holds both
+			assert(w.ns.Sources.SetVisibility(w.char(), "secret", 2))
 			w.Sync.Run(w.deps)                       -- backup #3; TRP3 no longer shows it
 			return w
 		end
@@ -414,7 +420,7 @@ local function legacySpec(t, expect)
 		t:it("refuses the safe mode when Dawnward's part cannot be separated", function()
 			local w = setup()
 			local b = w.deps.ledger.backups[3]
-			b.owners.about.block = "\n\nnot in the backup"
+			b.owners.about.slots.T1 = "\n\nnot in the backup"
 			local preview = w.Sync.RollbackPreview(w.deps, 3)
 			expect.falsy(preview.ownPossible)
 			local before = w.fake.snapshot()
@@ -586,9 +592,9 @@ local function legacySpec(t, expect)
 			w.Sync.Run(w.deps)
 			local record = w.deps.ledger.profiles[w.fake.profileId].about
 			local about = w.fake.profile.player.about
-			expect.equal(w.ns.TRP3AboutBlock.WithoutOwned(about, record).T1.TX, "Private about text")
+			expect.equal(w.ns.TRP3AboutDoc.Strip(about, record).T1.TX, "Private about text")
 			about.T1.TX = about.T1.TX .. " (edited)"
-			local own, why = w.ns.TRP3AboutBlock.WithoutOwned(about, record)
+			local own, why = w.ns.TRP3AboutDoc.Strip(about, record)
 			expect.equal(own, nil)
 			expect.truthy(why:find("edited", 1, true))
 		end)

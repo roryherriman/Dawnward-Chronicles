@@ -4,8 +4,8 @@
 -- ctx.trp3Deps() must return the Sync deps (see Sync.lua). Anything that
 -- writes to TRP3 or removes content requires the word "confirm".
 local _, ns = ...
-local Util, Sync, AboutBlock, TraitPlan, Projection, FieldPlan, Ledger =
-	ns.Util, ns.TRP3Sync, ns.TRP3AboutBlock, ns.TRP3TraitPlan, ns.Projection, ns.TRP3FieldPlan, ns.TRP3Ledger
+local Util, Sync, TraitPlan, Projection, FieldPlan, Ledger =
+	ns.Util, ns.TRP3Sync, ns.TRP3TraitPlan, ns.Projection, ns.TRP3FieldPlan, ns.TRP3Ledger
 
 local TRP3Commands = {}
 ns.TRP3Commands = TRP3Commands
@@ -79,8 +79,10 @@ TRP3Commands.MANUAL_FIELDS = {
 function TRP3Commands.ManualText(char)
 	local public = char and Projection.GetPublic(char) or { facts = {}, personality = {} }
 	local lines = { "-- Paste this at the end of your Total RP 3 About text --", "" }
-	local block = AboutBlock.Compose(public)
-	lines[#lines + 1] = block ~= "" and block or "(no facts yet)"
+	-- The same About text the sync would write (template 1, AboutDoc).
+	Sync.ApplySettings(public, char)
+	local block = ns.TRP3AboutDoc.Render(ns.TRP3AboutDoc.Build(public), 1).T1
+	lines[#lines + 1] = block ~= "" and block or "(nothing to publish yet)"
 	lines[#lines + 1] = ""
 	lines[#lines + 1] = "-- Suggested Total RP 3 personality traits (custom traits; left / right) --"
 	local any = false
@@ -218,10 +220,14 @@ function TRP3Commands.AboutDiagnostics(deps)
 	local public = Sync.PublicOf(deps)
 	lines[#lines + 1] = "biography in the profile Dawnward publishes: " .. flag(public.biography ~= nil)
 		.. (current and not public.biography and " - kept back: confirm with /dawnward publish" or "")
-	lines[#lines + 1] = "About content: " .. (Sync.UsesProfile(public) and "whole profile" or "short summary")
+	lines[#lines + 1] = "About content: " .. (public.trp3About == "summary" and "overview only" or "overview and story")
 		.. ", layout " .. tostring(public.trp3Layout) .. ", style " .. tostring(public.trp3Style or "neutral")
+		.. ", headings " .. tostring(public.trp3Accent or "style")
 	local doc = ns.TRP3AboutDoc.Build(public)
-	lines[#lines + 1] = string.format("composed sections: %d", #doc)
+	local ids = {}
+	for i, section in ipairs(doc) do ids[i] = section.id end
+	lines[#lines + 1] = string.format("composed sections: %d%s", #doc, #ids > 0 and (" (" .. table.concat(ids, ", ")
+		.. ")") or "")
 	local entry = deps.ledger.optIn[deps.characterKey]
 	lines[#lines + 1] = "About sync authorised: " .. flag(Sync.FeatureOn(entry, "about"))
 		.. (entry and entry.profileId and (" for profile " .. tostring(entry.profileId)) or "")
@@ -353,23 +359,125 @@ end
 --- What the About page will look like in Total RP 3, for the settings
 -- page's preview: TRP3Presentation.Display blocks for the template the next
 -- write uses (the chosen layout, else currentTemplate, the About's own TE),
--- planned the same way as the sync (whole profile, or the summary block as
--- one section without a heading). Returns blocks, template. Read only.
+-- planned the same way as the sync (AboutDoc). Returns blocks, template.
+-- Read only.
 function TRP3Commands.AboutDisplay(char, currentTemplate)
+	local model = TRP3Commands.AboutModel(char, currentTemplate)
+	return model.blocks, model.template
+end
+
+--- Everything the Biography panel shows (UI/TRP3BiographyPanel.lua), read
+-- only: the saved choices (prefs), the sections in the player's order with
+-- whether each has text to show (available) and its icon and background
+-- (verified ones only), the template the next write uses, the rendered
+-- About (rendered) and its preview blocks (blocks).
+function TRP3Commands.AboutModel(char, currentTemplate)
 	local public = char and Projection.GetPublic(char) or { facts = {}, personality = {}, fields = {} }
 	Sync.ApplySettings(public, char)
+	local prefs = char and char.story and char.story.prefs or ns.StorySchema.NewPrefs()
 	local LAYOUT = { text = 1, frames = 2, sections = 3 }
 	local template = LAYOUT[public.trp3Layout] or (currentTemplate == 2 or currentTemplate == 3) and currentTemplate
 		or 1
-	local doc
-	if Sync.UsesProfile(public) then
-		doc = ns.TRP3AboutDoc.Build(public)
-	else
-		local block = AboutBlock.Compose(public)
-		doc = block ~= "" and { { id = "notes", body = block, raw = true } } or {}
+	local doc = ns.TRP3AboutDoc.Build(public)
+	-- What each section would say with every section on (for "available").
+	local everything = Util.DeepCopy(public)
+	everything.trp3About = "profile"
+	everything.trp3Sections = Util.DeepCopy(public.trp3Sections) or {}
+	everything.trp3Sections.on = {}
+	for _, id in ipairs(ns.StorySchema.TRP3_SECTIONS) do everything.trp3Sections.on[id] = true end
+	local available = {}
+	for _, section in ipairs(ns.TRP3AboutDoc.Build(everything)) do available[section.id] = true end
+	local shown = {}
+	for _, section in ipairs(doc) do shown[section.id] = true end
+	local style = ns.TRP3Presentation.Resolve(public.trp3Style, public.trp3Accent)
+	local sections = {}
+	for i, s in ipairs(ns.StorySchema.AboutSections(prefs)) do
+		sections[i] = { id = s.id, on = s.on, title = s.title, available = available[s.id] == true,
+			shown = shown[s.id] == true, defaultTitle = ns.StorySchema.TRP3_SECTION_DEFAULTS[s.id].title,
+			icon = ns.TRP3Presentation.SafeIcon(s.icon, s.id),
+			background = ns.TRP3Presentation.SafeBackground(s.background, style) }
 	end
-	local rendered = ns.TRP3AboutDoc.Render(doc, template, public.trp3Style)
-	return ns.TRP3Presentation.Display(rendered, template), template
+	local rendered = ns.TRP3AboutDoc.Render(doc, template)
+	return { prefs = prefs, template = template, sections = sections, doc = doc, rendered = rendered,
+		blocks = ns.TRP3Presentation.Display(rendered, template), style = style }
+end
+
+--- Sets the About headings' colour: "style" (the style's own) or one of
+-- TRP3Presentation.ACCENTS. Returns ok, message.
+function TRP3Commands.SetAboutAccent(ctx, id)
+	if not ns.StorySchema.TRP3_ACCENTS[id] then
+		return nil, "Unknown heading colour."
+	end
+	return ns.Actions.WithCharacter(ctx, function(char)
+		char.story.prefs.trp3Accent = id
+		return true, "Heading colour: " .. ns.TRP3Presentation.ACCENT_BY_ID[id].label .. "."
+	end)
+end
+
+--- Changes one About choice of the character (through Actions.WithCharacter:
+-- read-only data is refused, and an opted-in sync catches up). what:
+--   "on", id, bool        a section on or off
+--   "title", id, text     a section's title ("" or nil: the default)
+--   "icon", id, icon      a frame icon (allowlisted only; nil: the default)
+--   "background", id, n   a frame background (allowlisted only; nil: the style's)
+--   "move", id, -1 | 1    a section up or down
+--   "reset"               every section choice back to the defaults
+-- Returns ok, message.
+function TRP3Commands.SetAboutSection(ctx, what, id, value)
+	local Schema = ns.StorySchema
+	local known = false
+	for _, sid in ipairs(Schema.TRP3_SECTIONS) do known = known or sid == id end
+	if what ~= "reset" and not known then
+		return nil, "Unknown About section."
+	end
+	if what == "icon" and value ~= nil and not ns.TRP3Presentation.ICONS[tostring(value):lower()] then
+		return nil, "That icon is not one Dawnward can use in Total RP 3."
+	end
+	if what == "background" and value ~= nil and not ns.TRP3Presentation.BACKGROUNDS[value] then
+		return nil, "That background is not one Dawnward can use in Total RP 3."
+	end
+	return ns.Actions.WithCharacter(ctx, function(char)
+		local prefs = char.story.prefs
+		if what == "reset" then
+			prefs.trp3Sections = nil
+			return true, "About sections reset."
+		end
+		local sections = Util.DeepCopy(prefs.trp3Sections) or {}
+		sections.on, sections.titles = sections.on or {}, sections.titles or {}
+		sections.icons, sections.backgrounds = sections.icons or {}, sections.backgrounds or {}
+		local label = Schema.TRP3_SECTION_DEFAULTS[id].title
+		local message
+		if what == "on" then
+			sections.on[id] = value and true or false
+			message = label .. (value and " shown." or " hidden.")
+		elseif what == "title" then
+			local clean = Util.CleanText(value, Schema.TRP3_SECTION_TITLE_MAX)
+			sections.titles[id] = (clean and clean ~= "" and clean ~= label) and clean or nil
+			message = "Title saved: " .. (sections.titles[id] or label) .. "."
+		elseif what == "icon" then
+			sections.icons[id] = value and tostring(value):lower() or nil
+			message = label .. ": icon saved."
+		elseif what == "background" then
+			sections.backgrounds[id] = value
+			message = label .. ": background saved."
+		elseif what == "move" then
+			local order = {}
+			for i, s in ipairs(Schema.AboutSections(prefs)) do order[i] = s.id end
+			local at
+			for i, sid in ipairs(order) do if sid == id then at = i end end
+			local to = at + (value == -1 and -1 or 1)
+			if to < 1 or to > #order then
+				return nil, "Already " .. (to < 1 and "first." or "last.")
+			end
+			order[at], order[to] = order[to], order[at]
+			sections.order = order
+			message = label .. " moved " .. (value == -1 and "up." or "down.")
+		else
+			return nil, "Unknown change."
+		end
+		prefs.trp3Sections = Schema.CleanAboutSections(sections)
+		return true, message
+	end)
 end
 
 --- The public profile Dawnward would publish, as text (read only): the
@@ -382,30 +490,25 @@ function TRP3Commands.ProfilePreview(char, template)
 	local lines = {}
 	local LAYOUT = { text = 1, frames = 2, sections = 3 }
 	template = LAYOUT[public.trp3Layout] or template or 1
-	if Sync.UsesProfile(public) then
-		-- v0.10: laid out as Total RP 3 shows it (TRP3Presentation.Display):
-		-- the same order, frames and template 3 titles, headings on their
-		-- own line, markup shown as plain text (TRP3Commands.PlainLines).
-		local rendered = ns.TRP3AboutDoc.Render(ns.TRP3AboutDoc.Build(public), template, public.trp3Style)
-		local style = ns.TRP3Presentation.Get(public.trp3Style)
-		lines[#lines + 1] = "ABOUT PAGE (template " .. template .. ") · style: " .. style.label
-		local blocks = ns.TRP3Presentation.Display(rendered, template)
-		for i, block in ipairs(blocks) do
-			if block.kind == "frame" then
-				local bk = ns.TRP3Presentation.BACKGROUNDS[block.background]
-				lines[#lines + 1] = string.format("--- Frame %d (icon %s, background %s) ---", i, tostring(block.icon),
-					bk and tostring(block.background) or (tostring(block.background) .. ", your own"))
-			elseif block.kind == "part" then
-				lines[#lines + 1] = "--- " .. block.title .. " ---"
-			end
-			for _, line in ipairs(TRP3Commands.PlainLines(block.items)) do lines[#lines + 1] = line end
+	-- Laid out as Total RP 3 shows it (TRP3Presentation.Display): the same
+	-- order, frames and template 3 titles, headings on their own line,
+	-- markup shown as plain text (TRP3Commands.PlainLines).
+	local rendered = ns.TRP3AboutDoc.Render(ns.TRP3AboutDoc.Build(public), template)
+	local style = ns.TRP3Presentation.Get(public.trp3Style)
+	lines[#lines + 1] = "ABOUT PAGE (template " .. template .. ") · style: " .. style.label
+	local blocks = ns.TRP3Presentation.Display(rendered, template)
+	for i, block in ipairs(blocks) do
+		if block.kind == "frame" then
+			local bk = ns.TRP3Presentation.BACKGROUNDS[block.background]
+			lines[#lines + 1] = string.format("--- Frame %d (icon %s, background %s) ---", i, tostring(block.icon),
+				bk and tostring(block.background) or (tostring(block.background) .. ", your own"))
+		elseif block.kind == "part" then
+			lines[#lines + 1] = "--- " .. block.title .. " ---"
 		end
-		if #blocks == 0 or (#blocks == 1 and #blocks[1].items == 0) then
-			lines[#lines + 1] = "(nothing yet)"
-		end
-	else
-		lines[#lines + 1] = "ABOUT PAGE (summary block)"
-		lines[#lines + 1] = AboutBlock.Compose(public) ~= "" and AboutBlock.Compose(public) or "(nothing yet)"
+		for _, line in ipairs(TRP3Commands.PlainLines(block.items)) do lines[#lines + 1] = line end
+	end
+	if #blocks == 0 or (#blocks == 1 and #blocks[1].items == 0) then
+		lines[#lines + 1] = "(nothing yet)"
 	end
 	lines[#lines + 1] = ""
 	lines[#lines + 1] = "PROFILE FIELDS"
@@ -907,7 +1010,10 @@ function TRP3Commands.PublicPreview(char)
 			fields[#fields + 1] = { id = m.id, label = m.label, trp3 = m.trp3, value = miscValues[m.id] }
 		end
 	end
-	return { about = AboutBlock.Compose(public), traits = traits, fields = fields }
+	-- The About text as template 1 would hold it ("" when there is nothing).
+	Sync.ApplySettings(public, char)
+	local about = ns.TRP3AboutDoc.Render(ns.TRP3AboutDoc.Build(public), 1).T1
+	return { about = about, traits = traits, fields = fields }
 end
 
 --- Read-only snapshot for the settings page: the adapter probe, the opt-in

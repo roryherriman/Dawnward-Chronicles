@@ -79,7 +79,8 @@ local function legacySpec(t, expect)
 			expect.equal(#fake.events, 0, "nothing written until the debounced run")
 			mock.RunTimers()
 			local about = fake.profile.player.about.T1.TX
-			expect.truthy(about:find("{h2}The fall of Lordaeron{/h2}\nThe walls fell.\n\nShe hid.", 1, true), about)
+			expect.truthy(about:find("{h2}Biography{/h2}\n{h3}The fall of Lordaeron{/h3}\n{col:e8e0d0}The walls fell.{/col}"
+				.. "\n\n{col:e8e0d0}She hid.{/col}", 1, true), about)
 			expect.equal(fake.profile.player.characteristics.FN, "Mirelle")
 			expect.equal(fake.profile.player.characteristics.MI[1].VA, "she/her")
 			ns.MainWindow.Refresh()
