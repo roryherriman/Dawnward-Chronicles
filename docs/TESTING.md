@@ -918,3 +918,37 @@ The automated run (L2, TRP3 3.4.1 fake) imports one long backstory of plain para
 | Z13 | Drag the gold resize grip to both limits; Settings > General > Reset Window Size; scroll the Character left column, the Chronicle list and Read view, and the Journal with the wheel | The window scales; nothing overlaps or disappears; the wheel never zooms the camera over the window |
 | Z14 | Character > Showcase: live model loads; rotate; zoom; switch to portrait and back; `/reload` | The model fills its card; the toggle works both ways; the choice is remembered; equipment is unchanged |
 | Z15 | Screenshot every screen and compare side by side with `docs/design/mockups/`; check line icons, tracked eyebrows and the new fonts render (no squares, no overlapping letters) in all three themes | The owner judges each screen against its rendering; record differences against `docs/design/UI_DESIGN_V10.md` |
+
+### v0.10.1 in-game acceptance gate (L3): the Total RP 3 profile, release-blocking
+
+**Nothing below is passed until the owner has done it in Classic Era 1.15.9 with Total RP 3 3.4.1 and recorded the result.** Automated tests (L2) are not this gate.
+
+**Before you start**
+1. Close WoW. Back up `Interface\AddOns\DawnwardChronicles` and `WTF\Account\<account>\SavedVariables\` (DawnwardChronicles*.lua and totalRP3*.lua).
+2. Install the build; `/dawnward status` shows **0.10.1-dev**. Turn on Lua errors: `/console scriptErrors 1`.
+3. Use the connected, named, non-default Total RP 3 profile of a test character (or Kyssarra's own, if you accept Dawnward managing it; take the backup first).
+
+**How to report a failure:** the item number, a screenshot, any Lua error text, and the output of `/dawnward trp3 diagnose` and `/dawnward trp3 log`.
+
+#### Part AA: v0.10.1 acceptance (each item release-blocking)
+
+| # | Steps | Pass when |
+|---|---|---|
+| AA1 | Character > Showcase: let the live model load; Turn left/right; Zoom in/out; switch to the portrait and back; change theme (Settings > General); `/reload`; reopen | No Lua error at any point; arrows and zoom work; the choice is remembered |
+| AA2 | Total RP 3 > your profile > About (reopen the tab after a sync) | Character overview, then your whole Biography. No "Chronicle notes", no "Origin:" or "Relationship:" lists, no "Beliefs and motivations" block; no sentence of your story repeated in another section |
+| AA3 | Read the Biography in Total RP 3 against your original story | Every paragraph present, in order, word for word, with your chapter headings |
+| AA4 | Look at the About text in each style (Dawnward Settings > Total RP 3 > Biography > Style: Neutral, Silver Hand, Arcane) | Body text ivory/parchment, not bright yellow; headings gold (Silver Hand) or violet (Arcane); readable spacing |
+| AA5 | Biography > Template: Text, then Frames, then Sections (wait a few seconds after each; reopen the About tab) | Text: one page. Frames: one frame per section with an icon and background (no green squares), your own frames untouched. Sections: appearance under Physical description, your personality description under Personality, overview and story under History |
+| AA6 | Total RP 3 page > At First Glance: add two entries (title, text, icon), hide one, reorder, enable sync | Total RP 3 > Miscellaneous shows the active entries with their icons in order; the hidden one is not shown to others; slots you filled yourself are unchanged |
+| AA7 | Status and OOC > Currently: type a line, Save (sync on); then Clear | Total RP 3's Currently box and your tooltip show it; after Clear it is empty. Suggest only fills the box until you save |
+| AA8 | Status and OOC > OOC: type a line, Save | Total RP 3's OOC box shows it |
+| AA9 | Status and OOC > Roleplay status: switch In character / Out of character; Walk-up: Yes / Do not show | Total RP 3's status icon and walk-up icon follow; nothing changes on its own |
+| AA10 | Status and style: read the six roleplay-style preferences; hand one to Dawnward and change it; leave the rest | The values match Total RP 3's Miscellaneous tab; only the handed-over one changes; Open in Total RP 3 opens your profile page |
+| AA11 | Character > Personality: change an axis value; rename an axis's words | The matching Total RP 3 trait bar moves the right way; the trait is renamed in place; your own traits untouched |
+| AA12 | Edit name, title, race, eye colour, height in Dawnward | Total RP 3 Characteristics show the new values within seconds |
+| AA13 | In Total RP 3, edit one sentence of Dawnward's About section, your Currently, and one Dawnward glance entry; then change the same items in Dawnward | Each shows a conflict in Dawnward (Synchronization > Recovery or the item's row); nothing you typed in Total RP 3 is overwritten until you choose |
+| AA14 | `/reload` | Everything above is unchanged; `/dawnward trp3 log` shows no new writes |
+| AA15 | In Total RP 3, switch to another profile; open Dawnward's Total RP 3 page; switch back | Dawnward shows "Paused" and writes nothing to the other profile; after switching back sync carries on |
+| AA16 | Synchronization > Recovery: Roll back… the newest backup (preview first), then Exact restore… an older one | Each asks first; your own text returns; Dawnward's part is rebuilt or restored as described |
+| AA17 | Screenshot every Dawnward screen and compare with `docs/design/mockups/` | The owner judges each screen; differences recorded against `docs/design/UI_DESIGN_V10.md` and `docs/design/audit/v10.1-refinements.md` |
+| AA18 | Play normally for 30 minutes with Dawnward open at times (quests, a level, zone changes, a story moment) | No Lua error appears |
