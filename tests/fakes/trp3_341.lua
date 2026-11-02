@@ -54,7 +54,9 @@ function Fake.new(opts)
 	function user:GetProfileName() return profile.profileName end
 	function user:GetProfileID() return fake.profileId end
 	function user:GetCharacterID() return fake.playerId end
-	function user:IsProfileDefault() return opts.isDefault == true end
+	-- CurrentUser:IsProfileDefault compares with the default_profile_id
+	-- config value (Core/Player.lua).
+	function user:IsProfileDefault() return fake.profileId == fake.defaultProfileId end
 	function user:GetProfile() return profile.player end
 	function user:GetCharacteristics() return profile.player.characteristics end
 	function user:GetFirstName() return profile.player.characteristics.FN end
@@ -218,10 +220,85 @@ function Fake.new(opts)
 		return out
 	end
 	function fake.switchProfile(id, name, data)
+		fake.profiles[fake.profileId] = nil
 		fake.profileId = id
 		profile.profileName = name or profile.profileName
 		if data then profile.player = data end
+		fake.profiles[id] = profile
 		fire("REGISTER_PROFILES_LOADED", profile)
+	end
+
+	-- Profiles (Core/Profiles.lua): TRP3_Profiles keyed by profile ID, the
+	-- default profile's ID ending in "*", TRP3_Characters[player].profileID
+	-- naming the character's profile. opts.profiles adds named profiles
+	-- ({ [id] = { profileName, player } }); opts.isDefault makes the active
+	-- profile the default one.
+	fake.profiles = { [fake.profileId] = profile }
+	fake.defaultProfileId = opts.isDefault and fake.profileId or "1690000000DFLT*"
+	if not fake.profiles[fake.defaultProfileId] then
+		fake.profiles[fake.defaultProfileId] = { profileName = "Default profile",
+			player = { characteristics = { v = 2, FN = "Testchar", MI = {}, PS = {} },
+				about = { v = 1, TE = 1, T1 = {}, T2 = {}, T3 = { PH = {}, PS = {}, HI = {} } },
+				character = { v = 1, RP = 2, WU = 2 } } }
+	end
+	for id, p in pairs(opts.profiles or {}) do
+		fake.profiles[id] = p
+	end
+	local characters = opts.characters or { [fake.playerId] = { profileID = fake.profileId } }
+	fake.characters = characters
+	fake.created = {}
+	local nextId = 0
+	-- PR_DEFAULT_PROFILE as the Register modules fill it (RegisterCharacteristics.lua 44,
+	-- RegisterAbout.lua 95, RegisterMisc.lua 18, Dashboard.lua 30).
+	local function template()
+		return { player = {
+			characteristics = { v = 1, RA = "Human", CL = "Paladin", FN = "Testchar",
+				IC = "Achievement_Character_Human_Female", MI = {}, PS = {} },
+			about = { v = 1, TE = 1, T1 = {}, T2 = {}, T3 = { PH = {}, PS = {}, HI = {} } },
+			misc = { v = 1, PE = {}, ST = {} },
+			character = { v = 1, RP = 2, WU = 2 },
+		} }
+	end
+	local function isNameAvailable(name)
+		assert(type(name) == "string" and name ~= "", "Invalid profile name.")
+		for id, p in pairs(fake.profiles) do
+			if p.profileName == name then return false, id end
+		end
+		return true, nil
+	end
+	local function selectProfile(id)
+		local p = fake.profiles[id]
+		assert(p, "Unknown profile id: " .. tostring(id))
+		profile = p
+		fake.profile = p
+		fake.profileId = id
+		characters[fake.playerId] = characters[fake.playerId] or {}
+		characters[fake.playerId].profileID = id
+		fake.selected = (fake.selected or 0) + 1
+		fire("REGISTER_PROFILES_LOADED", p)
+		fire("REGISTER_DATA_UPDATED", fake.playerId, id)
+	end
+	trp3api.profile = {
+		getProfiles = function() return fake.profiles end,
+		isProfileNameAvailable = isNameAvailable,
+		createProfile = function(name, isDefaultProfile)
+			assert(type(name) == "string" and name ~= "", "Invalid profile name.")
+			assert(isNameAvailable(name), "Unavailable profile name: " .. tostring(name))
+			nextId = nextId + 1
+			local id = string.format("17100000%02dNEWID", nextId)
+			if isDefaultProfile then id = id:sub(1, -2) .. "*" end
+			local p = template()
+			p.profileName = name
+			fake.profiles[id] = p
+			fake.created[#fake.created + 1] = id
+			return id
+		end,
+		selectProfile = selectProfile,
+		getPlayerCurrentProfileID = function() return fake.profileId end,
+		isDefaultProfile = function(id) return type(id) == "string" and id:sub(-1) == "*" end,
+	}
+	if opts.noProfileApi then
+		trp3api.profile = nil
 	end
 
 	local version = opts.version or "3.4.1"
@@ -229,7 +306,7 @@ function Fake.new(opts)
 		AddOn_TotalRP3 = api,
 		TRP3_Addon = addon,
 		TRP3_API = trp3api,
-		TRP3_Characters = opts.characters or { [fake.playerId] = { profileID = fake.profileId } },
+		TRP3_Characters = characters,
 		C_AddOns = {
 			IsAddOnLoaded = function(name) return name == "totalRP3" and not opts.notLoaded end,
 			GetAddOnMetadata = function(name, field)
