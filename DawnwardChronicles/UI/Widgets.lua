@@ -263,7 +263,30 @@ local function paintButton(b, theme)
 	b.edges:Paint(edge, edgeAlpha)
 	if b.textColor then text = b.textColor end
 	Style.TextColor(b.label, text)
-	if b.icon then b.icon:SetColor(b.iconRole and Style.Tone(theme, b.iconRole) or text) end
+	if b.icon then
+		Widgets.TintIcon(b.icon, b.iconRole and Style.Tone(theme, b.iconRole) or text,
+			(enabled or b.selected) and 1 or Widgets.BUTTON.disabledAlpha)
+	end
+end
+
+--- Colours an icon on a control. Two kinds of icon are used: Dawnward's
+-- line icons (Style.LineIcon, which have SetColor) and the client's own
+-- Texture objects (no SetColor; tinted with SetVertexColor). A native texture
+-- marked fullColor (art with its own colours, such as the rotate arrows)
+-- keeps its colours untinted; its owner dims it (SetAlpha, SetDesaturated).
+-- alpha (0-1) dims a disabled control's line or single-colour icon.
+function Widgets.TintIcon(icon, color, alpha)
+	if type(icon) ~= "table" then return end
+	alpha = alpha or 1
+	if type(icon.SetColor) == "function" then
+		icon:SetColor(color, alpha)
+	elseif type(icon.SetVertexColor) == "function" then
+		if icon.fullColor or type(color) ~= "table" then
+			icon:SetVertexColor(1, 1, 1, 1)
+		else
+			icon:SetVertexColor(color[1], color[2], color[3], alpha)
+		end
+	end
 end
 
 -- Icon and label sit side by side, centred together (the design's .btn: icon
@@ -273,7 +296,9 @@ Widgets.BUTTON_ICON = { standard = 16, compact = 14, gap = 8 }
 local function placeLabel(b, pressed)
 	local d = pressed and 1 or 0
 	local shift = 0
-	if b.icon then
+	-- Only the button's own line icon (it has a size) is placed here; a
+	-- native texture an owner put on the button keeps the owner's anchors.
+	if b.icon and b.icon.size then
 		local text = (not b.iconOnly and b.GetText and b:GetText()) or ""
 		local size = b.icon.size
 		local group = size
@@ -1192,7 +1217,7 @@ function Widgets.Chip(parent, text, tone, height)
 			c.edges:Paint(edge, 1)
 		end
 		Style.TextColor(c.label, color)
-		if c.icon then c.icon:SetColor(color) end
+		if c.icon then Widgets.TintIcon(c.icon, color) end
 	end)
 	chip:SetChip(text, tone)
 	return chip

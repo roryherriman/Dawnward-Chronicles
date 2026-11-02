@@ -333,6 +333,8 @@ function Showcase.Model(parent, width, height)
 		b.icon:SetTexture(Showcase.ROTATE_ICONS[side])
 		b.icon:SetSize(Showcase.ROTATE_ICON_SIZE, Showcase.ROTATE_ICON_SIZE)
 		b.icon:SetPoint("CENTER", 0, 0)
+		b.icon.fullColor = true -- the client's coloured art: dimmed when disabled, never tinted
+		Style.Repaint(b)
 		return b
 	end
 	f.left = rotateButton("left", "Turn left")
