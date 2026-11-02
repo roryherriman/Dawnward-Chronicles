@@ -51,6 +51,19 @@ Sections: **Profile** (identity, titles, race, class, physical details, addition
 ### Saved data
 Additive only: `char.trp3status`, `char.fields.personality`, story preferences `trp3Accent` and `trp3Sections`, and new ledger records (`status`, `look`, `style`, About `frameStyles`/`frameIds`, `character` backups). An older build ignores them.
 
+### Fixed before merge (independent review)
+- "Replace it with Dawnward's" no longer takes over About parts Dawnward does not write: personality or physical text you write later in Total RP 3 stays yours and is never wiped (Dawnward appends after it if it needs that part later).
+- After a takeover, switching the About template in Dawnward no longer replaces the new template's texts and frames: the takeover applied to the old template only, and Dawnward appends to the new one.
+- Backups: the state before Dawnward's first write in each section is never pushed out, "Use Dawnward's" pins are limited on their own, and frequent status writes push out only their own backups, never another section's.
+- Frames written by 0.10 take a newly chosen icon and background again (unless you restyled them in Total RP 3).
+- A section title typed in the Biography panel is saved to its own section even after moving sections while typing.
+- A status, OOC or roleplay style row you have no Dawnward value for is no longer paused because of Total RP 3's own text.
+- Backups of Miscellaneous and Status and OOC are named correctly; the status view and the rollback preview treat a colour in another letter case as the same colour.
+- Body text inside your own centred or right-aligned paragraphs, and next to your own headings or images, keeps the body colour instead of turning gold.
+- Wording: the Personality field feeds the Personality section; the help no longer says there is none.
+- The Total RP 3 page's status, At First Glance, roleplay style and About choices are refused in simulation mode (they belong to the real character Total RP 3 shows).
+- Rolling back a status backup taken without a roleplay status or walk-up no longer fails its read-back.
+
 ## [Unreleased]: 0.10.0-dev (pre-playthrough overhaul)
 
 **Verified: L2** (mocked). Nothing in this section has been tested in game yet.
