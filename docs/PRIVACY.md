@@ -8,7 +8,7 @@ A character's history is the player's creative work. Some of it is meant for oth
 
 | Part of the profile (published when connected) | Never part of the profile |
 |---|---|
-| Profile details (names, titles, race, class, age, birthplace, residence, appearance, ...), the biography (the story kept word for word), family, history, facts, personality values, the public persona of an established stance, defining moments (approved story entries marked important) | Journal notes, unapproved story drafts and suggestions, story answers and decisions, memories, a stance's inner conviction, earlier biography versions and where text came from |
+| Profile details (names, titles, race, class, age, birthplace, residence, appearance, ...), the biography (the story kept word for word), family, history, facts, personality values and your own words for each axis, the public persona of an established stance, defining moments (approved story entries marked important) | Journal notes, unapproved story drafts and suggestions, story answers and decisions, memories, a stance's inner conviction, earlier biography versions and where text came from |
 
 `char.publication` (`Core/Publication.lua`) records which model a character is on:
 
@@ -18,6 +18,8 @@ A character's history is the player's creative work. Some of it is meant for oth
 | `{ mode = "profile" }` (v0.9) with something hidden, or `{}` (before v0.9) | Older characters until the player confirms | Only what an earlier version marked Public |
 
 - **Older content is never published silently.** A character an earlier version kept partly back stays as it was until the player confirms once (`/dawnward publish confirm`, or **Publish whole profile…** on the Total RP 3 page). The confirmation first lists, per category, how many items would be published.
+- **Your own axis words** were never published before v0.10, so a character that has them counts as having something kept back and waits for the confirmation too.
+- **Backups carry the model,** and restoring a backup never moves a character back to an earlier model.
 - **Reversible and lossless.** The confirmation does not change any record: old visibility values stay stored, and `/dawnward publish undo` returns the character to the model it had.
 - **Why this changed (v0.10).** In 0.9 a backstory imported during first-time setup was stored with the old Private default, because the wizard switched the character to the profile model only at Finish; the About page was then built from Public items only and stayed empty in game ("No description"). In v0.10 the profile publishes as a whole, so the order of setup steps no longer matters.
 

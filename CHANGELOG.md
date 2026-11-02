@@ -61,6 +61,13 @@ Per-screen tables of what matches the approved renderings, what still differs an
 - **Total RP 3 page:** sections for Connection, Character information, Biography (with a preview laid out as Total RP 3 shows it), Personality, Appearance and At First Glance, Synchronization status (last sync, last problem) and Conflicts and recovery.
 - **How your profile looks in Total RP 3:** headings, icons and backgrounds come from an allowlist verified in Total RP 3 3.4.1 and the Classic Era client; Silver Hand frames now use the Marble background. Your story is always word for word.
 
+### Fixed before merge (independent review)
+- Restoring a personal backup could take a character back to an earlier publication model (and the empty About page with it); backups now carry the model, and a restore never moves it backwards.
+- Renaming a personality axis to words another Total RP 3 trait already uses (or giving two axes the same words) could make two identical traits and pause trait sync; the rename now stops with a conflict instead.
+- The automatic move of a 0.9 character could have started publishing the player's own axis words; they now count as content an earlier version kept back and wait for the one-time confirmation.
+- The publish confirmation and its undo refuse to act in simulation mode (they concern the real character Total RP 3 shows).
+- Clicking an empty field's dashed tile now opens its editor in the real client (the tile takes the mouse).
+
 ### In-game acceptance
 - `docs/TESTING.md` **part Z** is the release-blocking checklist for this build (Z1–Z15). Nothing in it is passed until confirmed in Classic Era.
 

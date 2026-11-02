@@ -105,11 +105,32 @@ function TraitPlan.Plan(characteristics, record, desired, maxTraits)
 			index[axisId] = found[1]
 		end
 	end
+	-- The names every trait will carry after this plan: an owned trait keeps
+	-- its index and takes its desired names (or goes, when no longer desired);
+	-- any other trait keeps its own. A desired name already carried by a
+	-- different trait, or wanted by two axes, would make two identical traits
+	-- (and ownership by names unprovable), so it stops the plan instead.
+	local after = {}
+	for i, trait in ipairs(list) do
+		if isCustom(trait) then after[i] = trait.LT .. "\0" .. trait.RT end
+	end
+	for axisId, i in pairs(index) do
+		local d = desired[axisId]
+		after[i] = d and (d.LT .. "\0" .. d.RT) or nil
+	end
+	local wanted = {}
 	for _, axisId in ipairs(sortedKeys(desired)) do
 		local d = desired[axisId]
-		if not owned[axisId] and #findByLabels(list, d.LT, d.RT) > 0 then
-			conflicts[#conflicts + 1] = "a trait named " .. d.LT .. "/" .. d.RT .. " already exists in Total RP 3"
+		local name = d.LT .. "\0" .. d.RT
+		local clash = wanted[name] ~= nil
+		for i, other in pairs(after) do
+			if other == name and i ~= index[axisId] then clash = true end
 		end
+		if clash then
+			conflicts[#conflicts + 1] = "a trait named " .. d.LT .. "/" .. d.RT .. " already exists in Total RP 3"
+				.. " (or two axes use the same words)"
+		end
+		wanted[name] = axisId
 	end
 	if #conflicts > 0 then
 		return { action = "conflict", record = record, reason = table.concat(conflicts, "; ") }

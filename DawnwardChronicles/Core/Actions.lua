@@ -628,6 +628,11 @@ end
 -- Old visibility values are kept, so RevertPublication undoes it exactly.
 -- Returns ok, message.
 function Actions.TransitionPublication(ctx)
+	-- Publication concerns the real character Total RP 3 shows, never a
+	-- simulated copy.
+	if ctx.store:IsSimulation() then
+		return nil, "Not changed: turn simulation mode off first (this concerns your real character)."
+	end
 	return withCharacter(ctx, function(char)
 		local changed, err = ns.Publication.Transition(char, nil, ctx.now())
 		if not changed then
@@ -643,6 +648,9 @@ end
 
 --- Undoes TransitionPublication. Returns ok, message.
 function Actions.RevertPublication(ctx)
+	if ctx.store:IsSimulation() then
+		return nil, "Not changed: turn simulation mode off first (this concerns your real character)."
+	end
 	return withCharacter(ctx, function(char)
 		local ok, err = ns.Publication.Revert(char, ctx.now())
 		if not ok then

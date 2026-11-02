@@ -42,6 +42,8 @@ Publication.CATEGORIES = {
 	{ id = "family", label = "Family" },
 	{ id = "history", label = "History" },
 	{ id = "moments", label = "Defining moments" },
+	-- Never published before v0.10 (Total RP 3 traits used Dawnward's words).
+	{ id = "axisWords", label = "Your own words for personality axes" },
 }
 Publication.CATEGORY_IDS = {}
 for _, c in ipairs(Publication.CATEGORIES) do
@@ -60,6 +62,10 @@ local function levels(char, id)
 	elseif id == "stances" then
 		for _, i in ipairs(char.story and char.story.identity or {}) do
 			if i.status == "established" and i.persona then out[#out + 1] = i.visibility end
+		end
+	elseif id == "axisWords" then
+		for _, entry in pairs(char.axisMeanings or {}) do
+			if type(entry) == "table" and (entry.left or entry.right) then out[#out + 1] = "private" end
 		end
 	elseif id == "moments" then
 		for _, e in ipairs(char.journal or {}) do
