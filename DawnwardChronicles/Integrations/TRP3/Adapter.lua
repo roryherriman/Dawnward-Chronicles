@@ -5,7 +5,10 @@
 --   public        TRP3's documented AddOn_TotalRP3 setters. TRP3 3.4.1 has
 --                 none for About or personality traits; when an official
 --                 setter appears, it is added to PUBLIC_SECTION_WRITERS and
---                 takes precedence automatically.
+--                 takes precedence automatically. v0.10.1: the player's
+--                 status and look (Currently, OOC, roleplay status, walk-up,
+--                 profile icon, class colour) are written only through
+--                 CurrentUser's own setters (ApplySetters).
 --   manual        Dawnward shows the text; the player pastes it into TRP3.
 --                 Always available; needs no TRP3 access at all.
 --   experimental  Version-allowlisted internal write of the player's own
@@ -23,7 +26,9 @@ local Adapter = {}
 ns.TRP3Adapter = Adapter
 
 -- v0.9: "misc" (player.misc), for Dawnward's own At First Glance slots.
-Adapter.SECTIONS = { about = true, characteristics = true, misc = true }
+-- v0.10.1: "character" (player.character: Currently, OOC, roleplay status,
+-- walk-up), read directly and written only through the public setters.
+Adapter.SECTIONS = { about = true, characteristics = true, misc = true, character = true }
 
 -- How TRP3 3.4.1 holds an unsaved About or characteristics draft
 -- (RegisterAbout.lua, RegisterCharacteristics.lua, RegisterMain.lua,
@@ -237,6 +242,11 @@ function Adapter.Probe(env)
 				reasons[#reasons + 1] = "Dawnward cannot tell whether the Total RP 3 editor is open"
 			end
 		end
+		-- Total RP 3's Currently and OOC boxes have no draft: they call the
+		-- public setters themselves (Dashboard/Currently.lua,
+		-- RegisterMisc.lua 387-409), so nothing waits for them.
+		probe.editorOpen.character = false
+		probe.editorState.character = { open = false, why = "Total RP 3 keeps no status draft" }
 		local glanceOpen = shownFlag(env, Adapter.GLANCE_EDITOR) == true
 		probe.editorOpen.misc = glanceOpen
 		probe.editorState.misc = { open = glanceOpen, editShown = glanceOpen,
@@ -358,6 +368,9 @@ function Adapter.WriteSection(env, section, data, expectedProfileId)
 	if not Adapter.SECTIONS[section] then
 		return nil, "unknown section"
 	end
+	if section == "character" then
+		return Adapter.WriteCharacter(env, data, expectedProfileId)
+	end
 	local ok, result, err, addon, playerId = pcall(function()
 		local player, user = livePlayer(env)
 		if not player then
@@ -397,6 +410,101 @@ function Adapter.WriteSection(env, section, data, expectedProfileId)
 		return nil, err
 	end
 	return result, nil, notify(addon, playerId, expectedProfileId, section)
+end
+
+--- Public setters (v0.10.1) ----------------------------------------------------
+
+--- Calls CurrentUser's own setters, in order: calls = { { key, setter,
+-- value }, ... } (StatusPlan). Refuses unless the version's setters were
+-- audited (VersionProfiles tiers.publicSetters), every setter exists, and
+-- the active profile is still expectedProfileId and not the default one.
+-- Each setter stores the value, bumps the section version and fires
+-- REGISTER_DATA_UPDATED itself (Core/Player.lua UpdateProfileField), so
+-- Dawnward fires nothing. Returns the section's version afterwards, or nil
+-- plus a reason (a setter that failed part-way: the caller restores).
+function Adapter.ApplySetters(env, section, calls, expectedProfileId)
+	local status = Status.Read(env)
+	if status.error or not status.loaded or not VersionProfiles.Get(status.version).tiers.publicSetters then
+		return nil, "Dawnward has not checked Total RP 3's setters for this version"
+	end
+	local ok, result, err = pcall(function()
+		local player, user = livePlayer(env)
+		if not player then
+			return nil, user
+		end
+		if call(user, "GetProfileID") ~= expectedProfileId or call(user, "IsProfileDefault") == true then
+			return nil, "the active Total RP 3 profile changed"
+		end
+		for _, c in ipairs(calls or {}) do
+			if type(user[c.setter]) ~= "function" then
+				return nil, "Total RP 3's " .. tostring(c.setter) .. " is unavailable"
+			end
+		end
+		for _, c in ipairs(calls or {}) do
+			local called, why = pcall(user[c.setter], user, c.value)
+			if not called then
+				return nil, "Total RP 3 refused the change (" .. tostring(why) .. ")"
+			end
+		end
+		local live = player[section]
+		return type(live) == "table" and (live.v or 0) or 0
+	end)
+	if not ok then
+		return nil, "Total RP 3 behaved unexpectedly while writing (" .. tostring(result) .. ")"
+	end
+	return result, err
+end
+
+--- Puts the character section's Currently, OOC, roleplay status and
+-- walk-up to data's values through the setters (a rollback or a restore:
+-- every other key there is Total RP 3's own and is left alone). A key data
+-- does not hold is emptied for the two texts, kept for the two statuses
+-- (they have no "empty"). Returns the version, or nil plus a reason.
+function Adapter.WriteCharacter(env, data, expectedProfileId)
+	local current, err = Adapter.ReadSection(env, "character")
+	if not current then
+		return nil, err
+	end
+	local calls = {}
+	for _, key in ipairs({ "CU", "CO", "RP", "WU" }) do
+		local want = data[key]
+		if (key == "CU" or key == "CO") and want == nil then want = "" end
+		local have = current[key]
+		if (key == "CU" or key == "CO") and have == nil then have = "" end
+		if want ~= nil and want ~= have then
+			calls[#calls + 1] = { key = key, setter = ns.TRP3StatusPlan.CHARACTER_KEYS[key], value = want }
+		end
+	end
+	return Adapter.ApplySetters(env, "character", calls, expectedProfileId)
+end
+
+--- Opens Total RP 3 on the player's own profile page (the "Open in Total
+-- RP 3" button), the way Total RP 3's own menu does: openMainFrame, then
+-- selectMenu("main_12_player_character") (Core/MainStructure.lua 156-165
+-- and 253-263; RegisterMain.lua 771-780). Refused while a Total RP 3 editor
+-- holds unsaved changes: selecting the page replaces its context, which
+-- would discard that draft. Returns true, or nil plus a reason.
+function Adapter.OpenProfilePage(env)
+	local ok, result, err = pcall(function()
+		local api = env.TRP3_API
+		local nav = type(api) == "table" and type(api.navigation) == "table" and api.navigation or nil
+		local menu = nav and type(nav.menu) == "table" and nav.menu or nil
+		if not nav or type(nav.openMainFrame) ~= "function" or not menu or type(menu.selectMenu) ~= "function" then
+			return nil, "Total RP 3's window cannot be opened from here; open it from its toolbar or minimap button"
+		end
+		for section in pairs(Adapter.EDITOR_FRAMES) do
+			if Adapter.EditorState(env, section).open == true then
+				return nil, "the Total RP 3 editor holds unsaved changes; save or cancel them there first"
+			end
+		end
+		nav.openMainFrame()
+		menu.selectMenu("main_12_player_character")
+		return true
+	end)
+	if not ok then
+		return nil, "Total RP 3 behaved unexpectedly (" .. tostring(result) .. ")"
+	end
+	return result, err
 end
 
 --- Asks TRP3 to tell us about profile switches and profile edits. The

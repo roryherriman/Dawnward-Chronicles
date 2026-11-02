@@ -4,8 +4,8 @@
 -- ctx.trp3Deps() must return the Sync deps (see Sync.lua). Anything that
 -- writes to TRP3 or removes content requires the word "confirm".
 local _, ns = ...
-local Util, Sync, AboutBlock, TraitPlan, Projection, FieldPlan, Ledger =
-	ns.Util, ns.TRP3Sync, ns.TRP3AboutBlock, ns.TRP3TraitPlan, ns.Projection, ns.TRP3FieldPlan, ns.TRP3Ledger
+local Util, Sync, TraitPlan, Projection, FieldPlan, Ledger =
+	ns.Util, ns.TRP3Sync, ns.TRP3TraitPlan, ns.Projection, ns.TRP3FieldPlan, ns.TRP3Ledger
 
 local TRP3Commands = {}
 ns.TRP3Commands = TRP3Commands
@@ -21,6 +21,9 @@ local HELP = {
 	"  trp3 resolve about|traits|glance|<field> keep|reclaim",
 	"  trp3 glance (your At First Glance entries, 1-5) | trp3 glance title|text <n> <words> (|n: new line)",
 	"  trp3 glance icon <n> <icon name>|default | trp3 glance show|hide <n> | trp3 glance clear <n> confirm",
+	"  trp3 glance move <n> up|down (the order Total RP 3 shows them in)",
+	"  trp3 currently <text>|clear | trp3 ooc <text>|clear | trp3 rpstatus ic|ooc | trp3 walkup yes|no",
+	"  trp3 sync-status <currently|ooc|rpStatus|walkup|icon|classColor> on|off (keep it in sync with Total RP 3)",
 	"  trp3 diagnose (read-only: which guard is holding each feature back)",
 }
 
@@ -79,8 +82,10 @@ TRP3Commands.MANUAL_FIELDS = {
 function TRP3Commands.ManualText(char)
 	local public = char and Projection.GetPublic(char) or { facts = {}, personality = {} }
 	local lines = { "-- Paste this at the end of your Total RP 3 About text --", "" }
-	local block = AboutBlock.Compose(public)
-	lines[#lines + 1] = block ~= "" and block or "(no facts yet)"
+	-- The same About text the sync would write (template 1, AboutDoc).
+	Sync.ApplySettings(public, char)
+	local block = ns.TRP3AboutDoc.Render(ns.TRP3AboutDoc.Build(public), 1).T1
+	lines[#lines + 1] = block ~= "" and block or "(nothing to publish yet)"
 	lines[#lines + 1] = ""
 	lines[#lines + 1] = "-- Suggested Total RP 3 personality traits (custom traits; left / right) --"
 	local any = false
@@ -218,10 +223,14 @@ function TRP3Commands.AboutDiagnostics(deps)
 	local public = Sync.PublicOf(deps)
 	lines[#lines + 1] = "biography in the profile Dawnward publishes: " .. flag(public.biography ~= nil)
 		.. (current and not public.biography and " - kept back: confirm with /dawnward publish" or "")
-	lines[#lines + 1] = "About content: " .. (Sync.UsesProfile(public) and "whole profile" or "short summary")
+	lines[#lines + 1] = "About content: " .. (public.trp3About == "summary" and "overview only" or "overview and story")
 		.. ", layout " .. tostring(public.trp3Layout) .. ", style " .. tostring(public.trp3Style or "neutral")
+		.. ", headings " .. tostring(public.trp3Accent or "style")
 	local doc = ns.TRP3AboutDoc.Build(public)
-	lines[#lines + 1] = string.format("composed sections: %d", #doc)
+	local ids = {}
+	for i, section in ipairs(doc) do ids[i] = section.id end
+	lines[#lines + 1] = string.format("composed sections: %d%s", #doc, #ids > 0 and (" (" .. table.concat(ids, ", ")
+		.. ")") or "")
 	local entry = deps.ledger.optIn[deps.characterKey]
 	lines[#lines + 1] = "About sync authorised: " .. flag(Sync.FeatureOn(entry, "about"))
 		.. (entry and entry.profileId and (" for profile " .. tostring(entry.profileId)) or "")
@@ -353,23 +362,154 @@ end
 --- What the About page will look like in Total RP 3, for the settings
 -- page's preview: TRP3Presentation.Display blocks for the template the next
 -- write uses (the chosen layout, else currentTemplate, the About's own TE),
--- planned the same way as the sync (whole profile, or the summary block as
--- one section without a heading). Returns blocks, template. Read only.
+-- planned the same way as the sync (AboutDoc). Returns blocks, template.
+-- Read only.
 function TRP3Commands.AboutDisplay(char, currentTemplate)
+	local model = TRP3Commands.AboutModel(char, currentTemplate)
+	return model.blocks, model.template
+end
+
+--- Everything the Biography panel shows (UI/TRP3BiographyPanel.lua), read
+-- only: the saved choices (prefs), the sections in the player's order with
+-- whether each has text to show (available) and its icon and background
+-- (verified ones only), the template the next write uses, the rendered
+-- About (rendered) and its preview blocks (blocks).
+function TRP3Commands.AboutModel(char, currentTemplate)
 	local public = char and Projection.GetPublic(char) or { facts = {}, personality = {}, fields = {} }
 	Sync.ApplySettings(public, char)
+	local prefs = char and char.story and char.story.prefs or ns.StorySchema.NewPrefs()
 	local LAYOUT = { text = 1, frames = 2, sections = 3 }
 	local template = LAYOUT[public.trp3Layout] or (currentTemplate == 2 or currentTemplate == 3) and currentTemplate
 		or 1
-	local doc
-	if Sync.UsesProfile(public) then
-		doc = ns.TRP3AboutDoc.Build(public)
-	else
-		local block = AboutBlock.Compose(public)
-		doc = block ~= "" and { { id = "notes", body = block, raw = true } } or {}
+	local doc = ns.TRP3AboutDoc.Build(public)
+	-- What each section would say with every section on (for "available").
+	local everything = Util.DeepCopy(public)
+	everything.trp3About = "profile"
+	everything.trp3Sections = Util.DeepCopy(public.trp3Sections) or {}
+	everything.trp3Sections.on = {}
+	for _, id in ipairs(ns.StorySchema.TRP3_SECTIONS) do everything.trp3Sections.on[id] = true end
+	local available = {}
+	for _, section in ipairs(ns.TRP3AboutDoc.Build(everything)) do available[section.id] = true end
+	local shown = {}
+	for _, section in ipairs(doc) do shown[section.id] = true end
+	local style = ns.TRP3Presentation.Resolve(public.trp3Style, public.trp3Accent)
+	local sections = {}
+	for i, s in ipairs(ns.StorySchema.AboutSections(prefs)) do
+		sections[i] = { id = s.id, on = s.on, title = s.title, available = available[s.id] == true,
+			shown = shown[s.id] == true, defaultTitle = ns.StorySchema.TRP3_SECTION_DEFAULTS[s.id].title,
+			icon = ns.TRP3Presentation.SafeIcon(s.icon, s.id),
+			background = ns.TRP3Presentation.SafeBackground(s.background, style) }
 	end
-	local rendered = ns.TRP3AboutDoc.Render(doc, template, public.trp3Style)
-	return ns.TRP3Presentation.Display(rendered, template), template
+	local rendered = ns.TRP3AboutDoc.Render(doc, template)
+	return { prefs = prefs, template = template, sections = sections, doc = doc, rendered = rendered,
+		blocks = ns.TRP3Presentation.Display(rendered, template), style = style }
+end
+
+-- Simulation mode keeps a simulated copy of the character, while the Total
+-- RP 3 page reads (and Total RP 3 shows) the real one: a change made there
+-- would land in the copy and never show. These choices are refused then,
+-- as ImportStatus is.
+TRP3Commands.SIMULATION_REFUSAL = "Turn simulation mode off first: these settings belong to your real character, "
+	.. "as Total RP 3 shows it."
+local function simulated(ctx)
+	return ctx and ctx.store and ctx.store.IsSimulation and ctx.store:IsSimulation() or false
+end
+TRP3Commands.Simulated = simulated
+
+--- Sets one About page choice kept in the story preferences ("trp3Layout"
+-- or "trp3Style"), through Actions.SetStoryPref. Returns ok, message.
+function TRP3Commands.SetAboutPref(ctx, key, id)
+	if key ~= "trp3Layout" and key ~= "trp3Style" then
+		return nil, "Unknown About choice."
+	end
+	if simulated(ctx) then
+		return nil, TRP3Commands.SIMULATION_REFUSAL
+	end
+	return ns.Actions.SetStoryPref(ctx, key, id)
+end
+
+--- Sets the About headings' colour: "style" (the style's own) or one of
+-- TRP3Presentation.ACCENTS. Returns ok, message.
+function TRP3Commands.SetAboutAccent(ctx, id)
+	if simulated(ctx) then
+		return nil, TRP3Commands.SIMULATION_REFUSAL
+	end
+	if not ns.StorySchema.TRP3_ACCENTS[id] then
+		return nil, "Unknown heading colour."
+	end
+	return ns.Actions.WithCharacter(ctx, function(char)
+		char.story.prefs.trp3Accent = id
+		return true, "Heading colour: " .. ns.TRP3Presentation.ACCENT_BY_ID[id].label .. "."
+	end)
+end
+
+--- Changes one About choice of the character (through Actions.WithCharacter:
+-- read-only data is refused, and an opted-in sync catches up). what:
+--   "on", id, bool        a section on or off
+--   "title", id, text     a section's title ("" or nil: the default)
+--   "icon", id, icon      a frame icon (allowlisted only; nil: the default)
+--   "background", id, n   a frame background (allowlisted only; nil: the style's)
+--   "move", id, -1 | 1    a section up or down
+--   "reset"               every section choice back to the defaults
+-- Returns ok, message.
+function TRP3Commands.SetAboutSection(ctx, what, id, value)
+	if simulated(ctx) then
+		return nil, TRP3Commands.SIMULATION_REFUSAL
+	end
+	local Schema = ns.StorySchema
+	local known = false
+	for _, sid in ipairs(Schema.TRP3_SECTIONS) do known = known or sid == id end
+	if what ~= "reset" and not known then
+		return nil, "Unknown About section."
+	end
+	if what == "icon" and value ~= nil and not ns.TRP3Presentation.ICONS[tostring(value):lower()] then
+		return nil, "That icon is not one Dawnward can use in Total RP 3."
+	end
+	if what == "background" and value ~= nil and not ns.TRP3Presentation.BACKGROUNDS[value] then
+		return nil, "That background is not one Dawnward can use in Total RP 3."
+	end
+	return ns.Actions.WithCharacter(ctx, function(char)
+		local prefs = char.story.prefs
+		if what == "reset" then
+			prefs.trp3Sections = nil
+			return true, "About sections reset."
+		end
+		local sections = Util.DeepCopy(prefs.trp3Sections) or {}
+		sections.on, sections.titles = sections.on or {}, sections.titles or {}
+		sections.icons, sections.backgrounds = sections.icons or {}, sections.backgrounds or {}
+		local label = Schema.TRP3_SECTION_DEFAULTS[id].title
+		local message
+		if what == "on" then
+			sections.on[id] = value and true or false
+			message = label .. (value and " shown." or " hidden.")
+		elseif what == "title" then
+			local clean = Util.CleanText(value, Schema.TRP3_SECTION_TITLE_MAX)
+			sections.titles[id] = (clean and clean ~= "" and clean ~= label) and clean or nil
+			message = "Title saved: " .. (sections.titles[id] or label) .. "."
+		elseif what == "icon" then
+			sections.icons[id] = value and tostring(value):lower() or nil
+			message = label .. ": icon saved."
+		elseif what == "background" then
+			sections.backgrounds[id] = value
+			message = label .. ": background saved."
+		elseif what == "move" then
+			local order = {}
+			for i, s in ipairs(Schema.AboutSections(prefs)) do order[i] = s.id end
+			local at
+			for i, sid in ipairs(order) do if sid == id then at = i end end
+			local to = at + (value == -1 and -1 or 1)
+			if to < 1 or to > #order then
+				return nil, "Already " .. (to < 1 and "first." or "last.")
+			end
+			order[at], order[to] = order[to], order[at]
+			sections.order = order
+			message = label .. " moved " .. (value == -1 and "up." or "down.")
+		else
+			return nil, "Unknown change."
+		end
+		prefs.trp3Sections = Schema.CleanAboutSections(sections)
+		return true, message
+	end)
 end
 
 --- The public profile Dawnward would publish, as text (read only): the
@@ -382,30 +522,25 @@ function TRP3Commands.ProfilePreview(char, template)
 	local lines = {}
 	local LAYOUT = { text = 1, frames = 2, sections = 3 }
 	template = LAYOUT[public.trp3Layout] or template or 1
-	if Sync.UsesProfile(public) then
-		-- v0.10: laid out as Total RP 3 shows it (TRP3Presentation.Display):
-		-- the same order, frames and template 3 titles, headings on their
-		-- own line, markup shown as plain text (TRP3Commands.PlainLines).
-		local rendered = ns.TRP3AboutDoc.Render(ns.TRP3AboutDoc.Build(public), template, public.trp3Style)
-		local style = ns.TRP3Presentation.Get(public.trp3Style)
-		lines[#lines + 1] = "ABOUT PAGE (template " .. template .. ") · style: " .. style.label
-		local blocks = ns.TRP3Presentation.Display(rendered, template)
-		for i, block in ipairs(blocks) do
-			if block.kind == "frame" then
-				local bk = ns.TRP3Presentation.BACKGROUNDS[block.background]
-				lines[#lines + 1] = string.format("--- Frame %d (icon %s, background %s) ---", i, tostring(block.icon),
-					bk and tostring(block.background) or (tostring(block.background) .. ", your own"))
-			elseif block.kind == "part" then
-				lines[#lines + 1] = "--- " .. block.title .. " ---"
-			end
-			for _, line in ipairs(TRP3Commands.PlainLines(block.items)) do lines[#lines + 1] = line end
+	-- Laid out as Total RP 3 shows it (TRP3Presentation.Display): the same
+	-- order, frames and template 3 titles, headings on their own line,
+	-- markup shown as plain text (TRP3Commands.PlainLines).
+	local rendered = ns.TRP3AboutDoc.Render(ns.TRP3AboutDoc.Build(public), template)
+	local style = ns.TRP3Presentation.Get(public.trp3Style)
+	lines[#lines + 1] = "ABOUT PAGE (template " .. template .. ") · style: " .. style.label
+	local blocks = ns.TRP3Presentation.Display(rendered, template)
+	for i, block in ipairs(blocks) do
+		if block.kind == "frame" then
+			local bk = ns.TRP3Presentation.BACKGROUNDS[block.background]
+			lines[#lines + 1] = string.format("--- Frame %d (icon %s, background %s) ---", i, tostring(block.icon),
+				bk and tostring(block.background) or (tostring(block.background) .. ", your own"))
+		elseif block.kind == "part" then
+			lines[#lines + 1] = "--- " .. block.title .. " ---"
 		end
-		if #blocks == 0 or (#blocks == 1 and #blocks[1].items == 0) then
-			lines[#lines + 1] = "(nothing yet)"
-		end
-	else
-		lines[#lines + 1] = "ABOUT PAGE (summary block)"
-		lines[#lines + 1] = AboutBlock.Compose(public) ~= "" and AboutBlock.Compose(public) or "(nothing yet)"
+		for _, line in ipairs(TRP3Commands.PlainLines(block.items)) do lines[#lines + 1] = line end
+	end
+	if #blocks == 0 or (#blocks == 1 and #blocks[1].items == 0) then
+		lines[#lines + 1] = "(nothing yet)"
 	end
 	lines[#lines + 1] = ""
 	lines[#lines + 1] = "PROFILE FIELDS"
@@ -447,7 +582,11 @@ function TRP3Commands.ConnectAll(ctx, opts)
 	end
 	local choices = {}
 	for _, id in ipairs(Ledger.MAPPINGS) do
-		choices[id] = "dawnward"
+		-- The roleplay style is only ever handed over one preference at a
+		-- time, by the player's own choice (Ledger.OPT_IN_ONLY).
+		if not Ledger.OPT_IN_ONLY[id] then
+			choices[id] = "dawnward"
+		end
 	end
 	local ok, message = Sync.Authorize(deps, choices, { adopt = opts.existing == "replace" })
 	if ok and ctx.trp3RequestSync then
@@ -836,6 +975,9 @@ end
 -- "icon" | "show" | "hide" | "clear". Never touches Total RP 3 directly.
 -- Returns ok, message.
 function TRP3Commands.SetGlance(ctx, what, n, value)
+	if simulated(ctx) then
+		return nil, TRP3Commands.SIMULATION_REFUSAL
+	end
 	local index = ns.Glance.Index(n)
 	if not index then
 		return nil, "choose an At First Glance entry from 1 to " .. ns.Glance.SLOTS
@@ -861,6 +1003,162 @@ function TRP3Commands.SetGlance(ctx, what, n, value)
 		return true, "At First Glance " .. index .. ": " .. (what == "clear" and "removed" or "saved")
 			.. ". Total RP 3 follows on the next sync while At First Glance sync is on."
 	end)
+end
+
+--- Moves At First Glance entry n up or down one place (dir -1 or 1): the
+-- order Total RP 3 shows the entries in. Returns ok, message.
+function TRP3Commands.MoveGlance(ctx, n, dir)
+	if simulated(ctx) then
+		return nil, TRP3Commands.SIMULATION_REFUSAL
+	end
+	return ns.Actions.WithCharacter(ctx, function(char)
+		local to, err = ns.Glance.Move(char, n, dir, ctx.now())
+		if not to then return ns.Actions.Fail(err) end
+		return true, "At First Glance " .. n .. " is now " .. to .. ". Total RP 3 follows on the next sync while "
+			.. "At First Glance sync is on."
+	end)
+end
+
+--- Saves At First Glance entry n from the editor in one change: { title,
+-- text, icon, active } (an empty title and text removes it). Returns ok,
+-- message.
+function TRP3Commands.SaveGlance(ctx, n, values)
+	if simulated(ctx) then
+		return nil, TRP3Commands.SIMULATION_REFUSAL
+	end
+	return ns.Actions.WithCharacter(ctx, function(char)
+		local ok, err = ns.Glance.Save(char, n, values, ctx.now())
+		if not ok then return ns.Actions.Fail(err) end
+		return true, "At First Glance " .. n .. " saved. Total RP 3 follows on the next sync while At First Glance "
+			.. "sync is on."
+	end)
+end
+
+--- Status, look and roleplay style (v0.10.1) ----------------------------------
+
+--- Sets (or, with value nil, clears) one status or look value the player
+-- keeps for Total RP 3 (RPStatus). Only Dawnward's own copy changes here;
+-- Total RP 3 follows on the next sync while that row is kept in sync.
+-- Returns ok, message.
+function TRP3Commands.SetStatus(ctx, id, value)
+	if simulated(ctx) then
+		return nil, TRP3Commands.SIMULATION_REFUSAL
+	end
+	local f = ns.RPStatus.BY_ID[id]
+	if not f then
+		return nil, "unknown status value '" .. tostring(id) .. "'"
+	end
+	return ns.Actions.WithCharacter(ctx, function(char)
+		local ok, err
+		if value == nil then
+			ok, err = ns.RPStatus.Clear(char, id, ctx.now())
+		else
+			ok, err = ns.RPStatus.Set(char, id, value, ctx.now())
+		end
+		if ok == nil then return ns.Actions.Fail(err) end
+		return true, f.label .. (value == nil and " cleared" or " saved") .. " in Dawnward."
+	end)
+end
+
+--- Sets (or, with nil, forgets) one roleplay style preference by its Total
+-- RP 3 key. Returns ok, message.
+function TRP3Commands.SetStyle(ctx, key, value)
+	if simulated(ctx) then
+		return nil, TRP3Commands.SIMULATION_REFUSAL
+	end
+	local s = ns.RPStatus.STYLE_BY_KEY[key]
+	if not s then
+		return nil, "unknown roleplay style preference"
+	end
+	return ns.Actions.WithCharacter(ctx, function(char)
+		local ok, err = ns.RPStatus.SetStyle(char, key, value, ctx.now())
+		if not ok then return ns.Actions.Fail(err) end
+		return true, s.label .. ": " .. tostring(ns.RPStatus.OptionLabel(s.options, value) or "not set") .. "."
+	end)
+end
+
+--- Keeps one status, look or style row in sync with Total RP 3 (on), or
+-- hands it back to Total RP 3 (off), through Sync.Authorize (every check
+-- of an authorisation applies). Returns ok, message.
+function TRP3Commands.ManageRow(ctx, id, on)
+	local deps = ctx.trp3Deps and ctx.trp3Deps()
+	if not deps then
+		return nil, "Total RP 3 sync is not available"
+	end
+	local _, feature = Sync.MappingOf(id)
+	if feature ~= "status" and feature ~= "look" and feature ~= "style" then
+		return nil, "unknown status value '" .. tostring(id) .. "'"
+	end
+	local ok, message = Sync.Authorize(deps, { [id] = on and "dawnward" or "trp3" })
+	if ok and on and ctx.trp3RequestSync then
+		ctx.trp3RequestSync()
+	end
+	return ok, message
+end
+
+--- Copies Total RP 3's value of a status, look or style row into Dawnward
+-- (the player confirmed). When that row is kept in sync, the two now agree,
+-- so its pause ends and Dawnward keeps Total RP 3's value from now on;
+-- nothing is written to Total RP 3. Not in simulation mode (Total RP 3 is
+-- the real profile). Returns ok, message.
+function TRP3Commands.ImportStatus(ctx, id)
+	local deps = ctx.trp3Deps and ctx.trp3Deps()
+	if not deps then
+		return nil, "Total RP 3 sync is not available"
+	end
+	if deps.store:IsSimulation() then
+		return nil, "Turn simulation mode off first: Total RP 3 holds your real profile."
+	end
+	local m, feature = Sync.MappingOf(id)
+	local plan = feature and Sync.ROW_FEATURES[feature]
+	if feature ~= "status" and feature ~= "look" and feature ~= "style" then
+		return nil, "unknown status value '" .. tostring(id) .. "'"
+	end
+	local section, err = ns.TRP3Adapter.ReadAudited(deps.env, Sync.FEATURES[feature].section)
+	if not section then
+		return nil, "Nothing was imported: " .. tostring(err) .. "."
+	end
+	local value = plan.Current(section, m)
+	if value == nil or value == "" or not plan.IsOwnedValue(m, value) then
+		return nil, "Total RP 3 has no " .. m.trp3 .. " Dawnward can import"
+	end
+	local ok, message = ns.Actions.WithCharacter(ctx, function(char)
+		local done, why
+		if feature == "style" then
+			done, why = ns.RPStatus.SetStyle(char, m.key, value, ctx.now())
+		else
+			done, why = ns.RPStatus.Set(char, id, value, ctx.now())
+		end
+		if done == nil then return ns.Actions.Fail(why) end
+		return true, "Imported Total RP 3's " .. m.trp3 .. " into Dawnward. Nothing was written to Total RP 3."
+	end)
+	if not ok then
+		return ok, message
+	end
+	local probe = ns.TRP3Adapter.Probe(deps.env)
+	local profileId = probe.profile and probe.profile.id
+	local entry = deps.ledger.optIn[deps.characterKey]
+	local record = not deps.ledgerReadOnly and entry and entry.profileId == profileId
+		and Ledger.Policy(entry, id) == "dawnward" and Ledger.Profile(deps.ledger, profileId)
+	if record then
+		record.fieldConflicts[id] = nil
+		record[feature] = record[feature] or {}
+		record[feature][id] = { value = value }
+	end
+	return ok, message
+end
+
+--- Opens Total RP 3 on the player's own profile page (read only here).
+function TRP3Commands.OpenInTRP3(ctx)
+	local deps = ctx.trp3Deps and ctx.trp3Deps()
+	if not deps then
+		return nil, "Total RP 3 is not available"
+	end
+	local ok, err = ns.TRP3Adapter.OpenProfilePage(deps.env)
+	if not ok then
+		return nil, "Could not open Total RP 3: " .. tostring(err) .. "."
+	end
+	return true, "Opened your profile in Total RP 3. Its Miscellaneous tab holds the roleplay style."
 end
 
 --- Switches a feature on or off: Sync.SetOptIn, then (when turning on) the
@@ -907,7 +1205,10 @@ function TRP3Commands.PublicPreview(char)
 			fields[#fields + 1] = { id = m.id, label = m.label, trp3 = m.trp3, value = miscValues[m.id] }
 		end
 	end
-	return { about = AboutBlock.Compose(public), traits = traits, fields = fields }
+	-- The About text as template 1 would hold it ("" when there is nothing).
+	Sync.ApplySettings(public, char)
+	local about = ns.TRP3AboutDoc.Render(ns.TRP3AboutDoc.Build(public), 1).T1
+	return { about = about, traits = traits, fields = fields }
 end
 
 --- Read-only snapshot for the settings page: the adapter probe, the opt-in
@@ -940,6 +1241,8 @@ function TRP3Commands.Overview(deps)
 	view.connection = TRP3Commands.Connection(deps, { name = named
 		or tostring(deps.characterKey or ""):match("^([^%-]+)") })
 	view.preview = TRP3Commands.PublicPreview(char)
+	-- The status, look and roleplay style rows (v0.10.1).
+	view.status = Sync.StatusView(deps)
 	view.log = deps.ledger.log
 	view.differences = Sync.Differences(deps)
 	view.policies = {}
@@ -1137,6 +1440,44 @@ local function command(ctx, rest)
 	elseif sub == "resolve" then
 		local feature = featureArg(word1) or fieldArg(word1)
 		local _, message = Sync.Resolve(deps, feature, word2)
+		out(ctx, message)
+	elseif sub == "currently" or sub == "ooc" then
+		local text = args
+		if text == "" then
+			out(ctx, "Usage: /dawnward trp3 " .. sub .. " <text> | trp3 " .. sub .. " clear")
+			return
+		end
+		local id = sub == "ooc" and "ooc" or "currently"
+		local _, message = TRP3Commands.SetStatus(ctx, id, text:lower() ~= "clear" and text or nil)
+		out(ctx, message)
+	elseif sub == "rpstatus" or sub == "walkup" then
+		local value = ({ ic = 1, ooc = 2 })[word1:lower()]
+		if sub == "walkup" then value = ({ yes = 2, no = 1 })[word1:lower()] end
+		if not value then
+			out(ctx, sub == "walkup" and "Usage: /dawnward trp3 walkup yes|no" or "Usage: /dawnward trp3 rpstatus ic|ooc")
+			return
+		end
+		local _, message = TRP3Commands.SetStatus(ctx, sub == "walkup" and "walkup" or "rpStatus", value)
+		out(ctx, message)
+	elseif sub == "sync-status" then
+		local m
+		for id in pairs(ns.RPStatus.BY_ID) do
+			if id:lower() == word1:lower() then m = Sync.MappingOf(id) end
+		end
+		if not m or (word2 ~= "on" and word2 ~= "off") then
+			out(ctx, "Usage: /dawnward trp3 sync-status currently|ooc|rpStatus|walkup|icon|classColor on|off")
+			return
+		end
+		local _, message = TRP3Commands.ManageRow(ctx, m.id, word2 == "on")
+		out(ctx, message)
+	elseif sub == "glance" and word1:lower() == "move" then
+		local n, dir = Util.NextWord(tail)
+		local step = ({ up = -1, down = 1 })[(dir or ""):lower():match("^%s*(%a*)")]
+		if not step then
+			out(ctx, "Usage: /dawnward trp3 glance move <n> up|down")
+			return
+		end
+		local _, message = TRP3Commands.MoveGlance(ctx, tonumber(n), step)
 		out(ctx, message)
 	elseif sub == "glance" then
 		local what = word1:lower()

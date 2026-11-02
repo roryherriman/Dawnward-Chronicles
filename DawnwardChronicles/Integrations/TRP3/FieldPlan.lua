@@ -103,10 +103,12 @@ FieldPlan.UNSUPPORTED = {
 	{ label = "Name (one field)", source = "name",
 		reason = "Dawnward's Name is kept as it is; TRP3's first and last name come from the First name and Last "
 			.. "name details instead, never from splitting it" },
-	{ label = "Currently, OOC, RP status", reason = "a live status you set in TRP3; Dawnward has no source for it" },
-	{ label = "Icon, class colour, eye colour colour, residence map pin", reason = "TRP3 choices with no Dawnward "
-		.. "source; they stay yours" },
-	{ label = "Walk-up, roleplay experience, music", reason = "TRP3 settings, not character details" },
+	-- v0.10.1: Currently, OOC, roleplay status, walk-up, the profile icon
+	-- and class colour are set on the Total RP 3 page itself (StatusPlan).
+	{ label = "Eye colour's colour, residence map pin", reason = "Total RP 3 choices with no Dawnward source; they "
+		.. "stay yours" },
+	{ label = "Roleplay experience, music", reason = "Total RP 3 settings, not character details (roleplay "
+		.. "experience is kept for the whole account)" },
 }
 
 --- A value TRP3's sanitiser and editor leave exactly as written: one line,

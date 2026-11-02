@@ -17,6 +17,7 @@
 -- Pure Lua: normalisation follows the same rules as Core/Schema.lua.
 local _, ns = ...
 local Util, Serializer, FieldPlan, MiscPlan = ns.Util, ns.Serializer, ns.TRP3FieldPlan, ns.TRP3MiscPlan
+local StatusPlan, StylePlan = ns.TRP3StatusPlan, ns.TRP3StylePlan
 
 local Ledger = {}
 ns.TRP3Ledger = Ledger
@@ -27,11 +28,15 @@ ns.TRP3Ledger = Ledger
 -- (v0.9 is unreleased): Dawnward's At First Glance slots (glance, in TRP3's
 -- misc section); a v0.9 build without them drops that record, and the
 -- glance plan never adds an entry a slot already shows, so nothing is
--- duplicated even then.
+-- duplicated even then. Still 2 (v0.10.1): the status, look and style
+-- records (status, look, style) and "character" backups; an older build
+-- drops them and their policies, which only switches those rows off: the
+-- next sync then sees Dawnward's old value as the player's own (a pause,
+-- never an overwrite).
 Ledger.VERSION = 2
 Ledger.LIMITS = {
-	backups = 20,          -- section backups kept in total, oldest unpinned dropped first
-	pinned = 4,            -- of those, at most this many pinned (see Ledger.Prune)
+	backups = 20,          -- section backups kept in total (see Ledger.Prune)
+	pinned = 4,            -- of those, at most this many "reclaim" pins (origins are outside this limit)
 	backupBytes = 65536,   -- a section too large to back up is never written
 	block = 30100,         -- bytes of one owned About text (AboutDoc.MAX_BYTES plus separator, with margin)
 	frames = 20,           -- owned template 2 frames
@@ -41,8 +46,9 @@ Ledger.LIMITS = {
 	text = 200,            -- short labels and reasons
 }
 
-Ledger.SECTIONS = { about = true, characteristics = true, misc = true }
-Ledger.FEATURES = { about = true, traits = true, fields = true, misc = true, glance = true }
+Ledger.SECTIONS = { about = true, characteristics = true, misc = true, character = true }
+Ledger.FEATURES = { about = true, traits = true, fields = true, misc = true, glance = true, status = true,
+	look = true, style = true }
 
 -- Ownership policies. "dawnward": Dawnward writes it automatically (set
 -- only by an explicit authorisation). "trp3": Total RP 3 manages it and
@@ -59,6 +65,20 @@ for _, m in ipairs(MiscPlan.MAPPINGS) do
 end
 -- v0.9: At First Glance, a block feature (on or off) like the biography.
 Ledger.MAPPINGS[#Ledger.MAPPINGS + 1] = "glance"
+-- v0.10.1: the status and look rows (written through Total RP 3's public
+-- setters) and the six roleplay style preferences.
+for _, list in ipairs({ StatusPlan.STATUS.MAPPINGS, StatusPlan.LOOK.MAPPINGS, StylePlan.MAPPINGS }) do
+	for _, m in ipairs(list) do
+		Ledger.MAPPINGS[#Ledger.MAPPINGS + 1] = m.id
+	end
+end
+-- Mappings only ever handed to Dawnward one by one, by the player's own
+-- explicit choice (never by "Connect everything"): the roleplay style
+-- preferences, which Total RP 3 offers no public setter for.
+Ledger.OPT_IN_ONLY = {}
+for _, m in ipairs(StylePlan.MAPPINGS) do
+	Ledger.OPT_IN_ONLY[m.id] = true
+end
 Ledger.MAPPING_SET = {}
 for _, id in ipairs(Ledger.MAPPINGS) do
 	Ledger.MAPPING_SET[id] = true
@@ -90,6 +110,16 @@ end
 --- True when any field mapping is managed by Dawnward.
 function Ledger.AnyFieldManaged(entry)
 	for _, m in ipairs(FieldPlan.MAPPINGS) do
+		if Ledger.Policy(entry, m.id) == "dawnward" then
+			return true
+		end
+	end
+	return false
+end
+
+--- True when any mapping of a list is managed by Dawnward.
+function Ledger.AnyManaged(entry, mappings)
+	for _, m in ipairs(mappings) do
 		if Ledger.Policy(entry, m.id) == "dawnward" then
 			return true
 		end
@@ -163,6 +193,23 @@ local function normalizeAbout(raw)
 		end
 		if not next(out.slots) and #out.frames == 0 then
 			return nil
+		end
+		-- v0.10.1: the icon and background Dawnward gave each frame
+		-- ("icon|background", "" unknown) and the About section it holds, one
+		-- per owned frame; anything else is dropped (the frames then keep the
+		-- icons they have and are matched by their headings).
+		for _, key in ipairs({ "frameStyles", "frameIds" }) do
+			if type(raw[key]) == "table" and #raw[key] == #out.frames then
+				local list = {}
+				for i, v in ipairs(raw[key]) do
+					if type(v) ~= "string" or #v > Ledger.LIMITS.text or v:find("[%c]") then
+						list = nil
+						break
+					end
+					list[i] = v
+				end
+				out[key] = list
+			end
 		end
 		return out
 	end
@@ -259,6 +306,33 @@ local function normalizeGlance(raw)
 	return { slots = slots, at = timestamp(raw.at) }
 end
 
+-- { [id] = { value } } for the status, look or style rows: the exact value
+-- Dawnward last wrote (StatusPlan / StylePlan IsOwnedValue).
+local function rowNormalizer(byId, isOwned)
+	return function(raw)
+		if type(raw) ~= "table" then
+			return nil
+		end
+		local out = {}
+		for id, owned in pairs(raw) do
+			local m = byId[id]
+			if m and type(owned) == "table" and isOwned(m, owned.value) then
+				out[id] = { value = owned.value }
+			end
+		end
+		return next(out) and out or nil
+	end
+end
+local normalizeStatus = rowNormalizer(StatusPlan.STATUS.BY_ID, StatusPlan.IsOwnedValue)
+local normalizeLook = rowNormalizer(StatusPlan.LOOK.BY_ID, StatusPlan.IsOwnedValue)
+local normalizeStyle = rowNormalizer(StylePlan.BY_ID, StylePlan.IsOwnedValue)
+
+-- Every row mapping that can be paused on its own (fieldConflicts).
+local ROW_IDS = {}
+for _, byId in ipairs({ FieldPlan.BY_ID, MiscPlan.BY_ID, StatusPlan.BY_ID, StylePlan.BY_ID }) do
+	for id in pairs(byId) do ROW_IDS[id] = true end
+end
+
 local function normalizeProfile(raw)
 	local out = { conflicts = {}, fieldConflicts = {} }
 	if type(raw) ~= "table" then
@@ -269,16 +343,16 @@ local function normalizeProfile(raw)
 	out.fields = normalizeFields(raw.fields)
 	out.misc = normalizeMisc(raw.misc)
 	out.glance = normalizeGlance(raw.glance)
+	out.status = normalizeStatus(raw.status)
+	out.look = normalizeLook(raw.look)
+	out.style = normalizeStyle(raw.style)
 	if type(raw.conflicts) == "table" then
 		for feature in pairs(Ledger.BLOCK_FEATURES) do
 			out.conflicts[feature] = shortText(raw.conflicts[feature])
 		end
 	end
 	if type(raw.fieldConflicts) == "table" then
-		for id in pairs(FieldPlan.BY_ID) do
-			out.fieldConflicts[id] = shortText(raw.fieldConflicts[id])
-		end
-		for id in pairs(MiscPlan.BY_ID) do
+		for id in pairs(ROW_IDS) do
 			out.fieldConflicts[id] = shortText(raw.fieldConflicts[id])
 		end
 	end
@@ -286,7 +360,8 @@ local function normalizeProfile(raw)
 end
 
 local OWNER_NORMALIZERS = { about = normalizeAbout, traits = normalizeTraits, fields = normalizeFields,
-	misc = normalizeMisc, glance = normalizeGlance }
+	misc = normalizeMisc, glance = normalizeGlance, status = normalizeStatus, look = normalizeLook,
+	style = normalizeStyle }
 
 -- { [feature] = owner record } saved with a backup (all features of its section).
 local function normalizeOwners(raw)
@@ -490,36 +565,66 @@ function Ledger.AddBackup(ledger, profileId, section, data, meta, now)
 	return backup
 end
 
---- Keeps the backup list bounded: at most LIMITS.backups in total and
--- LIMITS.pinned pinned. The oldest unpinned backup goes first, so many
--- automatic writes never push out the state before Dawnward's first write
--- (or a value the player handed over with "Use Dawnward's"); beyond the
--- pinned limit the oldest pinned one goes.
+--- Keeps the backup list bounded: at most LIMITS.backups in total. Three
+-- kinds of backup:
+--   origin   the state before Dawnward owned anything in a section (one per
+--            profile and section, AddBackup): outside the pinned limit and
+--            never pushed out by the other kinds (only, past the total,
+--            which takes origins of many profiles, the oldest origin of
+--            another profile than the newest backup's)
+--   reclaim  the player's value replaced by "Use Dawnward's": at most
+--            LIMITS.pinned stay pinned; past that the oldest becomes an
+--            ordinary backup
+--   ordinary every other backup
+-- The one that goes first is the oldest ordinary backup of the profile and
+-- section with the most ordinary backups, so frequent writes to one
+-- section (the status, for example) push out their own backups, never
+-- another section's; then the oldest reclaim pin.
 function Ledger.Prune(ledger)
 	local list = ledger.backups
-	local pinned = 0
+	local function groupOf(b)
+		return b.profileId .. "\0" .. b.section
+	end
+	-- At most one origin per profile and section (the newest).
+	local seenOrigin = {}
+	for i = #list, 1, -1 do
+		local b = list[i]
+		if b.pin == "origin" then
+			if seenOrigin[groupOf(b)] then b.pin = nil end
+			seenOrigin[groupOf(b)] = true
+		end
+	end
+	local reclaims = 0
 	for _, b in ipairs(list) do
-		if b.pin then pinned = pinned + 1 end
+		if b.pin == "reclaim" then reclaims = reclaims + 1 end
 	end
 	for _, b in ipairs(list) do
-		if pinned <= Ledger.LIMITS.pinned then break end
-		if b.pin then
+		if reclaims <= Ledger.LIMITS.pinned then break end
+		if b.pin == "reclaim" then
 			b.pin = nil
-			pinned = pinned - 1
+			reclaims = reclaims - 1
+		end
+	end
+	local function first(test)
+		for i, b in ipairs(list) do
+			if test(b) then return i end
 		end
 	end
 	while #list > Ledger.LIMITS.backups do
-		local removed = false
-		for i, b in ipairs(list) do
+		local perGroup, most = {}, 0
+		for _, b in ipairs(list) do
 			if not b.pin then
-				table.remove(list, i)
-				removed = true
-				break
+				local key = groupOf(b)
+				perGroup[key] = (perGroup[key] or 0) + 1
+				if perGroup[key] > most then most = perGroup[key] end
 			end
 		end
-		if not removed then
-			table.remove(list, 1)
-		end
+		local newest = list[#list]
+		local victim = first(function(b) return not b.pin and perGroup[groupOf(b)] == most end)
+			or first(function(b) return b.pin == "reclaim" end)
+			or first(function(b) return b.profileId ~= newest.profileId end)
+			or 1
+		table.remove(list, victim)
 	end
 end
 

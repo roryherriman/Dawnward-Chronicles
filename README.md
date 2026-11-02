@@ -110,7 +110,8 @@ Sync is **experimental and off by default**. Connect once (in setup, or Settings
   - **Profile fields:** first and last name, title prefix, full title, race, class, age, birthplace, residence, eye colour, height, body shape and relationship status;
   - **Additional information:** pronouns, faith, occupation and allegiance;
   - **Personality traits** from your personality values, named with your own axis words;
-  - **At First Glance** entries you write (`/dawnward trp3 glance`), into free slots, when you enable them.
+  - **At First Glance** entries you write in the At First Glance editor, into free slots, when you enable them;
+  - **Currently, OOC, roleplay status and walk-up** you set in Dawnward (through Total RP 3's own setters), your profile icon and class colour, and any roleplay-style preference you hand to Dawnward.
 - **Each part has its own setting** on the Mappings tab: managed by Dawnward, managed by Total RP 3, or not synchronised.
 - **Your own values stay yours:** Dawnward writes a field only while it is empty or still holds exactly what Dawnward last wrote. If you or another addon changed it, that field pauses until you choose **Keep yours** or **Use Dawnward's**.
 - **Approval:** opt-in per character and per TRP3 profile, after a preview of exactly what would be written; a shared profile is flagged.
@@ -118,7 +119,7 @@ Sync is **experimental and off by default**. Connect once (in setup, or Settings
 - **Rollback:** it lists anything your profile no longer has before restoring, and by default never brings it back.
 - **Import from TRP3:** always explicit.
 - **Diagnostics:** `/dawnward trp3 diagnose` traces every step from your stored story to Total RP 3's About page (it never prints the story).
-- **Never written:** Currently, OOC and RP status, RP style, icon, colours, walk-up, music and Notes (they stay yours in Total RP 3).
+- **Never written unless you set them in Dawnward:** Currently, OOC, roleplay status, walk-up, roleplay style, icon and class colour. **Never written:** music, Notes (local notes about other profiles) and roleplay experience.
 - **Preview first:** **Preview profile** (`/dawnward trp3 profile`) shows everything that would be published.
 
 ### What stays with you
@@ -255,6 +256,7 @@ Approved designs are listed separately: an approved mockup is a design, not a fe
 | **0.8-dev** (pre-playthrough candidate) | Automatic TRP3 field sync with per-field ownership, story import, own axis words and locks, context-aware Story Director with repetition control, continuity review, verified atlas evidence, calmer timing, v0.8 visual refinement | 🧪 automated; first-playthrough checklist [part U](docs/TESTING.md) pending |
 | **0.9-dev** | Setup opens by itself on first login; simpler setup without privacy sorting (the profile model); the whole backstory in Total RP 3's About page (templates 1, 2, 3, styles); 13 profile fields and 4 additional-information entries; one-step connection and the Overview; wizard and scroll-bar fidelity | 🧪 automated; in-game checklist parts [W and X](docs/TESTING.md) pending |
 | **0.10-dev** (pre-playthrough overhaul, PRs [#65](https://github.com/roryherriman/Dawnward-Chronicles/pull/65)–[#70](https://github.com/roryherriman/Dawnward-Chronicles/pull/70)) | Fix for the empty Total RP 3 About page found in game; no Public / Private / Secret anywhere (the whole profile publishes, older data after one confirmation); `trp3 diagnose`; Create / Switch profile during setup; game-derived Race and Class, axis-word trait names, At First Glance; UI fidelity pass (line icons, tracked eyebrows, new type weights, every screen) | 🧪 automated; release-blocking in-game gate [part Z](docs/TESTING.md) pending |
+| **0.10.1-dev** (PRs [#71](https://github.com/roryherriman/Dawnward-Chronicles/pull/71)–[#72](https://github.com/roryherriman/Dawnward-Chronicles/pull/72)) | Showcase Lua error fixed; the About page is your overview and story only (deduplicated, readable colours, per-section style, live preview); Currently, OOC, roleplay status, walk-up, roleplay style, At First Glance editor, profile icon and colour; the Total RP 3 page as a profile editor | 🧪 automated; 0.10 About page owner-confirmed in game; in-game gate [part AA](docs/TESTING.md) pending |
 | **Release gate** | WoW Forever compatibility and launch readiness | ⛔ [#24](https://github.com/roryherriman/Dawnward-Chronicles/issues/24) |
 
 ### Compatibility

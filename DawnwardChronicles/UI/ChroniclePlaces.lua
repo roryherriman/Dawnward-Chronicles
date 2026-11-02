@@ -398,16 +398,15 @@ function ChroniclePlaces.Create(parent, width, api)
 	d.homeland = Widgets.Button(d, "Set as homeland", widths[3], L.buttonHeight, "ghost")
 	d.buttons = { d.write, d.mark, d.homeland }
 
-	-- Empty state: nothing logged yet.
-	view.empty = Widgets.Panel(f, "No places yet")
+	-- Empty state: nothing logged yet (v0.10.1: the shared empty-state card;
+	-- no action, since places are logged by travelling).
+	view.empty = Widgets.EmptyState(f, "home")
 	view.empty:SetPoint("TOPLEFT", 0, 0)
-	view.empty:SetSize(width, 120)
-	view.emptyText = Widgets.Label(view.empty.inner, "reading", true, "reading")
-	view.emptyText:SetPoint("TOPLEFT", 0, 0)
-	view.emptyText:SetWidth(width - 2 * Widgets.PANEL_PAD)
-	view.emptyText:SetText("No places logged yet. Dawnward notes towns, inns and other places as you travel; "
-		.. "each one appears here with its visits, and you can mark it as meaningful, make it your Homeland "
-		.. "or write a memory there.")
+	view.emptyText = view.empty.text
+	view.empty:Set("No places logged yet", "Dawnward notes towns, inns and other places as you travel. Each one "
+		.. "appears here with its visits; you can mark it as meaningful, make it your Homeland or write a memory "
+		.. "there.")
+	view.empty:Layout(width)
 
 	-- Acts on the selected place, looked up again by its exact key, never by name.
 	local function this(c, entry)

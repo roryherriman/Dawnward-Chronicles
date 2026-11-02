@@ -112,7 +112,7 @@ function StoryView.Summary(char, now)
 	else
 		next = "keep adventuring"
 	end
-	return table.concat(parts, "  -  ") .. "\nNext: " .. next .. "."
+	return table.concat(parts, " · ") .. "\nNext: " .. next .. "."
 end
 
 --- The small line under the question: folded events, a recalled memory and
@@ -270,49 +270,16 @@ function StoryView.Reversible(char, limit)
 end
 
 --- Height of lines of text at size with spacing between lines. Pure.
+-- (v0.10.1: shared as Style.TextHeight.)
 function StoryView.TextHeight(lines, size, spacing)
-	if not lines or lines <= 0 then return 0 end
-	return lines * size + (lines - 1) * spacing
+	return Style.TextHeight(lines, size, spacing)
 end
 
 --- Estimated number of lines text wraps to at width, set in a Dawnward
--- style's font at size (word wrap, real advance widths, Style.TextWidth).
--- indent narrows the first line. Pure.
+-- style's font at size; indent narrows the first line. Pure. (v0.10.1:
+-- shared as Style.WrapLines, for every screen that sizes wrapped text.)
 function StoryView.WrapLines(text, style, size, width, indent)
-	local spec = Style.FONT_BY_STYLE[style] or Style.FONT_BY_STYLE.body
-	local scale = (size or spec.size) / spec.size
-	local space = Style.TextWidth(" ", style) * scale
-	local total = 0
-	for paragraph in (tostring(text or "") .. "\n"):gmatch("(.-)\n") do
-		local lines, x = 1, indent or 0
-		indent = nil
-		local first = true
-		for word in paragraph:gmatch("%S+") do
-			local w = Style.TextWidth(word, style) * scale
-			if first then
-				-- After an indent (an inline label), a first word that does not
-				-- fit starts the next line.
-				if x > 0 and x + space + w > width then
-					lines = lines + 1
-					x = w
-				else
-					x = x + w
-				end
-				first = false
-			elseif x + space + w <= width then
-				x = x + space + w
-			else
-				lines = lines + 1
-				x = w
-			end
-			while x > width do -- a word longer than the line breaks anywhere
-				lines = lines + 1
-				x = x - width
-			end
-		end
-		total = total + lines
-	end
-	return math.max(1, total)
+	return Style.WrapLines(text, style, size, width, indent)
 end
 
 --- Width of an action button for its label: the label plus the design's
@@ -711,6 +678,13 @@ local function create(parent)
 
 	-- Empty state, inside the same card: a title, a short gold rule, the
 	-- explanation in reading type and the summary of what is waiting.
+	-- v0.10.1: the Story sparkle in gold over the title, as the other empty
+	-- states carry their section's icon (Widgets.EmptyState).
+	section.emptyIcon = Style.LineIcon(card, "sparkle", Widgets.EMPTY.icon)
+	if section.emptyIcon then
+		section.emptyIcon:SetPoint("TOP", card, "TOP", 0, -150 + Widgets.EMPTY.icon + Widgets.EMPTY.iconGap)
+		Style.Register(section.emptyIcon, function(i, theme) i:SetColor(theme.accent) end)
+	end
 	section.heading = Widgets.Label(card, "GameFontNormalLarge", true, "title")
 	section.heading:SetJustifyH("CENTER")
 	section.heading:SetPoint("TOP", card, "TOP", 0, -150)
@@ -1129,6 +1103,7 @@ local function create(parent)
 			w:SetShown(hasReaction)
 		end
 		self.heading:SetShown(not hasReaction)
+		if self.emptyIcon then self.emptyIcon:SetShown(not hasReaction) end
 		self.rule:SetShown(not hasReaction)
 		self.body:SetShown(not hasReaction)
 		self.summary:SetShown(not hasReaction)

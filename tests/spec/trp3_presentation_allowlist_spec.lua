@@ -129,6 +129,7 @@ return function(t, expect)
 					local all = template == 2 and "" or table.concat({ r.T1 or "", r.PH or "", r.PS or "", r.HI or "" },
 						"\n")
 					for _, f in ipairs(r.frames or {}) do all = all .. "\n" .. f.TX end
+					all = P.Visible(all) -- v0.10.1: the body colour tags around each line
 					for _, line in ipairs({ "When the grain carts stopped, she left {quietly}.", "She hid | waited.",
 						"A new oath." }) do
 						expect.truthy(all:find(line, 1, true), styleId .. " T" .. template .. ": " .. line)
@@ -139,9 +140,11 @@ return function(t, expect)
 			end
 		end)
 
-		t:it("Neutral is unchanged, so a profile synced earlier is not rewritten", function()
+		t:it("Neutral keeps TRP3's own white headings and gives the body text a neutral ivory", function()
 			expect.equal(P.SectionHeading(P.Get("neutral"), "Family", 2, "family"), "{h2}Family{/h2}")
-			expect.equal(P.STYLES.neutral.heading, "{h3}Chronicle{/h3}")
+			expect.equal(P.STYLES.neutral.heading, "{h3}Chronicle{/h3}", "the v0.3 summary block's heading")
+			expect.equal(P.Body(P.Get("neutral"), "A line.\n\nAnother."),
+				"{col:e8e0d0}A line.{/col}\n\n{col:e8e0d0}Another.{/col}")
 		end)
 	end)
 
@@ -176,7 +179,9 @@ return function(t, expect)
 			local parts = P.Display(Doc.Render(doc, 3, "arcane"), 3)
 			local titles = {}
 			for _, part in ipairs(parts) do titles[#titles + 1] = part.title end
-			expect.deepEqual(titles, { "Physical Description", "Personality Traits", "History" })
+			-- v0.10.1: the personality part holds only a personality description
+			-- (none here), never beliefs, traits or stances.
+			expect.deepEqual(titles, { "Physical Description", "History" })
 		end)
 
 		t:it("the profile preview window lays the About page out as Total RP 3 does", function()

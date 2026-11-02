@@ -56,7 +56,7 @@ CharacterView.GROUPS = {
 		"age" } },
 	-- The long texts carry their own labels (mockup: SUMMARY, MOTIVATION cards), so
 	-- this group shows no heading of its own.
-	{ id = "words", title = "Summary & motivation", heading = false, keys = { "summary", "motivation" } },
+	{ id = "words", title = "Summary & motivation", heading = false, keys = { "summary", "personality", "motivation" } },
 	{ id = "background", title = "Background & biography", keys = { "homeland", "faith", "occupation", "appearance" },
 		story = true },
 	-- v0.9: the details Total RP 3 shows on its characteristics page.
@@ -567,7 +567,8 @@ local function create(parent)
 	end
 	-- Family (mockup: FAMILY with its Add on the eyebrow row).
 	section.familyPanel = backPanel("Family")
-	section.familyPanel.empty = Widgets.Label(section.familyPanel, "meta", true, "muted")
+	-- Side-panel notes use the small muted style on every screen (v0.10.1).
+	section.familyPanel.empty = Widgets.Label(section.familyPanel, "small", true, "muted")
 	section.familyPanel.empty:SetPoint("TOPLEFT", L.pad, -L.famHead)
 	section.familyPanel.empty:SetWidth(cols.right - 2 * L.pad)
 	section.familyPanel.empty:SetText(CharacterView.FAMILY_HINT)
@@ -1125,6 +1126,13 @@ local function create(parent)
 		self.sideScroll:ClearAllPoints()
 		self.sideScroll:SetPoint("TOPLEFT", cols.rightX, -(L.scrollTop + drop))
 		self.sideScroll:SetSize(cols.right, height)
+		-- v0.10.1: a taller or shorter view changes the range; keep the place
+		-- inside it and the slim thumbs in proportion at once (the client also
+		-- reports the change through OnScrollRangeChanged, a frame later).
+		for _, pair in ipairs({ { self.scroll, self.scrollBar }, { self.sideScroll, self.sideBar } }) do
+			Widgets.ScrollTo(pair[1], pair[1]:GetVerticalScroll())
+			if pair[2] and pair[2].UpdateThumb then pair[2].UpdateThumb() end
+		end
 	end
 
 	--- The header's eyebrow names the view (mockup: "CHARACTER · SHOWCASE").
@@ -1256,6 +1264,17 @@ function CharacterView.AttachReader(section)
 		end
 	end)
 
+	-- v0.10.1: an empty reader shows the shared empty-state card with the
+	-- reader's action (the foot's action button hides meanwhile).
+	reader.empty = Widgets.EmptyState(reader.child, "character")
+	reader.empty:SetPoint("TOPLEFT", 0, 0)
+	reader.empty:Hide()
+	CharacterView.READER_EMPTY = {
+		story = { "No story yet", "Paste a backstory you already wrote, or read your Total RP 3 About text. "
+			.. "It is kept exactly as you wrote it.", "Import a story" },
+		family = { "No family yet", CharacterView.FAMILY_HINT, "Add family member" },
+	}
+
 	reader.paras, reader.cards = {}, {}
 	local function para(i)
 		local fs = reader.paras[i]
@@ -1340,6 +1359,15 @@ function CharacterView.AttachReader(section)
 		end
 		for k = p + 1, #reader.paras do reader.paras[k]:Hide() end
 		for k = c + 1, #reader.cards do reader.cards[k]:Hide() end
+		local isEmpty = p == 0 and c == 0
+		reader.empty:SetShown(isEmpty)
+		reader.action:SetShown(not isEmpty)
+		reader.hint:SetShown(not isEmpty)
+		if isEmpty then
+			local e = CharacterView.READER_EMPTY[kind]
+			reader.empty:Set(e[1], e[2], e[3], function() reader.action:GetScript("OnClick")(reader.action) end)
+			y = reader.empty:Layout(width - 8)
+		end
 		reader.child:SetHeight(math.max(y, 1))
 		Widgets.ScrollTo(reader.scroll, reader.scroll:GetVerticalScroll())
 		reader.height = y

@@ -148,6 +148,115 @@ function Glance.Clear(char, n, now)
 	return true
 end
 
+--- Saves entry n from the editor in one change: values = { title, text,
+-- icon, active }. An empty title and text removes the entry. Returns the
+-- entry (or true when removed), or nil plus a reason.
+function Glance.Save(char, n, values, now)
+	local index = Glance.Index(n)
+	if not index then
+		return nil, "choose an entry from 1 to " .. Glance.SLOTS
+	end
+	values = values or {}
+	if values.icon ~= nil and values.icon ~= "" and not Glance.CleanIcon(values.icon) then
+		return nil, "an icon is a Total RP 3 icon name such as inv_misc_questionmark"
+	end
+	local entry = Glance.CleanEntry({ title = values.title, text = values.text,
+		icon = values.icon ~= "" and values.icon or nil, active = values.active ~= false })
+	if not entry then
+		if store(char)[index] then
+			store(char)[index] = nil
+			touch(char, now)
+			return true
+		end
+		return nil, "write a title or a text"
+	end
+	store(char)[index] = entry
+	touch(char, now)
+	return entry
+end
+
+--- Moves entry n one place up (dir -1) or down (dir 1), swapping it with
+-- its neighbour (an empty place too): Dawnward's order is the order Total
+-- RP 3 shows the entries in (GlancePlan keeps each owned slot in place and
+-- updates its content, so a swap reorders Total RP 3's slots as well).
+-- Returns the new number, or nil plus a reason.
+function Glance.Move(char, n, dir, now)
+	local index = Glance.Index(n)
+	local entries = store(char)
+	if not index or not entries[index] then
+		return nil, "there is no At First Glance entry " .. tostring(n)
+	end
+	local to = Glance.Index(index + (dir == -1 and -1 or 1))
+	if not to then
+		return nil, "entry " .. index .. " is already " .. (dir == -1 and "first" or "last")
+	end
+	entries[index], entries[to] = entries[to], entries[index]
+	touch(char, now)
+	return to
+end
+
+--- Icons offered by Dawnward's own icon picker (the At First Glance and
+-- profile icon editors). Total RP 3's icon browser lives inside its main
+-- window (UI/Browsers/IconBrowser.lua: TRP3_IconBrowserFrame is parented to
+-- TRP3_PopupsFrame, a child of TRP3_MainFrame), so showing it from here
+-- would mean re-parenting Total RP 3's frames; Dawnward never does that.
+-- Each name below exists on Classic Era: it is the fallback Total RP 3
+-- 3.4.1 itself ships for older clients (the last candidate of an entry in
+-- Resources/InterfaceIcons.lua), or an icon the Classic Era 1.15.9 UI uses
+-- (wow-ui-source, Interface\Icons\...). Any other icon name can still be
+-- typed in.
+Glance.ICON_CHOICES = {
+	"inv_misc_questionmark",       -- Default; 1.15.9 UI (QuestInfo)
+	"inv_misc_note_02",            -- 1.15.9 UI
+	"inv_scroll_04",               -- 1.15.9 UI
+	"inv_misc_coin_01",            -- 1.15.9 UI
+	"inv_misc_pocketwatch_01",     -- 1.15.9 UI
+	"inv_misc_dice_02",            -- 1.15.9 UI
+	"inv_misc_book_09",            -- DirectorySection
+	"inv_misc_book_12",            -- HistorySection
+	"inv_misc_note_06",            -- MiscInfoSection
+	"inv_scroll_02",               -- TargetNotes (older client)
+	"inv_scroll_01",               -- MiscInfoMotto (older client)
+	"inv_scroll_07",               -- TargetFlagMatureUnsafe (older client)
+	"inv_misc_scrollunrolled01",   -- TargetOpenCharacter (older client)
+	"inv_misc_map_01",             -- ScanReady (older client)
+	"inv_misc_gear_01",            -- Gears (older client)
+	"inv_misc_grouplooking",       -- ProfileDefault
+	"spell_nature_strength",       -- PhysicalSection (older client)
+	"spell_arcane_mindmastery",    -- TraitSection
+	"spell_shadow_charm",          -- ToolbarStatusIC (older client)
+	"spell_nature_sleep",          -- ModeAFK
+	"spell_holy_silence",          -- ToolbarLanguage
+	"spell_nature_swiftness",      -- TargetOpenMount
+	"spell_nature_massteleport",   -- RelationFriend (older client)
+	"inv_misc_coin_02",            -- RelationBusiness (older client)
+	"ability_rogue_disguise",      -- RelationNone
+	"ability_dualwield",           -- RelationUnfriendly
+	"inv_valentinescandy",         -- RelationLove
+	"inv_misc_drum_06",            -- TargetPlayMusic (older client)
+	"inv_shirt_guildtabard_01",    -- MiscInfoGuildName (older client)
+	"inv_jewelry_ring_36",         -- MiscInfoHouse (older client)
+	"inv_jewelry_ring_14",         -- MiscInfoPiercings
+	"inv_shield_35",               -- TraitLawful (older client)
+	"inv_misc_gift_02",            -- TraitAltruistic
+	"inv_rosebouquet01",           -- TraitForgiving
+	"spell_holy_holyguidance",     -- TraitSuperstitious
+	"spell_holy_auraoflight",      -- TraitValorous (older client)
+	"ability_hunter_snipershot",   -- TraitVindictive
+	"inv_misc_food_02",            -- TraitAscetic (older client)
+	"spell_arcane_teleportstormwind", -- HumanFemale/Male (older client)
+	"spell_arcane_teleportironforge", -- DwarfFemale/Male (older client)
+	"spell_arcane_teleportdarnassus", -- NightElfFemale/Male (older client)
+	"spell_arcane_teleportorgrimmar", -- OrcFemale/Male (older client)
+	"spell_arcane_teleportundercity", -- ScourgeFemale/Male (older client)
+	"spell_arcane_teleportthunderbluff", -- TaurenFemale/Male (older client)
+	"inv_misc_head_gnome_01",      -- GnomeMale (older client)
+	"inv_misc_head_troll_02",      -- TrollFemale (older client)
+	"inv_helmet_20",               -- CharacterMenuItem (older client)
+	"inv_misc_cape_18",            -- ToolbarCloakOn
+	"inv_helmet_13",               -- ToolbarHelmetOn
+}
+
 --- The entries to publish, in Dawnward's order: a list of { n, TI, TX, IC,
 -- AC } in Total RP 3's slot shape (RegisterMisc.lua applyPeekSlot). Copies;
 -- nil when there are none.

@@ -70,6 +70,27 @@ StorySchema.TRP3_ABOUT = { auto = true, summary = true, profile = true }
 -- choice in Total RP 3; text, frames and sections pick template 1, 2 or 3.
 StorySchema.TRP3_LAYOUTS = { current = true, text = true, frames = true, sections = true }
 
+-- v0.10.1: the About page's sections, in their default order
+-- (Integrations/TRP3/AboutDoc.lua). The overview and the biography are the
+-- page; the others appear only when the player wrote them (and, for
+-- motivation and new developments, switched them on). Titles are the
+-- defaults the player may rename; icons and backgrounds apply to template 2
+-- frames and are checked against TRP3Presentation's allowlist when used.
+StorySchema.TRP3_SECTIONS = { "overview", "biography", "appearance", "personality", "motivation", "developments" }
+StorySchema.TRP3_SECTION_DEFAULTS = {
+	overview = { title = "Character overview", on = true },
+	biography = { title = "Biography", on = true },
+	appearance = { title = "Appearance", on = true },
+	personality = { title = "Personality", on = true },
+	motivation = { title = "Motivation", on = false },
+	developments = { title = "New developments", on = false },
+}
+StorySchema.TRP3_SECTION_TITLE_MAX = 60
+-- Heading colour: "style" follows the presentation style; the others are
+-- TRP3Presentation.ACCENTS.
+StorySchema.TRP3_ACCENTS = { style = true, gold = true, silver = true, crimson = true, azure = true, violet = true,
+	verdant = true }
+
 StorySchema.DEFAULT_PREFS = {
 	frequency = "normal",
 	threshold = 1,       -- minimum significance (1-3) that may become a reaction
@@ -80,6 +101,10 @@ StorySchema.DEFAULT_PREFS = {
 	trp3Style = "neutral",
 	trp3About = "auto",
 	trp3Layout = "current",
+	trp3Accent = "style",
+	-- trp3Sections (optional): the player's About section choices, sparse:
+	-- { order = { id, ... }, on = { [id] = bool }, titles = { [id] = text },
+	-- icons = { [id] = icon }, backgrounds = { [id] = n } }. Absent: defaults.
 	places = "on",       -- location moments: on, fewer or off
 	pace = "standard",   -- narrative day length in play (Core/NarrativeClock.lua): brisk, standard, slow
 	repeatDays = 3,      -- (v0.7.x) narrative days before the same question about the same situation (0-14; 0 off)
@@ -356,6 +381,65 @@ function StorySchema.CleanChange(raw, axes)
 	return change
 end
 
+--- The About section choices, cleaned (unknown ids and values dropped).
+-- Returns nil when nothing differs from the defaults' shape (absent = defaults).
+local SECTION_KNOWN = {}
+for _, sid in ipairs(StorySchema.TRP3_SECTIONS) do SECTION_KNOWN[sid] = true end
+function StorySchema.CleanAboutSections(raw)
+	if type(raw) ~= "table" then
+		return nil
+	end
+	local out, any = { on = {}, titles = {}, icons = {}, backgrounds = {} }, false
+	if type(raw.order) == "table" then
+		local seen, order = {}, {}
+		for _, sid in ipairs(raw.order) do
+			if SECTION_KNOWN[sid] and not seen[sid] then
+				seen[sid] = true
+				order[#order + 1] = sid
+			end
+		end
+		if #order > 0 then out.order, any = order, true end
+	end
+	for sid in pairs(SECTION_KNOWN) do
+		if type(raw.on) == "table" and type(raw.on[sid]) == "boolean" then
+			out.on[sid], any = raw.on[sid], true
+		end
+		local title = type(raw.titles) == "table" and text(raw.titles[sid], StorySchema.TRP3_SECTION_TITLE_MAX) or nil
+		if title then out.titles[sid], any = title, true end
+		local icon = type(raw.icons) == "table" and raw.icons[sid]
+		if type(icon) == "string" and #icon <= 64 and icon:match("^[%w_]+$") then
+			out.icons[sid], any = icon:lower(), true
+		end
+		local bk = type(raw.backgrounds) == "table" and smallInt(raw.backgrounds[sid], 1, 64) or nil
+		if bk then out.backgrounds[sid], any = bk, true end
+	end
+	return any and out or nil
+end
+
+--- The About sections in the player's order, each { id, on, title, icon,
+-- background } (icon and background nil when the player chose none). Pure.
+function StorySchema.AboutSections(prefs)
+	local chosen = type(prefs) == "table" and prefs.trp3Sections or nil
+	chosen = type(chosen) == "table" and chosen or {}
+	local order, seen = {}, {}
+	for _, sid in ipairs(chosen.order or {}) do
+		if SECTION_KNOWN[sid] and not seen[sid] then seen[sid] = true; order[#order + 1] = sid end
+	end
+	for _, sid in ipairs(StorySchema.TRP3_SECTIONS) do
+		if not seen[sid] then order[#order + 1] = sid end
+	end
+	local out = {}
+	for i, sid in ipairs(order) do
+		local defaults = StorySchema.TRP3_SECTION_DEFAULTS[sid]
+		local on = chosen.on and chosen.on[sid]
+		if on == nil then on = defaults.on end
+		out[i] = { id = sid, on = on, title = chosen.titles and chosen.titles[sid] or defaults.title,
+			icon = chosen.icons and chosen.icons[sid] or nil,
+			background = chosen.backgrounds and chosen.backgrounds[sid] or nil }
+	end
+	return out
+end
+
 local function cleanPrefs(raw)
 	local prefs = StorySchema.NewPrefs()
 	if type(raw) ~= "table" then
@@ -367,6 +451,8 @@ local function cleanPrefs(raw)
 	if StorySchema.TRP3_STYLES[raw.trp3Style] then prefs.trp3Style = raw.trp3Style end
 	if StorySchema.TRP3_ABOUT[raw.trp3About] then prefs.trp3About = raw.trp3About end
 	if StorySchema.TRP3_LAYOUTS[raw.trp3Layout] then prefs.trp3Layout = raw.trp3Layout end
+	if StorySchema.TRP3_ACCENTS[raw.trp3Accent] then prefs.trp3Accent = raw.trp3Accent end
+	prefs.trp3Sections = StorySchema.CleanAboutSections(raw.trp3Sections)
 	if StorySchema.PLACE_PROMPTS[raw.places] then prefs.places = raw.places end
 	if ns.NarrativeClock.PACES[raw.pace] then prefs.pace = raw.pace end
 	prefs.repeatDays = smallInt(raw.repeatDays, 0, 14) or prefs.repeatDays

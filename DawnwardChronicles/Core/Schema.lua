@@ -60,6 +60,10 @@ Schema.FIELDS = {
 	{ key = "appearance", kind = "long", label = "Appearance" },
 	{ key = "summary", kind = "long", label = "Summary" },
 	{ key = "motivation", kind = "long", label = "Motivation" },
+	-- v0.10.1: the player's own description of the character's personality,
+	-- for Total RP 3's personality part of the About page (never generated
+	-- from the axes). Additive: an older build drops it on load.
+	{ key = "personality", kind = "long", label = "Personality" },
 	-- v0.9: details with a matching Total RP 3 field (docs/TRP3_INTEGRATION.md,
 	-- "Field mappings"). Additive: an older build drops them on load.
 	{ key = "firstName", kind = "short", label = "First name" },
@@ -204,6 +208,9 @@ function Schema.NewCharacter(now)
 		axisMeanings = {},
 		-- At First Glance entries the player wrote for Total RP 3 (v0.9, Core/Glance.lua).
 		glance = {},
+		-- Currently, OOC, status, walk-up, icon, colour and roleplay style the
+		-- player set for Total RP 3 (v0.10.1, Core/RPStatus.lua).
+		trp3status = { style = {} },
 		wizard = {},
 		-- The publication model (v0.9, Privacy.ProfileModel): {} is the
 		-- original model (everything starts Private).
@@ -846,6 +853,7 @@ function Schema.NormalizeCharacter(raw, report)
 	char.personality = normalizePersonality(raw.personality)
 	char.axisMeanings = ns.AxisMeanings.Clean(raw.axisMeanings)
 	char.glance = ns.Glance.Clean(raw.glance)
+	char.trp3status = ns.RPStatus.Clean(raw.trp3status)
 	char.sources = normalizeSources(raw.sources, report)
 	char.interpretationKeys = normalizeInterpretationKeys(raw.interpretationKeys, report)
 	char.interpretations = normalizeInterpretations(raw.interpretations, char.interpretationKeys, report)

@@ -12,6 +12,58 @@ Every release entry has a **Verified** line naming the highest test level reache
 
 A feature is never called "tested" or "compatible" in this file unless it reached L3 or L4.
 
+## [Unreleased]: 0.10.1-dev (Showcase fix, Total RP 3 profile refinement)
+
+**Verified: L2** (mocked). The owner confirmed in game that 0.10.0's About page now receives the whole story; everything below is tested against a mock only.
+
+### Fixed: Lua error in the Character Showcase
+- **Cause:** `UI/Widgets.lua:266: attempt to call a nil value`. The Showcase's rotate buttons carry the client's own Texture objects, and the shared button painter called `SetColor` on them, which only Dawnward's line icons have. It fired on every window refresh, on portrait/live switching and on control updates.
+- **Fix:** icons on buttons and chips are coloured through `Widgets.TintIcon` (line icons with `SetColor`, native textures with `SetVertexColor`; coloured art keeps its colours). The rotate and zoom buttons now draw Dawnward line icons.
+- **Why tests missed it:** the mock client accepted any method on any object. It is now strict for textures, mask textures, lines and font strings: only methods the Classic Era client documents exist (generated from Blizzard's API documentation by `tools/gen_client_api.py`).
+
+### Your Total RP 3 About page: your story, not a records dump
+- **What it shows now:** **Character overview** (your Summary, your words) and **Biography** (your whole story, word for word, your own chapter headings). Optional, only when you wrote them: **Appearance**, **Personality** (a new profile field: your own description, never generated), **Motivation** (off by default) and **New developments** (approved defining moments your story doesn't already tell; off by default).
+- **Gone from the About page:** Chronicle notes, fact lists (Origin:, Relationship: ...), Beliefs and motivations, stance lines and Defining experiences. They stay in Dawnward for the Story Director.
+- **No repetition:** a sentence your story already tells is never repeated in another section; a section left with nothing new is not shown. Your story itself is never changed.
+- **Readable colours:** Total RP 3 colours only headings, so paragraphs showed in the game's gold. Dawnward now colours body text: ivory (Neutral), parchment (Silver Hand) or cool ivory (Arcane), with gold or violet headings.
+- **Templates:** Text (one page), Frames (one native frame per section, with a verified icon and background; your story split only at your own headings when very long) and Sections (appearance in Physical, your personality description in Personality, overview and story in History).
+- **Choose how it looks** (Settings > Total RP 3 > Biography): template, style, heading accent, and per section: show or hide, title, order, and in Frames its icon and background, with a live preview drawn as Total RP 3 draws it. A frame you restyled in Total RP 3 keeps your look.
+- **Upgrading:** the next sync replaces the 0.10 page in place in one write; frames no longer needed are removed (Dawnward's own only).
+
+### Total RP 3 Miscellaneous, from Dawnward
+- **At First Glance editor:** five entries with title, short text, icon (a picker of icons verified for Classic Era, or any icon name), shown or hidden, and order; with a preview. Synced into free slots once enabled; your own slots are never touched.
+- **Currently and OOC:** editors in Dawnward, written through Total RP 3's own public setters. Currently can **Suggest** a draft from your zone and active goal, which only fills the editor; nothing changes until you save. Never updated on zone changes.
+- **Roleplay status and walk-up:** shown and changeable in Dawnward (Total RP 3's own setters); never inferred.
+- **Roleplay style** (injury, death, romance, crime, loss of control, guild): shown read-only with Total RP 3's exact options. Each preference can be handed to Dawnward explicitly (then written with a backup and read-back); otherwise **Open in Total RP 3**. Never changed by Connect everything.
+- **Profile icon and class colour:** editable in Dawnward (Total RP 3's own setters).
+- **Ownership:** a value is Dawnward's only after you set it in Dawnward with sync on, and only while Total RP 3 still shows exactly what Dawnward wrote. If you change it in Total RP 3, that item pauses with **Keep yours / Use Dawnward's / Import**.
+
+### The Total RP 3 page is a profile editor
+Sections: **Profile** (identity, titles, race, class, physical details, additional information, icon and colour), **Biography** (the editor and, behind a switch, the sync card), **Personality** (Dawnward's traits; your own Total RP 3 traits read-only), **At First Glance**, **Status and OOC**, **Synchronization** (connection with **Disconnect…**, status, recovery: conflicts, backups, rollback).
+
+### Interface refinements
+- Story answer cards verified at every scale; the wrap estimate is shared (`Style.WrapLines`).
+- Showcase turn and zoom buttons use line icons and the normal button states.
+- One empty-state card for the Journal, Chronicle tabs, Places, Story and Character lists, with an action where useful.
+- The Guide scrolls; tooltip and wording fixes.
+- New sweeps over every screen: no text under 13 px, no clipped labels, theme switching repaints everything, identical layout at window scale 0.7 and 1.4.
+
+### Saved data
+Additive only: `char.trp3status`, `char.fields.personality`, story preferences `trp3Accent` and `trp3Sections`, and new ledger records (`status`, `look`, `style`, About `frameStyles`/`frameIds`, `character` backups). An older build ignores them.
+
+### Fixed before merge (independent review)
+- "Replace it with Dawnward's" no longer takes over About parts Dawnward does not write: personality or physical text you write later in Total RP 3 stays yours and is never wiped (Dawnward appends after it if it needs that part later).
+- After a takeover, switching the About template in Dawnward no longer replaces the new template's texts and frames: the takeover applied to the old template only, and Dawnward appends to the new one.
+- Backups: the state before Dawnward's first write in each section is never pushed out, "Use Dawnward's" pins are limited on their own, and frequent status writes push out only their own backups, never another section's.
+- Frames written by 0.10 take a newly chosen icon and background again (unless you restyled them in Total RP 3).
+- A section title typed in the Biography panel is saved to its own section even after moving sections while typing.
+- A status, OOC or roleplay style row you have no Dawnward value for is no longer paused because of Total RP 3's own text.
+- Backups of Miscellaneous and Status and OOC are named correctly; the status view and the rollback preview treat a colour in another letter case as the same colour.
+- Body text inside your own centred or right-aligned paragraphs, and next to your own headings or images, keeps the body colour instead of turning gold.
+- Wording: the Personality field feeds the Personality section; the help no longer says there is none.
+- The Total RP 3 page's status, At First Glance, roleplay style and About choices are refused in simulation mode (they belong to the real character Total RP 3 shows).
+- Rolling back a status backup taken without a roleplay status or walk-up no longer fails its read-back.
+
 ## [Unreleased]: 0.10.0-dev (pre-playthrough overhaul)
 
 **Verified: L2** (mocked). Nothing in this section has been tested in game yet.

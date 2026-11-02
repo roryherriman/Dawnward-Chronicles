@@ -357,6 +357,52 @@ function Style.TextWidth(text, style)
 	return units * spec.size / 1000
 end
 
+--- Height of lines of text at size with spacing between lines. Pure.
+function Style.TextHeight(lines, size, spacing)
+	if not lines or lines <= 0 then return 0 end
+	return lines * size + (lines - 1) * spacing
+end
+
+--- Estimated number of lines text wraps to at width, set in a Dawnward
+-- style's font at size (word wrap, real advance widths, Style.TextWidth).
+-- indent narrows the first line. Pure. (Moved from StoryView in v0.10.1.)
+function Style.WrapLines(text, style, size, width, indent)
+	local spec = Style.FONT_BY_STYLE[style] or Style.FONT_BY_STYLE.body
+	local scale = (size or spec.size) / spec.size
+	local space = Style.TextWidth(" ", style) * scale
+	local total = 0
+	for paragraph in (tostring(text or "") .. "\n"):gmatch("(.-)\n") do
+		local lines, x = 1, indent or 0
+		indent = nil
+		local first = true
+		for word in paragraph:gmatch("%S+") do
+			local w = Style.TextWidth(word, style) * scale
+			if first then
+				-- After an indent (an inline label), a first word that does not
+				-- fit starts the next line.
+				if x > 0 and x + space + w > width then
+					lines = lines + 1
+					x = w
+				else
+					x = x + w
+				end
+				first = false
+			elseif x + space + w <= width then
+				x = x + space + w
+			else
+				lines = lines + 1
+				x = w
+			end
+			while x > width do -- a word longer than the line breaks anywhere
+				lines = lines + 1
+				x = x - width
+			end
+		end
+		total = total + lines
+	end
+	return math.max(1, total)
+end
+
 --- Painting ------------------------------------------------------------------------
 
 -- Weak keys: objects that disappear are forgotten.
@@ -574,6 +620,7 @@ Style.ICONS = {
 		5, 18, arc(7, 18, 2, 180, 90, 2), 17, 20, arc(17, 18, 2, 90, 0, 2), 19, 8), { 9, 12, 16, 12 }, { 9, 16, 14, 16 } },
 	close = { stroke = 2, { 6, 6, 18, 18 }, { 18, 6, 6, 18 } },
 	plus = { stroke = 2.2, { 12, 5, 12, 19 }, { 5, 12, 19, 12 } },
+	minus = { stroke = 2.2, { 5, 12, 19, 12 } }, -- v0.10.1: the Showcase's Zoom out
 	search = { stroke = 2, { 20, 20, 16.2, 16.2 }, circles = { { 11, 11, 7 } } },
 	edit = { stroke = 2, { 4, 20, 8, 20, 19, 9, 15, 5, 4, 16, 4, 20 } },
 	delete = { stroke = 2, { 4, 7, 20, 7 }, { 10, 11, 10, 17 }, { 14, 11, 14, 17 }, { 6, 7, 7, 20, 17, 20, 18, 7 },
@@ -587,7 +634,26 @@ Style.ICONS = {
 	home = { stroke = 2, { 3, 11, 12, 4, 21, 11, 21, 20, 20, 21, 15, 21, 15, 15, 9, 15, 9, 21, 4, 21, 3, 20, 3, 11 } },
 	star = { stroke = 2, { 12, 3, 14.7, 8.6, 20.8, 9.5, 16.4, 13.8, 17.4, 19.9, 12, 17, 6.6, 19.9, 7.6, 13.8, 3.2, 9.5,
 		9.3, 8.6, 12, 3 } },
+	-- v0.10.1: the Showcase's turn buttons (the mockup's rotate icons: an
+	-- open circle from the left, round the bottom to the top, back towards
+	-- the arrow head at the upper left). rotateRight is its mirror image.
+	rotateLeft = { stroke = 2, path(arc(12, 12, 9, 180, -90, 18), 5.3, 5.7, 3, 8), { 3, 3, 3, 8, 8, 8 } },
 }
+-- The mirror image of an icon (x -> 24 - x).
+local function mirror(spec)
+	local out = { stroke = spec.stroke }
+	for i, line in ipairs(spec) do
+		local m = {}
+		for j = 1, #line, 2 do m[j], m[j + 1] = 24 - line[j], line[j + 1] end
+		out[i] = m
+	end
+	if spec.circles then
+		out.circles = {}
+		for i, c in ipairs(spec.circles) do out.circles[i] = { 24 - c[1], c[2], c[3] } end
+	end
+	return out
+end
+Style.ICONS.rotateRight = mirror(Style.ICONS.rotateLeft)
 
 --- The polylines of icon name with its circles expanded (24 px box). Pure.
 function Style.IconPaths(name)

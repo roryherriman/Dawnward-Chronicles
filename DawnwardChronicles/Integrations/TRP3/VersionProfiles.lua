@@ -23,7 +23,11 @@ VersionProfiles.KNOWN = {
 		-- calls TRP3's own "Create profile" button makes in RegisterMain.lua
 		-- 735-742). Used only after the player confirms (Adapter.CreateProfile,
 		-- Adapter.SelectProfile).
-		tiers = { read = true, publicSetters = false, manualExport = true, experimentalWrite = true,
+		-- publicSetters (v0.10.1): CurrentUser's SetCurrentlyText,
+		-- SetOutOfCharacterInfo, SetRoleplayStatus, SetWalkup, SetCustomIcon
+		-- and SetCustomClassColor (Core/Player.lua 413-494, UpdateProfileField),
+		-- used for the player's status and look (StatusPlan.lua).
+		tiers = { read = true, publicSetters = true, manualExport = true, experimentalWrite = true,
 			profileTools = true },
 	},
 	-- Newer versions (3.5.x, main) change icon storage and have not had a
