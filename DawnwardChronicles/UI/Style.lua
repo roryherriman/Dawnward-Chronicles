@@ -38,7 +38,7 @@ Style.MIN_TEXT = 13
 -- Text roles: font template and colour (a theme role or a Style.Tones key).
 Style.TEXT = {
 	title = { font = "GameFontNormalLarge", color = "heading" },
-	eyebrow = { font = "GameFontNormalSmall", color = "ornament" },
+	eyebrow = { font = "GameFontNormalSmall", color = "eyebrowText" },
 	heading = { font = "GameFontNormal", color = "label" },
 	body = { font = "GameFontHighlight", color = "text" },
 	reading = { font = "GameFontHighlight", color = "reading" },
@@ -58,6 +58,16 @@ end
 --- color mixed toward white by amount (0..1). Pure.
 function Style.Lighten(color, amount)
 	return Style.Mix(color, { 1, 1, 1 }, amount)
+end
+
+--- color lightened in 5 % steps until it reads at ratio on background. Pure.
+function Style.Readable(color, background, ratio)
+	local c = color
+	for step = 1, 20 do
+		if Themes.Contrast(c, background) >= ratio then return c end
+		c = Style.Lighten(color, step * 0.05)
+	end
+	return c
 end
 
 --- color scaled by k, keeping its hue (channels capped at 1). Pure.
@@ -101,6 +111,9 @@ local function deriveTones(t)
 		-- A warm dark (the background toward the dark accent text, a touch of gold).
 		calloutFill = Style.Mix(Style.Mix(t.background, t.accentText, 0.5), accent, 0.04), -- 1A1A17 callout
 		dot = Style.Mix(Style.Scale(edge, 2), muted, 0.25), -- 6E7891 neutral status dot
+		-- Eyebrows: the ornament colour (C9A55E), lightened only as far as 4.5:1
+		-- needs on the lightest surface they sit on (Shadowbound's crimson).
+		eyebrowText = Style.Readable(t.ornament, t.surfaceHover, 4.5),
 		-- Gold and amber chips: their colour darkened (Main.dc.html .goldtag #2A2213, .amber #2E2410).
 		accentWell = Style.Scale(accent, 0.2),
 	}

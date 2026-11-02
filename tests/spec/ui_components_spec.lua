@@ -347,7 +347,13 @@ return function(t, expect)
 				< 0.01)
 			-- Colour follows the theme role.
 			ns.Style.Apply(ns.Themes.Get("shadowbound"))
-			expect.equal(label.letters[1].__textColor[1], ns.Themes.Get("shadowbound").ornament[1])
+			expect.equal(label.letters[1].__textColor[1], S.Tones(ns.Themes.Get("shadowbound")).eyebrowText[1])
+			for _, theme in ipairs(ns.Themes.LIST) do
+				expect.truthy(ns.Themes.Contrast(S.Tones(theme).eyebrowText, theme.surfaceHover) >= 4.5,
+					theme.id .. " eyebrows readable")
+			end
+			expect.deepEqual(S.Tones(ns.Themes.Get("dawnward")).eyebrowText, ns.Themes.Get("dawnward").ornament,
+				"unchanged where already readable")
 			-- Shorter text hides the letters it no longer uses.
 			label:SetText("AB")
 			expect.falsy(label.letters[3]:IsShown())
