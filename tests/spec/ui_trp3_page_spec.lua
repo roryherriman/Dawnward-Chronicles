@@ -338,8 +338,8 @@ local function legacySpec(t, expect)
 			for _, s in ipairs(P.SECTIONS) do
 				expect.truthy(ns.Style.TextWidth(s.label, "title") + 12 + 180 <= page.innerWidth, s.label)
 			end
-			for _, t in ipairs({ "Biography: proposed change", "Personality: sync is off" }) do
-				expect.truthy(ns.Style.TextWidth(t, "title") + 12 + 180 <= page.innerWidth, t)
+			for _, title in ipairs({ "Biography: proposed change", "Personality: sync is off" }) do
+				expect.truthy(ns.Style.TextWidth(title, "title") + 12 + 180 <= page.innerWidth, title)
 			end
 			expect.truthy(page.approve:GetWidth() + page.notNow:GetWidth() + page.toggle:GetWidth() + 8 + 28
 				< page.card:GetWidth(), "the three actions do not overlap")
