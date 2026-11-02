@@ -176,6 +176,10 @@ local function diagnose(ctx, deps)
 				flag(e.hasContext), flag(e.editMode), flag(e.tabShown), flag(e.editShown)))
 		end
 	end
+	local glanceEditor = probe.editorState and probe.editorState.misc
+	if glanceEditor then
+		out(ctx, "  At First Glance editor: open " .. flag(glanceEditor.open))
+	end
 	out(ctx, string.format("  simulation: %s, saved data read-only: %s, ledger read-only: %s, in combat: %s",
 		flag(deps.store:IsSimulation()), flag(deps.store.realReadOnly == true), flag(deps.ledgerReadOnly ~= nil),
 		flag(deps.inCombat and deps.inCombat() or false)))
