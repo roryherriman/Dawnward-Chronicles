@@ -35,27 +35,22 @@ ns.TRP3Sync = Sync
 -- Template numbers for the Total RP 3 layout preference (nil keeps TRP3's).
 local LAYOUT_TEMPLATE = { text = 1, frames = 2, sections = 3 }
 
---- Whether the About page gets the full profile (AboutDoc) or the summary
--- block (AboutBlock), from the public projection's settings.
+--- Whether the About page gets the whole narrative (overview, biography and
+-- the chosen sections) or the overview alone ("summary"), from the public
+-- projection's settings.
 function Sync.UsesProfile(public)
 	return public.trp3About == "profile" or (public.trp3About ~= "summary" and public.profileModel == true)
 end
 
 -- Plans the About page for one projection (the about feature's planner).
+-- v0.10.1: always the narrative page (AboutDoc); the v0.3 summary block of
+-- facts, stances and moments is no longer published. A record any earlier
+-- version wrote (v0.8 block, v0.9/v0.10 slots and frames) is replaced in
+-- place by AboutDoc.Plan, so the upgrade is one ordinary write.
 local function planAbout(section, record, public, extra)
 	extra = extra or {}
-	local upgraded = record and (record.slots ~= nil or record.frames ~= nil)
-	if Sync.UsesProfile(public) or upgraded or extra.adopt then
-		local doc = Sync.UsesProfile(public) and AboutDoc.Build(public) or {}
-		if not Sync.UsesProfile(public) then
-			-- The summary block as one section, without a heading of its own.
-			local block = AboutBlock.Compose(public)
-			if block ~= "" then doc = { { id = "notes", title = nil, body = block, raw = true } } end
-		end
-		return AboutDoc.Plan(section, record, doc, { template = LAYOUT_TEMPLATE[public.trp3Layout],
-			style = public.trp3Style, adopt = extra.adopt })
-	end
-	return AboutBlock.Plan(section, record, AboutBlock.Compose(public))
+	return AboutDoc.Plan(section, record, AboutDoc.Build(public), { template = LAYOUT_TEMPLATE[public.trp3Layout],
+		style = public.trp3Style, accent = public.trp3Accent, adopt = extra.adopt })
 end
 Sync.PlanAbout = planAbout
 
@@ -197,6 +192,8 @@ function Sync.ApplySettings(public, char)
 	public.trp3Style = prefs.trp3Style
 	public.trp3About = prefs.trp3About or "auto"
 	public.trp3Layout = prefs.trp3Layout or "current"
+	public.trp3Accent = prefs.trp3Accent
+	public.trp3Sections = prefs.trp3Sections and Util.DeepCopy(prefs.trp3Sections) or nil
 	public.profileModel = ns.Privacy.ProfileModel(char)
 	return public
 end
@@ -932,7 +929,7 @@ function Sync.RollbackPreview(deps, backupId)
 		local now = currentBlockLines(public)
 		for line in (AboutDoc.OwnedText(owners.about) .. "\n"):gmatch("([^\n]*)\n") do
 			if not isHeading(line) and not now[line] then
-				items[#items + 1] = "Biography line: " .. line
+				items[#items + 1] = "Biography line: " .. Presentation.Visible(line)
 			end
 		end
 	end

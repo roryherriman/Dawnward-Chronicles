@@ -1,8 +1,10 @@
--- L1/L2 (v0.9): the full-profile About page. The player's whole biography
--- (word for word, every paragraph, in order) and the Public sections of the
--- character, in Total RP 3's templates 1, 2 and 3, kept up to date
--- automatically, never duplicated and never written over the player's own
--- text. Against the TRP3 3.4.1 fake (mocked; not in-game evidence).
+-- L1/L2 (v0.9, restructured in v0.10.1): the About page. The character's
+-- public narrative: the overview, then the player's whole biography (word
+-- for word, every paragraph, in order, the player's own chapter headings),
+-- then only the optional sections the player wrote; in Total RP 3's
+-- templates 1, 2 and 3, kept up to date automatically, never duplicated and
+-- never written over the player's own text. Against the TRP3 3.4.1 fake
+-- (mocked; not in-game evidence).
 local Loader = require("support.loader")
 local Fake = require("fakes.trp3_341")
 
@@ -27,8 +29,14 @@ local function bodyLines(text)
 	return out
 end
 
+-- The text a reader sees (v0.10.1: Dawnward's body colour tags removed).
+local function visible(text)
+	return (text:gsub("{col:%x%x%x%x%x%x}", ""):gsub("{/col}", ""))
+end
+
 -- Asserts every body line appears in text exactly once and in order.
 local function expectWhole(expect, text, biography)
+	text = visible(text)
 	local at = 1
 	for _, line in ipairs(bodyLines(biography)) do
 		local s, e = text:find(line, at, true)
@@ -93,7 +101,7 @@ return function(t, expect)
 				"a blank line inside a section is kept")
 		end)
 
-		t:it("builds sections from Public data only, in a fixed order", function()
+		t:it("builds the narrative only: overview, biography, then the authored optional sections", function()
 			local ns = Loader.WithTRP3()
 			local char = ns.Schema.NewCharacter(1)
 			ns.Publication.Adopt(char, 1)
@@ -108,14 +116,15 @@ return function(t, expect)
 			local doc = ns.TRP3AboutDoc.Build(ns.Projection.GetPublic(char))
 			local ids = {}
 			for i, s in ipairs(doc) do ids[i] = s.id .. ":" .. s.title end
-			expect.deepEqual(ids, { "overview:Character overview", "appearance:Appearance", "bio:Background",
-				"family:Family", "beliefs:Beliefs and motivations", "notes:Chronicle notes" })
-			local all = {}
-			for _, s in ipairs(doc) do all[#all + 1] = s.body end
-			all = table.concat(all, "\n")
+			expect.deepEqual(ids, { "overview:Character overview", "biography:Biography", "appearance:Appearance" })
+			local all = ns.TRP3AboutDoc.Render(doc, 1).T1
 			expect.falsy(all:find("No village forgotten", 1, true), "a Private field never appears")
-			expect.truthy(all:find("Brother: Tomas (living)", 1, true))
-			expect.truthy(all:find("Origin: Born above the river fields", 1, true))
+			-- Dawnward's records stay in Dawnward: no family list, facts or notes.
+			for _, gone in ipairs({ "Tomas", "Brother:", "Origin:", "Born above the river fields", "The Light never left",
+				"Chronicle notes", "Beliefs and motivations", "Family" }) do
+				expect.falsy(all:find(gone, 1, true), "not on the About page: " .. gone)
+			end
+			expect.truthy(char.facts[1] and char.family[1], "the records themselves are untouched")
 		end)
 
 		t:it("styles headings with TRP3's own tags and escapes a player's heading", function()
@@ -123,8 +132,9 @@ return function(t, expect)
 			expect.equal(P.SectionHeading(P.Get("neutral"), "Family", 2, "family"), "{h2}Family{/h2}")
 			expect.equal(P.SectionHeading(P.Get("silverhand"), "Family", 2, "family"),
 				"{h2}{col:e6c35c}Family{/col}{/h2}")
-			expect.equal(P.SectionHeading(P.Get("arcane"), "Family", 3, "family"),
-				"{h3}{icon:inv_misc_grouplooking:18} {col:b89cff}Family{/col}{/h3}")
+			expect.equal(P.SectionHeading(P.Get("arcane"), "Character overview", 3, "overview"),
+				"{h3}{icon:inv_misc_book_09:18} {col:c4adff}Character overview{/col}{/h3}")
+			expect.equal(P.ChapterHeading(P.Get("silverhand"), "The {fall}"), "{h3}{col:d9c38a}The (fall){/col}{/h3}")
 			expect.equal(P.SectionHeading(P.Get("neutral"), "{col:ff0000}Red", 2), "{h2}(col:ff0000)Red{/h2}")
 		end)
 	end)
@@ -139,8 +149,8 @@ return function(t, expect)
 			expect.equal(r.state, "written", r.message)
 			local tx = w.about().T1.TX
 			expect.equal(tx:sub(1, #"Private about text\n\n"), "Private about text\n\n", "the player's text stays first")
-			expect.truthy(tx:find("{h2}Character overview{/h2}\nA quiet paladin.", 1, true))
-			expect.truthy(tx:find("{h2}The fall of Lordaeron{/h2}\nWhen the grain carts", 1, true))
+			expect.truthy(tx:find("{h2}Character overview{/h2}\n{col:e8e0d0}A quiet paladin.{/col}", 1, true))
+			expect.truthy(tx:find("{h3}The fall of Lordaeron{/h3}\n{col:e8e0d0}When the grain carts", 1, true))
 			expectWhole(expect, tx, LONG)
 			expect.equal(w.run().state, "noop", "no change, no write, no version bump")
 			-- The biography changes in Dawnward: the same block is replaced in place.
@@ -162,6 +172,7 @@ return function(t, expect)
 			w.run()
 			expect.falsy(w.about().T1.TX:find("A secret past", 1, true))
 			expect.truthy(w.about().T1.TX:find("Public summary.", 1, true))
+			expect.falsy(w.about().T1.TX:find("{h2}Biography", 1, true), "no empty section")
 		end)
 
 		t:it("pauses instead of overwriting when the player edits Dawnward's part", function()
@@ -209,16 +220,18 @@ return function(t, expect)
 			local own = { TX = "My own frame", IC = "INV_Misc_Rose_01", BK = 5 }
 			local w = world({ about = { v = 2, TE = 2, T2 = { own } } })
 			w.bio(LONG)
+			w.field("summary", "A quiet paladin.")
 			w.pref("trp3Style", "arcane")
 			w.connect()
 			expect.equal(w.run().state, "written")
 			local frames = w.about().T2
 			expect.deepEqual(frames[1], { TX = "My own frame", IC = "INV_Misc_Rose_01", BK = 5 })
-			expect.equal(#frames, 1 + 5, "one frame per biography section")
-			expect.equal(frames[2].IC, "inv_misc_book_12")
-			expect.equal(frames[2].BK, 1)
-			expect.truthy(frames[3].TX:find("{h2}{icon:inv_misc_book_12:18} {col:b89cff}The fall of Lordaeron", 1,
-				true))
+			expect.equal(#frames, 1 + 2, "one frame for the overview, one for the whole biography (not split)")
+			expect.equal(frames[2].IC, "inv_misc_book_09")
+			expect.equal(frames[3].IC, "inv_misc_book_12")
+			expect.equal(frames[3].BK, 1)
+			expect.truthy(frames[3].TX:find("^{h2}{icon:inv_misc_book_12:18} {col:c4adff}Biography{/col}{/h2}\n"))
+			expect.truthy(frames[3].TX:find("{h3}{col:b6a6dc}The fall of Lordaeron{/col}{/h3}", 1, true))
 			local all = {}
 			for i = 2, #frames do all[#all + 1] = frames[i].TX end
 			expectWhole(expect, table.concat(all, "\n"), LONG)
@@ -226,11 +239,14 @@ return function(t, expect)
 
 		t:it("keeps a restyled frame's icon and background, and removes frames no longer needed", function()
 			local w = world({ about = { v = 2, TE = 2, T2 = {} } })
+			w.field("summary", "Short and true.")
 			w.bio("# One\nFirst.\n# Two\nSecond.")
 			w.connect()
 			w.run()
-			w.about().T2[1].IC = "INV_Sword_04"
-			w.about().T2[1].BK = 9
+			expect.equal(#w.about().T2, 2)
+			w.about().T2[2].IC = "INV_Sword_04"
+			w.about().T2[2].BK = 9
+			w.field("summary", "First, revised.") -- now only repeats the biography: the overview frame goes
 			w.bio("# One\nFirst, revised.")
 			expect.equal(w.run().state, "written")
 			expect.equal(#w.about().T2, 1)
@@ -241,16 +257,18 @@ return function(t, expect)
 	end)
 
 	t:describe("About page: template 3 (L2)", function()
-		t:it("puts appearance in PH, beliefs and personality in PS, the rest in the history", function()
+		t:it("puts the appearance alone in PH, nothing generated in PS, the story in the history", function()
 			local w = world({ about = { v = 2, TE = 3, T3 = { PH = {}, PS = { TX = "My own personality notes." }, HI = {} } } })
 			w.bio(LONG)
 			w.field("appearance", "Grey eyes.")
 			w.field("motivation", "No village forgotten.")
+			w.ns.Personality.Set(w.char(), "courage", 18)
 			w.connect()
 			expect.equal(w.run().state, "written")
 			local t3 = w.about().T3
-			expect.equal(t3.PH.TX, "Grey eyes.", "TRP3 titles this part itself")
-			expect.truthy(t3.PS.TX:find("^My own personality notes%.\n\n{h3}Beliefs and motivations{/h3}"))
+			expect.equal(t3.PH.TX, "{col:e8e0d0}Grey eyes.{/col}", "TRP3 titles this part itself")
+			expect.equal(t3.PS.TX, "My own personality notes.", "no personality text is ever generated")
+			expect.falsy(t3.HI.TX:find("No village forgotten", 1, true), "motivation is off by default")
 			expectWhole(expect, t3.HI.TX, LONG)
 		end)
 	end)
@@ -282,7 +300,7 @@ return function(t, expect)
 			w.bio("The whole story.")
 			w.connect({ adopt = true })
 			expect.equal(w.run().state, "written")
-			expect.truthy(w.about().T1.TX:find("^{h2}Background{/h2}\nThe whole story%."))
+			expect.truthy(w.about().T1.TX:find("^{h2}Biography{/h2}\n{col:e8e0d0}The whole story%.{/col}"))
 			expect.falsy(w.about().T1.TX:find("Private about text", 1, true))
 			local backup = w.deps.ledger.backups[#w.deps.ledger.backups]
 			expect.equal(w.ns.TRP3Ledger.BackupData(backup).T1.TX, "Private about text")
@@ -293,22 +311,19 @@ return function(t, expect)
 			expect.equal(w.run().state, "conflict")
 		end)
 
-		t:it("upgrades a v0.8 summary block in place to the full profile, without duplicating", function()
+		t:it("upgrades a v0.8 summary block in place to the narrative, without duplicating", function()
 			local w = world()
-			local char = w.char()
-			char.publication = {} -- an older character: the summary block
-			w.ns.Facts.Add(char, { category = "origin", statement = "Born in Stormwind", visibility = "public" })
+			w.field("summary", "Born in Stormwind.")
 			w.connect()
+			-- What v0.8 wrote (AboutBlock), and its ledger record.
+			local block = "\n\n{h3}Chronicle{/h3}\nOrigin: Born in Stormwind"
+			w.about().T1.TX = "Private about text" .. block
+			w.ns.TRP3Ledger.Profile(w.deps.ledger, w.fake.profileId).about = { block = block, template = 1 }
 			expect.equal(w.run().state, "written")
-			expect.equal(w.about().T1.TX, "Private about text\n\n{h3}Chronicle{/h3}\nOrigin: Born in Stormwind")
-			expect.truthy(w.record().block, "the v0.8 record shape for the summary")
-			w.pref("trp3About", "profile")
-			expect.equal(w.run().state, "written")
-			local tx = w.about().T1.TX
-			expect.falsy(tx:find("{h3}Chronicle{/h3}", 1, true), "the old block was replaced, not kept")
-			expect.truthy(tx:find("{h2}Chronicle notes{/h2}\nOrigin: Born in Stormwind", 1, true))
-			local _, count = tx:gsub("Private about text", "")
-			expect.equal(count, 1)
+			expect.equal(w.about().T1.TX, "Private about text\n\n{h2}Character overview{/h2}\n"
+				.. "{col:e8e0d0}Born in Stormwind.{/col}", "the old block was replaced in place, not kept")
+			expect.truthy(w.record().slots, "the record moved to the current shape")
+			expect.equal(w.run().state, "noop")
 		end)
 
 		t:it("rolls back to the player's own text, rebuilding Dawnward's part from what is Public now", function()
@@ -318,7 +333,8 @@ return function(t, expect)
 			w.run()
 			w.bio("A tale, retold.") -- a second write: its backup holds Dawnward's first text
 			w.run()
-			w.char().publication = {} -- back on an older model: the story is no longer published
+			w.char().publication = {} -- back on an older model where the story is kept back
+			w.ns.Sources.SetVisibility(w.char(), "private", 9)
 			local preview = w.Sync.RollbackPreview(w.deps)
 			expect.truthy(preview.ownPossible, preview.ownReason)
 			expect.truthy(table.concat(preview.items, "\n"):find("A tale.", 1, true), "names what is no longer Public")

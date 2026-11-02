@@ -79,6 +79,9 @@ local function legacySpec(t, expect)
 
 		t:it("a public defining moment syncs into the About section once, and drafts never do", function()
 			local w = world()
+			-- v0.10.1: defining moments appear under "New developments", which
+			-- the player switches on (off by default).
+			w.char.story.prefs.trp3Sections = { on = { developments = true } }
 			local entry = storyEntry(w, "The Ashenvale Ambush")
 			w.Sync.SetOptIn(w.deps, "about", true)
 			expect.equal(w.Sync.Check(w.deps, "about").state, "noop", "a private draft publishes nothing")
@@ -87,7 +90,8 @@ local function legacySpec(t, expect)
 			expect.equal(r.state, "written", r.message)
 			local text = w.fake.profile.player.about.T1.TX
 			expect.truthy(text:find("Private about text", 1, true), "the player's own text is kept")
-			expect.truthy(text:find("- The Ashenvale Ambush", 1, true), text)
+			expect.truthy(text:find("{h2}New developments{/h2}", 1, true), text)
+			expect.truthy(text:find("The Ashenvale Ambush", 1, true), text)
 			expect.equal(w.Sync.Run(w.deps)[1].state, "noop", "repeated sync is idempotent")
 			-- Making it private again removes it on the next sync.
 			w.ns.Journal.SetVisibility(w.char, entry.id, "private", 13)
@@ -97,23 +101,26 @@ local function legacySpec(t, expect)
 
 		t:it("changing style rewrites only Dawnward's own section, and release restores the text", function()
 			local w = world()
+			w.char.story.prefs.trp3Sections = { on = { developments = true } }
 			publish(w, storyEntry(w, "Moment"))
 			w.Sync.SetOptIn(w.deps, "about", true)
 			w.Sync.Run(w.deps)
 			w.char.story.prefs.trp3Style = "arcane"
 			expect.equal(w.Sync.Run(w.deps)[1].state, "written")
 			local text = w.fake.profile.player.about.T1.TX
-			expect.truthy(text:find("{col:b89cff}", 1, true))
+			expect.truthy(text:find("{col:c4adff}", 1, true), "Arcane's violet headings")
+			expect.truthy(text:find("{col:e6e1f0}", 1, true), "Arcane's cool ivory body text")
 			expect.equal(text:sub(1, #"Private about text"), "Private about text")
 			assert(w.Sync.Release(w.deps, "about"))
 			expect.equal(w.fake.profile.player.about.T1.TX, "Private about text")
 		end)
 
-		t:it("an upgraded profile is not rewritten: v0.3 content with the default style is a no-op", function()
+		t:it("an upgraded profile is not rewritten: content with the default style is a no-op after normalisation", function()
 			local w = world()
-			w.ns.Facts.Add(w.char, { category = "origin", statement = "Born at sea", visibility = "public" })
+			assert(w.ns.Character.SetField(w.char, "summary", "Born at sea.", 1))
+			assert(w.ns.Character.SetFieldVisibility(w.char, "summary", "public", 1))
 			w.Sync.SetOptIn(w.deps, "about", true)
-			w.Sync.Run(w.deps)
+			expect.equal(w.Sync.Run(w.deps)[1].state, "written")
 			local version = w.fake.profile.player.about.v
 			-- Schema v4 normalisation (as after an upgrade) and a new default story table.
 			w.deps.store.real.characters[KEY] = w.ns.Schema.NormalizeCharacter(w.ns.Util.DeepCopy(w.char))

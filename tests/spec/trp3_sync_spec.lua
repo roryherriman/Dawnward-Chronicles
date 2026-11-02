@@ -21,8 +21,16 @@ local function legacySpec(t, expect)
 		function w.char()
 			return assert(store:EnsureCharacter(KEY, 1))
 		end
+		-- A public fact, and (v0.10.1: facts stay in Dawnward; the About page
+		-- is the narrative) the same words as a sentence of the public summary,
+		-- which the About page publishes as the character overview.
 		function w.publicFact(category, statement)
-			return ns.Facts.Add(w.char(), { category = category, statement = statement, visibility = "public" })
+			local fact = ns.Facts.Add(w.char(), { category = category, statement = statement, visibility = "public" })
+			local summary = w.char().fields.summary
+			local text = (summary and summary.value and (summary.value .. " ") or "") .. statement .. "."
+			assert(ns.Character.SetField(w.char(), "summary", text, 1))
+			assert(ns.Character.SetFieldVisibility(w.char(), "summary", "public", 1))
+			return fact
 		end
 		function w.trait(axis, value)
 			ns.Personality.Set(w.char(), axis, value)
@@ -56,7 +64,7 @@ local function legacySpec(t, expect)
 			local results = w.Sync.Run(w.deps)
 			expect.equal(results[1].state, "written", results[1].message)
 			local about = w.about()
-			expect.equal(about.T1.TX, "Private about text\n\n{h3}Chronicle{/h3}\nOrigin: Born in Stormwind")
+			expect.equal(about.T1.TX, "Private about text\n\n{h2}Character overview{/h2}\n{col:e8e0d0}Born in Stormwind.{/col}")
 			expect.falsy(about.T1.TX:find("PRIVATE-FEAR", 1, true))
 			expect.equal(about.v, 4, "bumped two steps from 2")
 			expect.equal(about.TE, 1)
@@ -90,8 +98,8 @@ local function legacySpec(t, expect)
 			w.Sync.Run(w.deps)
 			w.publicFact("belief", "Protect the weak")
 			expect.equal(w.Sync.Run(w.deps)[1].state, "written")
-			expect.equal(w.about().T1.TX, "Private about text\n\n{h3}Chronicle{/h3}\nOrigin: Born in Stormwind"
-				.. "\nBelief: Protect the weak")
+			expect.equal(w.about().T1.TX, "Private about text\n\n{h2}Character overview{/h2}\n{col:e8e0d0}Born in Stormwind."
+				.. " Protect the weak.{/col}")
 		end)
 
 		t:it("never overwrites the player's edit of Dawnward's section", function()
@@ -116,7 +124,10 @@ local function legacySpec(t, expect)
 			w.publicFact("origin", "Born in Stormwind")
 			w.enable("about")
 			w.Sync.Run(w.deps)
-			w.about().T1.TX = w.about().T1.TX .. " (edited)"
+			-- The player rewrote Dawnward's sentence (an edit that only appended
+			-- to it would still hold Dawnward's whole text, and a fresh copy
+			-- would duplicate it: that stays a conflict, AboutDoc.Plan).
+			w.about().T1.TX = w.about().T1.TX:gsub("Born in Stormwind", "Born in Lakeshire (edited)")
 			w.Sync.Run(w.deps)
 			expect.falsy(w.Sync.Resolve(w.deps, "about", "maybe"))
 			assert(w.Sync.Resolve(w.deps, "about", "reclaim"))
@@ -188,7 +199,7 @@ local function legacySpec(t, expect)
 			w3.publicFact("origin", "Born in Stormwind")
 			w3.enable("about")
 			w3.Sync.Run(w3.deps)
-			expect.equal(w3.about().T3.HI.TX, "Born.\n\n{h3}Chronicle{/h3}\nOrigin: Born in Stormwind")
+			expect.equal(w3.about().T3.HI.TX, "Born.\n\n{h2}Character overview{/h2}\n{col:e8e0d0}Born in Stormwind.{/col}")
 			expect.equal(w3.about().T3.PH.TX, "Tall")
 			expect.equal(w3.about().v, 2, "99 wraps to 1, then 2")
 		end)
@@ -199,7 +210,7 @@ local function legacySpec(t, expect)
 			w.enable("about")
 			-- A hostile TRP3 that mangles the section right after our write.
 			w.fake.env.TRP3_Addon.TriggerEvent = function(_, _, _, _, section)
-				if section == "about" and w.about().T1.TX:find("Chronicle") then
+				if section == "about" and w.about().T1.TX:find("Character overview") then
 					w.about().T1.TX = w.about().T1.TX .. " MANGLED"
 				end
 			end
@@ -440,7 +451,7 @@ local function legacySpec(t, expect)
 			assert(w.Sync.Rollback(w.deps, 2))
 			w.enable("about")
 			expect.equal(w.Sync.Run(w.deps)[1].state, "written")
-			local _, count = w.about().T1.TX:gsub("Chronicle", "")
+			local _, count = w.about().T1.TX:gsub("Character overview", "")
 			expect.equal(count, 1, w.about().T1.TX)
 			assert(w.Sync.Release(w.deps, "about"))
 			expect.equal(w.about().T1.TX, "Private about text")

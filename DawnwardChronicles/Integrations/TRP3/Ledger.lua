@@ -164,6 +164,23 @@ local function normalizeAbout(raw)
 		if not next(out.slots) and #out.frames == 0 then
 			return nil
 		end
+		-- v0.10.1: the icon and background Dawnward gave each frame
+		-- ("icon|background", "" unknown) and the About section it holds, one
+		-- per owned frame; anything else is dropped (the frames then keep the
+		-- icons they have and are matched by their headings).
+		for _, key in ipairs({ "frameStyles", "frameIds" }) do
+			if type(raw[key]) == "table" and #raw[key] == #out.frames then
+				local list = {}
+				for i, v in ipairs(raw[key]) do
+					if type(v) ~= "string" or #v > Ledger.LIMITS.text or v:find("[%c]") then
+						list = nil
+						break
+					end
+					list[i] = v
+				end
+				out[key] = list
+			end
+		end
 		return out
 	end
 	if not ownedText(raw.block) then

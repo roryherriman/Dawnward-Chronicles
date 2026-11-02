@@ -43,9 +43,11 @@ local function start(fakeOpts)
 	return mock, env, ns, fake
 end
 
+-- Public content for the About page (v0.10.1: the overview; facts stay in
+-- Dawnward and are no longer published).
 local function publicFact(mock)
-	mock.Slash("fact add origin Born in Stormwind")
-	mock.Vis("fact vis 1 public")
+	mock.Slash("set summary Born in Stormwind.")
+	mock.Vis("vis summary public")
 end
 
 local function open(ns)
@@ -144,7 +146,7 @@ local function legacySpec(t, expect)
 			expect.equal(#mock.timers, 0, "opening the page requests no automatic run")
 			expect.equal(#fake.setterCalls, 0)
 			-- The preview is drawn as Total RP 3 will show it (v0.10).
-			expect.truthy(ns.TRP3Page.PreviewText(page):find("Origin: Born in Stormwind", 1, true),
+			expect.truthy(ns.TRP3Page.PreviewText(page):find("Born in Stormwind.", 1, true),
 				ns.TRP3Page.PreviewText(page))
 		end)
 
@@ -167,7 +169,7 @@ local function legacySpec(t, expect)
 			mock.timers = {}
 			expect.truthy(page.approve:IsEnabled())
 			click(page.approve)
-			expect.truthy(fake.profile.player.about.T1.TX:find("Origin: Born in Stormwind", 1, true))
+			expect.truthy(fake.profile.player.about.T1.TX:find("Born in Stormwind.", 1, true))
 			expect.truthy(fake.profile.player.about.T1.TX:find("^Private about text"))
 			expect.equal(#env.DawnwardChroniclesTRP3DB.backups, 1, "backup taken before the write")
 			expect.truthy(status(ns):find("Updated your Total RP 3 biography", 1, true))
@@ -205,8 +207,7 @@ local function legacySpec(t, expect)
 			mock.Slash("trp3 enable about confirm")
 			mock.RunTimers()
 			fake.profile.player.about.T1.TX = "Rewritten by the player"
-			mock.Slash("fact add belief Protect the weak")
-			mock.Vis("fact vis 2 public")
+			mock.Slash("set summary Born in Stormwind. Protect the weak.")
 			mock.timers = {}
 			local page = open(ns)
 			-- A conflict opens Conflicts and recovery (v0.10); the rail marks it.
@@ -235,7 +236,7 @@ local function legacySpec(t, expect)
 			mock.Slash("trp3 enable about confirm")
 			mock.RunTimers()
 			local written = fake.profile.player.about.T1.TX
-			expect.truthy(written:find("Chronicle", 1, true))
+			expect.truthy(written:find("Character overview", 1, true))
 			local page = open(ns)
 			expect.truthy(page.backupRows[1]:IsShown())
 			expect.truthy(page.backupRows[1].name:GetText():find("#1 About", 1, true))
@@ -271,7 +272,7 @@ local function legacySpec(t, expect)
 			publicFact(mock)
 			mock.Slash("fact add belief Hidden lover in Duskwood")
 			mock.Slash("fact add origin Secret heir of Alterac")
-			mock.Vis("fact vis 3 secret")
+			mock.Vis("fact vis 2 secret")
 			mock.Slash("personality set faith 3")
 			mock.Slash("personality set courage 15")
 			mock.Vis("personality vis courage public")
@@ -445,8 +446,6 @@ local function legacySpec(t, expect)
 		t:it("v0.10: the Biography preview mirrors Total RP 3's headings, order and frames", function()
 			local mock, _, ns = start()
 			publicFact(mock)
-			mock.Slash("fact add belief Protect the weak")
-			mock.Vis("fact vis 2 public")
 			local char = ns.ctx.store.real.characters[CHAR]
 			ns.Publication.Adopt(char, 1)
 			ns.Actions.WithCharacter(ns.ctx, function(c)
@@ -455,7 +454,7 @@ local function legacySpec(t, expect)
 			local page = open(ns)
 			go(page, "about")
 			local text = ns.TRP3Page.PreviewText(page)
-			local a, b = text:find("The fall", 1, true), text:find("Beliefs and motivations", 1, true)
+			local a, b = text:find("Character overview", 1, true), text:find("The fall", 1, true)
 			expect.truthy(a and b and a < b, "the order of the About page: " .. text)
 			expect.truthy(text:find("The walls fell.", 1, true) and text:find("She hid.", 1, true))
 			expect.truthy(page.render.pools.h2[1]:IsShown(), "headings drawn as headings")
@@ -700,16 +699,20 @@ local function legacySpec(t, expect)
 
 		t:it("the exact restore names what is no longer Public; Roll back… keeps it hidden", function()
 			local mock, _, ns, fake = start()
-			mock.Slash("fact add origin Born in Stormwind")
-			mock.Vis("fact vis 1 public")
-			mock.Slash("fact add belief Loves the Duke")
-			mock.Vis("fact vis 2 public")
+			-- v0.10.1: what stops being Public is the biography (facts are no
+			-- longer published on the About page).
+			mock.Slash("set summary Born in Stormwind.")
+			mock.Vis("vis summary public")
+			ns.Actions.WithCharacter(ns.ctx, function(c)
+				return ns.Sources.Capture(c, "paste", "Loves the Duke.", nil, 5)
+			end)
+			mock.Vis("biography public")
 			mock.Slash("trp3 enable about confirm")
 			mock.RunTimers()
-			mock.Slash("fact add event Saved a village")
-			mock.Vis("fact vis 3 public")
+			mock.Slash("set appearance Saved a village, and it shows.")
+			mock.Vis("vis appearance public")
 			mock.RunTimers()
-			mock.Vis("fact vis 2 secret")
+			mock.Vis("biography secret")
 			mock.RunTimers()
 			local page = open(ns)
 			click(page.backupRows[1]) -- newest: holds the Duke line

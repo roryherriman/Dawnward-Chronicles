@@ -65,13 +65,21 @@ local TEMPLATES = {
 		HI = {} } } },
 }
 
--- Everything Dawnward published, whatever the template.
+-- The text a reader sees: v0.10.1 wraps every line Dawnward writes in its
+-- body colour ({col:RRGGBB}...{/col}, TRP3Presentation.Body), so the words
+-- are compared without those tags. Nothing else is removed: the player's
+-- own braces are kept as written.
+local function visible(text)
+	return (text:gsub("{col:%x%x%x%x%x%x}", ""):gsub("{/col}", ""))
+end
+
+-- Everything Dawnward published, whatever the template, as a reader sees it.
 local function publishedText(about)
-	if about.TE == 1 then return about.T1.TX end
-	if about.TE == 3 then return about.T3.HI.TX or "" end
+	if about.TE == 1 then return visible(about.T1.TX) end
+	if about.TE == 3 then return visible(about.T3.HI.TX or "") end
 	local parts = {}
 	for _, frame in ipairs(about.T2 or {}) do parts[#parts + 1] = frame.TX or "" end
-	return table.concat(parts, "\n\n")
+	return visible(table.concat(parts, "\n\n"))
 end
 
 return function(t, expect)
@@ -163,7 +171,7 @@ return function(t, expect)
 					else
 						expect.equal(about.T3.PH.TX, "My own looks.", "nothing to add to appearance")
 						expect.truthy(about.T3.PS.TX:find("^My own notes%."), "the player's notes stay first")
-						expect.truthy(about.T3.HI.TX:find(paragraphs(text)[1], 1, true), "the story is the history")
+						expect.truthy(visible(about.T3.HI.TX):find(paragraphs(text)[1], 1, true), "the story is the history")
 					end
 				end)
 
@@ -220,7 +228,7 @@ return function(t, expect)
 					w.import(edited)
 					expect.equal(w.run().state, "written", "template " .. template.id)
 					h = template.id == 1 and w.about().T1 or w.about().T3.HI
-					expectParagraphs(expect, h.TX, edited, "template " .. template.id)
+					expectParagraphs(expect, visible(h.TX), edited, "template " .. template.id)
 					expect.equal(count(h.TX, "A closing note the player typed in TRP3."), 1, "the player's note is kept once")
 				end
 			end)
@@ -235,8 +243,10 @@ return function(t, expect)
 				expect.equal(w.ns.TRP3Ledger.BackupData(backup).T1.TX, "Private about text")
 				local preview = w.Sync.RollbackPreview(w.deps)
 				expect.truthy(preview, "a preview before anything changes")
-				expect.truthy(w.about().T1.TX:find(paragraphs(text)[2], 1, true), "previewing changes nothing")
-				w.char().publication = {} -- an older model: the story is no longer published
+				expect.truthy(visible(w.about().T1.TX):find(paragraphs(text)[2], 1, true), "previewing changes nothing")
+				-- An older model where the story is kept back: it is no longer published.
+				w.char().publication = {}
+				assert(w.ns.Sources.SetVisibility(w.char(), "private", 9))
 				local ok, msg = w.Sync.Rollback(w.deps, nil, "own")
 				expect.truthy(ok, msg)
 				expect.equal(w.about().T1.TX, "Private about text")
