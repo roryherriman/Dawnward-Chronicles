@@ -138,7 +138,9 @@ return function(t, expect)
 			expect.truthy(text:find("Biography", 1, true) < text:find("Character overview", 1, true))
 			-- A section with nothing written says how to add it.
 			local personality = rowOf(w.panel, "personality")
-			expect.truthy(personality.toggle.tooltipText:find("no personality description", 1, true))
+			expect.truthy(personality.toggle.tooltipText:find("Describe the personality on the Character page", 1, true))
+			expect.falsy(personality.toggle.tooltipText:find("no personality description", 1, true),
+				"the help no longer says there is no personality field")
 			click(w.panel.reset)
 			expect.equal(w.prefs().trp3Sections, nil)
 			expect.equal(w.panel.rows[1].id, "overview")

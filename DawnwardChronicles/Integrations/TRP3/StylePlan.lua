@@ -82,6 +82,10 @@ function StylePlan.Plan(misc, record, desired, policies, paused)
 			rows[#rows + 1] = row
 			if paused[m.id] then
 				row.state, row.reason = "conflict", paused[m.id]
+			elseif owned == nil and want == nil then
+				-- Nothing of Dawnward's and nothing to write: Total RP 3's
+				-- choice (even one Dawnward could not track) stays, unpaused.
+				row.state = "empty"
 			elseif current ~= nil and not valid(m, current) then
 				row.state, row.reason = "conflict", m.label .. " has a value in Total RP 3 that Dawnward cannot track"
 				conflicts[m.id] = row.reason

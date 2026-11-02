@@ -10,10 +10,9 @@
 --                          chapter headings (a line "# Title" or
 --                          "{h2}Title{/h2}"), shown as chapter titles
 --   * Appearance           the Appearance field, when written
---   * Personality          a personality description field, when the
---                          character has one (Dawnward has none yet, so it
---                          never appears; nothing is generated from axes,
---                          traits or facts)
+--   * Personality          the Personality field (the player's own
+--                          description, Core/Schema FIELDS), when written;
+--                          nothing is generated from axes, traits or facts
 --   * Motivation           the Motivation field; off unless the player
 --                          switches it on
 --   * New developments     approved defining moments the biography does not
@@ -49,7 +48,12 @@
 --                          Dawnward owns each slot it uses entirely (the
 --                          player's previous text stays in the backup taken
 --                          before the write). Later edits in TRP3 are
---                          conflicts, never overwritten
+--                          conflicts, never overwritten. A slot it does
+--                          not write is not taken over: later text there
+--                          is the player's (appended to, if Dawnward needs
+--                          it later; never wiped). The takeover applies to
+--                          its template only: after a template change in
+--                          Dawnward the new template is in append mode
 -- A slot or frame that cannot be found exactly once is a conflict and
 -- nothing is written. Content identical to Dawnward's that Dawnward did not
 -- write (for example after its ledger was lost) is also a conflict, so the
@@ -59,7 +63,9 @@
 -- needs are removed (Dawnward's own only). Since v0.10.1 the record also
 -- keeps the icon and background Dawnward gave each frame (frameStyles), so
 -- a style chosen in Dawnward reaches the frames the player has not
--- restyled, and a frame the player restyled keeps the player's choice.
+-- restyled, and a frame the player restyled keeps the player's choice. A
+-- frame from before v0.10.1 (style unknown) still in an icon and
+-- background Dawnward writes takes the chosen style, which is then recorded.
 local _, ns = ...
 local Util, Presentation, StorySchema, AboutBlock = ns.Util, ns.TRP3Presentation, ns.StorySchema, ns.TRP3AboutBlock
 
@@ -474,8 +480,14 @@ end
 local SEPARATOR = "\n\n"
 
 -- Plans one text slot. Returns newText, newOwned or nil, reason.
+-- In adopt mode a slot Dawnward appended to after the takeover (its owned
+-- part starts with the separator: the player's own text is before it)
+-- follows the append rules, so the player's text there is never replaced.
 local function planSlot(text, owned, want, mode, label)
 	text = type(text) == "string" and text or ""
+	if mode == "adopt" and owned and owned:sub(1, #SEPARATOR) == SEPARATOR then
+		mode = "append"
+	end
 	if mode == "adopt" then
 		if owned and text ~= owned then
 			return nil, "the " .. label .. " was edited in Total RP 3 since Dawnward last wrote it"
@@ -645,7 +657,9 @@ local function planFrames(frames, ownedList, wanted, mode, ownedStyles, ownedIds
 			local copy = Util.DeepCopy(base)
 			copy.TX = want.TX
 			local was = ownedStyles[i] or ""
-			if was ~= "" and was == styleKey(base) then
+			-- In Dawnward's style: the one it recorded, or (no record: a frame
+			-- written before v0.10.1) an icon and background it writes.
+			if (was ~= "" and was == styleKey(base)) or (was == "" and not restyled(base, "")) then
 				copy.IC, copy.BK = want.IC, want.BK
 				was = styleKey(copy)
 			end
@@ -748,6 +762,12 @@ function AboutDoc.Plan(about, record, doc, opts)
 			return { action = "conflict", record = record, reason = err }
 		end
 		record = nil
+		-- The takeover applied to the old template only: the new one's
+		-- texts and frames are the player's, so Dawnward appends there
+		-- (unless the player chose "Replace it with Dawnward's" just now).
+		if not opts.adopt then
+			mode = "append"
+		end
 	end
 	local rendered = AboutDoc.Render(doc, target, opts.style, opts.accent)
 	local newRecord = { template = target, mode = mode, slots = {}, frames = {} }
@@ -773,6 +793,7 @@ function AboutDoc.Plan(about, record, doc, opts)
 		newRecord.frameIds = #owned > 0 and ids or nil
 	else
 		local slots = target == 1 and { "T1" } or { "PH", "PS", "HI" }
+		local firstTakeover = mode == "adopt" and not (record and record.mode == "adopt")
 		for _, slot in ipairs(slots) do
 			local want = slot == "T1" and rendered.T1 or rendered[slot]
 			if #want > AboutDoc.MAX_BYTES then
@@ -782,15 +803,21 @@ function AboutDoc.Plan(about, record, doc, opts)
 			local h = holder(about, slot == "T1" and 1 or slot)
 			local owned = record and record.slots and record.slots[slot]
 			local slotMode = mode
-			if mode == "adopt" and record and record.mode ~= "adopt" and owned then
-				-- Replace Dawnward's appended part in place, then own the slot.
+			local takeover = firstTakeover and (want ~= "" or owned ~= nil)
+			if mode == "adopt" and (owned and record and record.mode ~= "adopt" or not takeover and not owned) then
+				-- Replace Dawnward's appended part in place, then own the slot;
+				-- or a slot Dawnward neither owns nor takes over: its text is
+				-- the player's, so the append rules apply (it is never wiped).
 				slotMode = "append"
 			end
 			local text, newOwned = planSlot(h.TX, owned, want, slotMode, SLOT_LABELS[slot])
 			if not text then
 				return { action = "conflict", record = record, reason = newOwned }
 			end
-			if mode == "adopt" then
+			if takeover then
+				-- The takeover: Dawnward owns the whole slot (the player's
+				-- previous text stays in the backup), but only a slot it writes
+				-- or already owns; a slot it does not need is left untouched.
 				text, newOwned = want, want ~= "" and want or nil
 			end
 			h.TX = text ~= "" and text or nil

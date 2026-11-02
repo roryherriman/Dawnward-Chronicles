@@ -184,7 +184,7 @@ Removing the owned block (release) restores the player's text **byte for byte** 
 ### Transaction
 1. Plan against a **copy**. A **no-op writes nothing**: no backup, no version bump, no event.
 2. **Back up** the whole section (serialised) into the ledger.
-   - At most 20 backups are kept in total. The oldest **unpinned** backup goes first. Pinned (at most 4): the state before Dawnward's first write in a section (no Dawnward content; kept until a newer such state exists), and the player's value saved when they choose "Use Dawnward's" on a field. So many automatic writes never push out the way back to the player's own profile.
+   - At most 20 backups are kept in total. The state before Dawnward's first write in each section (no Dawnward content; one per profile and section, kept until a newer such state exists) is pinned and never pushed out by other backups. The player's value saved when they choose "Use Dawnward's" on a field is pinned too (at most 4 such pins; past that the oldest becomes an ordinary backup). Of the ordinary backups, the oldest of the section with the most goes first, so frequent writes to one section (the status, for example) push out their own backups, never another section's. So many automatic writes never push out the way back to the player's own profile.
    - A section too large to back up (over 64 KB serialised) is **never written**.
 3. Write the owned change: replace the live section's contents in place, as TRP3's editors do.
 4. Bump `v` by **two** steps.
@@ -475,7 +475,7 @@ The About page is the character's **public narrative**, not a list of Dawnward's
 | Character overview | the Summary field, in the player's words | on |
 | Biography | the current biography, **word for word**: every paragraph and line break, and the player's own chapter headings (`# Title` or `{h2}Title{/h2}` lines become chapter titles) | on |
 | Appearance | the Appearance field | on |
-| Personality | a personality *description* field. Dawnward has none yet, so this section never appears; nothing is ever generated from personality axes, traits or facts | on |
+| Personality | the Personality field on the Character page (the player's own description), when written; nothing is ever generated from personality axes, traits or facts | on |
 | Motivation | the Motivation field | **off** |
 | New developments | approved defining moments (journal entries the player approved and marked important) that the biography does not already tell | **off** |
 
@@ -499,7 +499,7 @@ Never published any more: facts and their "Origin:" / "Relationship:" lists, fam
 
 **Ownership modes:**
 - **Append** (default): the player's own text and frames are never changed.
-- **Adopt**: the player chose "Replace it with Dawnward's" when connecting. The first write takes over each slot it uses after a backup (the player's previous text stays in that backup); afterwards an edit in TRP3 is a conflict.
+- **Adopt**: the player chose "Replace it with Dawnward's" when connecting. The first write takes over each slot it uses after a backup (the player's previous text stays in that backup); afterwards an edit in TRP3 is a conflict. A slot Dawnward does not write (for example the personality part when the Personality field is empty) is not taken over: what the player writes there later is theirs, and if Dawnward needs that slot later its text is appended after the player's. The takeover applies to the template it was made on: after a template change chosen in Dawnward, the new template's texts and frames are the player's and Dawnward appends there.
 
 **Frames and the player's styling:** the record keeps, for each of Dawnward's frames, the section it holds (`frameIds`) and the icon and background Dawnward gave it (`frameStyles`, both v0.10.1, additive in the ledger). A frame still in Dawnward's style takes a newly chosen icon or background; a frame the player restyled in TRP3 keeps the player's choice, and moves with its section when the order changes. A restyled frame that is no longer needed is a **conflict** (never dropped). For a record written before v0.10.1 the style is unknown: such frames keep the icon and background they have, and count as restyled when they carry an icon or background Dawnward never writes.
 

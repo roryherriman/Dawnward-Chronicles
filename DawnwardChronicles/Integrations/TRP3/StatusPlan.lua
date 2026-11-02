@@ -142,6 +142,11 @@ local function feature(name, sectionName, mappings)
 				rows[#rows + 1] = row
 				if paused[m.id] then
 					row.state, row.reason = "conflict", paused[m.id]
+				elseif owned == nil and (want == nil or empty(m, want)) then
+					-- Nothing of Dawnward's and nothing to write: whatever
+					-- Total RP 3 holds (even a value Dawnward could not
+					-- track) is the player's, and nothing is paused.
+					row.state = "empty"
 				elseif current ~= nil and not empty(m, current) and not valid(m, current) then
 					row.state, row.reason = "conflict", m.trp3 .. " has a value in Total RP 3 that Dawnward cannot track"
 					conflicts[m.id] = row.reason

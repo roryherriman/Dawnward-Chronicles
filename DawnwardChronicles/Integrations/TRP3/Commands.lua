@@ -405,9 +405,35 @@ function TRP3Commands.AboutModel(char, currentTemplate)
 		blocks = ns.TRP3Presentation.Display(rendered, template), style = style }
 end
 
+-- Simulation mode keeps a simulated copy of the character, while the Total
+-- RP 3 page reads (and Total RP 3 shows) the real one: a change made there
+-- would land in the copy and never show. These choices are refused then,
+-- as ImportStatus is.
+TRP3Commands.SIMULATION_REFUSAL = "Turn simulation mode off first: these settings belong to your real character, "
+	.. "as Total RP 3 shows it."
+local function simulated(ctx)
+	return ctx and ctx.store and ctx.store.IsSimulation and ctx.store:IsSimulation() or false
+end
+TRP3Commands.Simulated = simulated
+
+--- Sets one About page choice kept in the story preferences ("trp3Layout"
+-- or "trp3Style"), through Actions.SetStoryPref. Returns ok, message.
+function TRP3Commands.SetAboutPref(ctx, key, id)
+	if key ~= "trp3Layout" and key ~= "trp3Style" then
+		return nil, "Unknown About choice."
+	end
+	if simulated(ctx) then
+		return nil, TRP3Commands.SIMULATION_REFUSAL
+	end
+	return ns.Actions.SetStoryPref(ctx, key, id)
+end
+
 --- Sets the About headings' colour: "style" (the style's own) or one of
 -- TRP3Presentation.ACCENTS. Returns ok, message.
 function TRP3Commands.SetAboutAccent(ctx, id)
+	if simulated(ctx) then
+		return nil, TRP3Commands.SIMULATION_REFUSAL
+	end
 	if not ns.StorySchema.TRP3_ACCENTS[id] then
 		return nil, "Unknown heading colour."
 	end
@@ -427,6 +453,9 @@ end
 --   "reset"               every section choice back to the defaults
 -- Returns ok, message.
 function TRP3Commands.SetAboutSection(ctx, what, id, value)
+	if simulated(ctx) then
+		return nil, TRP3Commands.SIMULATION_REFUSAL
+	end
 	local Schema = ns.StorySchema
 	local known = false
 	for _, sid in ipairs(Schema.TRP3_SECTIONS) do known = known or sid == id end
@@ -946,6 +975,9 @@ end
 -- "icon" | "show" | "hide" | "clear". Never touches Total RP 3 directly.
 -- Returns ok, message.
 function TRP3Commands.SetGlance(ctx, what, n, value)
+	if simulated(ctx) then
+		return nil, TRP3Commands.SIMULATION_REFUSAL
+	end
 	local index = ns.Glance.Index(n)
 	if not index then
 		return nil, "choose an At First Glance entry from 1 to " .. ns.Glance.SLOTS
@@ -976,6 +1008,9 @@ end
 --- Moves At First Glance entry n up or down one place (dir -1 or 1): the
 -- order Total RP 3 shows the entries in. Returns ok, message.
 function TRP3Commands.MoveGlance(ctx, n, dir)
+	if simulated(ctx) then
+		return nil, TRP3Commands.SIMULATION_REFUSAL
+	end
 	return ns.Actions.WithCharacter(ctx, function(char)
 		local to, err = ns.Glance.Move(char, n, dir, ctx.now())
 		if not to then return ns.Actions.Fail(err) end
@@ -988,6 +1023,9 @@ end
 -- text, icon, active } (an empty title and text removes it). Returns ok,
 -- message.
 function TRP3Commands.SaveGlance(ctx, n, values)
+	if simulated(ctx) then
+		return nil, TRP3Commands.SIMULATION_REFUSAL
+	end
 	return ns.Actions.WithCharacter(ctx, function(char)
 		local ok, err = ns.Glance.Save(char, n, values, ctx.now())
 		if not ok then return ns.Actions.Fail(err) end
@@ -1003,6 +1041,9 @@ end
 -- Total RP 3 follows on the next sync while that row is kept in sync.
 -- Returns ok, message.
 function TRP3Commands.SetStatus(ctx, id, value)
+	if simulated(ctx) then
+		return nil, TRP3Commands.SIMULATION_REFUSAL
+	end
 	local f = ns.RPStatus.BY_ID[id]
 	if not f then
 		return nil, "unknown status value '" .. tostring(id) .. "'"
@@ -1022,6 +1063,9 @@ end
 --- Sets (or, with nil, forgets) one roleplay style preference by its Total
 -- RP 3 key. Returns ok, message.
 function TRP3Commands.SetStyle(ctx, key, value)
+	if simulated(ctx) then
+		return nil, TRP3Commands.SIMULATION_REFUSAL
+	end
 	local s = ns.RPStatus.STYLE_BY_KEY[key]
 	if not s then
 		return nil, "unknown roleplay style preference"

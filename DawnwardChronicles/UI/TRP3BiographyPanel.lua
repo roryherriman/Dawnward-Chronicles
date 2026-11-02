@@ -50,8 +50,7 @@ Panel.HELP = {
 		overview = "Write a summary on the Character page to show it here.",
 		biography = "Import your story to show it here.",
 		appearance = "Describe the appearance on the Character page to show it here.",
-		personality = "Dawnward has no personality description of its own yet, so this section stays hidden. Total "
-			.. "RP 3's personality text is yours to write.",
+		personality = "Describe the personality on the Character page to show it here.",
 		motivation = "Write a motivation on the Character page to show it here.",
 		developments = "Defining moments the story does not already tell appear here: approve a journal entry and "
 			.. "mark it as a defining moment.",
@@ -335,10 +334,18 @@ local function buildRow(panel, parent, width)
 	Widgets.Tooltip(row.icon, "Frame icon", "The icon of this section's frame in Total RP 3.")
 	Widgets.Tooltip(row.background, "Frame background", "The background of this section's frame in Total RP 3.")
 	row.title = Widgets.EditLine(row, ns.StorySchema.TRP3_SECTION_TITLE_MAX + 1, Panel.ROW)
+	-- The section being edited is the one the row showed when the box took
+	-- focus: Up/Down (or any refresh) while typing moves the row to another
+	-- section, and the title still belongs to the one it was typed for.
+	row.title:HookScript("OnEditFocusGained", function()
+		row.editingId, row.editingTitle = row.id, row.titleText
+	end)
 	row.title:HookScript("OnEditFocusLost", function(self)
 		local text = self:GetText() or ""
-		if row.id and text ~= row.titleText then
-			local _, message = ns.TRP3Commands.SetAboutSection(ns.ctx, "title", row.id, text)
+		local id, was = row.editingId or row.id, row.editingId and row.editingTitle or row.titleText
+		row.editingId, row.editingTitle = nil, nil
+		if id and text ~= was then
+			local _, message = ns.TRP3Commands.SetAboutSection(ns.ctx, "title", id, text)
 			say(message)
 			panel:Changed()
 		end
@@ -393,7 +400,7 @@ function Panel.Build(parent, width, height)
 	panel.templateLabel = eyebrow(content, "TEMPLATE", W)
 	place(panel.templateLabel, Panel.EYEBROW + 4)
 	panel.template = Widgets.Segmented(content, Panel.TEMPLATES, W, Style.CONTROL.compact, function(id)
-		local _, message = ns.Actions.SetStoryPref(ns.ctx, "trp3Layout", id)
+		local _, message = ns.TRP3Commands.SetAboutPref(ns.ctx, "trp3Layout", id)
 		say(message)
 		panel:Changed()
 	end)
@@ -404,7 +411,7 @@ function Panel.Build(parent, width, height)
 	panel.styleLabel = eyebrow(content, "STYLE", W)
 	place(panel.styleLabel, Panel.EYEBROW + 4)
 	panel.style = Widgets.Segmented(content, Panel.STYLES, W, Style.CONTROL.compact, function(id)
-		local _, message = ns.Actions.SetStoryPref(ns.ctx, "trp3Style", id)
+		local _, message = ns.TRP3Commands.SetAboutPref(ns.ctx, "trp3Style", id)
 		say(message)
 		panel:Changed()
 	end)

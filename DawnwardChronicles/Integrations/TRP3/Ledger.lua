@@ -35,8 +35,8 @@ ns.TRP3Ledger = Ledger
 -- never an overwrite).
 Ledger.VERSION = 2
 Ledger.LIMITS = {
-	backups = 20,          -- section backups kept in total, oldest unpinned dropped first
-	pinned = 4,            -- of those, at most this many pinned (see Ledger.Prune)
+	backups = 20,          -- section backups kept in total (see Ledger.Prune)
+	pinned = 4,            -- of those, at most this many "reclaim" pins (origins are outside this limit)
 	backupBytes = 65536,   -- a section too large to back up is never written
 	block = 30100,         -- bytes of one owned About text (AboutDoc.MAX_BYTES plus separator, with margin)
 	frames = 20,           -- owned template 2 frames
@@ -565,36 +565,66 @@ function Ledger.AddBackup(ledger, profileId, section, data, meta, now)
 	return backup
 end
 
---- Keeps the backup list bounded: at most LIMITS.backups in total and
--- LIMITS.pinned pinned. The oldest unpinned backup goes first, so many
--- automatic writes never push out the state before Dawnward's first write
--- (or a value the player handed over with "Use Dawnward's"); beyond the
--- pinned limit the oldest pinned one goes.
+--- Keeps the backup list bounded: at most LIMITS.backups in total. Three
+-- kinds of backup:
+--   origin   the state before Dawnward owned anything in a section (one per
+--            profile and section, AddBackup): outside the pinned limit and
+--            never pushed out by the other kinds (only, past the total,
+--            which takes origins of many profiles, the oldest origin of
+--            another profile than the newest backup's)
+--   reclaim  the player's value replaced by "Use Dawnward's": at most
+--            LIMITS.pinned stay pinned; past that the oldest becomes an
+--            ordinary backup
+--   ordinary every other backup
+-- The one that goes first is the oldest ordinary backup of the profile and
+-- section with the most ordinary backups, so frequent writes to one
+-- section (the status, for example) push out their own backups, never
+-- another section's; then the oldest reclaim pin.
 function Ledger.Prune(ledger)
 	local list = ledger.backups
-	local pinned = 0
+	local function groupOf(b)
+		return b.profileId .. "\0" .. b.section
+	end
+	-- At most one origin per profile and section (the newest).
+	local seenOrigin = {}
+	for i = #list, 1, -1 do
+		local b = list[i]
+		if b.pin == "origin" then
+			if seenOrigin[groupOf(b)] then b.pin = nil end
+			seenOrigin[groupOf(b)] = true
+		end
+	end
+	local reclaims = 0
 	for _, b in ipairs(list) do
-		if b.pin then pinned = pinned + 1 end
+		if b.pin == "reclaim" then reclaims = reclaims + 1 end
 	end
 	for _, b in ipairs(list) do
-		if pinned <= Ledger.LIMITS.pinned then break end
-		if b.pin then
+		if reclaims <= Ledger.LIMITS.pinned then break end
+		if b.pin == "reclaim" then
 			b.pin = nil
-			pinned = pinned - 1
+			reclaims = reclaims - 1
+		end
+	end
+	local function first(test)
+		for i, b in ipairs(list) do
+			if test(b) then return i end
 		end
 	end
 	while #list > Ledger.LIMITS.backups do
-		local removed = false
-		for i, b in ipairs(list) do
+		local perGroup, most = {}, 0
+		for _, b in ipairs(list) do
 			if not b.pin then
-				table.remove(list, i)
-				removed = true
-				break
+				local key = groupOf(b)
+				perGroup[key] = (perGroup[key] or 0) + 1
+				if perGroup[key] > most then most = perGroup[key] end
 			end
 		end
-		if not removed then
-			table.remove(list, 1)
-		end
+		local newest = list[#list]
+		local victim = first(function(b) return not b.pin and perGroup[groupOf(b)] == most end)
+			or first(function(b) return b.pin == "reclaim" end)
+			or first(function(b) return b.profileId ~= newest.profileId end)
+			or 1
+		table.remove(list, victim)
 	end
 end
 

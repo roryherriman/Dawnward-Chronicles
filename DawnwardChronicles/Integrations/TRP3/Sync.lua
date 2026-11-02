@@ -409,13 +409,20 @@ end
 
 --- Whether a section read back as expected. The character section is
 -- compared on the keys Dawnward writes there (its other keys are Total RP
--- 3's own, which a rollback through the setters leaves as they are).
+-- 3's own, which a rollback through the setters leaves as they are). A
+-- roleplay status or walk-up the expected data does not hold is kept as it
+-- is by Adapter.WriteCharacter (they have no "empty"), so the value read
+-- back is the one expected for it.
 local function readsBack(sectionName, readBack, expected)
 	if not readBack then
 		return false
 	end
 	if sectionName == "character" then
-		return StatusPlan.STATUS.SameKeys(readBack, expected)
+		local want = Util.DeepCopy(expected) or {}
+		for _, key in ipairs({ "RP", "WU" }) do
+			if want[key] == nil then want[key] = readBack[key] end
+		end
+		return StatusPlan.STATUS.SameKeys(readBack, want)
 	end
 	return deepEqual(readBack, expected)
 end
@@ -972,11 +979,13 @@ function Sync.StatusView(deps)
 			local policy = Ledger.Policy(bound and entry or nil, m.id)
 			local owned = record and record[feature] and record[feature][m.id]
 			local row = { id = m.id, feature = feature, m = m, label = m.label, trp3Label = m.trp3, policy = policy,
-				trp3 = current, dawnward = desired[m.id], owned = owned ~= nil and owned.value == current,
+				trp3 = current, dawnward = desired[m.id], owned = owned ~= nil and StatusPlan.Same(m, owned.value, current),
 				conflict = policy == "dawnward" and record and record.fieldConflicts and record.fieldConflicts[m.id]
 					or nil }
 			local function blank(v) return v == nil or v == "" end
-			row.differ = not (blank(row.trp3) and blank(row.dawnward)) and row.trp3 ~= row.dawnward
+			-- Compared as Total RP 3 means them (a colour in either case is
+			-- the same colour: StatusPlan.Same).
+			row.differ = not (blank(row.trp3) and blank(row.dawnward)) and not StatusPlan.Same(m, row.trp3, row.dawnward)
 			-- Total RP 3's value can be copied into Dawnward when it is a value
 			-- Dawnward could hold and differs from the player's Dawnward one.
 			row.importable = not blank(current) and plan.IsOwnedValue(m, current) and row.differ
@@ -1103,7 +1112,7 @@ function Sync.RollbackPreview(deps, backupId)
 			local desired = plan.Desired(public)
 			for _, m in ipairs(plan.MAPPINGS) do
 				local o = owners[feature][m.id]
-				if o and desired[m.id] ~= o.value then
+				if o and not StatusPlan.Same(m, desired[m.id], o.value) then
 					local shown = feature == "style" and StylePlan.Display(m, o.value) or StatusPlan.Display(m, o.value)
 					items[#items + 1] = m.label .. ": " .. tostring(shown)
 				end

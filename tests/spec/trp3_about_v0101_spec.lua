@@ -244,10 +244,10 @@ return function(t, expect)
 			ns.Personality.Set(char, "courage", 20, 1)
 			ns.Facts.Add(char, { category = "trait", statement = "Stubborn" })
 			local r = ns.TRP3AboutDoc.Render(ns.TRP3AboutDoc.Build(publicOf(ns, char)), 3)
-			expect.equal(r.PS, "", "Dawnward has no personality description: PS gets nothing")
+			expect.equal(r.PS, "", "no Personality field written: PS gets nothing")
 			expect.equal(visible(r.PH), "Grey eyes, a burn scar on one hand.", "PH: the appearance only")
 			expect.falsy(visible(r.HI):find("Grey eyes", 1, true), "never the appearance twice")
-			-- A personality description (a field a later version may add) goes to PS alone.
+			-- The Personality field (the player's own description) goes to PS alone.
 			local public = publicOf(ns, char)
 			public.fields.personality = { value = "Patient, then suddenly not.", visibility = "public" }
 			r = ns.TRP3AboutDoc.Render(ns.TRP3AboutDoc.Build(public), 3)

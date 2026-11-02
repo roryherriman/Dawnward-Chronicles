@@ -118,6 +118,10 @@ TRP3Page.CHOICE_HELP = {
 TRP3Page.CHOICE_LABEL = 96    -- the choices' label column
 TRP3Page.CHOICE_ITEM = 86     -- one segment ("Silver Hand" gets 100)
 TRP3Page.CHOICE_GAP = 6
+-- Each Total RP 3 section a backup can hold (Ledger.SECTIONS), as named in
+-- Total RP 3's own profile editor.
+TRP3Page.BACKUP_SECTION = { about = "About", characteristics = "Characteristics", misc = "Miscellaneous",
+	character = "Status and OOC" }
 TRP3Page.STATUS_ROW = 22      -- one status line
 TRP3Page.STATUS_LINES = 10    -- Synchronization > Status: one line per part
 TRP3Page.STATUS_LABEL = 170   -- the status label column
@@ -1368,7 +1372,7 @@ function TRP3Page.Refresh(page)
 		row:SetShown(b ~= nil)
 		row.backupId = b and b.id or nil
 		if b then
-			local name = "#" .. b.id .. " " .. (b.section == "about" and "About" or "Characteristics") .. " · "
+			local name = "#" .. b.id .. " " .. (TRP3Page.BACKUP_SECTION[b.section] or tostring(b.section)) .. " · "
 				.. plain(b.reason or "")
 			local when = b.at and b.at > 0 and date("%d %b %Y, %H:%M", b.at) or "Date unknown"
 			row:SetText("")

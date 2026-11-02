@@ -228,21 +228,74 @@ function Presentation.ChapterHeading(style, title)
 	return "{h3}" .. text .. "{/h3}"
 end
 
---- Body text in the style's paragraph colour: every line with text is
--- wrapped in {col:body}...{/col} (a colour cannot span TRP3's block
--- elements, see above), and re-opened after any {/col} the line already
--- has, so the rest of the line never falls back to TRP3's gold. Blank and
--- whitespace-only lines stay exactly as they are; nothing else changes.
+-- The player's own block markup in a body line, as toHTML (Core/Utils.lua,
+-- TRP3 3.4.1) turns it into HTML elements BEFORE the colour tags become
+-- |c...|r (convertTextTags runs last, line 709): structureTags (lines
+-- 475-485: {h1}..{h3} with :c/:r, {/hN}, {p}, {p:c}, {p:r}, {/p}),
+-- IMAGE_PATTERN (line 503, written as "</P><img .../><P>", line 507) and a
+-- markdown image with a texture path (lines 662-675, the same tag). A
+-- colour opened before one of these ends at it, so the text after it would
+-- fall back to TRP3's gold. Returns the tag at position i of line, or nil.
+local IMAGE_TAG_PATTERN = "^{img%:[^:]+%:[^:]+%:[^:}]+%:?[^:}]*%}"
+local BLOCK_TAGS = { "^{h%d}", "^{h%d:[cr]}", "^{/h%d}", "^{p}", "^{p:[cr]}", "^{/p}", IMAGE_TAG_PATTERN }
+local function blockTagAt(line, i)
+	local c = line:sub(i, i)
+	if c == "{" then
+		for _, pattern in ipairs(BLOCK_TAGS) do
+			local s, e = line:find(pattern, i)
+			if s then return line:sub(s, e) end
+		end
+	elseif c == "!" then
+		local s, e, icon = line:find("^!%[(.-)%]%(.-%)", i)
+		if s and icon:find("\\", 1, true) then return line:sub(s, e) end
+	end
+	return nil
+end
+
+--- Body text in the style's paragraph colour: every run of text with
+-- something visible is wrapped in {col:body}...{/col} (a colour cannot
+-- span TRP3's block elements, see above), and re-opened after any {/col}
+-- the text already has, so the rest never falls back to TRP3's gold. A run
+-- is the text between the player's own block tags (paragraphs, headings,
+-- images: blockTagAt), so the colour opens inside a {p:c} paragraph and
+-- closes before its {/p}; text inside a heading of the player's keeps
+-- TRP3's heading colour. Blank and whitespace-only lines stay exactly as
+-- they are; nothing else changes.
 function Presentation.Body(style, text)
 	local body = style and style.body
 	if not body then
 		return text
 	end
 	local open = "{col:" .. body .. "}"
+	local inHeading = false
+	local function colour(run)
+		if inHeading or not run:match("%S") then
+			return run
+		end
+		return open .. run:gsub("{/col}", "{/col}" .. open) .. "{/col}"
+	end
 	local out = {}
 	for line in (tostring(text or ""):gsub("\r\n", "\n") .. "\n"):gmatch("([^\n]*)\n") do
 		if line:match("%S") then
-			out[#out + 1] = open .. line:gsub("{/col}", "{/col}" .. open) .. "{/col}"
+			local parts, runStart, i = {}, 1, 1
+			while i <= #line do
+				local tag = blockTagAt(line, i)
+				if tag then
+					parts[#parts + 1] = colour(line:sub(runStart, i - 1))
+					parts[#parts + 1] = tag
+					if tag:find("^{h%d") then
+						inHeading = true
+					elseif tag:find("^{/h%d") then
+						inHeading = false
+					end
+					i = i + #tag
+					runStart = i
+				else
+					i = i + 1
+				end
+			end
+			parts[#parts + 1] = colour(line:sub(runStart))
+			out[#out + 1] = table.concat(parts)
 		else
 			out[#out + 1] = line
 		end
