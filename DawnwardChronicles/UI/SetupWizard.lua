@@ -37,6 +37,14 @@
 -- SetupWizard.dc.html: steps 44 high with 26 px badges, a Cinzel 28 stage
 -- title, 36 px inputs and buttons. The dialog scales down to fit small
 -- screens (Style.FitScale), like the main window.
+--
+-- v0.10 (first-time-setup.png hierarchy): the Character stage is the
+-- mockup's grid (Name, Title / Pronouns, Homeland, then About them, 40 px
+-- inputs, a 96 px text area); the game identity is the Name's hint instead
+-- of a portrait row. Every choice shows all its options as a segmented
+-- control with short labels (the full wording is its tooltip), the one in
+-- use raised: no "click to cycle" buttons. Finish reviews every choice,
+-- the backstory included, with the labels in their own tone.
 local _, ns = ...
 local Widgets, Style, Actions, Onboarding, Themes, MainWindow =
 	ns.Widgets, ns.Style, ns.Actions, ns.Onboarding, ns.Themes, ns.MainWindow
@@ -49,8 +57,8 @@ SetupWizard.STRATA = "HIGH" -- above the journal (MEDIUM), below game dialogs
 -- rail: step rail width; pad: content padding; bodyTop: where a stage's
 -- panels start; footer: the button strip; button: footer button height.
 SetupWizard.LAYOUT = { width = 820, height = 600, rail = 236, pad = 30, top = 26, bodyTop = 118, footer = 70,
-	button = 36, step = 44, stepGap = 4, stepsTop = 92, field = 40, badge = 26, fieldRow = 84, portrait = 48,
-	area = 80, cycle = 30, cycleRow = 40, tile = 40 }
+	button = 36, step = 44, stepGap = 4, stepsTop = 92, field = 40, badge = 26, fieldRow = 98,
+	area = 96, cycle = 30, cycleRow = 40, tile = 40, segment = 86 }
 
 local L = SetupWizard.LAYOUT
 local BODY_WIDTH = L.width - L.rail - 2 * L.pad
@@ -99,6 +107,20 @@ SetupWizard.TRP3_BUTTONS = { create = 160, switch = 150, refresh = 170, gap = 8 
 -- Colour roles of the stage's guidance line, by ConnectionText's tone.
 SetupWizard.GUIDE_ROLE = { danger = "dangerText", waiting = "accent", muted = "muted" }
 
+-- Short labels for the segmented choices (Onboarding's own wording, which
+-- the tooltips keep, is too long to sit side by side), and the order on
+-- screen where it differs from Onboarding's (rarest first).
+SetupWizard.SHORT_LABELS = {
+	frequency = { normal = "Normal", rare = "Rarely", frequent = "Often", off = "Never" },
+	places = { on = "On", fewer = "Fewer", off = "Off" },
+	card = { [true] = "Card", [false] = "Chat line" },
+	approval = { ask = "Ask me first", auto = "Apply at once" },
+	minimap = { [true] = "Shown", [false] = "Hidden" },
+	trp3 = { connect = "Connect", later = "Not now" },
+	trp3Existing = { keep = "Keep mine", replace = "Use Dawnward's" },
+}
+SetupWizard.CHOICE_ORDER = { frequency = { "rare", "normal", "frequent", "off" } }
+
 -- The Character stage's note (v0.9: the profile model; no classification).
 SetupWizard.PROFILE_NOTE = "This is your character's profile. If you connect Total RP 3, it is what other "
 	.. "players see there. Leave anything blank that you would rather not show."
@@ -133,43 +155,61 @@ local function panel(parent, title, x, y, w, h, callout)
 	return p
 end
 
--- A labelled cycle button for one of Onboarding.PREFS (or any { key, label, values }).
--- The button names the value in use; a "›" at its right edge and the
--- tooltip (every option, the current one marked) say a click moves on.
-local function cycleRow(parent, y, spec, width)
+-- A labelled choice for one of Onboarding.PREFS (or any { key, label,
+-- values = { {value, label} } }): every option as a segment, short labels
+-- (SHORT_LABELS), the full wording on hover. The returned control also
+-- answers Update (select the value in use), SetEnabled / IsEnabled,
+-- GetText (the selected label) and Option(value) (its segment).
+local function choiceRow(parent, y, spec, width)
 	local label = Widgets.Label(parent, "GameFontNormal", false, "heading")
 	label:SetPoint("TOPLEFT", 0, y - 7)
 	label:SetWidth(LABEL_WIDTH - 8)
 	label:SetText(spec.label)
-	local b = Widgets.Button(parent, "", width - LABEL_WIDTH, L.cycle, "choice")
-	b:SetPoint("TOPLEFT", LABEL_WIDTH, y)
-	b.chevron = Widgets.Label(b, "glyph", false, "accent")
-	b.chevron:SetPoint("RIGHT", -10, 1)
-	b.chevron:SetText("\226\128\186")
-	b.spec = spec
-	b:SetScript("OnClick", function(self)
-		local values = self.spec.values
-		local current = wizard.values[self.spec.key]
-		local nextValue = values[1][1]
-		for i, v in ipairs(values) do
-			if v[1] == current then nextValue = values[i % #values + 1][1] end
+	local short = SetupWizard.SHORT_LABELS[spec.key] or {}
+	local byValue = {}
+	for _, v in ipairs(spec.values) do byValue[tostring(v[1])] = v end
+	local items, widest = {}, L.segment
+	for _, value in ipairs(SetupWizard.CHOICE_ORDER[spec.key] or {}) do
+		local v = byValue[tostring(value)]
+		if v then items[#items + 1] = { id = v[1], label = short[v[1]] or v[2], long = v[2] } end
+	end
+	if #items == 0 then
+		for _, v in ipairs(spec.values) do
+			items[#items + 1] = { id = v[1], label = short[v[1]] or v[2], long = v[2] }
 		end
-		wizard.values[self.spec.key] = nextValue
-		wizard.edited[self.spec.key] = true
+	end
+	for _, item in ipairs(items) do
+		widest = math.max(widest, math.ceil(Style.TextWidth(item.label, "buttonSmall")) + 26)
+	end
+	local seg = Widgets.Segmented(parent, items, math.min(width - LABEL_WIDTH, widest * #items), L.cycle, function(id)
+		wizard.values[spec.key] = id
+		wizard.edited[spec.key] = true
 		SetupWizard.Refresh()
 	end)
-	Widgets.Tooltip(b, spec.label, "Click to change.")
-	function b.Update(self)
-		local options = {}
-		for _, v in ipairs(self.spec.values) do
-			local on = v[1] == wizard.values[self.spec.key]
-			if on then self:SetText(v[2]) end
-			options[#options + 1] = on and ("[" .. v[2] .. "]") or v[2]
-		end
-		Widgets.Tooltip(self, self.spec.label, "Options: " .. table.concat(options, " · ") .. "\nClick for the next option.")
+	seg.buttons[1]:SetPoint("TOPLEFT", LABEL_WIDTH, y)
+	seg.spec, seg.label, seg.enabled = spec, label, true
+	for i, b in ipairs(seg.buttons) do
+		Widgets.Tooltip(b, spec.label .. ": " .. b:GetText(), items[i].long)
 	end
-	wizard.cycles[#wizard.cycles + 1] = b
-	return b
+	function seg.Update(self) self:Select(wizard.values[spec.key]) end
+	function seg.SetEnabled(self, on)
+		self.enabled = on and true or false
+		for _, b in ipairs(self.buttons) do b:SetEnabled(on) end
+	end
+	function seg.IsEnabled(self) return self.enabled end
+	function seg.GetText(self)
+		for _, b in ipairs(self.buttons) do
+			if b.segmentId == self.selected then return b:GetText() end
+		end
+		return ""
+	end
+	function seg.Option(self, value)
+		for _, b in ipairs(self.buttons) do
+			if b.segmentId == value then return b end
+		end
+	end
+	wizard.cycles[#wizard.cycles + 1] = seg
+	return seg
 end
 
 -- One profile field of the Character stage: a bold label, the input, and a
@@ -230,26 +270,13 @@ end
 
 local function buildCharacter()
 	local p = pageFrame("character")
-	-- The player's own portrait and the game's identity line: read live,
-	-- never stored, nothing invented.
-	wizard.portrait = ns.Showcase.Portrait(p, L.portrait)
-	wizard.portrait:SetPoint("TOPLEFT", 0, 0)
-	local idX = L.portrait + 14
-	wizard.identity = Widgets.Label(p, "GameFontNormal", false, "heading")
-	wizard.identity:SetPoint("TOPLEFT", idX, -6)
-	wizard.identity:SetWidth(BODY_WIDTH - idX)
-	wizard.identityNote = Widgets.Label(p, "GameFontHighlightSmall", false, "muted")
-	wizard.identityNote:SetPoint("TOPLEFT", idX, -26)
-	wizard.identityNote:SetWidth(BODY_WIDTH - idX)
-	wizard.identityNote:SetText("From the game. Existing details are kept; an empty box never erases anything.")
-
 	wizard.inputs = {}
 	local F = Onboarding.FIELDS
-	local hints = { name = "Suggested from the game; change it freely.",
+	local hints = { name = "Suggested from your character. Change it if you like.",
 		pronouns = "Used in story questions." }
-	-- Two columns of one-line fields (label, 36 px input, hint or error), then
+	-- Two columns of one-line fields (label, 40 px input, hint or error), then
 	-- the long field across the full width (SetupWizard.dc.html grid).
-	local top = -(L.portrait + 12)
+	local top = 0
 	for i = 1, 4 do
 		local field = F[i]
 		local col, row = (i - 1) % 2, math.floor((i - 1) / 2)
@@ -258,6 +285,11 @@ local function buildCharacter()
 	end
 	for i = 5, #F do
 		fieldBox(p, F[i], 0, top - 2 * L.fieldRow - (i - 5) * 112, BODY_WIDTH, L.area, hints[F[i].key])
+	end
+	-- The game's identity (read live, never stored) is the Name's hint: the
+	-- name was suggested from it.
+	for _, input in ipairs(wizard.inputs) do
+		if input.fieldKey == "name" then wizard.identity = input.hint end
 	end
 	-- Keyboard: Tab / Shift+Tab between the fields, Enter on a one-line field
 	-- moves on (and after the last, to the next page), Escape closes setup
@@ -269,7 +301,7 @@ local function buildCharacter()
 	wizard.chain.SetFields(wizard.inputs)
 	-- The profile note (v0.9): what these details are for. No privacy
 	-- classification here; a detail can be made Private later.
-	local note = panel(p, nil, 0, -354, BODY_WIDTH, 46)
+	local note = panel(p, nil, 0, -(2 * L.fieldRow + 22 + L.area + 24), BODY_WIDTH, 46)
 	wizard.profileNote = note
 	wizard.profileNoteText = paragraph(note.inner, 0, 0, INNER_WIDTH - 160, SetupWizard.PROFILE_NOTE, "small")
 	wizard.profileNoteText:SetPoint("TOPLEFT", 0, 3)
@@ -298,10 +330,10 @@ local function buildStory()
 	local qH = 36 + #Onboarding.PREFS * L.cycleRow + 4
 	local q = panel(p, "Story questions", 0, top, BODY_WIDTH, qH)
 	for i, pref in ipairs(Onboarding.PREFS) do
-		cycleRow(q.inner, -(i - 1) * L.cycleRow, pref, INNER_WIDTH)
+		choiceRow(q.inner, -(i - 1) * L.cycleRow, pref, INNER_WIDTH)
 	end
 	paragraph(p, 0, top - qH - 10, BODY_WIDTH, "Dawnward may ask a quiet question when something worth remembering "
-		.. "happens, never in combat. Your homeland and the places, people and goals you care about matter most.",
+		.. "happens, never in combat. Never still records what happens. Hover a choice for what it does.",
 		"muted")
 end
 
@@ -342,7 +374,7 @@ local function buildTRP3()
 	local choices = panel(p, "Connection", 0, top, BODY_WIDTH, choicesH)
 	wizard.trp3Cycles = {}
 	for i, choice in ipairs(Onboarding.TRP3_CHOICES) do
-		wizard.trp3Cycles[choice.key] = cycleRow(choices.inner, -(i - 1) * L.cycleRow, choice, INNER_WIDTH)
+		wizard.trp3Cycles[choice.key] = choiceRow(choices.inner, -(i - 1) * L.cycleRow, choice, INNER_WIDTH)
 	end
 	-- What Finish will do with Total RP 3 (or what a profile action did).
 	wizard.trp3Action = paragraph(p, 0, top - choicesH - 10, BODY_WIDTH, "", "small")
@@ -388,7 +420,7 @@ local function buildAppearance()
 		.. "depends on class, race or faction.", "muted")
 
 	local mini = panel(p, "Minimap", 0, -(36 + rows * 42 + 60) - 34, BODY_WIDTH, 36 + L.cycle + 14)
-	cycleRow(mini.inner, 0, { key = "minimap", label = "Minimap button",
+	choiceRow(mini.inner, 0, { key = "minimap", label = "Minimap button",
 		values = { { true, "Show the button on the minimap" }, { false, "Hide it (/dawnward still works)" } } },
 		INNER_WIDTH)
 end
@@ -785,9 +817,6 @@ local function refreshTRP3(view)
 	for _, b in pairs(wizard.trp3Cycles) do
 		b:SetEnabled(view.connectable)
 	end
-	if not view.connectable then
-		wizard.trp3Cycles.trp3:SetText("Not available now")
-	end
 	wizard.trp3Cycles.trp3Existing:SetEnabled(view.connectable and wizard.values.trp3 == "connect")
 	local name = c.profile and c.profile.name and ("\"" .. tostring(c.profile.name):gsub("|", "||") .. "\"")
 		or "the active profile"
@@ -804,16 +833,42 @@ local function refreshTRP3(view)
 	wizard.trp3Action:SetText(wizard.trp3Result or action)
 end
 
+-- The Name's hint names what the game says about the character (read live).
 local function refreshIdentity()
-	local game = ns.Showcase.GameIdentity()
-	local ok, name = pcall(UnitName, "player")
-	local parts = {}
-	if ok and type(name) == "string" and name ~= "" then parts[#parts + 1] = name end
-	if game.level then parts[#parts + 1] = "Level " .. game.level end
-	local line = ns.Showcase.IdentityLine(game, nil)
-	if line ~= "" then parts[#parts + 1] = line end
-	wizard.identity:SetText(#parts > 0 and table.concat(parts, "  ·  ") or "Your character")
-	wizard.portrait.Update()
+	local line = ns.Showcase.IdentityLine(ns.Showcase.GameIdentity(), nil)
+	wizard.identity:SetText(line ~= "" and ("Suggested from your character (" .. line .. "). Change it if you like.")
+		or "Suggested from your character. Change it if you like.")
+end
+
+-- Review lines with the label in the field-label tone: "Name: Lirael".
+local function reviewText(lines, theme)
+	local c = Style.Tones(theme).label
+	local hex = string.format("%02x%02x%02x", math.floor(c[1] * 255 + 0.5), math.floor(c[2] * 255 + 0.5),
+		math.floor(c[3] * 255 + 0.5))
+	local out = {}
+	for i, line in ipairs(lines) do
+		local name, value = line:match("^(.-): (.*)$")
+		out[i] = name and ("|cff" .. hex .. name .. "|r  " .. value:gsub("|", "||")) or line
+	end
+	return table.concat(out, "\n")
+end
+
+--- The review's lines: Onboarding's summary plus the backstory, the
+-- Total RP 3 line saying what Finish will actually do. Pure apart from
+-- reading the character.
+function SetupWizard.ReviewLines(values)
+	local lines = Onboarding.Summary(values)
+	local char = Actions.Character(ns.ctx)
+	local current = char and ns.Sources.Current(char)
+	local nFields = #Onboarding.FIELDS
+	table.insert(lines, nFields + 1, "Backstory: " .. (current and string.format("saved word for word (%d paragraphs)",
+		#ns.Sources.Paragraphs(current.text)) or "none yet (import it any time)"))
+	local trp3Line = Onboarding.TRP3Summary(values, wizard.trp3Shown)
+	if trp3Line and not SetupWizard.CanConnect() then
+		trp3Line = "Total RP 3: not connected now (connect later in Settings > Total RP 3)"
+	end
+	if trp3Line then lines[#lines + 1] = trp3Line end
+	return lines, nFields
 end
 
 --- Redraws the current page from the values.
@@ -864,15 +919,14 @@ function SetupWizard.Refresh()
 	end
 	local last = wizard.page == wizard.visible[count]
 	if last then
-		local lines = Onboarding.Summary(wizard.values)
-		local nFields = #Onboarding.FIELDS
-		local trp3Line = Onboarding.TRP3Summary(wizard.values, wizard.trp3Shown)
-		if trp3Line and not SetupWizard.CanConnect() then
-			trp3Line = "Total RP 3: not connected now (connect later in Settings > Total RP 3)"
+		local lines, nFields = SetupWizard.ReviewLines(wizard.values)
+		local left, right = {}, {}
+		for i, line in ipairs(lines) do
+			table.insert(i <= nFields and left or right, line)
 		end
-		if trp3Line then lines[#lines + 1] = trp3Line end
-		wizard.summary:SetText(table.concat(lines, "\n", 1, nFields))
-		wizard.choices:SetText(table.concat(lines, "\n", nFields + 1, #lines))
+		wizard.summaryLines, wizard.choiceLines = left, right
+		wizard.summary:SetText(reviewText(left, theme))
+		wizard.choices:SetText(reviewText(right, theme))
 		local blocked = wizard.simulation and "Simulation mode is on, so setup cannot be saved. Turn simulation "
 			.. "off (Settings > Data) and run setup again."
 			or wizard.readOnly and "Saved data is read-only this session, so setup cannot be saved. Nothing has "
