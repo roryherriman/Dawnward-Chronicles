@@ -1,9 +1,9 @@
 # Total RP 3 integration
 
-**Status (v0.9-dev):** read-only status (tested in game, v0.1/v0.2), plus **experimental automatic sync** of the character's whole public profile: the About page (the whole biography and every Public section, in templates 1, 2 and 3), Dawnward-owned personality traits, thirteen profile fields and four additional-information entries, each under a per-item ownership policy. Connecting is **one authorisation** (the setup wizard's Total RP 3 stage, or Overview > Connect everything); after that, changes in Dawnward reach Total RP 3 automatically.
+**Status (v0.9-dev):** read-only status (tested in game, v0.1/v0.2), plus **experimental automatic sync** of the character's whole public profile: the About page (the whole biography and every Public section, in templates 1, 2 and 3), Dawnward-owned personality traits, thirteen profile fields, four additional-information entries and the At First Glance entries the player writes for it, each under a per-item ownership policy. Connecting is **one authorisation** (the setup wizard's Total RP 3 stage, or Overview > Connect everything); after that, changes in Dawnward reach Total RP 3 automatically.
 
 The sync is **built and tested against mocks only (L2)**:
-- It is **off by default**. A character connects once (setup's Total RP 3 stage, or Settings > Total RP 3 > Overview > **Connect everything…**), or authorises single mappings on the Mappings tab, or with `/dawnward trp3 enable about|traits confirm` and `/dawnward trp3 field <name> dawnward confirm`.
+- It is **off by default**. A character connects once (setup's Total RP 3 stage, or Settings > Total RP 3 > Overview > **Connect everything…**), or authorises single mappings on the Mappings tab, or with `/dawnward trp3 enable about|traits|glance confirm` and `/dawnward trp3 field <name> dawnward confirm`.
 - It is **allowlisted for TRP3 3.4.1 only**.
 - **Nothing in this document about sync has been validated in game yet.** The checklist is in [TESTING.md](TESTING.md#v03-in-game-checklist-l3).
 
@@ -61,9 +61,24 @@ A draft proposal is in [planning/living-character/trp3-upstream-proposal.md](pla
 - Only the active template is sent to other players **S**.
 
 ### Characteristics (`player.characteristics`)
-- `PS` is a list. A preset trait is `{ID, V2}`; a custom trait is `{LT, RT, LI, RI, LC, RC, V2}` **S**.
-- `V2` runs from 0 to 20 (default 10). It is the number of points toward the **left** trait; the right trait gets `20 - V2` (`refreshPsycho`) **S**.
+- `PS` is a list. A preset trait is `{ID, V2}`; a custom trait is `{LT, RT, LI, RI, LC, RC, V2}` **S**. The editor's "new" custom trait is `{ LT, LI = "INV_Misc_QuestionMark", RT, RI = "INV_Misc_QuestionMark", V2 = 10 }` (`RegisterCharacteristics.lua` `psychoAdd`, line 685) **S**.
+- `V2` runs from 0 to 20 (`Globals.lua` 68–69: `PSYCHO_DEFAULT_VALUE_V2 = 10`, `PSYCHO_MAX_VALUE_V2 = 20`). It is the number of points toward the **left** trait; the right trait gets `20 - V2` (`refreshPsycho`, line 186–191: `leftCount = value`, `rightCount = PSYCHO_MAX_VALUE_V2 - value`); MSP sends `V2 / 20` (`MSP/Fields.lua` 146) **S**.
 - There is no limit on the number of traits **S**.
+- `MI` (additional information) is a list of `{ ID = type, NA = name, VA = value, IC = icon }` (`Core/ProfileUtil.lua` 9–21 `MiscInfoType`: 1 custom, 2 house, 3 nickname, 4 motto, 5 facial features, 6 piercings, 7 pronouns, 8 guild name, 9 guild rank, 10 tattoos, 11 voice reference) **S**. The profile page shows every entry in order with `IC` (else the type's icon) and `NA` (else the type's name) (`CreateMiscFieldInfo` 103, `setConsultDisplay` 412) **S**. An entry without `ID` is typed by `NA` matching a preset's English **or localised** name (`GetMiscInfoTypeByName` 143) **S**. The editor adds a preset as `{ ID, NA = localised name, VA, IC = preset icon }` and "Create new" as `{ ID = 1, NA = "Name", VA, IC = TRP3_InterfaceIcons.Default }` (`miscAdd` 602, `miscAddDropDownSelection` 650) **S**.
+- A new profile starts with `RA = Globals.player_race_loc`, `CL = Globals.player_class_loc`, `FN = Globals.player` (`RegisterCharacteristics.lua` 44–51; `Globals.lua` 48–51: the first returns of `UnitRace`, `UnitClass`, `UnitNameUnmodified`) **S**.
+
+### Miscellaneous (`player.misc`)
+- Default `{ v = 1, PE = {}, ST = {} }` (`RegisterMisc.lua` 18) **S**. It is its own section: its own `v`, its own exchange type `"misc"` (`RegisterMain.lua` 49) **S**.
+- **At First Glance** `PE`: five slots keyed `"1"`…`"5"` (`displayPeek` 251–254, `getMiscExchangeData` 452–457), each `{ IC, AC, TI, TX }` **S**. The glance editor has **no draft**: Apply calls `applyPeekSlot` (332), which writes the live slot, bumps `v` (`incrementNumber(v, 2)`) and fires `REGISTER_DATA_UPDATED(player_id, profileID, "misc")` **S**. The editor saves `TI`/`TX` as `stEtN(text)` (`RegisterGlance.lua` `openGlanceEditor` 428) **S**. Its frame `TRP3_AtFirstGlanceEditor` is declared `hidden="true"` (`RegisterUIMisc.xml` 239) **S**. Dragging swaps whole slots (`swapDataFromSlots`, `RegisterGlance.lua` 95) **S**.
+- Only **active** slots reach others: `getMiscExchangeData` drops `AC == false` slots (452), and MSP sends only `AC` slots as `PE` (`RegisterMSP.lua` `updateMiscData` 167–189) **S**.
+- `sanitizeMisc` (293) strips codes from `TI` (one line) and `TX` (multi-line) on load **S**.
+- `ST` holds the RP-style answers (injury, death, romance, …); written only by the player's dropdowns (`onEditStyle` 104) **S**.
+
+### Character status (`player.character`)
+- Default `{ v = 1, RP, WU }` (`Dashboard.lua` 30); `CU` (Currently) and `CO` (OOC information) are written through the public setters `SetCurrentlyText` / `SetOutOfCharacterInfo` (`Core/Player.lua` 442–447, `UpdateProfileField` 419), from the Miscellaneous tab's boxes (`RegisterMisc.lua` 396, 408) **S**. RP experience is stored in TRP3's configuration, not the profile (`Player.lua` 500) **S**.
+
+### Notes (`profile.notes`, `TRP3_Notes`)
+- The Notes tab writes `profile.notes[profileID]` (the current profile's notes **about** the viewed profile) and the account-wide `TRP3_Notes[profileID]` (`RegisterNotes.lua` 62, 75) **S**. Neither is part of `player`, and the exchange only answers `characteristics`, `about`, `misc` and `character` (`RegisterExchange.lua` 436–445) **S**. **Notes are local and private: never sent to anyone.** Dawnward never reads or writes them.
 
 ### Editors
 - The About and characteristics editors work on a **draft copied when the editor opens** **S**.
@@ -100,11 +115,13 @@ All of them are under `Integrations/TRP3/`:
 | Module | Role |
 |---|---|
 | `Adapter.lua` | **The only module that touches TRP3 for sync.** `Probe` re-reads everything on every call: version, profile ID, default, linked characters, update-event API and editor state. `ReadSection` returns validated deep copies. `WriteSection` is the experimental driver. `Listen` registers the hints. |
-| `Shape.lua` | Fail-closed layout checks for About and characteristics (unknown extra fields are preserved), and the version rule |
+| `Shape.lua` | Fail-closed layout checks for About, characteristics and (v0.9) misc (unknown extra fields are preserved), and the version rule |
 | `AboutBlock.lua` | Composes the Dawnward section from public facts, and plans insert, replace, remove, no-op or conflict (pure) |
 | `TraitPlan.lua` | Maps public Dawnward personality axes to owned custom traits, and plans changes (pure) |
 | `FieldPlan.lua` | Profile field mappings (13 fields, below), the value cleaner, the game's own defaults and the per-field plan (pure) |
 | `MiscPlan.lua` | v0.9: Dawnward-owned entries in TRP3's additional-information list (pronouns, faith, occupation, allegiance) (pure) |
+| `GlancePlan.lua` | v0.9: Dawnward-owned At First Glance slots in TRP3's misc section, from the entries the player wrote (pure) |
+| `Core/Glance.lua` | v0.9: the player's own At First Glance entries (`char.glance`, five at most), `/dawnward trp3 glance` |
 | `AboutDoc.lua` | v0.9: the full-profile About document (the whole biography and Public sections), rendered for templates 1, 2 and 3, and its plan (pure) |
 | `Ledger.lua` | `DawnwardChroniclesTRP3DB`: ownership policies per character and profile, ownership records, conflicts, backups and log |
 | `Sync.lua` | The transaction, plus rollback, release and resolve |
@@ -118,16 +135,18 @@ All of them are under `Integrations/TRP3/`:
 | T2 | One whole frame Dawnward added (book icon, background 1) | Exact `TX` match. A frame the player restyled is never removed (conflict). |
 | T3 | A block appended to the history text `T3.HI.TX` | As for T1 |
 | Traits | One custom trait per public axis, with Dawnward's own pole labels (for example Cautious/Bold) | Exact `LT`/`RT` pair, and `V2` equal to the value Dawnward last wrote |
-| Profile fields | The value of `FT`, `RA`, `CL`, `AG` or `BP` that Dawnward wrote | The field holds exactly the value the ledger says Dawnward last wrote. Text that merely matches is never claimed. |
+| Profile fields | The value of a mapped characteristics field that Dawnward wrote | The field holds exactly the value the ledger says Dawnward last wrote. Text that merely matches is never claimed. |
+| Additional information | One `MI` entry per managed mapping | Same type (preset `ID`, or the localised/English name TRP3 types it by; custom by name) and `VA` equal to the ledger's value; `IC` is never compared |
+| At First Glance | Each `PE` slot Dawnward filled | The slot holds exactly the `TI`, `TX`, `IC` and `AC` Dawnward last wrote there (per slot in the ledger). A slot the player filled is never written; a new entry only goes into a free slot (absent or an empty table), and never when a slot already shows the same title and text |
 
 These cases are a **conflict**:
 - The owned content is missing, appears more than once, or was edited.
 - The template changed.
 - The player already has a trait with Dawnward's labels.
 
-On a conflict, Dawnward writes nothing and pauses that feature until the player runs `/dawnward trp3 resolve about|traits keep|reclaim`:
+On a conflict, Dawnward writes nothing and pauses that feature until the player runs `/dawnward trp3 resolve about|traits|glance keep|reclaim`:
 - **keep**: the player's version stays and Dawnward stops managing it.
-- **reclaim**: for the biography, the edited text becomes the player's and Dawnward appends a fresh section. For traits, Dawnward takes back its labelled traits at their current values.
+- **reclaim**: for the biography, the edited text becomes the player's and Dawnward appends a fresh section. For traits, Dawnward takes back its labelled traits at their current values. For At First Glance, the edited slots become the player's and Dawnward writes its entries again into free slots.
 
 Removing the owned block (release) restores the player's text **byte for byte** (L2).
 
@@ -217,48 +236,69 @@ Facts that apply to every characteristics field below **S**:
 - The characteristics editor works on a draft (as for About); its Save copies the draft over the whole section. The existing editor guard covers them.
 - On the default profile, TRP3 wipes everything except `v`, `RA`, `CL`, `FN`, `IC`; Dawnward never writes the default profile anyway.
 
-### Complete mapping matrix (v0.9)
+### Complete mapping matrix (v0.9 audit)
 
-Verified against Total RP 3 **3.4.1** as installed (the same files as tag `3.4.1`): `Core/Player.lua`, `Core/ProfileUtil.lua`, `Core/Enums.lua`, `Core/Utils.lua` (`toHTML`, `convertTextTags`), `Core/UITools.lua` (backgrounds), `Resources/InterfaceIcons.lua`, `Modules/Register/Characters/RegisterCharacteristics.lua`, `RegisterAbout.lua`, `RegisterMain.lua` and `Modules/Register/MSP/RegisterMSP.lua`. Every write uses the editor path (replace the section's contents, bump `v`, fire `REGISTER_DATA_UPDATED`) inside a backed-up, read-back transaction; "public setter" only notes what TRP3 also offers.
+Verified line by line against Total RP 3 **3.4.1** (tag `3.4.1`, commit `4c25cb0`). File paths are under `totalRP3/`; `RC.lua` is `Modules/Register/Characters/RegisterCharacteristics.lua`, `RM.lua` is `Modules/Register/Characters/RegisterMisc.lua`. Every write uses the editor path (replace the section's contents, bump `v` by two steps, fire `REGISTER_DATA_UPDATED(player_id, profileID, section)`) inside a backed-up, read-back transaction; the public setters are only noted. "Ownership" is how Dawnward proves a value is its own (ledger exact match); "auto" means the guarded debounced run keeps it up to date once the player authorised that mapping. Every row still needs the in-game check (L3) listed in the last column; none has been done.
 
-| Area | Dawnward source | TRP3 destination | Public setter | Format and limits | Status |
+**Supported and implemented**
+
+| Dawnward source | TRP3 destination | API / data path (evidence) | Ownership | Auto | Verify in game |
 |---|---|---|---|---|---|
-| First name | `firstName` | `characteristics.FN` | `SetFirstName` | one clean line ≤ 100 bytes | **Synced.** The game's own name (TRP3's default) counts as empty and is replaced |
-| Last name | `lastName` | `LN` | `SetLastName` | as above | **Synced** |
-| Full name | (derived) | TRP3 shows `TI FN LN` | — | — | Follows from the three above |
-| Title prefix | `honorific` | `TI` | `SetTitle` | as above | **Synced** |
-| Full title | `title` | `FT` | `SetFullTitle` | as above | **Synced** |
-| Race | `race` | `RA` | `SetCustomRace` | as above | **Synced.** The game's race counts as empty |
-| Class | `class` | `CL` | `SetCustomClass` | as above; the class colour `CH` is untouched | **Synced.** The game's class counts as empty |
-| Age | `age` | `AG` | none | as above | **Synced** |
-| Birthplace | `homeland` | `BP` | none | as above | **Synced** |
-| Residence | `residence` | `RE` (the map pin `RC` is untouched) | none | as above | **Synced** |
-| Eye colour | `eyes` | `EC` (its colour `EH` untouched) | none | as above | **Synced** |
-| Height | `height` | `HE` | none | as above | **Synced** |
-| Body shape | `weight` ("Build") | `WE` | none | as above | **Synced** |
-| Relationship status | `relationship` | `RS` (number) | none | single 1, taken 2, married 3, divorced 4, widowed 5; anything else is "not writable" and shown with the reason. RS 0 ("do not show") counts as empty | **Synced** |
-| Pronouns | `pronouns` | an `MI` entry, preset type 7 | none | `{ ID = 7, NA = <TRP3's own localised name>, VA }`; MSP `PN` | **Synced** (additional information) |
-| Faith, occupation, allegiance | `faith`, `occupation`, `allegiance` | custom `MI` entries named Faith, Occupation, Allegiance | none | `{ ID = 1, NA, VA }` | **Synced** (additional information); icons are never written or compared, so the player can restyle them |
-| Physical description | `appearance` (Public) | template 3 `PH`; templates 1 and 2: an Appearance section | none | text | **Synced** in the About page |
-| Full biography | the current biography source (when the biography is Public) | the About page: T1 text, T2 frames, T3 history | none | word for word, split only at the player's own headings; ≤ 16 KB stored, ≤ 30 000 bytes per written slot | **Synced** |
-| Character overview | `summary` | About page section | none | text | **Synced** |
-| Family | Public family members | About page section "Family" | none | one line each | **Synced** |
-| Beliefs, motivations, fears | `motivation`, Public belief / motivation / fear facts | About "Beliefs and motivations" (T3: personality) | none | | **Synced** |
-| Personality (described) | Public stances, Public trait facts | About "Personality" (T3: personality) | none | | **Synced** |
-| Personality values | Public personality axes | Dawnward-owned custom traits in `PS` | none | `V2` = 20 − value (points toward the left trait) | **Synced** (traits) |
-| Defining experiences | approved Public defining moments, Public history entries | About "Defining experiences" | none | | **Synced** |
-| Other public facts | origin, relationship, event, place, other | About "Chronicle notes" | none | | **Synced** |
-| Memories, arcs, goals, places, people, journal | story records | — | — | — | **Never published** (private by design; see PRIVACY.md) |
-| Custom axis words | `axisMeanings` | — | — | — | **Not published**: private; traits keep Dawnward's own labels so ownership stays provable |
-| Relationships with other players | `story.people` | TRP3 relations (`register.relations`) | none | describe *other* players' profiles | **Unsupported**: TRP3 relations are about other characters' profiles, not the player's own |
-| Currently, OOC info | none | `character.CU`, `character.CO` | `SetCurrentlyText`, `SetOutOfCharacterInfo` | | **Unsupported**: a live status the player sets in TRP3; Dawnward has no source |
-| RP status | none | `character.RP` | `SetRoleplayStatus` | | **Unsupported** (live status) |
-| Icon, class and eye colours, walk-up, RP experience, music | none | `IC`, `CH`, `EH`, `WU`, `MU`, config | some | | **Out of scope**: TRP3 customisation the player keeps |
-| Name (one field) | `name` | — | — | | Kept in Dawnward; never split into first and last name (that would be a guess) |
+| `firstName` (Public) | `characteristics.FN` | `saveInDraft` `RC.lua` 484 (`or Globals.player`); setter `SetFirstName` `Player.lua` 454 | per field, exact value | yes | name on tooltip and profile |
+| `lastName` | `LN` | `RC.lua` 485; `SetLastName` 458 | per field | yes | as above |
+| `honorific` ("Title prefix") | `TI` (shown before the name, `getCompleteName` `RC.lua` 154) | `RC.lua` 483; `SetTitle` 466 | per field | yes | "Lady Kyssarra" |
+| `title` | `FT` (full title under the name) | `RC.lua` 486; `SetFullTitle` 470 | per field | yes | title line |
+| `race` | `RA` | `RC.lua` 487 (not trimmed); `SetCustomRace` 492 | per field | yes | Characteristics: Race |
+| `class` | `CL` (colour `CH` untouched) | `RC.lua` 488; `SetCustomClass` 474 | per field | yes | Class |
+| `age` | `AG` | `RC.lua` 489 | per field | yes | Age |
+| `homeland` | `BP` (Birthplace) | `RC.lua` 494 | per field | yes | Birthplace |
+| `residence` | `RE` (map pin `RC` untouched) | `RC.lua` 493 | per field | yes | Residence |
+| `eyes` | `EC` (colour `EH` untouched) | `RC.lua` 490 | per field | yes | Eye colour |
+| `height` | `HE` | `RC.lua` 491 | per field | yes | Height |
+| `weight` ("Build") | `WE` (Body shape) | `RC.lua` 492 | per field | yes | Body shape |
+| `relationship` | `RS` number: 1 single … 5 widowed; 0 = do not show | `RC.lua` 495 (`tonumber`), `Core/Enums.lua` 15, `RELATIONSHIP_STATUS_DROPDOWN` `RC.lua` 1298 | per field | yes | Relationship status |
+| game race, class, name (no Public value of the player's) | `RA`, `CL`, `FN` | TRP3's default profile `RC.lua` 44–51 = `UnitRace`/`UnitClass`/`UnitNameUnmodified` (`Globals.lua` 48–51) | **never owned**; counts as replaceable; restored when Dawnward takes its own value out | yes | Race "Human", Class "Paladin" after making a Dawnward race Private |
+| `pronouns` | `MI` entry `{ ID = 7, NA = localised "Pronouns", VA, IC = preset icon }`; MSP `PN` | `ProfileUtil.lua` 9–21, 143, 157; `miscAdd` `RC.lua` 602, 650; `RegisterMSP.lua` 145 | type + exact `VA` (an ID-less entry typed by its English or localised name is recognised: never duplicated) | yes | pronouns row with its icon; MSP `PN` |
+| `faith`, `occupation`, `allegiance` | custom `MI` entries `{ ID = 1, NA = "Faith" …, VA, IC = TRP3_InterfaceIcons.Default }` | `RC.lua` 644 ("Create new"), `CreateMiscFieldInfo` `ProfileUtil.lua` 103 | name + exact `VA`; `IC` never compared | yes | three rows, question-mark icon, restylable |
+| Public personality axes (6) | custom `PS` traits `{ LT, LI, RT, RI, V2 }`, `V2 = 20 − value` | `refreshPsycho` `RC.lua` 186–191; `psychoAdd` 685 (icons `INV_Misc_QuestionMark`); `Globals.lua` 68–69; MSP `Fields.lua` 146 | `LT`/`RT` pair + `V2` | yes | bar leans to the right pole for a high Dawnward value |
+| About page | `about` T1 / T2 / T3 | see "The About page (v0.9)" | owned block / frames / slots | yes | see that section |
+| At First Glance entries the player wrote (`/dawnward trp3 glance`) | `misc.PE["1".."5"] = { TI, TX, IC, AC }` | `applyPeekSlot` `RM.lua` 332; default `RM.lua` 18; five slots `RM.lua` 254, 457; inactive dropped from exchange `getMiscExchangeData` 452 and MSP `RegisterMSP.lua` 167–189 | per slot, exact `TI`/`TX`/`IC`/`AC`; only free slots; no duplicate titles+texts | yes (feature `glance`, off by default) | slot on the Miscellaneous tab; glance icon on others' target frame; hidden entry not visible to others |
+
+**Supported by TRP3, not implemented** (Dawnward has no source data, or the value is the player's live choice)
+
+| TRP3 field | Path (evidence) | Why not |
+|---|---|---|
+| Currently (`character.CU`) | `SetCurrentlyText` `Player.lua` 446; `RM.lua` 383, 396 | A live, in-the-moment status the player types; Dawnward has no source. Not auto-generated (the public setter exists, so an explicit opt-in "Currently" text could be added later). |
+| OOC information (`character.CO`) | `SetOutOfCharacterInfo` `Player.lua` 442; `RM.lua` 408 | The player's out-of-character note; no source |
+| RP status (`character.RP`), walk-up (`WU`) | `SetRoleplayStatus` 438, `SetWalkup` 450 | Preferences the player toggles; never changed |
+| RP style (`misc.ST`) | `onEditStyle` `RM.lua` 104 | Consent preferences (injury, death, romance…): never changed; the whole-section misc write keeps them exactly |
+| Eye colour colour `EH`, class colour `CH` | `RC.lua` 569–580 | No Dawnward source |
+| Profile icon `IC`, background `bkg`, residence pin `RC` | `RC.lua` 49, 304, 372 | TRP3 choices with no Dawnward source |
+| Other additional-information presets (house, nickname, motto, facial features, piercings, guild name/rank, tattoos, voice reference) | `ProfileUtil.lua` 9–21 | No matching Dawnward field |
+| Personality preset traits (`{ ID, V2 }`) | `RC.lua` 1212 | Dawnward uses its own labelled custom traits so ownership is provable; presets are never touched |
+
+**Experimental**: everything in the first table is written through the version-allowlisted experimental driver (`Adapter.WriteSection`), because TRP3 3.4.1 has no public writer for About, traits, `MI`, `misc.PE` or most fields.
+
+**Unsupported**
+
+| Item | Why |
+|---|---|
+| Relationships with other players (`story.people`) → TRP3 relations | TRP3 relations describe *other* characters' profiles, not the player's own |
+| Custom axis words (`axisMeanings`) as trait labels | Private by design; traits keep Dawnward's labels so ownership stays provable |
+| Name (one field) split into first/last | It would be a guess; first and last name are their own Dawnward fields |
+| Memories, arcs, goals, places, people, journal | Private story records; never published (PRIVACY.md) |
+
+**Not applicable**
+
+| Item | Why |
+|---|---|
+| Notes tab (`profile.notes`, `TRP3_Notes`) | Local, per-viewer notes about *other* profiles (`RegisterNotes.lua` 62, 75); never exchanged (`RegisterExchange.lua` 436–445). Dawnward never reads or writes them |
+| RP experience | Account configuration, not profile data (`Player.lua` 500) |
+| Companion profiles | Separate pet/mount profiles; out of scope |
 
 Why the editor path rather than the public setters for Title, Race and Class: Age and Birthplace have no setter, and the five fields are written as **one** backed-up, read-back-verified transaction on the characteristics section, exactly as TRP3's own `saveCharacteristics` does (replace contents, bump `v`, fire `REGISTER_DATA_UPDATED`). The effect for TRP3, MSP and other clients is the same as the setters' `UpdateProfileField`. The setter names are recorded in `FieldPlan.MAPPINGS` (`setter`) for a later switch.
 
-Inferred or game-derived values are never written: every supported source is a field the player typed (or a homeland the player chose), and only when its Dawnward visibility is **Public**.
+Inferred values are never written: every supported source is a field the player typed (or a homeland the player chose), only when its Dawnward visibility is **Public**, or an At First Glance entry the player wrote for Total RP 3. The one game-derived exception is v0.9's **game fallback** for race, class and first name: when Dawnward takes its own value of one of those back out, the field returns to the value the game itself shows (`UnitRace`/`UnitClass`/`UnitName`, exactly what TRP3 puts in a new profile), unowned. A field the player emptied or wrote in TRP3 is never filled. `Character.GameValue(key)` / `Character.FieldOrGame(char, key)` give the UI the same value for display.
 
 ## Ownership policies
 
@@ -266,12 +306,12 @@ Stored per character **and** linked profile in `DawnwardChroniclesTRP3DB.optIn[c
 
 | Policy | Meaning | Who sets it |
 |---|---|---|
-| `dawnward` — Managed by Dawnward | Updated automatically from Public data | Only an explicit authorisation: the page's **Authorize…** confirmation, `trp3 enable about\|traits confirm`, `trp3 field <name> dawnward confirm` |
+| `dawnward` — Managed by Dawnward | Updated automatically from Public data | Only an explicit authorisation: the page's **Authorize…** confirmation, `trp3 enable about\|traits\|glance confirm`, `trp3 field <name> dawnward confirm` |
 | `trp3` — Managed by Total RP 3 | Never written; shown in the differences view, importable on request | The default for every field |
 | `off` — Not synchronised | Never written, not compared | The default for the biography and traits (that is "sync off") |
 
 - **Migration:** a v0.7 opt-in (`about = true` / `traits = true`) loads as policy `dawnward` for that feature, with no change in behaviour; the booleans are still written so an older build reads the same choice (an older build drops the policies, and every field then falls back to "Managed by Total RP 3").
-- **Writes** happen only while the field holds exactly the value Dawnward last wrote, or is empty and has never been written by Dawnward. If Total RP 3 already holds the player's own value, or the player (or another addon) changed Dawnward's value, that field is **paused** (`profiles[id].fieldConflicts`), nothing is overwritten, and the other fields keep updating. A field whose Dawnward value stops being Public is cleared in TRP3 (it was Dawnward's own value).
+- **Writes** happen only while the field holds exactly the value Dawnward last wrote, or is empty and has never been written by Dawnward. If Total RP 3 already holds the player's own value, or the player (or another addon) changed Dawnward's value, that field is **paused** (`profiles[id].fieldConflicts`), nothing is overwritten, and the other fields keep updating. A field whose Dawnward value stops being Public is cleared in TRP3 (it was Dawnward's own value); race, class and first name go back to the game's value instead.
 - **Resolve:** **Keep yours** (`resolve <field> keep`) hands the field to Total RP 3; **Use Dawnward's** (`resolve <field> reclaim`) records TRP3's current value as Dawnward's, so the next run replaces it after a backup (the player's value stays in that backup).
 - **One character per profile** may manage each mapping; a second character's authorisation is refused, and **Authorize** is all-or-nothing.
 - Leaving `dawnward` for a field forgets Dawnward's ownership; TRP3 keeps its current value. **Except** when TRP3 still shows the exact value Dawnward wrote and that value is no longer your Public value (`Sync.FieldRisk`): the command refuses until you choose `trp3 field <name> trp3|off release confirm` (remove it first, recommended) or `… keep confirm`; on the page, the row and the Authorize confirmation say it will be removed first, and Authorize removes it (guarded, backed-up write) before saving the choice.
@@ -304,7 +344,8 @@ Nothing below is verified. Use two accounts (A writes, B observes), both on Clas
 10. **Formatting.** A Public Race with a `|` or line break in Dawnward: TRP3 shows it without codes, and it reads the same after A's `/reload` (TRP3's load-time sanitising leaves it unchanged; no conflict appears).
 11. **No duplication.** After `/reload` and a second sync on A: exactly one Dawnward block, one trait per axis, `log` shows no write.
 12. **No unrelated modifications.** Compare A's TRP3 profile before and after (A's own About text, preset traits, icon, colours, misc info, Currently, RP status): unchanged except the authorised mappings.
-13. **Rollback.** On A, make a fact Secret, then **Exact restore…** shows the fact; cancel. **Roll back…** (safe): B never sees the Secret fact.
+13. **At First Glance.** On A, `/dawnward trp3 glance title 1 Silver scar`, `… text 1 Across the jaw.`, `trp3 enable glance confirm`. On A's Miscellaneous tab the entry shows in the first free slot with its icon; A's own slots are unchanged. On B (and an MSP client), the glance icon appears on A's tooltip/target frame and the slot reads the same. `glance hide 1`: B no longer sees it (A still does, greyed). Edit the slot in TRP3: `/dawnward trp3 preview` shows the conflict; nothing is overwritten.
+14. **Rollback.** On A, make a fact Secret, then **Exact restore…** shows the fact; cancel. **Roll back…** (safe): B never sees the Secret fact.
 
 ## Internal dependencies and their risk
 
@@ -335,7 +376,7 @@ Nothing below is verified. Use two accounts (A writes, B observes), both on Clas
 - **Field values are never shortened or reformatted.** A Dawnward value Total RP 3 would alter is "not writable" and left alone. **Import** is exact too: a TRP3 value longer than Dawnward's field (or with formatting Dawnward does not keep) is refused, not shortened.
 - **Reading for display or import** (differences, `trp3 import`, the story import) goes through `Adapter.ReadAudited`, which refuses an unaudited TRP3 version. `AboutBlock.WithoutOwned` returns nil plus a reason when Dawnward's section cannot be separated, so the player's "own text" never silently includes Dawnward's block.
 - **The Total RP 3 page** builds its view with one probe and one read per section (`TRP3Commands.Overview` caches them); a write never uses that cache.
-- **A field Dawnward wrote is cleared** in TRP3 when its Dawnward value stops being Public. If the player had chosen "Use Dawnward's" over their own value, their old value is only in the backup.
+- **A field Dawnward wrote is cleared** in TRP3 when its Dawnward value stops being Public (race, class and first name return to the game's value). If the player had chosen "Use Dawnward's" over their own value, their old value is only in the backup.
 - **An exact rollback** of the characteristics section stops managing both traits and fields; the safe rollback keeps the current policies.
 - **Homeland maps to TRP3's Birthplace.** If you use Homeland for where your character lives now, keep that mapping on Total RP 3 and type Residence yourself.
 
@@ -344,6 +385,9 @@ Nothing below is verified. Use two accounts (A writes, B observes), both on Clas
 - Does TRP3's open profile page refresh by itself after the update event?
 - Does a second client (and an MSP client) receive the update after mouse-over?
 - Do profile field writes (`FT`, `RA`, `CL`, `AG`, `BP`) reach other TRP3 and MSP clients exactly like the public setters do (multiplayer procedure, steps 2, 5 and 9)?
+- Do additional-information entries written with `IC` from `GetMiscTypeInfo` show the expected icon on Classic Era (some preset icons, for example pronouns' `vas_namechange`, may not exist in the Classic icon set; TRP3 then resolves its own fallback at load)?
+- Do Dawnward's custom traits (icons `INV_Misc_QuestionMark`) render like a trait created in TRP3's editor?
+- Do At First Glance slots written by Dawnward show on the player's own Miscellaneous tab immediately, and on other clients after their next misc version query?
 - Does the page-context edit-mode check match what TRP3 does in every path (cancel, tab switch, closing the window mid-edit, `/reload` while editing)? Check with `/dawnward trp3 diagnose`.
 
 ## The About page (v0.9)
