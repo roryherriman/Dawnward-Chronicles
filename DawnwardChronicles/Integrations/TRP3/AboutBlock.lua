@@ -23,14 +23,13 @@ AboutBlock.MAX_BYTES = 4000
 AboutBlock.FRAME_ICON = "INV_Misc_Book_09"
 AboutBlock.FRAME_BACKGROUND = 1
 
--- Defining moments: public journal entries the player wrote or approved as
--- story and marked important. Unapproved drafts can never be public
--- (Journal.SetVisibility), and the public projection holds nothing else.
+-- Defining moments: journal entries the player wrote or approved as story
+-- and marked important. The projection holds only what may be published
+-- (Projection.GetPublic); unapproved drafts are never among them.
 local function moments(public)
 	local out = {}
 	for _, entry in ipairs(public and public.journal or {}) do
-		if entry.kind == "story" and entry.status == "approved" and entry.important and entry.title
-			and entry.visibility == "public" then
+		if entry.kind == "story" and entry.status == "approved" and entry.important and entry.title then
 			out[#out + 1] = entry.title
 		end
 	end

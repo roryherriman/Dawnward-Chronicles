@@ -247,14 +247,25 @@ local function normalizeTimestamp(value)
 	return 0
 end
 
---- Cleans the publication model: { mode = "profile", since?, transitionedAt? }
--- or {} (the original model). Unknown values fall back to {}, the safe side.
-function Schema.CleanPublication(raw)
+--- Cleans the publication model (Core/Publication.lua): { mode = "profile",
+-- version?, since?, transitionedAt?, upgraded?, previous? } or {} (the
+-- original model). Unknown values fall back to {}, the safe side.
+function Schema.CleanPublication(raw, depth)
 	if type(raw) ~= "table" or raw.mode ~= "profile" then
 		return {}
 	end
-	return { mode = "profile", since = normalizeTimestamp(raw.since),
+	local out = { mode = "profile", since = normalizeTimestamp(raw.since),
 		transitionedAt = raw.transitionedAt ~= nil and normalizeTimestamp(raw.transitionedAt) or nil }
+	local version = tonumber(raw.version)
+	if version and version >= 2 and version == math.floor(version) then
+		out.version = version
+	end
+	if raw.upgraded == true then out.upgraded = true end
+	-- The model before the one-time confirmation, kept so it can be undone.
+	if type(raw.previous) == "table" and (depth or 0) < 1 then
+		out.previous = Schema.CleanPublication(raw.previous, (depth or 0) + 1)
+	end
+	return out
 end
 
 local function claimId(raw, usedIds, report, label)
@@ -840,6 +851,9 @@ function Schema.NormalizeCharacter(raw, report)
 	char.publication = Schema.CleanPublication(raw.publication)
 	char.guide = ns.Guide.Clean(raw.guide)
 	char.story = StorySchema.Normalize(raw.story, Schema.PERSONALITY_AXIS_BY_ID, report)
+	-- A v0.9 profile-model character with nothing hidden publishes the
+	-- same under v0.10, so it moves over by itself (never one with hidden items).
+	if ns.Publication then ns.Publication.Upgrade(char) end
 
 	-- IDs are unique across all lists so commands can never hit the wrong item.
 	local maxId = 0

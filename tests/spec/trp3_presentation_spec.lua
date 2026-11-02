@@ -44,13 +44,12 @@ return function(t, expect)
 				"{h3}Chronicle{/h3}\nOrigin: Born in (Mulgore)\nBelief: Trusts no one")
 		end)
 
-		t:it("only approved, important, public story entries become defining moments", function()
+		t:it("only approved, important story entries in the projection become defining moments", function()
 			local ns = Loader.WithTRP3()
 			local journal = {
 				{ kind = "story", status = "approved", important = true, visibility = "public", title = "Kept" },
 				{ kind = "story", status = "draft", important = true, visibility = "public", title = "Draft" },
 				{ kind = "story", status = "approved", important = false, visibility = "public", title = "Minor" },
-				{ kind = "story", status = "approved", important = true, visibility = "private", title = "Private" },
 				{ kind = "note", important = true, visibility = "public", title = "A note" },
 			}
 			expect.deepEqual(ns.TRP3AboutBlock.Moments({ journal = journal }), { "Kept" })

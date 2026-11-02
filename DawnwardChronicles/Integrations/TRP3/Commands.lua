@@ -169,6 +169,9 @@ local function diagnose(ctx, deps)
 		flag(deps.store:IsSimulation()), flag(deps.store.realReadOnly == true), flag(deps.ledgerReadOnly ~= nil),
 		flag(deps.inCombat and deps.inCombat() or false)))
 	local entry = deps.ledger.optIn[deps.characterKey]
+	for _, line in ipairs(TRP3Commands.AboutDiagnostics(deps)) do
+		out(ctx, "  " .. line)
+	end
 	for _, feature in ipairs(Sync.ORDER) do
 		local check = Sync.Check(deps, feature)
 		out(ctx, string.format("  %s: opted in %s (profile %s), state %s%s", Sync.FEATURES[feature].label,
@@ -176,6 +179,65 @@ local function diagnose(ctx, deps)
 			STATE_LABEL[check.state] or check.state,
 			#check.reasons > 0 and (" - " .. table.concat(check.reasons, "; ")) or ""))
 	end
+end
+
+--- The About page's path from the stored story to Total RP 3, as lines
+-- (read-only; never the story's text). Each line names one link of the
+-- chain, so a page that stays empty in game shows where it stops.
+function TRP3Commands.AboutDiagnostics(deps)
+	local lines = {}
+	local char = deps.store.real.characters[deps.characterKey]
+	lines[#lines + 1] = "character: " .. tostring(deps.characterKey) .. (char and "" or " (no Dawnward data yet)")
+	local status = char and ns.Publication.Status(char) or "empty"
+	lines[#lines + 1] = "publication: " .. (status == "profile" and "whole profile"
+		or status == "pending" and string.format("waiting for your one-time confirmation (%d item(s) kept back by an "
+			.. "earlier version; /dawnward publish)", ns.Publication.HiddenCount(char))
+		or "nothing to publish yet")
+	local current = char and ns.Sources.Current(char)
+	if current then
+		lines[#lines + 1] = string.format("biography: version %s (%s), %d bytes, %d paragraphs", tostring(current.id),
+			tostring(current.kind), #current.text, #ns.Sources.Paragraphs(current.text))
+	else
+		lines[#lines + 1] = "biography: none imported"
+	end
+	local public = Sync.PublicOf(deps)
+	lines[#lines + 1] = "biography in the profile Dawnward publishes: " .. flag(public.biography ~= nil)
+		.. (current and not public.biography and " - kept back: confirm with /dawnward publish" or "")
+	lines[#lines + 1] = "About content: " .. (Sync.UsesProfile(public) and "whole profile" or "short summary")
+		.. ", layout " .. tostring(public.trp3Layout) .. ", style " .. tostring(public.trp3Style or "neutral")
+	local doc = ns.TRP3AboutDoc.Build(public)
+	lines[#lines + 1] = string.format("composed sections: %d", #doc)
+	local entry = deps.ledger.optIn[deps.characterKey]
+	lines[#lines + 1] = "About sync authorised: " .. flag(Sync.FeatureOn(entry, "about"))
+		.. (entry and entry.profileId and (" for profile " .. tostring(entry.profileId)) or "")
+	local about = ns.TRP3Adapter.ReadSection(deps.env, "about")
+	if about then
+		local frames = type(about.T2) == "table" and #about.T2 or 0
+		lines[#lines + 1] = string.format("Total RP 3 About now: template %s, version %s, text %d bytes, %d frame(s)",
+			tostring(about.TE), tostring(about.v), about.T1 and type(about.T1.TX) == "string" and #about.T1.TX or 0,
+			frames)
+	else
+		lines[#lines + 1] = "Total RP 3 About now: could not be read"
+	end
+	local check = Sync.Check(deps, "about")
+	lines[#lines + 1] = "next About run: " .. (STATE_LABEL[check.state] or check.state)
+		.. (#check.reasons > 0 and (" - " .. table.concat(check.reasons, "; ")) or "")
+	local profileId = check.profileId or (entry and entry.profileId)
+	local record = profileId and deps.ledger.profiles[profileId]
+	local owned = record and record.about
+	lines[#lines + 1] = "last About write: " .. (owned and owned.at and ((deps.formatTime and deps.formatTime(owned.at))
+		or tostring(owned.at)) or "never")
+	for i = #deps.ledger.log, 1, -1 do
+		local text = deps.ledger.log[i].text
+		if text:find("^about: ") then
+			lines[#lines + 1] = "last About log: " .. text
+			-- A write is logged as done only after it read back exactly as written.
+			lines[#lines + 1] = "last read-back: " .. (text:find("write failed", 1, true) and "did NOT match (restored)"
+				or text:find("conflict", 1, true) and "not written (conflict)" or "matched what was written")
+			break
+		end
+	end
+	return lines
 end
 
 local function statusLines(ctx)
