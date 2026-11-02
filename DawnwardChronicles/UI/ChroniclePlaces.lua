@@ -29,7 +29,8 @@ ChroniclePlaces.LAYOUT = {
 	top = 54, listWidth = 300, gap = 16, height = 534,
 	listPad = 8, rowHeight = 54, rowGap = 4, rows = 8, pagerHeight = 30,
 	detailPad = 20, nameHeight = 34, subHeight = 20, eyebrowHeight = 16, chipGap = 8,
-	noteLine = 18, noteLines = 3, statMin = 70, statGap = 10, statPad = 12, statLabelLine = 16, statValueLine = 20,
+	noteLine = 18, noteLines = 3, statMin = 70, statGap = 10, statPad = 12, statLabelLine = 16, statValueLine = 24,
+	statValueSize = 20,
 	tied = 4, tiedHeight = 36, tiedGap = 6, buttonHeight = 36, buttonGap = 8,
 }
 
@@ -191,7 +192,9 @@ function ChroniclePlaces.DetailLayout(info, width, L)
 	local textW = statW - 2 * L.statPad
 	for _, stat in ipairs(info.stats or {}) do
 		local h = L.statPad + math.max(1, wrapLines(stat[1]:upper(), textW, "eyebrow")) * L.statLabelLine + 6
-			+ math.max(1, wrapLines(stat[2], textW, "reading")) * L.statValueLine + L.statPad
+			-- The value in the reading font at statValueSize (measured at the
+			-- reading style's 16 on a proportionally narrower line).
+			+ math.max(1, wrapLines(stat[2], textW * 16 / L.statValueSize, "reading")) * L.statValueLine + L.statPad
 		statH = math.max(statH, h)
 	end
 	r.stats = {}
@@ -271,6 +274,12 @@ local function statTile(parent, label, L)
 	tile.label:SetText(label:upper())
 	tile.labelText = label
 	tile.value = Widgets.Label(tile, "reading", true, "body")
+	-- The mockup's larger value (about 20): the reading font at that size,
+	-- set as Style.InitFonts sets its font objects (bundled fonts only).
+	if Style.UsesBundledFont("reading") and tile.value.SetFont then
+		local ok = pcall(tile.value.SetFont, tile.value, Style.FONT_DIR .. Style.FONT_FILES.body, L.statValueSize, "")
+		if ok and tile.value.SetSpacing then tile.value:SetSpacing(L.statValueLine - L.statValueSize) end
+	end
 	Style.Register(tile, function(t, theme)
 		Style.Color(t.bg, theme.background)
 		t.edges:Paint(theme.edge, 1)

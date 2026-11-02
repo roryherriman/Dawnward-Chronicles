@@ -426,6 +426,47 @@ return function(t, expect)
 				section.waitingNote:GetText())
 		end)
 
+		t:it("runs each Why now line on after its bold label, as one paragraph", function()
+			local _, _, ns = start()
+			local SV = ns.StoryView
+			local room = ns.Style.TextWidth("Why now:", "label") + SV.LAYOUT.why.labelGap
+			local prefix, indent = SV.InlineIndent(room, SV.LAYOUT.whyInner)
+			expect.truthy(prefix, "the bundled font is in use")
+			local space = ns.Style.TextWidth(" ", "meta")
+			expect.truthy(math.abs(indent - room) <= space, "the text starts within one space of the label's end")
+			expect.truthy(prefix:sub(-1) == " ", "a normal space after the no-break run, where a line may break")
+			expect.falsy(prefix:sub(1, -2):find(" ", 1, true), "no breaking space inside the run")
+			expect.falsy(SV.InlineIndent(SV.LAYOUT.whyInner * 0.8, SV.LAYOUT.whyInner), "a very long label stacks")
+			-- The estimate counts the label's room on the first line only.
+			local text = string.rep("word ", 30)
+			expect.truthy(SV.WrapLines(text, "meta", 14, 300, 120) >= SV.WrapLines(text, "meta", 14, 300))
+			expect.equal(SV.WrapLines("Supercalifragilistic", "meta", 14, 160, 150), 2,
+				"a first word that does not fit after the label starts the next line")
+		end)
+
+		t:it("lays the Why now rows out from their measured lines, inside the well", function()
+			local mock, env, ns, section = start()
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			ns.Memories.Add(char, { title = "The night the lanterns went out", zone = "Elwynn Forest",
+				importance = 2 }, "player", 1)
+			turnIn(mock, 31, "Why Quest")
+			ns.MainWindow.Refresh()
+			local layout = section.layout
+			local shown = 0
+			for i, row in ipairs(section.whyRows) do
+				if row.shown then
+					shown = shown + 1
+					expect.falsy(row.stacked, "inline with the bundled font")
+					local spec = layout.whyRows[i]
+					-- Label and text start on the same line; the text holds the label's room.
+					expect.equal(row.label.__points[1][5], row.text.__points[1][5])
+					expect.truthy(row.text:GetText():find(row.plain, 1, true))
+					expect.truthy(spec.top + ns.StoryView.TextHeight(spec.lines, 14, 4) <= layout.whyH)
+				end
+			end
+			expect.equal(shown, 2, "Why now and remembers")
+		end)
+
 		t:it("explains an empty Story section", function()
 			local _, _, ns, section = start()
 			expect.truthy(section.body:IsShown())

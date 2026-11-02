@@ -194,6 +194,11 @@ return function(t, expect)
 			expect.equal(tied.tooltipText, char.story.memories[1].text, "the whole memory")
 			expect.equal(tied.text:GetText(), "Coming home smaller")
 			expect.equal(tied.status:GetText(), "· Ordinary", "the status in its own, smaller type")
+			-- The stat tiles' values in the mockup's larger type, each tile holding its value.
+			for _, tile in ipairs(view.detail.stats) do
+				local _, size = tile.value:GetFont()
+				expect.equal(size, ns.ChroniclePlaces.LAYOUT.statValueSize)
+			end
 			expect.truthy(tied.text:GetWidth() + 6 + ns.Style.TextWidth(tied.status:GetText(), "small") + 28
 				<= view.detail.width - 2 * ns.ChroniclePlaces.LAYOUT.detailPad + 2, "name and status fit the row")
 			expect.equal(view.rows[1].tooltipTitle, "Goldshire")

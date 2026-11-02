@@ -77,6 +77,9 @@ local function legacySpec(t, expect)
 					chips = { { "Elwynn Forest and its many quiet places", "muted" }, { "Suggested by Dawnward", "muted" },
 						{ "Established", "muted" }, { "Fourth chip", "muted" } }, vis = "secret" },
 				{ text = "", chips = {} },
+				-- A Review finding: the message, then the question to the player.
+				{ chip = { "Stance", "accent" }, examine = true, text = "About the Circle, they say Loyal.",
+					note = "What is it? Choose how your story reads it; canon is not changed.", chips = {} },
 			}
 		end
 		local ACTIONS = {
@@ -103,7 +106,7 @@ local function legacySpec(t, expect)
 
 		local function parts(r)
 			local out = { r.chip }
-			for _, k in ipairs({ "date", "examine", "title", "meta", "text", "progress", "chips", "divider" }) do
+			for _, k in ipairs({ "date", "examine", "title", "meta", "text", "note", "progress", "chips", "divider" }) do
 				if r[k] then out[#out + 1] = r[k] end
 			end
 			if r.buttons then
@@ -237,6 +240,48 @@ local function legacySpec(t, expect)
 				width = width + w + L.tabGap
 			end
 			expect.truthy(width - L.tabGap + L.tabPad <= L.width, "tabs fit one row")
+		end)
+
+		t:it("puts a finding's question under its message", function()
+			local r = PCV.CardLayout(shapes()[6], ACTIONS[4])
+			expect.truthy(r.note and r.text, "both parts")
+			expect.truthy(r.note.y >= r.text.y + r.text.h, "the question follows the message")
+			expect.truthy(r.buttons.y >= r.note.y + r.note.h, "and the answers follow the question")
+			local c = PCV.ReviewContent({ kind = "persona", message = "About the Circle" }, 1)
+			expect.equal(c.text, "About the Circle")
+			expect.truthy(c.note:find("What is it?", 1, true))
+			expect.falsy(c.meta, "nothing above the message")
+		end)
+
+		t:it("draws each tab's count after its label, inside the tab, Review's in a badge", function()
+			local mock, env, ns, section = start()
+			local L = ns.ChronicleView.LAYOUT
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			for i = 1, 12 do ns.Memories.Add(char, { text = "M" .. i }, "player", i) end
+			mock.Slash("stance add The Cenarion Circle; Loyal; Doubts its leaders")
+			ns.MainWindow.Refresh()
+			local right = 0
+			for i, b in ipairs(section.tabButtons) do
+				local spec = ns.ChronicleView.TABS[i]
+				local x = b.__points[1][2]
+				expect.truthy(x >= right, spec.label .. " starts after the previous tab")
+				right = x + b:GetWidth()
+				expect.truthy(right <= L.width, spec.label .. " inside the track")
+				expect.equal(b:GetText(), spec.label, "the button's own label is the name alone")
+				local count = b.badge or b.count
+				if count:IsShown() then
+					local cx = count.__points[1][4]
+					local labelW = ns.Style.TextWidth(spec.label, "button")
+					expect.truthy(cx >= L.tabTextPad + labelW, spec.label .. ": the count follows the label")
+					expect.truthy(cx + ns.ChronicleView.CountWidth(spec, tonumber(b.count:GetText()))
+						<= b:GetWidth() - L.tabTextPad + 1, spec.label .. ": the count stays inside its tab")
+				end
+			end
+			expect.equal(section.tabButtons[1].count:GetText(), "12")
+			local review = section.tabButtons[#section.tabButtons]
+			expect.truthy(review.badge and review.badge:IsShown(), "Review's count sits in its badge")
+			expect.equal(review.count:GetText(), "1")
+			expect.falsy(section.tabButtons[2].count:IsShown(), "no count without records")
 		end)
 
 		t:it("places each card's frames from its layout, two cards side by side", function()
