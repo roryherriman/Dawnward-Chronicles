@@ -60,6 +60,10 @@ Schema.FIELDS = {
 	{ key = "appearance", kind = "long", label = "Appearance" },
 	{ key = "summary", kind = "long", label = "Summary" },
 	{ key = "motivation", kind = "long", label = "Motivation" },
+	-- v0.10.1: the player's own description of the character's personality,
+	-- for Total RP 3's personality part of the About page (never generated
+	-- from the axes). Additive: an older build drops it on load.
+	{ key = "personality", kind = "long", label = "Personality" },
 	-- v0.9: details with a matching Total RP 3 field (docs/TRP3_INTEGRATION.md,
 	-- "Field mappings"). Additive: an older build drops them on load.
 	{ key = "firstName", kind = "short", label = "First name" },
