@@ -17,7 +17,14 @@ VersionProfiles.KNOWN = {
 		-- 3.4.1 source (docs/TRP3_INTEGRATION.md). It only makes the
 		-- experimental driver *available*: each character must still opt in,
 		-- and every write re-checks the layout and the functions it uses.
-		tiers = { read = true, publicSetters = false, manualExport = true, experimentalWrite = true },
+		-- profileTools: creating and selecting the player's own profiles
+		-- through TRP3_API.profile (Core/Profiles.lua: isProfileNameAvailable
+		-- 101, createProfile 144, selectProfile 193, getProfiles 76, the same
+		-- calls TRP3's own "Create profile" button makes in RegisterMain.lua
+		-- 735-742). Used only after the player confirms (Adapter.CreateProfile,
+		-- Adapter.SelectProfile).
+		tiers = { read = true, publicSetters = false, manualExport = true, experimentalWrite = true,
+			profileTools = true },
 	},
 	-- Newer versions (3.5.x, main) change icon storage and have not had a
 	-- full audit or in-game test; they are deliberately absent (read-only).

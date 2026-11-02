@@ -325,6 +325,274 @@ function TRP3Commands.ConnectAll(ctx, opts)
 	return ok, message
 end
 
+--- Connection (v0.9) -------------------------------------------------------------
+-- What the setup's Total RP 3 stage and the Total RP 3 page's connection
+-- area show, from one read-only probe. States:
+--   absent / notLoaded / error   Total RP 3 cannot be used now
+--   unsupported  loaded, but not a version Dawnward writes to (status only)
+--   default      the active profile is Total RP 3's default profile, which
+--                Dawnward never writes to: the player is guided to create
+--                or select a named profile
+--   linked       another character already keeps this profile up to date
+--                (Sync.Authorize would refuse): guided the same way
+--   switched     this character is connected, but Total RP 3 now uses
+--                another profile: sync is paused by the guards
+--   connected    connected to the active profile
+--   ready        can be connected now (the single authorisation)
+--   blocked      any other guard (the reasons say which)
+
+local function linkedBy(deps, profileId)
+	if type(profileId) ~= "string" then
+		return nil
+	end
+	local keys = {}
+	for key, other in pairs(deps.ledger.optIn) do
+		if key ~= deps.characterKey and other.profileId == profileId and TRP3Commands.AnyManaged(other) then
+			keys[#keys + 1] = key
+		end
+	end
+	table.sort(keys)
+	return keys[1]
+end
+
+-- The Total RP 3 versions Dawnward writes to, for messages ("3.4.1").
+local function supportedVersions()
+	local list = {}
+	for version, known in pairs(ns.TRP3VersionProfiles.KNOWN) do
+		if known.tiers and known.tiers.experimentalWrite then list[#list + 1] = version end
+	end
+	table.sort(list)
+	return table.concat(list, ", ")
+end
+
+--- Read-only connection view. opts.name: the character's name, suggested
+-- for a new profile. Returns { state, status, probe, version, supported,
+-- profile, isDefault, shared, connected, connectedProfileId, connectedName,
+-- linkedBy, tools = { create, select }, candidates = { profiles to switch
+-- to }, suggestedName, canConnect, canCreate, canSwitch, canSwitchBack,
+-- guided, reasons }. Writes nothing.
+function TRP3Commands.Connection(deps, opts)
+	opts = opts or {}
+	local Adapter = ns.TRP3Adapter
+	local probe = Sync.ProbeOf(deps)
+	local status = probe.status
+	local c = { probe = probe, status = status, reasons = probe.experimental.reasons, candidates = {},
+		tools = { create = false, select = false }, shared = 0 }
+	if status.error then
+		c.state = "error"
+		return c
+	end
+	if not status.loaded then
+		c.state = status.installed and "notLoaded" or "absent"
+		return c
+	end
+	c.version = status.version
+	c.supported = (probe.versionProfile and probe.versionProfile.tiers.experimentalWrite) and true or false
+	c.supportedVersions = supportedVersions()
+	local profile = probe.profile
+	c.profile = profile
+	local id = profile and profile.id
+	c.isDefault = profile ~= nil and (profile.isDefault or (type(id) == "string" and id:sub(-1) == "*")) or false
+	c.shared = profile and profile.sharedWith or 0
+	local entry = deps.ledger.optIn[deps.characterKey]
+	c.connected = TRP3Commands.AnyManaged(entry)
+	c.connectedProfileId = c.connected and entry.profileId or nil
+	c.linkedBy = not c.isDefault and linkedBy(deps, id) or nil
+	if c.supported then
+		c.tools = Adapter.ProfileTools(deps.env)
+	end
+	local wanted = Adapter.CleanProfileName(opts.name)
+	local own -- a free profile already named after the character
+	for _, p in ipairs(c.tools.select and Adapter.ListProfiles(deps.env) or {}) do
+		if p.id == c.connectedProfileId then
+			c.connectedName = p.name
+		end
+		if not p.current and not linkedBy(deps, p.id) then
+			own = own or (wanted and p.name == wanted)
+			-- The profile named after the character first.
+			table.insert(c.candidates, (wanted and p.name == wanted) and 1 or #c.candidates + 1, p)
+		end
+	end
+	-- With such a profile, switching to it is offered instead of a new one.
+	c.suggestedName = not own and c.tools.create and wanted and Adapter.SuggestProfileName(deps.env, wanted) or nil
+	if not c.supported then
+		c.state = "unsupported"
+	elseif not id then
+		c.state = "blocked"
+	elseif c.connected and c.connectedProfileId ~= id then
+		c.state = "switched"
+	elseif c.isDefault then
+		c.state = "default"
+	elseif c.linkedBy then
+		c.state = "linked"
+	elseif c.connected then
+		c.state = "connected"
+	elseif probe.experimental.allowed then
+		c.state = "ready"
+	else
+		c.state = "blocked"
+	end
+	c.guided = c.state == "default" or c.state == "linked"
+	local offer = c.guided or (c.state == "ready" and c.shared > 0)
+	c.canConnect = probe.experimental.allowed == true and not c.linkedBy and not deps.ledgerReadOnly
+	c.canCreate = offer and c.suggestedName ~= nil
+	c.canSwitch = offer and c.tools.select and #c.candidates > 0
+	c.canSwitchBack = c.state == "switched" and c.tools.select and c.connectedName ~= nil
+	return c
+end
+
+local function quoted(name)
+	return "\"" .. tostring(name or "?"):gsub("|", "||") .. "\""
+end
+
+local function others(n)
+	return n .. " other character" .. (n == 1 and "" or "s")
+end
+
+--- The connection's texts, from TRP3Commands.Connection. Pure. Returns
+-- { chip, tone, profile, guide, guideTone } (guide may be nil).
+function TRP3Commands.ConnectionText(c)
+	local t = {}
+	local state = c.state
+	if state == "error" then
+		t.chip, t.tone, t.profile = "Could not be read", "danger", "Total RP 3 could not be read safely."
+		return t
+	elseif state == "absent" then
+		t.chip, t.tone, t.profile = "Not installed", "muted", "Total RP 3 is not installed. Dawnward works fully "
+			.. "without it."
+		return t
+	elseif state == "notLoaded" then
+		t.chip, t.tone, t.profile = "Installed, not loaded", "muted", "Total RP 3 is installed but not loaded. "
+			.. "Enable it at the character screen to connect it."
+		return t
+	end
+	t.chip = "Total RP 3 " .. tostring(c.version or "?") .. (c.supported and " · supported" or " · not supported")
+	t.tone = c.supported and "accent" or "danger"
+	local p = c.profile
+	if not p or not p.name then
+		t.profile = "Active profile: could not be read."
+	else
+		local kind
+		if c.isDefault then
+			kind = "Total RP 3's default profile"
+		elseif state == "linked" then
+			kind = "already connected to " .. tostring(c.linkedBy)
+		elseif state == "switched" then
+			kind = "not the profile this character is connected to"
+		elseif state == "connected" then
+			kind = "connected to this character" .. (c.shared > 0 and ("; also used by " .. others(c.shared)) or "")
+		else
+			kind = c.shared > 0 and ("also used by " .. others(c.shared)) or "this character only"
+		end
+		t.profile = "Active profile: " .. quoted(p.name) .. " · " .. kind
+	end
+	local tools = c.tools.create or c.tools.select
+	local how = tools and "Create a profile for this character, or switch to one of yours, then choose Refresh "
+		.. "connection."
+		or "In Total RP 3, open Profiles and create a profile for this character (or select one of yours), then "
+		.. "choose Refresh connection."
+	if state == "unsupported" then
+		t.guide = "Dawnward connects only to Total RP 3 " .. c.supportedVersions .. ". This version is shown for "
+			.. "information and is never written to; you can still copy your profile text from Settings > Total RP 3."
+		t.guideTone = "danger"
+	elseif state == "default" then
+		t.guide = "Dawnward never writes to Total RP 3's default profile. " .. how
+		t.guideTone = "waiting"
+	elseif state == "linked" then
+		t.guide = "This profile is already kept up to date by " .. tostring(c.linkedBy) .. ". " .. how
+		t.guideTone = "waiting"
+	elseif state == "switched" then
+		local was = c.connectedName and quoted(c.connectedName) or "another profile"
+		t.guide = "Sync is paused: this character is connected to " .. was .. ", but Total RP 3 now uses "
+			.. quoted(p and p.name) .. ". Switch back to " .. was
+			.. (c.canConnect and (", or Reconnect to use " .. quoted(p and p.name) .. " instead.") or " in Total RP 3 "
+				.. "> Profiles, then choose Refresh connection.")
+		t.guideTone = "waiting"
+	elseif state == "blocked" then
+		t.guide = "Cannot connect right now: " .. table.concat(c.reasons, "; ") .. ". Choose Refresh connection "
+			.. "once that changes."
+		t.guideTone = "danger"
+	elseif state == "ready" and c.shared > 0 then
+		t.guide = "Other characters using this profile would show the same details. You can create a profile just "
+			.. "for this character instead."
+		t.guideTone = "muted"
+	end
+	return t
+end
+
+--- The confirmation before "Create a profile…". Pure.
+function TRP3Commands.CreateQuestion(name)
+	return "Create a Total RP 3 profile named " .. quoted(name) .. " for this character?\n\nTotal RP 3 creates it "
+		.. "from its own blank template, as its Create profile button does, and this character starts using it. "
+		.. "Your other profiles, including the default profile, are not changed. Nothing from Dawnward is sent "
+		.. "until you connect."
+end
+
+--- The confirmation before switching to target ({ name, sharedWith }):
+-- the n-th of count candidates, or back to the connected profile. Pure.
+function TRP3Commands.SwitchQuestion(target, n, count, back)
+	local lines = { "Use your Total RP 3 profile " .. quoted(target.name) .. " for this character?", "",
+		"No profile is changed." }
+	if back then
+		lines[3] = lines[3] .. " This character is connected to it, so sync carries on."
+	end
+	if (target.sharedWith or 0) > 0 then
+		lines[3] = lines[3] .. " It is also used by " .. others(target.sharedWith) .. ", which would show the same."
+	end
+	if count and count > 1 then
+		lines[#lines + 1] = string.format("(Profile %d of %d: choose Switch profile… again for the next one.)", n, count)
+	end
+	return table.concat(lines, "\n")
+end
+
+-- The deps of ctx, or nil plus a reason.
+local function depsOf(ctx)
+	local deps = ctx and ctx.trp3Deps and ctx.trp3Deps()
+	if not deps then
+		return nil, "Total RP 3 is not available"
+	end
+	return deps
+end
+
+--- Creates a Total RP 3 profile named name and makes it this character's
+-- active profile (after the player confirmed). Connects nothing and writes
+-- no profile data. Returns ok, message.
+function TRP3Commands.CreateProfile(ctx, name)
+	local deps, err = depsOf(ctx)
+	if not deps then
+		return nil, err
+	end
+	if deps.store:IsSimulation() or deps.store.realReadOnly then
+		return nil, "Not created: Dawnward is in a preview mode."
+	end
+	local id, why = ns.TRP3Adapter.CreateProfile(deps.env, name)
+	if not id then
+		return nil, "Not created: " .. tostring(why) .. "."
+	end
+	return true, "Total RP 3 profile " .. quoted(ns.TRP3Adapter.CleanProfileName(name)) .. " created and now "
+		.. "used by this character. No other profile was changed."
+end
+
+--- Makes an existing named profile this character's active Total RP 3
+-- profile (after the player confirmed). Returns ok, message.
+function TRP3Commands.SelectProfile(ctx, id, name)
+	local deps, err = depsOf(ctx)
+	if not deps then
+		return nil, err
+	end
+	if deps.store:IsSimulation() or deps.store.realReadOnly then
+		return nil, "Not switched: Dawnward is in a preview mode."
+	end
+	local done, why = ns.TRP3Adapter.SelectProfile(deps.env, id)
+	if not done then
+		return nil, "Not switched: " .. tostring(why) .. "."
+	end
+	if ctx.trp3RequestSync then
+		ctx.trp3RequestSync()
+	end
+	return true, "This character now uses the Total RP 3 profile " .. quoted(name) .. ". No profile was changed."
+end
+
 --- Warning shown before a feature is switched on (chat adds how to confirm).
 function TRP3Commands.EnableWarning(feature)
 	local m = FieldPlan.BY_ID[feature]
@@ -485,6 +753,10 @@ function TRP3Commands.Overview(deps)
 		end
 	end
 	local char = deps.store.real.characters[deps.characterKey]
+	-- The connection, with the character's name suggested for a new profile.
+	local named = char and char.fields and char.fields.name and char.fields.name.value
+	view.connection = TRP3Commands.Connection(deps, { name = named
+		or tostring(deps.characterKey or ""):match("^([^%-]+)") })
 	view.preview = TRP3Commands.PublicPreview(char)
 	view.log = deps.ledger.log
 	view.differences = Sync.Differences(deps)

@@ -16,7 +16,12 @@
 --     Public (the profile model, Core/Publication.lua). The Total RP 3
 --     stage is the single authorisation: with "Connect" chosen, Finish
 --     links the active Total RP 3 profile (ConnectAll); nothing is sent
---     before Finish, and the sync's own guards still apply to every write
+--     before Finish, and the sync's own guards still apply to every write.
+--     On Total RP 3's default profile (never written) or one another
+--     character already keeps up to date, the stage guides the player to a
+--     profile of their own: "Create a profile…" / "Switch profile…" (each
+--     confirmed, through TRP3's own profile functions) or the steps in
+--     Total RP 3, then "Refresh connection" reads Total RP 3 again
 --   * test mode (/dawnward dev setup) is a clearly marked preview: no
 --     draft, no completion, and choices are saved only on "Save choices"
 --   * in simulation mode or on read-only data it is a preview that cannot
@@ -84,10 +89,15 @@ SetupWizard.HEADLINES = {
 }
 
 -- What connecting does (the Total RP 3 stage).
-SetupWizard.TRP3_NOTE = "Connecting writes your name, titles, race, class, other details, your backstory (as the "
-	.. "About text) and personality to the active Total RP 3 profile, and keeps them in step as your character "
-	.. "grows. A backup is taken before every write, and any write can be rolled back from Settings > Total RP 3. "
-	.. "Anything you make Private in Dawnward is never sent. Nothing is sent before Finish."
+SetupWizard.TRP3_NOTE = "Dawnward keeps your Total RP 3 profile up to date from your Dawnward character: name, "
+	.. "titles, race, class and other details, your backstory as the About text, and personality. A backup is "
+	.. "taken before every write; any write can be rolled back from Settings > Total RP 3. Nothing is sent before "
+	.. "Finish."
+
+-- The Total RP 3 stage's profile buttons (widths fit their labels).
+SetupWizard.TRP3_BUTTONS = { create = 160, switch = 150, refresh = 170, gap = 8 }
+-- Colour roles of the stage's guidance line, by ConnectionText's tone.
+SetupWizard.GUIDE_ROLE = { danger = "dangerText", waiting = "accent", muted = "muted" }
 
 -- The Character stage's note (v0.9: the profile model; no classification).
 SetupWizard.PROFILE_NOTE = "This is your character's profile. If you connect Total RP 3, it is what other "
@@ -295,25 +305,48 @@ local function buildStory()
 		"muted")
 end
 
+-- The Total RP 3 stage (v0.9): the installed version, the active profile
+-- and what kind it is, guidance when it cannot be connected (the default
+-- profile, or one another character already keeps up to date) with
+-- "Create a profile…", "Switch profile…" and "Refresh connection", the
+-- connection choices, and what Finish will do.
+SetupWizard.TRP3_STATUS_HEIGHT = 164
 local function buildTRP3()
 	local p = pageFrame("trp3")
-	local status = panel(p, "Your Total RP 3 profile", 0, 0, BODY_WIDTH, 112)
+	local B = SetupWizard.TRP3_BUTTONS
+	local statusH = SetupWizard.TRP3_STATUS_HEIGHT
+	local status = panel(p, "Your Total RP 3 profile", 0, 0, BODY_WIDTH, statusH)
 	wizard.trp3Chip = Widgets.Chip(status.inner, "Total RP 3", "muted")
 	wizard.trp3Chip:SetPoint("TOPLEFT", 0, 0)
 	wizard.trp3 = Widgets.Label(status.inner, "GameFontHighlightSmall", true, "body")
-	wizard.trp3:SetPoint("TOPLEFT", 0, -28)
+	wizard.trp3:SetPoint("TOPLEFT", 0, -30)
 	wizard.trp3:SetWidth(INNER_WIDTH)
 	wizard.trp3Warn = Widgets.Label(status.inner, "GameFontHighlightSmall", true, "danger")
 	wizard.trp3Warn:SetPoint("TOPLEFT", 0, -50)
 	wizard.trp3Warn:SetWidth(INNER_WIDTH)
+	local buttonY = -(statusH - 50 - L.cycle)
+	wizard.trp3Create = Widgets.Button(status.inner, "Create a profile…", B.create, L.cycle, "primary")
+	wizard.trp3Create:SetPoint("TOPLEFT", 0, buttonY)
+	wizard.trp3Create:SetScript("OnClick", function() SetupWizard.AskCreateProfile() end)
+	wizard.trp3Switch = Widgets.Button(status.inner, "Switch profile…", B.switch, L.cycle)
+	wizard.trp3Switch:SetPoint("TOPLEFT", B.create + B.gap, buttonY)
+	wizard.trp3Switch:SetScript("OnClick", function() SetupWizard.AskSwitchProfile() end)
+	wizard.trp3Refresh = Widgets.Button(status.inner, "Refresh connection", B.refresh, L.cycle, "ghost")
+	wizard.trp3Refresh:SetPoint("TOPRIGHT", 0, buttonY)
+	wizard.trp3Refresh:SetScript("OnClick", function() SetupWizard.RefreshConnection() end)
+	Widgets.Tooltip(wizard.trp3Refresh, "Refresh connection", "Reads Total RP 3 again: use it after creating or "
+		.. "selecting a profile in Total RP 3. Nothing is written.")
 
+	local top = -(statusH + 12)
 	local choicesH = 36 + #Onboarding.TRP3_CHOICES * L.cycleRow + 4
-	local choices = panel(p, "Connection", 0, -126, BODY_WIDTH, choicesH)
+	local choices = panel(p, "Connection", 0, top, BODY_WIDTH, choicesH)
 	wizard.trp3Cycles = {}
 	for i, choice in ipairs(Onboarding.TRP3_CHOICES) do
 		wizard.trp3Cycles[choice.key] = cycleRow(choices.inner, -(i - 1) * L.cycleRow, choice, INNER_WIDTH)
 	end
-	wizard.trp3Note = paragraph(p, 0, -126 - choicesH - 10, BODY_WIDTH, SetupWizard.TRP3_NOTE, "muted")
+	-- What Finish will do with Total RP 3 (or what a profile action did).
+	wizard.trp3Action = paragraph(p, 0, top - choicesH - 10, BODY_WIDTH, "", "small")
+	wizard.trp3Note = paragraph(p, 0, top - choicesH - 46, BODY_WIDTH, SetupWizard.TRP3_NOTE, "muted")
 end
 
 local function buildAppearance()
@@ -635,41 +668,140 @@ local function trp3Installed()
 	return type(status) == "table" and not status.error and (status.installed or status.loaded) and true or false
 end
 
---- What the Total RP 3 stage shows: { chip, tone, line, warn, connectable }.
--- The installed state comes from the same status read as everywhere else
--- (ctx.trp3Status); the active profile from the adapter's probe, read only.
+-- The name suggested for a new Total RP 3 profile: the Name typed in this
+-- setup, else the game's character name.
+local function characterName()
+	local typed = wizard and wizard.values and wizard.values.name
+	if type(typed) == "string" and typed:match("%S") then
+		return typed
+	end
+	local ok, name = pcall(UnitName, "player")
+	return ok and type(name) == "string" and name or nil
+end
+
+--- What the Total RP 3 stage shows: { chip, tone, line, warn, warnTone,
+-- connectable, connection }. The installed state comes from the same
+-- status read as everywhere else (ctx.trp3Status); the profile, its kind
+-- and the guidance from TRP3Commands.Connection (one probe, read only).
 function SetupWizard.TRP3View()
-	local view = { chip = "Not installed", tone = "muted", line = "Total RP 3 is not installed. Dawnward works "
-		.. "fully without it.", connectable = false }
-	local status = ns.ctx.trp3Status and ns.ctx.trp3Status()
+	local ctx = ns.ctx
+	local status = ctx.trp3Status and ctx.trp3Status()
+	local c
 	if type(status) ~= "table" then
-		return view
-	end
-	if status.error then
-		view.chip, view.tone, view.line = "Could not be read", "danger", "Total RP 3 could not be read safely."
-		return view
-	end
-	if not status.loaded then
-		if status.installed then
-			view.chip = "Installed, not loaded"
-			view.line = "Total RP 3 is installed but not loaded. Enable it at the character screen to connect it."
+		c = { state = "absent" }
+	elseif status.error then
+		c = { state = "error" }
+	elseif not status.loaded then
+		c = { state = status.installed and "notLoaded" or "absent" }
+	else
+		local deps = ctx.trp3Deps and ctx.trp3Deps()
+		local ok, result = false, "Total RP 3 sync is not available"
+		if deps and ns.TRP3Commands then
+			ok, result = pcall(ns.TRP3Commands.Connection, deps, { name = characterName() })
 		end
-		return view
+		c = ok and result or { state = "blocked", version = status.version, supported = false, tools = {},
+			candidates = {}, shared = 0, reasons = { tostring(result) } }
 	end
-	view.chip, view.tone = "Total RP 3 " .. tostring(status.version or ""), "accent"
-	local probe = ns.TRP3Adapter and ns.TRP3Adapter.Probe(_G)
-	local profile = probe and probe.profile
-	view.line = profile and profile.name and ("Active profile: " .. tostring(profile.name)) or "Active profile: unknown"
-	if profile and profile.sharedWith and profile.sharedWith > 0 then
-		view.line = view.line .. string.format(" (also used by %d other character%s; they would show the same)",
-			profile.sharedWith, profile.sharedWith == 1 and "" or "s")
+	local text = ns.TRP3Commands.ConnectionText(c)
+	return { connection = c, chip = text.chip, tone = text.tone, line = text.profile, warn = text.guide,
+		warnTone = text.guideTone, connectable = c.canConnect == true }
+end
+
+--- "Refresh connection": reads Total RP 3 again and redraws the stage.
+function SetupWizard.RefreshConnection()
+	if not wizard then return end
+	local view = SetupWizard.TRP3View()
+	wizard.trp3Result = "Checked Total RP 3 again: " .. (view.connectable and "this profile can be connected."
+		or "it cannot be connected yet.")
+	SetupWizard.Refresh()
+end
+
+-- Runs a profile action (fn(...) -> ok, message) safely and shows its
+-- message on the stage.
+local function profileAction(fn, ...)
+	local ok, result, message = pcall(fn, ...)
+	wizard.trp3Result = ok and message or ("Total RP 3 action failed safely: " .. tostring(result))
+	SetupWizard.Refresh()
+end
+
+--- "Create a profile…": after a confirmation, Total RP 3 creates a profile
+-- named after the character and this character starts using it. No other
+-- profile is changed; nothing from Dawnward is sent before Finish.
+function SetupWizard.AskCreateProfile()
+	local c = wizard.trp3View and wizard.trp3View.connection
+	local name = c and c.suggestedName
+	if not name or wizard.readOnly or wizard.test then return end
+	Widgets.Confirm(ns.TRP3Commands.CreateQuestion(name), "Create", function()
+		profileAction(ns.TRP3Commands.CreateProfile, ns.ctx, name)
+	end)
+end
+
+--- "Switch profile…" / "Switch back…": after a confirmation, this character
+-- uses one of the player's own named profiles. Each click offers the next
+-- one; the profile named after the character comes first.
+function SetupWizard.AskSwitchProfile()
+	local c = wizard.trp3View and wizard.trp3View.connection
+	if not c or wizard.readOnly or wizard.test then return end
+	local target, question
+	if c.canSwitchBack then
+		target = { id = c.connectedProfileId, name = c.connectedName, sharedWith = 0 }
+		question = ns.TRP3Commands.SwitchQuestion(target, nil, nil, true)
+	elseif #c.candidates > 0 then
+		wizard.trp3Pick = (wizard.trp3Pick or 0) % #c.candidates + 1
+		target = c.candidates[wizard.trp3Pick]
+		question = ns.TRP3Commands.SwitchQuestion(target, wizard.trp3Pick, #c.candidates)
+	else
+		return
 	end
-	view.connectable = probe ~= nil and probe.experimental.allowed == true
+	Widgets.Confirm(question, "Switch", function()
+		profileAction(ns.TRP3Commands.SelectProfile, ns.ctx, target.id, target.name)
+	end)
+end
+
+-- Redraws the Total RP 3 stage from a fresh view.
+local function refreshTRP3(view)
+	local c = view.connection
+	local B = SetupWizard.TRP3_BUTTONS
+	wizard.trp3Chip:SetChip(view.chip, view.tone)
+	wizard.trp3:SetText(view.line)
+	wizard.trp3Warn:SetText(view.warn or "")
+	Widgets.SetTextRole(wizard.trp3Warn, SetupWizard.GUIDE_ROLE[view.warnTone] or "dangerText")
+	Style.Repaint(wizard.trp3Warn)
+	local editable = not wizard.readOnly and not wizard.test
+	wizard.trp3Create:SetShown(c.canCreate == true)
+	wizard.trp3Create:SetEnabled(editable)
+	if c.canCreate then
+		Widgets.Tooltip(wizard.trp3Create, "Create a profile", "Creates the Total RP 3 profile \""
+			.. tostring(c.suggestedName) .. "\" for this character (you confirm first). No other profile is changed.")
+	end
+	local switch = c.canSwitchBack or c.canSwitch
+	wizard.trp3Switch:SetShown(switch == true)
+	wizard.trp3Switch:SetEnabled(editable)
+	wizard.trp3Switch:SetText(c.canSwitchBack and "Switch back…" or "Switch profile…")
+	wizard.trp3Switch:ClearAllPoints()
+	wizard.trp3Switch:SetPoint("TOPLEFT", c.canCreate and (B.create + B.gap) or 0,
+		-(SetupWizard.TRP3_STATUS_HEIGHT - 50 - L.cycle))
+	wizard.trp3Refresh:SetShown(c.state ~= "absent")
+	for _, b in pairs(wizard.trp3Cycles) do
+		b:SetEnabled(view.connectable)
+	end
 	if not view.connectable then
-		view.warn = "Cannot connect right now: " .. (probe and table.concat(probe.experimental.reasons, "; ")
-			or "Total RP 3 could not be read") .. ". You can connect later in Settings > Total RP 3."
+		wizard.trp3Cycles.trp3:SetText("Not available now")
 	end
-	return view
+	wizard.trp3Cycles.trp3Existing:SetEnabled(view.connectable and wizard.values.trp3 == "connect")
+	local name = c.profile and c.profile.name and ("\"" .. tostring(c.profile.name):gsub("|", "||") .. "\"")
+		or "the active profile"
+	local action
+	if SetupWizard.WillConnect() then
+		action = "Finish connects " .. name .. " to this character: this is your one authorisation. Dawnward then "
+			.. "keeps it up to date by itself."
+	elseif view.connectable then
+		action = "Finish leaves Total RP 3 as it is. You can connect later in Settings > Total RP 3."
+	else
+		action = "Finish completes setup without connecting; nothing is sent to Total RP 3. You can connect later "
+			.. "in Settings > Total RP 3."
+	end
+	wizard.trp3Action:SetText(wizard.trp3Result or action)
 end
 
 local function refreshIdentity()
@@ -721,19 +853,14 @@ function SetupWizard.Refresh()
 		wizard.storyState:SetText(current and string.format("Your backstory is saved word for word (%d paragraphs). "
 			.. "Import again to replace it; earlier versions are kept.", #ns.Sources.Paragraphs(current.text))
 			or "No backstory yet. Import the story you already wrote, or add it later from the Character tab.")
-	elseif page.id == "trp3" then
-		local view = SetupWizard.TRP3View()
-		wizard.trp3View = view
-		wizard.trp3Chip:SetChip(view.chip, view.tone)
-		wizard.trp3:SetText(view.line)
-		wizard.trp3Warn:SetText(view.warn or "")
-		for _, b in pairs(wizard.trp3Cycles) do
-			b:SetEnabled(view.connectable)
+	end
+	-- Total RP 3 is read afresh on every redraw, so Finish acts on the
+	-- profile that is active now (the player may switch it meanwhile).
+	if wizard.trp3Shown then
+		wizard.trp3View = SetupWizard.TRP3View()
+		if page.id == "trp3" then
+			refreshTRP3(wizard.trp3View)
 		end
-		if not view.connectable then
-			wizard.trp3Cycles.trp3:SetText("Not available now")
-		end
-		wizard.trp3Cycles.trp3Existing:SetEnabled(view.connectable and wizard.values.trp3 == "connect")
 	end
 	local last = wizard.page == wizard.visible[count]
 	if last then
@@ -752,9 +879,9 @@ function SetupWizard.Refresh()
 			.. "been changed."
 		wizard.finishNote:SetText(blocked or wizard.test and "Preview: Save choices applies these choices "
 			.. "to this character without changing its setup status. Close preview discards them."
-			or (SetupWizard.WillConnect() and "Finish saves your choices and connects Total RP 3: your Public "
-				.. "details, backstory and personality are written there after a backup. Nothing you already had "
-				.. "in Dawnward is cleared."
+			or (SetupWizard.WillConnect() and "Finish saves your choices and connects Total RP 3: Dawnward "
+				.. "writes your character's details, backstory and personality there after a backup, and keeps "
+				.. "them up to date. Nothing you already had in Dawnward is cleared."
 				or "Finish saves only what you changed here and never clears a detail you already had. Nothing is "
 				.. "sent to Total RP 3."))
 	end
@@ -781,7 +908,7 @@ end
 --- Whether Finish will connect Total RP 3 (the stage was shown, the
 -- player chose Connect, and connecting is possible now).
 function SetupWizard.CanConnect()
-	return wizard.trp3Shown and (wizard.trp3View == nil or wizard.trp3View.connectable) or false
+	return wizard.trp3Shown and wizard.trp3View ~= nil and wizard.trp3View.connectable or false
 end
 
 function SetupWizard.WillConnect()
@@ -791,6 +918,7 @@ end
 --- Goes to page n (values kept; the draft is saved).
 function SetupWizard.Go(n)
 	collect()
+	wizard.trp3Result = nil
 	wizard.page = visibleFrom(math.max(1, math.min(n, #Onboarding.PAGES)))
 	saveDraft()
 	SetupWizard.Refresh()
@@ -866,7 +994,7 @@ function SetupWizard.Open(opts)
 	wizard.initial, wizard.edited = initial, edited
 	wizard.finished = false
 	wizard.trp3Shown = trp3Installed()
-	wizard.trp3View = nil
+	wizard.trp3View, wizard.trp3Result, wizard.trp3Pick = nil, nil, 0
 	wizard.visible = Onboarding.VisiblePages(wizard.trp3Shown)
 	layoutRail()
 	wizard.values = values
@@ -900,6 +1028,9 @@ function SetupWizard.Finish()
 	end
 	collect()
 	if wizard.readOnly then return end
+	if wizard.trp3Shown then
+		wizard.trp3View = SetupWizard.TRP3View() -- the profile active now
+	end
 	local connect = SetupWizard.WillConnect()
 	local ok, message = Actions.CompleteSetup(ns.ctx, wizard.values, { test = wizard.test, only = wizard.edited,
 		trp3Shown = connect })
