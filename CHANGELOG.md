@@ -35,7 +35,34 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 - **Retired commands** (one reply line, nothing changes): `vis`, `journal|fact|family|history|personality vis`, `memory|arc|goal|stance|person vis`, `stance private`, `biography public|private|secret`. Listings no longer show visibility tags; `show public` is now `show profile` (the old spelling still works).
 - **Backups hold everything:** `export backup` (and Settings > Data) always includes every record, the story and the stored biography; `secrets` and `biography` are still accepted and change nothing. Backups from earlier versions still import. Export for sharing holds your published profile.
 - **Kept for compatibility:** stored visibility values are untouched and still normalised on load; they decide only what a character still waiting for the confirmation publishes.
-- **Tests:** a sweep opens every section, tab, form, full view and dialog of the main window, the story import window and the guide with a character holding every kind of record and every old visibility level, and finds no Public, Private or Secret on screen (the Total RP 3 page and the setup wizard are being reworked separately and are not swept yet).
+- **Tests:** a sweep opens every section, tab, form, full view and dialog of the main window, the story import window, the guide, every Total RP 3 tab (connected and not) and every setup stage, with a character holding every kind of record and every old visibility level, and finds no Public, Private or Secret on screen.
+
+### Total RP 3 connection during setup
+- **No more dead end on the default profile.** Total RP 3's default profile is never written to, so the setup stage and Settings > Total RP 3 now guide you to a profile of your own: **Create a profile…** (named after your character; TRP3 3.4.1's own `createProfile`/`selectProfile`, confirmed first, never touching another profile), **Switch profile…**, or step-by-step instructions, then **Refresh connection**. Finish connects whichever profile is active at that moment.
+- A profile switched in Total RP 3 after connecting shows **Paused**, with **Switch back…**, **Reconnect…** and **Refresh connection**; nothing is ever written to the other profile.
+
+### Total RP 3 profile mappings
+- **Game values:** Race, Class and first name come from the game until you write your own; releasing or clearing a Dawnward value puts the game's back (never Dawnward-owned).
+- **Additional information:** rows carry Total RP 3's own preset icons; a translated preset name is recognised, so pronouns are never added twice on a non-English client.
+- **Personality:** your own words for an axis are the trait's names in Total RP 3, and renaming an axis renames the same trait in place; new traits carry TRP3's default icons. Direction and scale (V2 = 20 − value) are pinned by tests for all six axes.
+- **At First Glance:** entries you write (`/dawnward trp3 glance`, up to five, with title, text and icon) go into free slots of Total RP 3's Miscellaneous tab when you enable it (`trp3 enable glance confirm`); slots you filled yourself are never changed.
+- **Not written, by design:** Currently and OOC (your live statuses), RP status, walk-up and RP style (your preferences), and Notes (Total RP 3 keeps them locally about *other* profiles and never sends them). The complete matrix with Total RP 3 source evidence is in `docs/TRP3_INTEGRATION.md`.
+
+### Interface (v0.10 fidelity pass)
+Per-screen tables of what matches the approved renderings, what still differs and why: `docs/design/UI_DESIGN_V10.md` and `docs/design/audit/v10-*.md`. Highlights:
+- **Line icons:** the 1.15.9 client draws lines, so navigation, buttons, chips and the search box carry the mockup's icons (with a text fallback).
+- **Tracked eyebrows, new type weights** (Alegreya Sans Italic and Medium, Cinzel Bold; OFL), colours closer to the design, a readable eyebrow tone in Shadowbound.
+- **Window and rail:** the gold resize ornament, wordmark, nav icons, italic title, "Total RP 3 · sync on/off".
+- **Journal:** the mockup's toolbar, icons on actions, a star for defining moments, shorter event cards.
+- **Character:** pencil Edit buttons, dashed "+ Add" tiles for empty fields, Race and Class from the game, a story card with **Read full story**, a right column without its own scroll bar in normal use; Showcase rotate arrows from the game's own art.
+- **Story Director:** "Why now" reads inline; the reaction card matches it.
+- **Chronicle:** one scrolling, pooled list with a slim bar instead of pages; tabs fitted to their words with quiet counts.
+- **Settings** grouped by purpose (General, Story, Data, Total RP 3, Help) with segmented choices; developer options only in development builds. **Setup** follows the rendering's grid; **Import story** gains step badges.
+- **Total RP 3 page:** sections for Connection, Character information, Biography (with a preview laid out as Total RP 3 shows it), Personality, Appearance and At First Glance, Synchronization status (last sync, last problem) and Conflicts and recovery.
+- **How your profile looks in Total RP 3:** headings, icons and backgrounds come from an allowlist verified in Total RP 3 3.4.1 and the Classic Era client; Silver Hand frames now use the Marble background. Your story is always word for word.
+
+### In-game acceptance
+- `docs/TESTING.md` **part Z** is the release-blocking checklist for this build (Z1–Z15). Nothing in it is passed until confirmed in Classic Era.
 
 ## [Unreleased]: 0.9.0-dev (first login, complete Total RP 3 profile)
 
@@ -50,8 +77,6 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 - **Simpler stages:** Welcome, Character, Story, Appearance, **Total RP 3** (only when Total RP 3 is installed), Finish. The routine Privacy stage is gone.
   - **Story** now starts with your backstory: import the story you already wrote, kept word for word.
   - **Total RP 3:** shows the active profile, and connects it once on Finish (the single authorisation). You can choose to keep what you already wrote in Total RP 3, or let Dawnward replace it (a backup is kept). Total RP 3 stays optional; nothing is sent before Finish.
-  - **On Total RP 3's default profile** (which Dawnward never writes to), or one another character already keeps up to date, the stage guides you to a profile of your own: **Create a profile…** named after your character, or **Switch profile…** to one of yours (each asks first, and changes no other profile), or the steps in Total RP 3, then **Refresh connection**. An unsupported Total RP 3 version is explained and never written.
-  - **Settings > Total RP 3 > Overview** shows the same connection details, and says clearly when sync is paused because Total RP 3 switched to another profile, with **Switch back…**, **Reconnect…** and **Refresh connection**.
 - **New characters use the profile model:** their profile details (fields, family, history, facts, personality, a stance's public persona, the biography) start **Public**, so nothing has to be sorted item by item. The journal, story answers and private convictions stay Private. Any item can still be made Private or Secret.
 - **Older characters are never published silently.** `/dawnward publish` previews, per category, what is Private, Secret and Public, and switches the character only when you confirm the categories to publish. Secret items never change.
 - **The biography has its own visibility** (Public under the profile model). Only while it is Public does its text reach share exports and Total RP 3.

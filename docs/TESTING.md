@@ -886,3 +886,35 @@ The automated run (L2, TRP3 3.4.1 fake) imports one long backstory of plain para
 | Y7 | Roll back… the newest backup | Preview first; after confirming, your own About text returns |
 | Y8 | `/reload` | No new write; the About page is unchanged |
 | Y9 | Log in another character on the same TRP3 profile | It can't take the About page; switching TRP3 profiles pauses sync |
+
+### v0.10 in-game acceptance gate (L3): release-blocking before the first playthrough
+
+**Nothing below is passed until the owner has done it in Classic Era 1.15.9 with Total RP 3 3.4.1 and recorded the result.** Automated tests (L2) passing is not this gate.
+
+**Before you start**
+1. Close WoW. Back up `Interface\AddOns\DawnwardChronicles` and `WTF\Account\<account>\SavedVariables\` (DawnwardChronicles*.lua and totalRP3*.lua).
+2. Install the build. Check `/dawnward status` shows 0.10.0-dev.
+3. Use a **new test character** for Z1–Z3. For Z4 onwards, use either that character or Kyssarra with a **spare, non-default** TRP3 profile created in Z3 (never Kyssarra's real profile).
+
+**How to report a failure:** the step number, what you saw (a screenshot), and the output of `/dawnward trp3 diagnose` and `/dawnward trp3 log`. The diagnose output never contains your story text.
+
+#### Part Z: v0.10 acceptance (each item release-blocking)
+
+| # | Steps | Pass when |
+|---|---|---|
+| Z1 | Log in a brand-new character; wait in the world | Setup opens by itself within a few seconds (not during combat or a loading screen) |
+| Z2 | Fill in name, title and other details; Story stage: **Import a story…**, paste the complete backstory, Save; reach Finish; `/reload` | The review page lists your details; after Finish and `/reload` setup does not open again; Character page shows your details |
+| Z3 | Run setup on a character whose TRP3 profile is the default one; at the Total RP 3 stage: **Create a profile…** (or Switch profile…), confirm; **Refresh connection**; Finish with Connect | TRP3 > Profiles lists the new profile, active for this character; the default profile is unchanged; the stage shows Connect available before Finish |
+| Z4 | After Z3, open TRP3 > your profile > **About** (close and reopen the tab if it was open) | The complete story is there, every paragraph in order, nothing cut at the end, nothing twice. `/dawnward trp3 diagnose`: "biography in the profile Dawnward publishes: yes", "last read-back: matched what was written" |
+| Z4b | **Kyssarra (updated from 0.9):** `/dawnward trp3 diagnose`, then **Publish whole profile…** (Total RP 3 page or Character page) or `/dawnward publish confirm` | Diagnose says "waiting for your one-time confirmation" first; after confirming, the About page shows the story within seconds |
+| Z5 | `/reload`, reopen the About tab; `/dawnward trp3 log` | The About page is unchanged; the log shows no new About write |
+| Z6 | Change one sentence of the story in Dawnward (Character > Import a story > Load saved story, edit, Save) | Within seconds the About page shows the changed sentence in place; nothing duplicated |
+| Z7 | Open TRP3 Characteristics and Miscellaneous | Name, title, race, class, age, birthplace, residence, eye colour, height, weight, relationship status hold your Dawnward values; Race and Class match the game if you never wrote them; Pronouns, Faith, Occupation, Allegiance appear as additional information with icons, each once |
+| Z8 | Character > Personality: change an axis value; rename an axis's words | The matching TRP3 personality bar moves the same way (a high Dawnward value leans right); the trait's names change in place; your own TRP3 traits are untouched |
+| Z9 | Dawnward Settings > Total RP 3 > Biography: try template Frames, then Sections, then Text; style Silver Hand and Arcane; compare the Dawnward preview with TRP3's About page | Frames: one frame per section with icons and backgrounds; Sections: the story under History; headings coloured; no green squares (missing icons) |
+| Z10 | Visit every Dawnward screen (Journal, Character, Story, every Chronicle tab, Settings pages, Total RP 3 page, setup, Import a story) | No Public / Private / Secret badges, toggles or "only Public…" wording anywhere |
+| Z11 | Compare the Journal, memories, goals, story answers and Character details with before the update | Every record is still there |
+| Z12 | Before and after Z4–Z9, compare TRP3 parts Dawnward does not manage (your own About text above Dawnward's part, your own traits, Notes, RP status and style) | Unchanged |
+| Z13 | Drag the gold resize grip to both limits; Settings > General > Reset Window Size; scroll the Character left column, the Chronicle list and Read view, and the Journal with the wheel | The window scales; nothing overlaps or disappears; the wheel never zooms the camera over the window |
+| Z14 | Character > Showcase: live model loads; rotate; zoom; switch to portrait and back; `/reload` | The model fills its card; the toggle works both ways; the choice is remembered; equipment is unchanged |
+| Z15 | Screenshot every screen and compare side by side with `docs/design/mockups/`; check line icons, tracked eyebrows and the new fonts render (no squares, no overlapping letters) in all three themes | The owner judges each screen against its rendering; record differences against `docs/design/UI_DESIGN_V10.md` |
