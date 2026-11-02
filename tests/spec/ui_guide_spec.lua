@@ -81,7 +81,11 @@ return function(t, expect)
 			expect.falsy(reply:find("family add", 1, true))
 			expect.truthy(run("help all"):find("family add", 1, true))
 			expect.truthy(run("help story"):find("cooldown", 1, true))
-			expect.truthy(run("help privacy secret"):find("Secret", 1, true))
+			expect.truthy(run("help profile published"):find("Total RP 3", 1, true))
+			local all = run("help all")
+			for _, word in ipairs({ "vis ", "public|private|secret", "[secrets]" }) do
+				expect.falsy(all:find(word, 1, true), "retired from help: " .. word)
+			end
 		end)
 
 		t:it("explains a missing record number with an example", function()

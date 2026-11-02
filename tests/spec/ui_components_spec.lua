@@ -180,21 +180,14 @@ return function(t, expect)
 			expect.equal(line.__insets[1], ns.Widgets.FIELD.textInset)
 		end)
 
-		t:it("a visibility button looks like its chip and keeps cycling", function()
+		t:it("has no visibility chip widget any more (v0.10); fixed-colour chip tones stay", function()
 			local _, env, ns = load()
-			local seen
-			local vis = ns.Widgets.VisibilityButton(env.CreateFrame("Frame"), function(level, b)
-				seen = level
-				b:SetLevel(level)
-			end)
-			local secret = ns.Themes.VISIBILITY_COLORS.secret
-			vis:SetLevel("secret")
-			expect.equal(vis.label.__textColor[1], secret[1])
-			local fill = ns.Widgets.ChipColors(secret, ns.Style.Current())
-			expect.equal(vis.bg.__color[1], fill[1], "tinted fill")
-			vis:GetScript("OnClick")(vis)
-			expect.equal(seen, "private")
-			expect.equal(vis:GetText(), "Private")
+			expect.equal(ns.Widgets.VisibilityButton, nil)
+			expect.equal(ns.Widgets.VISIBILITY_HELP, nil)
+			-- The Total RP 3 page still paints its "Connected" chip in the fixed green.
+			local chip = ns.Widgets.Chip(env.CreateFrame("Frame"), "Connected", "public")
+			local green = ns.Themes.VISIBILITY_COLORS.public
+			expect.equal(chip.label.__textColor[1], green[1])
 		end)
 
 		t:it("draws pills with round ends where masks exist, following the frame's height", function()
@@ -212,9 +205,6 @@ return function(t, expect)
 			expect.truthy(tone ~= nil)
 			expect.equal(chip.pill.mid.__color[1], fill[1])
 			expect.equal(chip.pill.capL.__color[1], edge[1])
-			local vis = ns.Widgets.VisibilityButton(env.CreateFrame("Frame"), function() end)
-			expect.truthy(vis.pill ~= nil)
-			expect.falsy(vis.bg:IsShown())
 		end)
 
 		t:it("draws Close as a large multiplication sign in a bordered icon button", function()

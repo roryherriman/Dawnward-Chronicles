@@ -414,7 +414,7 @@ return function(t, expect)
 				expect.equal(b:GetHeight(), C.compact)
 				expect.truthy(ns.Widgets.LabelFits(b:GetText(), b:GetWidth(), b:GetHeight()), b:GetText() .. " fits")
 			end
-			expect.equal(row.vis:GetHeight(), C.chip)
+			expect.equal(row.vis, nil, "no visibility chip in the footer")
 		end)
 
 		t:it("sets story text in the reading style, meta in the meta style and titles in Cinzel", function()
@@ -431,7 +431,7 @@ return function(t, expect)
 			expect.equal(row.title.textRole, "heading", "title white")
 		end)
 
-		t:it("keeps a draft's footer apart: visibility on the left, every action inside the card's text column", function()
+		t:it("keeps a draft's footer to its actions, every action inside the card's text column", function()
 			local mock, _, ns, section = start()
 			turnIn(mock, 30, "Draft Quest")
 			mock.Slash("story 1 1")
@@ -442,13 +442,14 @@ return function(t, expect)
 				if section.rows[i].entry.kind == "story" then row = section.rows[i] end
 			end
 			expect.truthy(row.approve:IsShown() and row.edit:IsShown() and row.delete:IsShown() and row.mark:IsShown())
-			-- Actions laid from the right edge: the leftmost one ends right of the visibility chip.
+			-- Actions laid from the right edge, all inside the text column.
 			local width = 0
 			for _, b in ipairs(row.actions) do
 				if b:IsShown() then width = width + b:GetWidth() + L.actionGap end
 			end
 			local actionsLeft = L.cardW - L.padX - (width - L.actionGap)
-			expect.truthy(actionsLeft >= L.textX + row.vis:GetWidth() + L.actionGap, "no overlap with visibility")
+			expect.truthy(actionsLeft >= L.textX, "inside the text column")
+			expect.equal(row.vis, nil, "no visibility chip")
 			-- Title and chips share the first line without overlapping.
 			local chipsWidth = 0
 			for _, chip in ipairs(row.chips) do

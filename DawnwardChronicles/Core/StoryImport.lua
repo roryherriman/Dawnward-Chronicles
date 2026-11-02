@@ -327,13 +327,6 @@ function StoryImport.Skip(char, key, now)
 	return Interpretations.Reject(char, key, now)
 end
 
---- What a fact would look like once public (for the confirmation before
--- approving a piece as Public). Pure.
-function StoryImport.PublicPreview(statement, category)
-	local label = Facts.DisplayCategory(category).label
-	return label .. ": " .. (Schema.CleanStatement(statement) or "")
-end
-
 --- Player actions (window and chat) ------------------------------------------------
 -- Every write goes through Actions.WithCharacter: read-only data is refused,
 -- and a failed first write leaves no empty character behind.
@@ -378,8 +371,7 @@ function StoryImport.ApproveAction(ctx, key, edits)
 	return act(ctx, function(char, now)
 		local fact, err = StoryImport.Approve(char, key, edits, now)
 		if not fact then return nil, err end
-		return fact, "Added to your canon as fact #" .. fact.id .. " ("
-			.. (ns.Themes.VISIBILITY_LABELS[fact.visibility] or fact.visibility) .. ")."
+		return fact, "Added to your canon as fact #" .. fact.id .. "."
 	end)
 end
 
@@ -396,8 +388,8 @@ local function statusLines(char)
 	local lines = {}
 	local current = char and Sources.Current(char)
 	if current then
-		lines[#lines + 1] = string.format("Stored story: version %d, %d bytes (%s), saved verbatim; %s.", current.id,
-			#current.text, current.kind == "trp3" and "from Total RP 3" or "pasted", Sources.Visibility(char))
+		lines[#lines + 1] = string.format("Stored story: version %d, %d bytes (%s), saved verbatim.", current.id,
+			#current.text, current.kind == "trp3" and "from Total RP 3" or "pasted")
 	else
 		lines[#lines + 1] = "No story stored yet. Open the import window with /dawnward biography."
 	end
@@ -416,9 +408,8 @@ if ns.Commands and ns.Commands.Register then
 				ns.Commands.Out(ctx, line)
 			end
 		elseif Privacy.IsValid(sub) then
-			-- v0.9: the whole story's own visibility (public reaches Total RP 3's About page).
-			local _, message = ns.Actions.SetBiographyVisibility(ctx, sub)
-			ns.Commands.Out(ctx, message)
+			-- Retired (v0.10): the story is part of the profile; nothing to choose.
+			ns.Commands.RetiredVisibility(ctx)
 		elseif ctx.ui and ctx.ui.ShowStoryImport then
 			ctx.ui.ShowStoryImport()
 		else

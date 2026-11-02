@@ -234,7 +234,7 @@ return function(t, expect)
 			expect.falsy(ns.Continuity.Review(char, "nope", "growth"))
 		end)
 
-		t:it("flags a met goal, duplicate memories and public records linked to secrets", function()
+		t:it("flags a met goal and duplicate memories; old visibility raises no privacy finding (v0.10)", function()
 			local ns, char, fx = setup()
 			ns.Goals.Add(char, { title = "Reach 10", objective = { kind = "level", target = 10 } }, 1)
 			ns.GameEvents.Record(char, "levelup", Fixtures.Context(fx, { level = 10 }), 2)
@@ -245,7 +245,24 @@ return function(t, expect)
 			expect.truthy(public)
 			local kinds = {}
 			for _, f in ipairs(ns.Continuity.Findings(char)) do kinds[f.kind] = true end
-			expect.truthy(kinds.goal and kinds.duplicate and kinds.privacy)
+			expect.truthy(kinds.goal and kinds.duplicate)
+			expect.falsy(kinds.privacy, "a link between memories cannot reveal anything: they are never published")
+		end)
+
+		t:it("a stance's persona against a fact is flagged once both are in the published profile", function()
+			local ns, char = setup()
+			local i = ns.Identity.Add(char, { subject = "Stormwind", persona = "Loyal to Stormwind" }, 1)
+			ns.Facts.Add(char, { category = "belief", statement = "Never loyal to Stormwind" }, nil, 3)
+			local function kinds()
+				local out = {}
+				for _, f in ipairs(ns.Continuity.Findings(char)) do out[f.kind] = f end
+				return out
+			end
+			expect.falsy(kinds().publicfact, "an older character: neither was marked Public")
+			ns.Publication.Adopt(char, 4)
+			local f = kinds().publicfact
+			expect.truthy(f)
+			expect.truthy(f.message:find("in your profile", 1, true))
 		end)
 	end)
 

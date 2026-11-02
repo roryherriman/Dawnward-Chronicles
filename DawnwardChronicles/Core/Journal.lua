@@ -112,7 +112,7 @@ function Journal.UpdateNote(char, id, values, now)
 		return nil, "no journal entry #" .. tostring(id)
 	end
 	if entry.kind ~= "note" and entry.kind ~= "story" then
-		return nil, "automatic entries cannot be edited (you can change their visibility)"
+		return nil, "automatic entries cannot be edited"
 	end
 	local title, text = entry.title, entry.text
 	if values.title ~= nil then
@@ -160,28 +160,6 @@ function Journal.SetVisibility(char, id, level, now)
 	entry.visibility = level
 	touch(char, now)
 	return entry
-end
-
---- What making an entry Public would share (#13), for the confirmation
--- shown before it happens. Pure. Returns the text: the entry exactly as it
--- would leave Dawnward, and where it can appear.
-Journal.PREVIEW_BYTES = 600
-function Journal.PublicPreview(entry)
-	if type(entry) ~= "table" then
-		return ""
-	end
-	local body = entry.text or ""
-	if #body > Journal.PREVIEW_BYTES then
-		body = ns.Util.TruncateUtf8(body, Journal.PREVIEW_BYTES) .. " [...]"
-	end
-	local where = "It can appear in share exports (Export for sharing)."
-	if entry.kind == "story" and entry.status == "approved" and entry.important then
-		where = where .. " As a defining moment, its title can also appear in your Total RP 3 biography block, "
-			.. "only if you turned biography sync on."
-	end
-	return "Make this entry Public?\n\nThis is exactly what becomes shareable:\n\n"
-		.. (entry.title and (entry.title .. "\n") or "") .. body .. "\n\n" .. where
-		.. " You can make it Private again at any time."
 end
 
 function Journal.RemoveNote(char, id, now)

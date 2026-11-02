@@ -27,19 +27,16 @@ local SHOW_LIMIT = 180 -- bytes of long text shown per line in chat
 local HELP = {
 	"Dawnward Chronicles: /dawnward (or /dwc) opens and closes the journal.",
 	"  setup   (first-time setup: name, backstory, story moments, appearance, Total RP 3) | guide   (help)",
-	"  publish   (one-time switch of an older character to the profile model; previews first)",
-	"  status | show [public] | fields | trp3 | theme [neutral|silverhand|arcane] | minimap [show|hide]",
-	"  journal list | journal add <text> | journal edit <#> <text> | journal vis <#> <level>",
-	"  journal remove <#> confirm",
-	"  set <field> <text> | vis <field> public|private|secret | clear <field> confirm",
+	"  publish   (an older character only: publish the whole profile once; lists what changes first)",
+	"  status | show [profile] | fields | trp3 | theme [neutral|silverhand|arcane] | minimap [show|hide]",
+	"  journal list | journal add <text> | journal edit <#> <text> | journal remove <#> confirm",
+	"  set <field> <text> | clear <field> confirm",
 	"  family add <relation> <name> | family list | family set <#> relation|name|status|notes <text>",
-	"  family vis <#> <level> | family remove <#> confirm",
-	"  history add <text> | history list | history set <#> when|text <text>",
-	"  history vis <#> <level> | history remove <#> confirm",
-	"  fact list | fact add <category> <statement> | fact vis <#> <level> | fact remove <#> confirm",
-	"  personality list | personality set <axis> <0-20> | personality vis <axis> <level>",
-	"  personality clear <axis> confirm",
-	"  export backup [secrets] [biography] | export share | import | import confirm | import undo",
+	"  family remove <#> confirm",
+	"  history add <text> | history list | history set <#> when|text <text> | history remove <#> confirm",
+	"  fact list | fact add <category> <statement> | fact remove <#> confirm",
+	"  personality list | personality set <axis> <0-20> | personality clear <axis> confirm",
+	"  export backup | export share | import | import confirm | import undo",
 	"  biography | biography status   (import a story you already wrote; you approve each piece)",
 	"  sim on | sim off | sim copy confirm | sim reset confirm | sim levelup <level>",
 	"  sim quest <id> [title] | sim death   (test the story loop in simulation data)",
@@ -80,6 +77,17 @@ local function writable(ctx)
 	return char
 end
 
+--- The one reply of every retired visibility command (vis, journal vis,
+-- fact vis, biography public, ...). v0.10 has no per-item visibility: the
+-- whole profile publishes once Total RP 3 is connected (Core/Publication.lua).
+-- Nothing is changed.
+Commands.RETIRED_VISIBILITY = "Per-item visibility is no longer used: your whole profile is published when "
+	.. "Total RP 3 is connected (see /dawnward publish). Nothing was changed."
+
+function Commands.RetiredVisibility(ctx)
+	out(ctx, Commands.RETIRED_VISIBILITY)
+end
+
 local function report(ctx, ok, err, success)
 	if ok then
 		out(ctx, success)
@@ -98,11 +106,10 @@ end
 
 local function itemLine(listName, item)
 	if listName == "family" then
-		return string.format("  #%d %s: %s (%s) [%s]%s", item.id, item.relation or "relative", item.name or "?",
-			item.status, item.visibility, item.notes and (" - " .. preview(item.notes)) or "")
+		return string.format("  #%d %s: %s (%s)%s", item.id, item.relation or "relative", item.name or "?",
+			item.status, item.notes and (" - " .. preview(item.notes)) or "")
 	end
-	return string.format("  #%d %s%s [%s]", item.id, item.when and (item.when .. ": ") or "",
-		preview(item.text or ""), item.visibility)
+	return string.format("  #%d %s%s", item.id, item.when and (item.when .. ": ") or "", preview(item.text or ""))
 end
 
 local function showCharacter(ctx, char, title)
@@ -111,7 +118,7 @@ local function showCharacter(ctx, char, title)
 	for _, field in ipairs(Schema.FIELDS) do
 		local entry = char.fields[field.key]
 		if entry then
-			out(ctx, string.format("  %s: %s [%s]", field.label, preview(entry.value), entry.visibility))
+			out(ctx, string.format("  %s: %s", field.label, preview(entry.value)))
 			any = true
 		end
 	end
@@ -206,8 +213,9 @@ handlers.status = function(ctx)
 	end
 	local char = ctx.store:GetCharacter(ctx.characterKey)
 	if char then
-		local c = Character.CountByVisibility(char)
-		out(ctx, string.format("Profile: %d public, %d private, %d secret facts", c.public, c.private, c.secret))
+		out(ctx, "Profile: " .. (ns.Publication.Status(char) == "pending"
+			and "part of it waits for your one-time confirmation before it is published (/dawnward publish)"
+			or "published as a whole when Total RP 3 is connected") .. ".")
 	else
 		out(ctx, "Profile: none yet. Start with /dawnward set name <your character's name>")
 	end
@@ -303,8 +311,8 @@ local function journalLine(entry, char)
 	else
 		label = entry.title and (entry.title .. ": ") or ""
 	end
-	return string.format("  #%d %s%s%s [%s]", entry.id, entry.important and "* " or "", label,
-		preview((char and ns.Narrative.DisplayText(char, entry) or entry.text) or ""), entry.visibility)
+	return string.format("  #%d %s%s%s", entry.id, entry.important and "* " or "", label,
+		preview((char and ns.Narrative.DisplayText(char, entry) or entry.text) or ""))
 end
 Commands.JournalLine = journalLine
 
@@ -343,10 +351,14 @@ handlers.journal = function(ctx, rest)
 		out(ctx, message)
 		return
 	end
+	if sub == "vis" then
+		Commands.RetiredVisibility(ctx)
+		return
+	end
 	local idText, tail = Util.NextWord(args)
 	local id = tonumber(idText)
 	if not Util.IsPositiveInteger(id) then
-		out(ctx, "Usage: /dawnward journal edit|vis|remove <#> ...   (see /dawnward journal list)")
+		out(ctx, "Usage: /dawnward journal edit|remove <#> ...   (see /dawnward journal list)")
 		return
 	end
 	local message
@@ -356,8 +368,6 @@ handlers.journal = function(ctx, rest)
 			return
 		end
 		_, message = Actions.UpdateNote(ctx, id, nil, tail, nil)
-	elseif sub == "vis" then
-		_, message = Actions.SetEntryVisibility(ctx, id, Util.NextWord(tail):lower())
 	elseif sub == "approve" then
 		_, message = Actions.ApproveEntry(ctx, id)
 	elseif sub == "important" then
@@ -388,7 +398,7 @@ handlers.fact = function(ctx, rest)
 		for _, group in ipairs(Facts.ByCategory(char)) do
 			out(ctx, "  " .. group.category.label .. ":")
 			for _, fact in ipairs(group.facts) do
-				out(ctx, string.format("    #%d %s [%s]", fact.id, preview(fact.statement), fact.visibility))
+				out(ctx, string.format("    #%d %s", fact.id, preview(fact.statement)))
 			end
 		end
 		return
@@ -403,22 +413,21 @@ handlers.fact = function(ctx, rest)
 		out(ctx, message)
 		return
 	end
-	local idText, tail = Util.NextWord(args)
-	local id = parseId(idText)
-	if not id or (sub ~= "vis" and sub ~= "remove") then
-		out(ctx, "Usage: /dawnward fact list | add <category> <statement> | vis <#> <level> | remove <#> confirm")
+	if sub == "vis" then
+		Commands.RetiredVisibility(ctx)
 		return
 	end
-	local message
-	if sub == "vis" then
-		_, message = Actions.SetFactVisibility(ctx, id, Util.NextWord(tail):lower())
-	else
-		if Util.NextWord(tail):lower() ~= "confirm" then
-			out(ctx, string.format("This deletes fact #%d. Type: /dawnward fact remove %d confirm", id, id))
-			return
-		end
-		_, message = Actions.RemoveFact(ctx, id)
+	local idText, tail = Util.NextWord(args)
+	local id = parseId(idText)
+	if not id or sub ~= "remove" then
+		out(ctx, "Usage: /dawnward fact list | add <category> <statement> | remove <#> confirm")
+		return
 	end
+	if Util.NextWord(tail):lower() ~= "confirm" then
+		out(ctx, string.format("This deletes fact #%d. Type: /dawnward fact remove %d confirm", id, id))
+		return
+	end
+	local _, message = Actions.RemoveFact(ctx, id)
 	out(ctx, message)
 end
 
@@ -433,8 +442,7 @@ handlers.personality = function(ctx, rest)
 			out(ctx, "  (no values set) Try: /dawnward personality set courage 14")
 		end
 		for _, item in ipairs(list) do
-			out(ctx, string.format("  %s: %s %d/20 %s [%s]", item.axis.id, item.axis.left, item.value, item.axis.right,
-				item.visibility))
+			out(ctx, string.format("  %s: %s %d/20 %s", item.axis.id, item.axis.left, item.value, item.axis.right))
 		end
 		return
 	end
@@ -450,7 +458,8 @@ handlers.personality = function(ctx, rest)
 		end
 		_, message = Actions.SetPersonality(ctx, axisId, value)
 	elseif sub == "vis" then
-		_, message = Actions.SetPersonalityVisibility(ctx, axisId, word)
+		Commands.RetiredVisibility(ctx)
+		return
 	elseif sub == "clear" then
 		if word ~= "confirm" then
 			out(ctx, "This clears the value. Type: /dawnward personality clear " .. axisId .. " confirm")
@@ -458,7 +467,7 @@ handlers.personality = function(ctx, rest)
 		end
 		_, message = Actions.ClearPersonality(ctx, axisId)
 	else
-		message = "Usage: /dawnward personality list | set <axis> <0-20> | vis <axis> <level> | clear <axis> confirm"
+		message = "Usage: /dawnward personality list | set <axis> <0-20> | clear <axis> confirm"
 	end
 	out(ctx, message)
 end
@@ -469,8 +478,11 @@ handlers.show = function(ctx, rest)
 		out(ctx, "No profile yet (" .. modeLabel(ctx) .. "). Start with /dawnward set name <name>")
 		return
 	end
-	if Util.NextWord(rest):lower() == "public" then
-		showCharacter(ctx, Projection.GetPublic(char), "Public view - the only facts that can ever be shared:")
+	-- "show public" is the older spelling of "show profile".
+	local word = Util.NextWord(rest):lower()
+	if word == "profile" or word == "public" then
+		showCharacter(ctx, Projection.GetPublic(char), "Your published profile (what Total RP 3 and a share export "
+			.. "receive):")
 	else
 		showCharacter(ctx, char, "Profile (" .. modeLabel(ctx) .. "):")
 	end
@@ -486,17 +498,12 @@ handlers.set = function(ctx, rest)
 	local char = writable(ctx)
 	if not char then return end
 	local ok, err = Character.SetField(char, key, value, ctx.now())
-	local entry = char.fields[key]
-	report(ctx, ok, err, ok and string.format("Set %s [%s].", key, entry.visibility))
+	report(ctx, ok, err, ok and string.format("Set %s.", key))
 end
 
-handlers.vis = function(ctx, rest)
-	local key, level = Util.NextWord(rest)
-	key, level = Schema.FieldKey(key:lower()), Util.NextWord(level):lower()
-	local char = writable(ctx)
-	if not char then return end
-	local ok, err = Character.SetFieldVisibility(char, key, level, ctx.now())
-	report(ctx, ok, err, "Visibility of " .. key .. " is now " .. level .. ".")
+-- Retired (v0.10): nothing is classified any more.
+handlers.vis = function(ctx)
+	Commands.RetiredVisibility(ctx)
 end
 
 handlers.clear = function(ctx, rest)
@@ -547,7 +554,12 @@ local function listCommand(listName)
 			local char = writable(ctx)
 			if not char then return end
 			local item, err = Character.AddItem(char, listName, values, ctx.now())
-			report(ctx, item, err, item and string.format("Added %s #%d [%s].", label, item.id, item.visibility))
+			report(ctx, item, err, item and string.format("Added %s #%d.", label, item.id))
+			return
+		end
+
+		if sub == "vis" then
+			Commands.RetiredVisibility(ctx)
 			return
 		end
 
@@ -564,12 +576,6 @@ local function listCommand(listName)
 			if not char then return end
 			local ok, err = Character.UpdateItem(char, listName, id, field:lower(), value, ctx.now())
 			report(ctx, ok, err, string.format("Updated %s #%d.", label, id))
-		elseif sub == "vis" then
-			local level = Util.NextWord(tail):lower()
-			local char = writable(ctx)
-			if not char then return end
-			local ok, err = Character.SetItemVisibility(char, listName, id, level, ctx.now())
-			report(ctx, ok, err, string.format("%s #%d is now %s.", label, id, level))
 		elseif sub == "remove" then
 			if Util.NextWord(tail):lower() ~= "confirm" then
 				out(ctx, string.format("This deletes %s #%d. Type: /dawnward %s remove %d confirm", label, id, listName, id))
@@ -589,13 +595,12 @@ handlers.family = listCommand("family")
 handlers.history = listCommand("history")
 
 handlers.export = function(ctx, rest)
-	local kind, opt = Util.NextWord(rest)
-	kind = kind:lower()
+	local kind = Util.NextWord(rest):lower()
 	if kind == "" then
 		kind = Transfer.KIND_BACKUP
 	end
 	if kind ~= Transfer.KIND_BACKUP and kind ~= Transfer.KIND_SHARE then
-		out(ctx, "Usage: /dawnward export backup [secrets] [biography] | /dawnward export share")
+		out(ctx, "Usage: /dawnward export backup | /dawnward export share")
 		return
 	end
 	local char = ctx.store:GetCharacter(ctx.characterKey)
@@ -603,29 +608,15 @@ handlers.export = function(ctx, rest)
 		out(ctx, "Nothing to export yet.")
 		return
 	end
-	local options = {}
-	for word in opt:lower():gmatch("%S+") do
-		options[word] = true
-	end
-	local includeSecrets = kind == Transfer.KIND_BACKUP and options.secrets == true
-	local includeBiography = kind == Transfer.KIND_BACKUP and options.biography == true
-	local text, err = Transfer.Export(char, kind, { includeSecrets = includeSecrets,
-		includeBiography = includeBiography, addonVersion = ctx.version, characterKey = ctx.characterKey })
+	-- v0.10: a personal backup always holds everything (the older options
+	-- "secrets" and "biography" are still accepted and change nothing).
+	local text, err = Transfer.Export(char, kind, { addonVersion = ctx.version, characterKey = ctx.characterKey })
 	if not text then
 		out(ctx, "Export failed: " .. tostring(err))
 		return
 	end
-	local title
-	if kind == Transfer.KIND_SHARE then
-		title = "Share export - public facts only"
-	elseif includeSecrets then
-		title = "Backup WITH SECRETS - do not share this text"
-	else
-		title = "Personal backup - includes private facts, not secrets"
-	end
-	if includeBiography then
-		title = title .. " (with stored biography)"
-	end
+	local title = kind == Transfer.KIND_SHARE and "Share export - your published profile"
+		or "Personal backup - everything about this character; keep it to yourself"
 	if ctx.ui and ctx.ui.ShowExport then
 		ctx.ui.ShowExport(title, text)
 		out(ctx, title .. ": copy it from the window (Ctrl+C).")
@@ -695,7 +686,7 @@ handlers.import = function(ctx, rest)
 		ctx.store:ReplaceCharacter(ctx.characterKey, merged)
 		ctx.pendingImport = nil
 		out(ctx, "Imported into " .. modeLabel(ctx) .. "." ..
-			(carried > 0 and (" Kept " .. carried .. " existing secret facts.") or "") ..
+			(carried > 0 and (" Kept " .. carried .. " existing records the older backup left out.") or "") ..
 			" Use /dawnward import undo to go back.")
 		return
 	end

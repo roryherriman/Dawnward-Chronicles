@@ -87,27 +87,23 @@ return function(t, expect)
 			expect.equal(ns.MainWindow.CurrentSection(), "settings", "the status line opens the Total RP 3 page")
 		end)
 
-		t:it("shows homeland and privacy chips from the profile's own data, never invented", function()
+		t:it("shows the homeland chip from the profile's own data, never invented, and no privacy chip", function()
 			local mock, env, ns, frame = open()
 			expect.falsy(frame.homelandChip:IsShown(), "no homeland set: no chip")
-			expect.falsy(frame.privacyChip:IsShown(), "no profile field set: nothing to summarise")
+			expect.equal(frame.privacyChip, nil, "no privacy chip (v0.10)")
+			expect.equal(ns.MainWindow.PrivacySummary, nil)
 			mock.Slash("set name Aelin")
-			expect.truthy(frame.privacyChip:IsShown())
-			expect.equal(frame.privacyChip.label:GetText(), "Private")
-			expect.equal(frame.privacyChip.tone, "private")
 			mock.Slash("set homeland Goldshire")
 			expect.truthy(frame.homelandChip:IsShown())
 			expect.equal(frame.homelandChip.label:GetText(), "Goldshire")
-			mock.Slash("vis name public")
-			expect.equal(frame.privacyChip.label:GetText(), "1 of 2 public")
-			expect.equal(frame.privacyChip.tone, "public")
-			expect.truthy(frame.privacyChip.tooltipText:find("1 of your 2 profile fields are Public", 1, true))
-			mock.Slash("vis homeland public")
-			expect.equal(frame.privacyChip.label:GetText(), "Public")
-			-- Showing the chips stores nothing.
+			-- Centred under the identity line.
+			local p = frame.homelandChip.__points[1]
+			expect.equal(p[1], "TOPLEFT")
+			expect.equal(p[4], -frame.homelandChip:GetWidth() / 2)
+			expect.equal(frame.chipRow.total, frame.homelandChip:GetWidth())
+			-- Showing the chip stores nothing.
 			local char = env.DawnwardChroniclesDB.characters[CHAR]
 			expect.equal(char.fields.homeland.value, "Goldshire")
-			expect.equal(ns.MainWindow.PrivacySummary({ fields = {} }), nil)
 		end)
 
 		t:it("keeps the chips inside the rail, cutting a long homeland with its full name on hover", function()
@@ -192,7 +188,7 @@ return function(t, expect)
 			expect.falsy(frame.portraitRing.round)
 			expect.truthy(frame.portrait.ring:IsShown())
 			expect.equal(frame.levelBadge.pill, nil)
-			expect.equal(frame.privacyChip.pill, nil)
+			expect.equal(frame.homelandChip.pill, nil)
 			-- With masks (stubbed as the client's CreateMaskTexture would give).
 			local mock, _, ns = Boot.Load()
 			local masks = 0
@@ -204,14 +200,15 @@ return function(t, expect)
 			end
 			Boot.Login(mock)
 			mock.Slash("set name Aelin")
+			mock.Slash("set homeland Goldshire")
 			mock.Slash("")
 			local round = ns.MainWindow.GetFrame()
 			-- AddMaskTexture is a no-op in the mock, so it is present on textures.
 			expect.truthy(round.portraitRing.round, "ring, gap and well are discs")
 			expect.falsy(round.portrait.ring:IsShown(), "the tracking-ring stand-in is hidden")
 			expect.truthy(round.levelBadge.pill ~= nil, "the level badge is a pill")
-			expect.truthy(round.privacyChip.pill ~= nil, "chips are pills")
-			expect.falsy(round.privacyChip.bg:IsShown(), "no square fill under a pill")
+			expect.truthy(round.homelandChip.pill ~= nil, "chips are pills")
+			expect.falsy(round.homelandChip.bg:IsShown(), "no square fill under a pill")
 			expect.truthy(round.tabs[1].badgeBg.round, "the Story badge is a disc")
 			expect.truthy(masks > 0)
 		end)
@@ -458,7 +455,7 @@ return function(t, expect)
 			mock.guild = { name = "The Lantern Watch", rank = "Member" }
 			mock.Slash("set name Aelin Brightwater")
 			mock.Slash("set title Keeper of the Road")
-			mock.Slash("vis title public")
+			mock.Vis("vis title public")
 			mock.Slash("set summary Kind to strangers.")
 			local _, section = showcaseOf(ns)
 			local view = section.showcaseView
@@ -473,11 +470,7 @@ return function(t, expect)
 			expect.equal(values[4], "REALM=Test Realm")
 			expect.equal(view.own.name:GetText(), "Aelin Brightwater")
 			expect.equal(view.own.summary:GetText(), "Kind to strangers.")
-			local chips = {}
-			for _, c in ipairs(view.own.chips) do
-				if c:IsShown() then chips[#chips + 1] = c.label:GetText() end
-			end
-			expect.deepEqual(chips, { "Name is Private", "Title is Public", "Summary is Private" })
+			expect.equal(view.own.chips, nil, "no \"Name is Private\" chips (v0.10)")
 			-- Nothing about the game is stored.
 			local char = ns.Actions.Character(ns.ctx)
 			expect.equal(char.fields.guild, nil)

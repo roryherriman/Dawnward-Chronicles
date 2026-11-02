@@ -2,8 +2,8 @@
 -- from chat. Every change goes through Actions.WithCharacter (read-only
 -- data refused, nothing created by a failed first write).
 local _, ns = ...
-local Util, Commands, Actions, Records, Memories, Arcs, Goals, Identity, Continuity =
-	ns.Util, ns.Commands, ns.Actions, ns.Records, ns.Memories, ns.Arcs, ns.Goals, ns.Identity, ns.Continuity
+local Util, Commands, Actions, Memories, Arcs, Goals, Identity, Continuity =
+	ns.Util, ns.Commands, ns.Actions, ns.Memories, ns.Arcs, ns.Goals, ns.Identity, ns.Continuity
 
 local NarrativeCommands = {}
 ns.NarrativeCommands = NarrativeCommands
@@ -24,7 +24,8 @@ local function id(word)
 	return Util.IsPositiveInteger(n) and n or nil
 end
 
--- Shared subcommands for record lists: accept, dispute, remove, vis.
+-- Shared subcommands for record lists: accept, dispute, remove (and the
+-- retired vis).
 local function common(ctx, mod, label, sub, n, tail)
 	if sub == "accept" then
 		run(ctx, function(char, now) return mod.Accept(char, n, now) end, label .. " #" .. n .. " is now established.")
@@ -37,9 +38,7 @@ local function common(ctx, mod, label, sub, n, tail)
 		end
 		run(ctx, function(char) return mod.Remove(char, n) end, "Removed " .. label:lower() .. " #" .. n .. ".")
 	elseif sub == "vis" then
-		local level = Util.NextWord(tail):lower()
-		run(ctx, function(char, now) return mod.SetVisibility(char, n, level, now) end,
-			label .. " #" .. n .. " is now " .. level .. ".")
+		Commands.RetiredVisibility(ctx)
 	else
 		return false
 	end
@@ -47,7 +46,7 @@ local function common(ctx, mod, label, sub, n, tail)
 end
 
 local function line(r, body)
-	return string.format("  #%d %s [%s]", r.id, preview(body or ""), Records.Label(r))
+	return string.format("  #%d %s [%s, %s]", r.id, preview(body or ""), r.provenance, r.status)
 end
 
 Commands.Register("memory", function(ctx, rest)
@@ -61,17 +60,17 @@ Commands.Register("memory", function(ctx, rest)
 			local m = list[i]
 			out(ctx, line(m, (m.title and (m.title .. ": ") or "") .. (m.text or "")))
 		end
-		out(ctx, "memory add <text> | accept|dispute|vis|remove <#> | supersede <#> <by #>")
+		out(ctx, "memory add <text> | accept|dispute|remove <#> | supersede <#> <by #>")
 		return
 	elseif sub == "add" then
 		run(ctx, function(c, now) return Memories.Add(c, { text = args }, "player", now) end,
-			function(m) return "Added memory #" .. m.id .. " (established, " .. m.visibility .. ")." end)
+			function(m) return "Added memory #" .. m.id .. " (established)." end)
 		return
 	end
 	local idWord, tail = Util.NextWord(args)
 	local n = id(idWord)
 	if not n then
-		out(ctx, "Usage: /dawnward memory list | add <text> | accept|dispute|vis|remove|supersede <#>")
+		out(ctx, "Usage: /dawnward memory list | add <text> | accept|dispute|remove|supersede <#>")
 		return
 	end
 	if sub == "supersede" then
@@ -85,10 +84,10 @@ end)
 -- Examples for the commands that need a record number (#51).
 local EXAMPLES = {
 	arc = { state = "state 7 concluded", rename = "rename 7 Where I belong", turn = "turn 7 Left home",
-		accept = "accept 7", dispute = "dispute 7", vis = "vis 7 public", remove = "remove 7 confirm" },
+		accept = "accept 7", dispute = "dispute 7", remove = "remove 7 confirm" },
 	goal = { state = "state 12 achieved", milestone = "milestone 12 Find a ship", done = "done 12 1",
 		undone = "undone 12 1", level = "level 12 20",
-		reputation = "reputation 12 honored Stormwind", vis = "vis 12 public", remove = "remove 12 confirm" },
+		reputation = "reputation 12 honored Stormwind", remove = "remove 12 confirm" },
 }
 
 --- A helpful message when a command needs a record number and got none.
@@ -112,7 +111,7 @@ Commands.Register("arc", function(ctx, rest)
 		for _, a in ipairs(list) do
 			out(ctx, line(a, string.format("%s (%s, %s, %d turning points)", a.title, a.kind, a.state, #a.turningPoints)))
 		end
-		out(ctx, "arc add <title> | accept|reject|dispute|vis|remove <#> | state <#> "
+		out(ctx, "arc add <title> | accept|reject|dispute|remove <#> | state <#> "
 			.. "active|paused|concluded|abandoned | rename <#> <title> | turn <#> <note>")
 		return
 	elseif sub == "add" then
@@ -158,11 +157,11 @@ Commands.Register("goal", function(ctx, rest)
 		end
 		out(ctx, "goal add <title> | goal level <#> <target level> | goal reputation <#> <standing> <faction> | "
 			.. "goal milestone <#> <text> | goal done <#> <n> | "
-			.. "goal state <#> <state> | goal vis|remove <#>")
+			.. "goal state <#> <state> | goal remove <#>")
 		return
 	elseif sub == "add" then
 		run(ctx, function(c, now) return Goals.Add(c, { title = args }, now) end,
-			function(g) return "Added goal #" .. g.id .. " (private)." end)
+			function(g) return "Added goal #" .. g.id .. "." end)
 		return
 	end
 	local idWord, tail = Util.NextWord(args)
@@ -204,35 +203,33 @@ Commands.Register("stance", function(ctx, rest)
 	local char = Actions.Character(ctx)
 	if sub == "" or sub == "list" then
 		local list = char and char.story.identity or {}
-		out(ctx, string.format("Public persona and private convictions (%d):", #list))
+		out(ctx, string.format("Stances: persona and inner conviction (%d):", #list))
 		for _, i in ipairs(list) do
-			out(ctx, line(i, string.format("%s - public: %s / private: %s [%s]%s", i.subject, i.persona or "-",
-				i.conviction or "-", i.convictionVisibility, i.deliberate and " (deliberate)" or "")))
+			out(ctx, line(i, string.format("%s - persona: %s / inner: %s%s", i.subject, i.persona or "-",
+				i.conviction or "-", i.deliberate and " (deliberate)" or "")))
 		end
-		out(ctx, "stance add <subject>; <public stance>; <private conviction>   (either side may be empty)")
-		out(ctx, "stance vis <#> <level> (public side) | stance private <#> <level> | stance remove <#> confirm")
+		out(ctx, "stance add <subject>; <persona>; <inner conviction>   (either side may be empty)")
+		out(ctx, "stance remove <#> confirm   (the persona is part of your profile; the inner conviction never is)")
 		return
 	elseif sub == "add" then
 		-- ";" separates the parts: WoW's chat box doubles a typed "|".
 		local subject, persona, conviction = args:match("^([^;]+);([^;]*);?(.*)$")
 		if not subject then
-			out(ctx, "Usage: /dawnward stance add <subject>; <public stance>; <private conviction>")
+			out(ctx, "Usage: /dawnward stance add <subject>; <persona>; <inner conviction>")
 			return
 		end
 		run(ctx, function(c, now) return Identity.Add(c, { subject = subject, persona = persona, conviction = conviction },
-			now) end, function(i) return "Added stance #" .. i.id .. " (both sides private until you change them)." end)
+			now) end, function(i) return "Added stance #" .. i.id .. "." end)
 		return
 	end
 	local idWord, tail = Util.NextWord(args)
 	local n = id(idWord)
 	if not n then
-		out(ctx, "Usage: /dawnward stance list | add ... | vis|private|remove <#> ...")
+		out(ctx, "Usage: /dawnward stance list | add ... | remove <#> confirm")
 		return
 	end
 	if sub == "private" then
-		local level = Util.NextWord(tail):lower()
-		run(ctx, function(c, now) return Identity.SetConvictionVisibility(c, n, level, now) end,
-			"The private conviction of stance #" .. n .. " is now " .. level .. ".")
+		Commands.RetiredVisibility(ctx)
 	elseif not common(ctx, Identity, "Stance", sub, n, tail) then
 		out(ctx, "Unknown stance command '" .. sub .. "'.")
 	end
@@ -253,7 +250,7 @@ local function examineLines(ctx, char, finding)
 			if side.at and side.at > 0 then
 				meta[#meta + 1] = ctx.formatTime and ctx.formatTime(side.at) or tostring(side.at)
 			end
-			for _, k in ipairs({ "provenance", "status", "visibility" }) do
+			for _, k in ipairs({ "provenance", "status" }) do
 				if side[k] then meta[#meta + 1] = side[k] end
 			end
 			if #meta > 0 then parts[#parts + 1] = "[" .. table.concat(meta, ", ") .. "]" end
@@ -297,8 +294,7 @@ Commands.Register("continuity", function(ctx, rest)
 			return
 		end
 		run(ctx, function(c) return Continuity.Undo(c, a.review.key) end,
-			"Answer taken back. If the records still disagree, the finding is open again. Nothing was made "
-				.. "Public: a hidden side that was Public is now Private.")
+			"Answer taken back. If the records still disagree, the finding is open again.")
 		return
 	elseif sub == "examine" or sub == "explain" then
 		local word, tail = Util.NextWord(args)
@@ -345,7 +341,7 @@ Commands.Register("person", function(ctx, rest)
 				p.relation and (": " .. p.relation) or "")))
 		end
 		out(ctx, "person add npc|player|family|other <name>; <relation>   (players: Name-Realm)")
-		out(ctx, "person feel <#> <how they feel> | person vis <#> <level> | person remove <#> confirm")
+		out(ctx, "person feel <#> <how they feel> | person remove <#> confirm")
 		return
 	elseif sub == "add" then
 		local kind, restArgs = Util.NextWord(args)
@@ -361,18 +357,18 @@ Commands.Register("person", function(ctx, rest)
 			name = name or who
 		end
 		run(ctx, function(c, now) return ns.People.Add(c, { kind = kind:lower(), name = name, realm = realm,
-			relation = relation }, now) end, function(p) return "Added #" .. p.id .. " " .. p.name .. " (private)." end)
+			relation = relation }, now) end, function(p) return "Added #" .. p.id .. " " .. p.name .. "." end)
 		return
 	end
 	local idWord, tail = Util.NextWord(args)
 	local n = id(idWord)
 	if not n then
-		out(ctx, "Usage: /dawnward person list | add ... | feel|vis|remove <#> ...")
+		out(ctx, "Usage: /dawnward person list | add ... | feel|remove <#> ...")
 		return
 	end
 	if sub == "feel" then
 		run(ctx, function(c, now) return ns.People.Edit(c, n, { feelings = tail }, now) end,
-			"Noted how they feel about #" .. n .. " (private).")
+			"Noted how they feel about #" .. n .. ".")
 	elseif not common(ctx, ns.People, "Person", sub, n, tail) then
 		out(ctx, "Unknown person command '" .. sub .. "'.")
 	end
@@ -406,14 +402,13 @@ Commands.Register("timeline", function(ctx, rest)
 	local dated, undated = ns.Timeline.Build(char, { limit = n })
 	out(ctx, string.format("Timeline, newest first (%d shown):", #dated))
 	for _, item in ipairs(dated) do
-		out(ctx, string.format("  %s  %s: %s [%s]", ctx.formatTime and ctx.formatTime(item.at) or tostring(item.at),
-			item.kind, preview(item.text), item.visibility))
+		out(ctx, string.format("  %s  %s: %s", ctx.formatTime and ctx.formatTime(item.at) or tostring(item.at),
+			item.kind, preview(item.text)))
 	end
 	if #undated > 0 then
 		out(ctx, "Before the chronicle (undated):")
 		for _, item in ipairs(undated) do
-			out(ctx, string.format("  %s%s [%s]", item.when and (item.when .. ": ") or "", preview(item.text),
-				item.visibility))
+			out(ctx, string.format("  %s%s", item.when and (item.when .. ": ") or "", preview(item.text)))
 		end
 	end
 end)

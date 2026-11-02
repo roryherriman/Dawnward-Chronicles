@@ -515,24 +515,15 @@ local function shorten(s, max)
 end
 
 --- The "Your character" content, from the player's own profile fields:
--- { name, title, pronouns, summary, chips = { { text, tone } } }. Pure.
+-- { name, title, pronouns, summary, empty }. Pure.
 function Showcase.OwnWords(char)
 	local fields = char and char.fields or {}
 	local function value(key)
 		return fields[key] and text(fields[key].value)
 	end
-	local out = { name = value("name"), title = value("title"), pronouns = value("pronouns"), chips = {} }
+	local out = { name = value("name"), title = value("title"), pronouns = value("pronouns") }
 	local summary = value("summary")
 	out.summary = summary and shorten(summary, Showcase.SUMMARY_MAX)
-	for _, key in ipairs({ "name", "title", "pronouns", "summary" }) do
-		local entry = fields[key]
-		if entry and text(entry.value) then
-			local level = entry.visibility or "private"
-			local label = ns.Schema and ns.Schema.FIELD_BY_KEY[key] and ns.Schema.FIELD_BY_KEY[key].label or key
-			out.chips[#out.chips + 1] = { text = label .. " is " .. (ns.Themes.VISIBILITY_LABELS[level] or level),
-				tone = level }
-		end
-	end
 	out.empty = not (out.name or out.title or out.pronouns or out.summary)
 	return out
 end
@@ -594,7 +585,7 @@ function Showcase.View(parent, width, height, opts)
 	end
 	v.game:SetHeight(P.rowsTop + 4 * P.rowHeight + P.padY - 6)
 
-	-- In your own words: written by the player, with each field's visibility.
+	-- In your own words: written by the player.
 	v.own = panel("In your own words")
 	v.own:SetPoint("TOPLEFT", v.game, "BOTTOMLEFT", 0, -P.gap)
 	v.own.name = Widgets.Label(v.own, "GameFontNormalLarge", true, "title")
@@ -605,11 +596,10 @@ function Showcase.View(parent, width, height, opts)
 	v.own.pronouns:SetWidth(innerWidth)
 	v.own.summary = Widgets.Label(v.own, "reading", true, "reading")
 	v.own.summary:SetWidth(innerWidth)
-	v.own.chips = {}
 	v.own.edit = Widgets.Button(v.own, "Edit", 56, Style.CONTROL.compact, "ghost")
 	v.own.edit:SetPoint("TOPRIGHT", -P.padX, -(P.padY - 6))
 	v.own.edit:SetScript("OnClick", function() if opts.onEditProfile then opts.onEditProfile() end end)
-	Widgets.Tooltip(v.own.edit, "Profile fields", "Edit what you wrote, and who may see each part.")
+	Widgets.Tooltip(v.own.edit, "Profile fields", "Edit what you wrote about your character.")
 
 	-- The portrait note and the player's own choice.
 	v.note = panel()
@@ -654,16 +644,6 @@ function Showcase.View(parent, width, height, opts)
 		v.note:SetHeight(12 + h + 10 + Style.CONTROL.compact + 12)
 	end
 
-	local function chip(i)
-		local c = v.own.chips[i]
-		if not c then
-			c = Widgets.Chip(v.own, "", "private")
-			c:SetMaxWidth(innerWidth)
-			v.own.chips[i] = c
-		end
-		return c
-	end
-
 	--- Re-reads the game identity and the player's words.
 	function v.Refresh(_, char, preferPortrait)
 		v.model:SetPreferPortrait(preferPortrait)
@@ -691,7 +671,7 @@ function Showcase.View(parent, width, height, opts)
 		end
 		if own.empty then
 			place(v.own.summary, "You have not written your character's name, title or summary yet. "
-				.. "Add them under Profile fields; only you decide what is public.", 10)
+				.. "Add them under Profile fields.", 10)
 			v.own.name:Hide(); v.own.title:Hide(); v.own.pronouns:Hide()
 		else
 			place(v.own.name, own.name, 4)
@@ -699,22 +679,6 @@ function Showcase.View(parent, width, height, opts)
 			place(v.own.pronouns, own.pronouns, 10)
 			place(v.own.summary, own.summary, 10)
 		end
-		local cx = P.padX
-		for i, c in ipairs(own.chips) do
-			local w = chip(i)
-			w:SetChip(c.text, c.tone)
-			local cw = w:GetWidth()
-			if cx > P.padX and cx + cw > colWidth - P.padX then
-				cx = P.padX
-				y = y + Widgets.CHIP_HEIGHT + 6
-			end
-			w:ClearAllPoints()
-			w:SetPoint("TOPLEFT", cx, -y)
-			w:Show()
-			cx = cx + cw + 6
-		end
-		for i = #own.chips + 1, #v.own.chips do v.own.chips[i]:Hide() end
-		if #own.chips > 0 then y = y + Widgets.CHIP_HEIGHT end
 		v.own:SetHeight(y + P.padY)
 		v.UpdateNote()
 	end

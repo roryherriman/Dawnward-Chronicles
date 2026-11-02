@@ -23,12 +23,53 @@ function Boot.ReadToc()
 	return files, meta
 end
 
+-- Test setup for older saved data (v0.10 retired the visibility commands):
+-- sets an item's stored visibility through the core, in the grammar the
+-- old commands had ("vis race public", "fact vis 1 public", "biography
+-- secret", "stance private 2 secret", ...). Goes through
+-- Actions.WithCharacter like a window edit. Returns the outcome message.
+local function attachVis(mock, ns)
+	function mock.Vis(line)
+		local w = {}
+		for word in line:gmatch("%S+") do w[#w + 1] = word end
+		local modules = { memory = ns.Memories, arc = ns.Arcs, goal = ns.Goals, stance = ns.Identity,
+			person = ns.People }
+		local _, message = ns.Actions.WithCharacter(ns.ctx, function(char)
+			local now, r, err = ns.ctx.now()
+			local cmd = w[1]
+			if cmd == "vis" then
+				r, err = ns.Character.SetFieldVisibility(char, ns.Schema.FieldKey(w[2]:lower()), w[3], now)
+			elseif cmd == "fact" then
+				r, err = ns.Facts.SetVisibility(char, tonumber(w[3]), w[4], now)
+			elseif cmd == "personality" then
+				r, err = ns.Personality.SetVisibility(char, w[3], w[4], now)
+			elseif cmd == "journal" then
+				r, err = ns.Journal.SetVisibility(char, tonumber(w[3]), w[4], now)
+			elseif cmd == "family" or cmd == "history" then
+				r, err = ns.Character.SetItemVisibility(char, cmd, tonumber(w[3]), w[4], now)
+			elseif cmd == "biography" then
+				r, err = ns.Sources.SetVisibility(char, w[2], now)
+			elseif cmd == "stance" and w[2] == "private" then
+				r, err = ns.Identity.SetConvictionVisibility(char, tonumber(w[3]), w[4], now)
+			elseif modules[cmd] then
+				r, err = modules[cmd].SetVisibility(char, tonumber(w[3]), w[4], now)
+			else
+				error("mock.Vis: unknown line " .. line)
+			end
+			if not r then return ns.Actions.Fail(err) end
+			return r, "Visibility set (test setup)."
+		end)
+		return message
+	end
+end
+
 --- Loads every TOC file. Returns mock, env, ns.
 function Boot.Load(opts)
 	local files = Boot.ReadToc()
 	local mock = Mock.new(opts)
 	local env = Loader.NewEnv(mock.env)
 	local ns = Loader.Load(files, env, {})
+	attachVis(mock, ns)
 	return mock, env, ns
 end
 

@@ -498,7 +498,8 @@ return function(t, expect)
 	end)
 
 	t:describe("journal story entries (L2)", function()
-		t:it("drafts can be approved, marked as defining moments, edited and then made public", function()
+		t:it("drafts can be approved and marked as defining moments, which makes them part of the profile",
+			function()
 			local mock, env, ns = Boot.Start()
 			mock.Slash("set name Drafter")
 			turnIn(mock, 30, "Draft Quest")
@@ -510,19 +511,18 @@ return function(t, expect)
 			expect.equal(row.entry.kind, "story")
 			expect.truthy(row.approve:IsShown())
 			expect.truthy(row.edit:IsShown())
-			click(row.vis) -- private -> public: refused for a draft
-			local journal = env.DawnwardChroniclesDB.characters[CHAR].journal
+			expect.equal(row.vis, nil, "no visibility chip")
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			local journal = char.journal
 			local entry = journal[#journal]
-			expect.equal(entry.visibility, "private")
 			click(row.approve)
 			expect.equal(entry.status, "approved")
 			click(section.rows[1].mark)
 			expect.equal(entry.important, true)
-			click(section.rows[1].vis)
-			-- Publishing asks first and names where a defining moment can appear (#13).
-			local asked = mock.AcceptPopup()
-			expect.truthy(asked.text:find("Total RP 3 biography block", 1, true))
-			expect.equal(entry.visibility, "public")
+			expect.falsy(ns.Widgets.dialog and ns.Widgets.dialog:IsShown(), "nothing to confirm")
+			ns.Publication.Adopt(char, 1)
+			local moments = ns.Projection.GetPublic(char).journal
+			expect.equal(moments[1] and moments[1].id, entry.id, "a defining moment is part of the profile")
 			expect.truthy(ns.JournalView.MetaText(entry, function() return "d" end):find("defining moment", 1, true))
 		end)
 	end)

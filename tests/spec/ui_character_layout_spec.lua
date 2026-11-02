@@ -54,25 +54,23 @@ return function(t, expect)
 			expect.truthy(cols.child <= W, "and the content area")
 		end)
 
-		t:it("fits the chip and Edit inside every tile, whatever the visibility", function()
+		t:it("shows a tile's value and its Edit only, Edit inside the tile at the bottom right", function()
 			local mock, _, ns, section = openCharacter()
 			local CV, L = ns.CharacterView, ns.CharacterView.LAYOUT
 			mock.Slash("set name Aelin Brightwater")
 			local tile = CV.TileWidth(ns.MainWindow.ContentWidth())
-			for _, level in ipairs({ "private", "public", "secret" }) do
-				mock.Slash("vis name " .. level)
-				local row = rowFor(section, "name")
-				expect.equal(row.vis:GetText(), ns.Themes.VISIBILITY_LABELS[level])
-				local chipRight = L.tilePadX + row.vis:GetWidth()
-				local editLeft = tile - L.tilePadY - row.edit:GetWidth()
-				expect.truthy(chipRight + 6 <= editLeft, level .. ": chip and Edit do not touch")
-				expect.equal(row.vis:GetWidth(), CV.ChipWidth(level), "the chip is as wide as its word")
-				expect.truthy(ns.Widgets.LabelFits(row.vis:GetText(), row.vis:GetWidth() + 2 * 4, row.vis:GetHeight(), "ghost"),
-					level .. " is readable in its chip")
-			end
 			local row = rowFor(section, "name")
+			expect.equal(row.vis, nil, "no visibility chip")
+			local point, x, y = anchor(row.edit)
+			expect.equal(point, "BOTTOMRIGHT")
+			expect.equal(x, -L.tilePadY)
+			expect.equal(y, L.tilePadY)
+			expect.truthy(row.edit:GetWidth() + L.tilePadY <= tile)
 			expect.equal(row.edit:GetHeight(), ns.Style.CONTROL.compact, "buttons in cards are 30 high")
-			expect.equal(row.vis:GetHeight(), ns.Widgets.CHIP_HEIGHT)
+			-- Every visible text in the tile is the label, the value or Edit.
+			for _, fs in ipairs({ row.key, row.value }) do
+				expect.falsy(fs:GetText():find("Private", 1, true) or fs:GetText():find("Public", 1, true))
+			end
 		end)
 
 		t:it("keeps a tile's value clear of its controls, even when it wraps", function()
@@ -101,7 +99,7 @@ return function(t, expect)
 			expect.equal(age.key.__template, ns.Style.Font("GameFontNormalSmall"))
 		end)
 
-		t:it("puts a card's chip and Edit on its label row, and its text in the reading style", function()
+		t:it("puts a card's Edit on its label row, and its text in the reading style", function()
 			local mock, _, ns, section = openCharacter()
 			local L = ns.CharacterView.LAYOUT
 			mock.Slash("set summary Raised above the Lion's Pride Inn by a widowed innkeeper.")
@@ -112,7 +110,7 @@ return function(t, expect)
 			expect.equal(y, -L.cardPadY)
 			expect.equal(card.edit:GetText(), "Edit")
 			expect.equal(card.edit.variant, "default", "a secondary button, as the mockup")
-			expect.equal(card.vis.__points[1][2], card.edit, "the chip sits left of Edit")
+			expect.equal(card.vis, nil, "no chip beside Edit")
 			expect.truthy(card.reading:IsShown())
 			expect.equal(card.reading:GetText(), "Raised above the Lion's Pride Inn by a widowed innkeeper.")
 			expect.equal(card.reading.__template, ns.Style.FontFor("reading"))
@@ -130,15 +128,15 @@ return function(t, expect)
 			expect.truthy(introTop + 18 <= ML.contentTop + L.scrollTop, "above the tiles")
 			expect.equal(ML.contentTop - L.headerOffset, ML.headerTop, "header buttons start where the close button does")
 			local width = 0
-			for _, b in ipairs({ section.previewButton, section.showcaseButton, section.trp3Button, section.importButton }) do
+			expect.equal(section.previewButton, nil, "no public preview (v0.10)")
+			for _, b in ipairs({ section.showcaseButton, section.trp3Button, section.importButton }) do
 				expect.equal(b:GetHeight(), ns.Style.CONTROL.standard, b:GetText())
 				expect.truthy(ns.Widgets.LabelFits(b:GetText(), b:GetWidth(), b:GetHeight(), b.variant), b:GetText())
 				width = width + b:GetWidth() + 8
 			end
-			expect.truthy(width - 8 <= section.header:GetWidth(), "four buttons fit the header's room")
-			for _, text in ipairs({ "Back to profile", "Profile fields" }) do
-				expect.truthy(ns.Widgets.LabelFits(text, 128, ns.Style.CONTROL.standard), text)
-			end
+			expect.truthy(width - 8 <= section.header:GetWidth(), "three buttons fit the header's room")
+			expect.equal(anchor(section.showcaseButton), "TOPRIGHT", "Showcase takes the right end")
+			expect.truthy(ns.Widgets.LabelFits("Profile fields", 128, ns.Style.CONTROL.standard))
 		end)
 
 		t:it("names the view in the eyebrow and keeps only the way back in the showcase header", function()
@@ -147,14 +145,12 @@ return function(t, expect)
 			expect.equal(frame.eyebrow:GetText(), "CHARACTER")
 			click(section.showcaseButton)
 			expect.equal(frame.eyebrow:GetText(), "CHARACTER · SHOWCASE")
-			expect.falsy(section.previewButton:IsShown())
 			expect.falsy(section.importButton:IsShown())
 			expect.falsy(section.trp3Button:IsShown())
 			expect.equal(anchor(section.showcaseButton), "TOPRIGHT", "Profile fields takes the right end")
 			click(section.showcaseButton)
-			expect.truthy(section.previewButton:IsShown() and section.importButton:IsShown() and section.trp3Button:IsShown())
-			click(section.previewButton)
-			expect.equal(frame.eyebrow:GetText(), "CHARACTER · PUBLIC PREVIEW")
+			expect.truthy(section.importButton:IsShown() and section.trp3Button:IsShown())
+			expect.equal(frame.eyebrow:GetText(), "CHARACTER")
 			ns.MainWindow.Select("journal")
 			expect.equal(frame.eyebrow:GetText(), "JOURNAL", "other sections keep their own")
 		end)
@@ -199,7 +195,7 @@ return function(t, expect)
 			expect.truthy(last <= panelY + section.personality:GetHeight())
 		end)
 
-		t:it("shows a family member as name, relation and notes, with Edit and the chip inside", function()
+		t:it("shows a family member as name, relation and notes, with Edit inside", function()
 			local mock, env, ns, section = openCharacter()
 			local L = ns.CharacterView.LAYOUT
 			mock.Slash("family add mother Maybell Dawnwhisper")
@@ -216,9 +212,15 @@ return function(t, expect)
 			expect.equal(row.notes:GetText(), "innkeeper, Goldshire")
 			local w = row:GetWidth()
 			expect.truthy(10 + row.title:GetWidth() + 8 + row.edit:GetWidth() + 10 <= w, "text clear of Edit")
-			local _, _, chipY = anchor(row.vis)
-			expect.truthy(-chipY + row.vis:GetHeight() <= row:GetHeight(), "the chip inside the card")
-			expect.truthy(10 + row.vis:GetWidth() <= w)
+			expect.equal(row.vis, nil, "no visibility chip")
+			local textBottom = 0
+			for _, fs in ipairs({ row.title, row.detail, row.notes }) do
+				local _, _, fy = anchor(fs)
+				textBottom = math.max(textBottom, -fy + fs:GetStringHeight())
+			end
+			expect.truthy(textBottom + 10 <= row:GetHeight(), "the card ends just under its text, no hole")
+			expect.truthy(row:GetHeight() <= textBottom + 10 + 1 or row:GetHeight() == 10 + L.controlHeight + 10,
+				"and no taller than its text or its Edit")
 			expect.equal(row.edit:GetHeight(), L.controlHeight)
 			-- The Add line uses a quiet button, as the mockup's family "Add".
 			for i, spec in ipairs(section.specs) do
@@ -251,15 +253,13 @@ return function(t, expect)
 			expect.equal(sizes[section.intro.__template], 15, "the intro at 15, as the mockup")
 		end)
 
-		t:it("lays the public preview out as reading text at a readable measure", function()
-			local mock, _, ns, section = openCharacter()
-			mock.Slash("set name Aelin Brightwater")
-			mock.Slash("vis name public")
-			click(section.previewButton)
-			expect.equal(section.previewText.__template, ns.Style.FontFor("reading"))
-			expect.truthy(section.previewText:GetWidth() <= 620, "lines no longer than about 62 characters at 16")
-			expect.truthy(section.previewText:GetText():find("NAME", 1, true) == nil, "field names are not shouted")
-			expect.truthy(section.previewText:GetText():find("PROFILE", 1, true), "section titles are eyebrows")
+		t:it("has no public preview mode any more (v0.10)", function()
+			local _, _, ns, section = openCharacter()
+			expect.equal(section.previewScroll, nil)
+			expect.equal(ns.CharacterView.PublicPreview, nil)
+			expect.equal(ns.CharacterView.EYEBROWS.preview, nil)
+			section:SetMode("preview")
+			expect.equal(section.mode, "profile", "an old mode name falls back to the profile")
 		end)
 	end)
 end
