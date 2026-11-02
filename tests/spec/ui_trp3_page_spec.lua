@@ -489,6 +489,31 @@ local function legacySpec(t, expect)
 			expect.equal(page.hidden.bg.__color[3], ns.Style.Tones(theme).field[3])
 		end)
 
+		t:it("v0.10: Synchronization status shows every part, the last successful sync and the last problem", function()
+			local mock, _, ns = start()
+			publicFact(mock)
+			local page = open(ns)
+			go(page, "status")
+			local names = {}
+			for i, row in ipairs(page.statusRows) do names[i] = row.name:GetText() end
+			expect.deepEqual(names, { "Biography", "Personality", "Character information", "Additional information",
+				"At First Glance", "Last successful sync", "Last problem", "Conflicts" })
+			expect.equal(page.statusRows[6].value:GetText(), "Nothing written yet")
+			expect.equal(page.statusRows[7].value:GetText(), "None")
+			mock.Slash("trp3 enable about confirm")
+			mock.RunTimers()
+			ns.MainWindow.Refresh()
+			expect.truthy(page.statusRows[6].value:GetText():find("%d%d%d%d, %d%d:%d%d"), "a date and time")
+			expect.truthy(page.statusRows[1].value:GetText():find("^Up to date"), page.statusRows[1].value:GetText())
+			expect.truthy(page.statusRows[1].hover.tooltipText:find("biography:", 1, true), "the About page's trace")
+			-- A problem in the log shows, in the amber warning tone.
+			table.insert(ns.ctx.trp3Deps().ledger.log, { at = 1700000500, text = "about: write failed (test); restored" })
+			ns.MainWindow.Refresh()
+			expect.truthy(page.statusRows[7].value:GetText():find("write failed", 1, true))
+			expect.truthy(page.statusRows[7].value.warning)
+			expect.truthy(ns.Style.TextWidth(ns.TRP3Page.BACKUP_NOTE, "small") <= 3 * page.backupNote:GetWidth())
+		end)
+
 		t:it("the chat commands still behave as before after the refactor", function()
 			local mock, _, _, fake = start()
 			publicFact(mock)

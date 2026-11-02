@@ -1639,6 +1639,13 @@ function TRP3Page.RefreshStatus(page, view)
 			Widgets.Tooltip(row.hover, line[1], line[3] and (line[2] .. "\n\n" .. line[3]) or line[2])
 		end
 	end
+	-- The Biography line's hover traces the About page from your story to
+	-- Total RP 3, link by link (the same read-only lines as trp3 diagnose).
+	local d = deps()
+	local ok, trace = pcall(function() return d and ns.TRP3Commands.AboutDiagnostics(d) end)
+	if ok and type(trace) == "table" and lines[1] then
+		Widgets.Tooltip(page.statusRows[1].hover, lines[1][1], lines[1][2] .. "\n\n" .. plain(table.concat(trace, "\n")))
+	end
 	page.hiddenText:SetText(TRP3Page.HiddenText(char))
 	Widgets.Tooltip(page.hiddenHover, "Never sent", TRP3Page.HiddenText(char) .. "\n\n" .. TRP3Page.UNSUPPORTED_DETAIL)
 end
