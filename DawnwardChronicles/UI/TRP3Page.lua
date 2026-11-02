@@ -11,30 +11,34 @@
 -- every write and the read-back with automatic undo. Opening or refreshing
 -- the page only reads (Adapter.Probe, Sync.Check, the profile projection).
 --
--- v0.10 layout: the summary strip on top (Total RP 3 · linked profile ·
--- sync), then a section rail on the left and one section card beside it:
---   Connection              the active profile, the connected character,
---                           the last successful sync; Connect everything…,
---                           Create a profile… / Switch profile…, Preview
---                           profile, Refresh connection
---   Character information   who keeps each field and additional-information
---                           entry up to date (Dawnward / TRP3 / Off), staged
---                           on the page until "Authorize…" (with its
---                           confirmation), and an explicit Import per field
---   Biography               the About page: content, template and style, the
---                           proposed change, and a preview of what Total RP 3
---                           will show (headings, order, frames)
---   Personality             Dawnward's traits, the proposed change and a
---                           preview of the trait bars
---   Appearance and At First Glance
---                           the appearance fields and the At First Glance
---                           entries, with the same staging and Authorize…
---   Synchronization status  every part's state, the last successful sync,
---                           the last problem, and what is never sent or not
---                           supported
---   Conflicts and recovery  the conflict callout (Keep yours / Use
---                           Dawnward's) and the backups, with Roll back… and
---                           Exact restore… behind their confirmations
+-- v0.10.1 layout (the Total RP 3 profile editor): the summary strip on top
+-- (Total RP 3 · linked profile · sync), then a section rail on the left and
+-- one section card beside it:
+--   Profile          the profile icon and class colour (editors), then who
+--                    keeps each identity, title, race, class, physical and
+--                    additional-information field up to date (Dawnward /
+--                    TRP3 / Off), staged until "Authorize…", with Import
+--   Biography        the biography editor (UI/TRP3BiographyPanel.lua when
+--                    present; else the About page's content, template and
+--                    style, the proposed change and the preview)
+--   Personality      Dawnward's traits (one per axis), the proposed change,
+--                    the trait bars, and the player's own Total RP 3 traits
+--                    (read only)
+--   At First Glance  the five entries: editor, icon picker, shown/hidden,
+--                    order, a preview, and At First Glance sync on or off
+--                    (UI/TRP3MiscSections.lua)
+--   Status and OOC   Currently and OOC (editors), roleplay status and
+--                    walk-up, and the roleplay style: read only unless the
+--                    player lets Dawnward manage a preference
+--                    (UI/TRP3MiscSections.lua)
+--   Synchronization  three views behind a switch: Connection (the active
+--                    profile, the connected character, the last successful
+--                    sync; Connect everything…, Create a profile… / Switch
+--                    profile…, Preview profile, Refresh connection,
+--                    Disconnect…), Status (every part's state, the last
+--                    problem, what is never sent) and Recovery (the conflict
+--                    callout and the backups, with Roll back… and Exact
+--                    restore… behind their confirmations)
 -- A section that needs the player carries a coloured mark in the rail
 -- (amber: waiting for a choice; red: blocked or in conflict), so nothing is
 -- hidden behind the section that is not open.
@@ -45,33 +49,46 @@ local TRP3Page = {}
 ns.TRP3Page = TRP3Page
 
 TRP3Page.SECTIONS = {
-	{ id = "connection", label = "Connection" },
-	{ id = "character", label = "Character information" },
+	{ id = "profile", label = "Profile" },
 	{ id = "about", label = "Biography" },
 	{ id = "traits", label = "Personality" },
-	{ id = "appearance", label = "Appearance and At First Glance" },
-	{ id = "status", label = "Synchronization status" },
-	{ id = "recovery", label = "Conflicts and recovery" },
+	{ id = "glance", label = "At First Glance" },
+	{ id = "status", label = "Status and OOC" },
+	{ id = "sync", label = "Synchronization" },
 }
 -- Earlier name of the same list (the rail replaces the feature tabs).
 TRP3Page.FEATURES = TRP3Page.SECTIONS
 local FEATURE_LABEL = { about = "Biography", traits = "Personality", fields = "Profile fields", mappings = "Mappings",
-	misc = "Additional information", glance = "At First Glance", overview = "Overview" }
+	misc = "Additional information", glance = "At First Glance", overview = "Overview", status = "Status and OOC",
+	look = "Profile icon and colour", style = "Roleplay style" }
 local SECTION_LABEL = {}
 for _, s in ipairs(TRP3Page.SECTIONS) do SECTION_LABEL[s.id] = s.label end
 
--- Which mappings each section lists (Ledger.MAPPINGS order). The biography
--- and traits are switched on their own sections (Enable syncing… / Stop
--- syncing), so their rows are not repeated.
-TRP3Page.APPEARANCE_MAPPINGS = { eyes = true, height = true, weight = true, glance = true }
-TRP3Page.SECTION_MAPPINGS = { character = {}, appearance = {} }
+-- Synchronization's three views, behind the switch under its title.
+TRP3Page.SYNC_VIEWS = { { id = "connection", label = "Connection" }, { id = "syncstatus", label = "Status" },
+	{ id = "recovery", label = "Recovery" } }
+-- The rail item each view belongs to (a view is what page.feature names).
+TRP3Page.RAIL_OF = { profile = "profile", about = "about", traits = "traits", glance = "glance", status = "status",
+	connection = "sync", syncstatus = "sync", recovery = "sync" }
+-- Earlier names of the sections (v0.9 tabs, v0.10 rail).
+TRP3Page.LEGACY = { overview = "connection", mappings = "profile", character = "profile", appearance = "profile",
+	sync = "connection" }
+for _, v in ipairs(TRP3Page.SYNC_VIEWS) do SECTION_LABEL[v.id] = "Synchronization" end
+
+-- Which mappings the Profile section lists (Ledger.MAPPINGS order): every
+-- profile field and additional-information entry, and the profile icon and
+-- class colour. The biography, traits, At First Glance, status and style
+-- have sections of their own.
+TRP3Page.SECTION_MAPPINGS = { profile = {} }
 for _, id in ipairs(ns.TRP3Ledger.MAPPINGS) do
-	if TRP3Page.APPEARANCE_MAPPINGS[id] then
-		table.insert(TRP3Page.SECTION_MAPPINGS.appearance, id)
-	elseif id ~= "about" and id ~= "traits" then
-		table.insert(TRP3Page.SECTION_MAPPINGS.character, id)
+	local _, feature = ns.TRP3Sync.MappingOf(id)
+	if feature == "fields" or feature == "misc" or feature == "look" then
+		table.insert(TRP3Page.SECTION_MAPPINGS.profile, id)
 	end
 end
+-- Earlier names (v0.10): one list now.
+TRP3Page.SECTION_MAPPINGS.character = TRP3Page.SECTION_MAPPINGS.profile
+TRP3Page.SECTION_MAPPINGS.appearance = {}
 
 -- The Biography's choices, each a segmented control writing one story
 -- preference (Actions.SetStoryPref).
@@ -96,6 +113,7 @@ TRP3Page.CHOICE_LABEL = 96    -- the choices' label column
 TRP3Page.CHOICE_ITEM = 86     -- one segment ("Silver Hand" gets 100)
 TRP3Page.CHOICE_GAP = 6
 TRP3Page.STATUS_ROW = 22      -- one status line
+TRP3Page.STATUS_LINES = 10    -- Synchronization > Status: one line per part
 TRP3Page.STATUS_LABEL = 170   -- the status label column
 TRP3Page.OVERVIEW_ROW = TRP3Page.STATUS_ROW
 TRP3Page.OVERVIEW_LABEL = 150 -- the connection lines' label column
@@ -123,7 +141,12 @@ TRP3Page.PREVIEW_LINES = 4    -- the plain preview lines kept for copying (Perso
 -- is wide enough for "Dawnward" in bold 14 (about 74 px with its insets).
 TRP3Page.MAP_ROW_HEIGHT = 37
 TRP3Page.MAP_ROW_GAP = 2
-TRP3Page.MAP_TOP = 110
+-- The profile icon and class colour editors sit between the shared-profile
+-- line and the rows (LOOK_TOP, LOOK_HEIGHT high).
+TRP3Page.LOOK_TOP = 108
+TRP3Page.LOOK_HEIGHT = 34
+TRP3Page.MAP_TOP = 152
+TRP3Page.SUBNAV_TOP = 46      -- a section's switch replaces its explanation
 TRP3Page.SELECTOR_WIDTH = 240
 TRP3Page.SELECTOR_HEIGHT = 20
 TRP3Page.CHOICE_HEIGHT = 30
@@ -142,6 +165,8 @@ TRP3Page.FIELD_CHOICES = { { id = "dawnward", label = "Dawnward" }, { id = "trp3
 
 TRP3Page.MAPPINGS_EXPLAIN = "Choose who keeps each part up to date. Dawnward writes from your character profile, "
 	.. "never over your own Total RP 3 text, and nothing changes until you Authorize."
+TRP3Page.PROFILE_EXPLAIN = "Your Total RP 3 identity: icon, colour, names, titles, race, class and details. "
+	.. "Choose who keeps each one up to date; nothing changes until you Authorize."
 TRP3Page.APPEARANCE_EXPLAIN = "Eye colour, height and build, and the At First Glance entries you wrote for Total "
 	.. "RP 3. Nothing changes until you Authorize."
 TRP3Page.CONNECTION_EXPLAIN = "Dawnward keeps one Total RP 3 profile up to date from this character. Your own "
@@ -170,6 +195,14 @@ TRP3Page.OPTIONAL_TEXT = "Total RP 3 is optional. Dawnward works fully without i
 	.. "story and chronicle never need it. If you use Total RP 3 3.4.1, Dawnward keeps your Total RP 3 profile "
 	.. "up to date from your Dawnward character once you connect it here."
 
+TRP3Page.SYNC_EXPLAIN = {
+	connection = "The Total RP 3 profile Dawnward keeps up to date, and when it last wrote. Your own Total RP 3 "
+		.. "text is never overwritten, and a backup is taken before every write.",
+	syncstatus = "What Dawnward keeps up to date in this profile, when it last wrote, and what it never sends.",
+	recovery = "If something Dawnward wrote was changed in Total RP 3, nothing is overwritten until you choose. "
+		.. "Every write is backed up first and can be rolled back.",
+}
+
 TRP3Page.EXPLAIN = {
 	about = "Dawnward only writes its own part of your \"About\" page. Everything you wrote in Total RP 3 "
 		.. "yourself stays exactly as it is.",
@@ -181,11 +214,11 @@ TRP3Page.EXPLAIN = {
 
 -- What is not supported (v0.10: accurate for the v0.9 profile model, where
 -- every field in Character information can be handed to Dawnward).
-TRP3Page.UNSUPPORTED_TEXT = "Never written: Currently and RP status, icon and colours, walk-up, roleplay "
-	.. "experience and music. Your one Name is never split; first and last name come from their own details."
+TRP3Page.UNSUPPORTED_TEXT = "Never written: roleplay experience and music (Total RP 3 settings), and a roleplay "
+	.. "style preference you did not hand to Dawnward. Your one Name is never split."
 TRP3Page.UNSUPPORTED_DETAIL = "Your story, profile details, family, beliefs, stances and defining moments go into "
-	.. "the About page, and your personality axes into traits. Each field in Character information and in "
-	.. "Appearance is written only while you hand it to Dawnward there."
+	.. "the About page, and your personality axes into traits. Each field in Profile, and each status, is "
+	.. "written only while you hand it to Dawnward there."
 
 TRP3Page.BACKUP_NOTE = "Every write is backed up first, read back, and undone at once if anything differs. "
 	.. "Select a backup to restore it."
@@ -565,7 +598,7 @@ local function buildRail(page, parent)
 		ns.Style.Register(b.mark, function(t, theme) ns.Style.Color(t, theme.accent) end)
 		b.mark:Hide()
 		b:SetScript("OnClick", function()
-			page.feature = s.id
+			page.feature = s.id == "sync" and (page.syncView or "connection") or s.id
 			page.mapPage = 1
 			MainWindow.Refresh()
 		end)
@@ -662,6 +695,17 @@ function TRP3Page.Build(parent, width, height)
 	page.chip:SetMaxWidth(180)
 	page.explain = paragraph(card, "muted", innerW, 2)
 	page.explain:SetPoint("TOPLEFT", P, -46)
+	-- Synchronization's switch (Connection · Status · Recovery), in place of
+	-- the explanation (which becomes its tooltip).
+	page.syncNav = Widgets.Segmented(card, TRP3Page.SYNC_VIEWS, 3 * 120, Style.CONTROL.segment, function(id)
+		page.feature = id
+		page.syncView = id
+		MainWindow.Refresh()
+	end)
+	page.syncNav.buttons[1]:SetPoint("TOPLEFT", card, "TOPLEFT", P, -TRP3Page.SUBNAV_TOP)
+	for _, b in ipairs(page.syncNav.buttons) do
+		Widgets.Tooltip(b, b:GetText(), TRP3Page.SYNC_EXPLAIN[b.segmentId])
+	end
 
 	-- Biography and Personality ------------------------------------------------------
 	local fv = sectionView(page, "about")
@@ -770,9 +814,23 @@ function TRP3Page.Build(parent, width, height)
 	page.previewTop.about = page.previewTop.traits + page.choices:GetHeight() + 10
 	page.render = newRenderer(page.preview, innerW, mainH - page.previewBottom - page.previewTop.about)
 
-	-- Character information and Appearance: who keeps each item ------------------------
-	local mv = sectionView(page, "character")
-	page.views.appearance = mv
+	-- v0.10.1: the Biography section is the biography editor
+	-- (UI/TRP3BiographyPanel.lua) when it is present; without it, the view
+	-- above shows the About page's choices and preview as before.
+	if ns.TRP3BiographyPanel and type(ns.TRP3BiographyPanel.Build) == "function" then
+		local bv = sectionView(page, "about")
+		local ok, panel = pcall(ns.TRP3BiographyPanel.Build, bv, innerW, mainH - HEAD - 14)
+		if ok and panel then
+			panel:SetPoint("TOPLEFT", bv, "TOPLEFT", P, -HEAD)
+			page.biography = panel
+		else
+			page.views.about = fv
+		end
+	end
+
+	-- Profile: the icon and colour editors, then who keeps each item -------------------
+	local mv = sectionView(page, "profile")
+	page.views.character, page.views.appearance = mv, mv
 	page.map = mv
 	page.sharedWarn = oneLine(mv, "body", innerW)
 	page.sharedWarn:SetPoint("TOPLEFT", P, -HEAD)
@@ -781,7 +839,8 @@ function TRP3Page.Build(parent, width, height)
 	local nameW = innerW - S - I - 12
 	local perPage = TRP3Page.MapPageSize(mainH)
 	page.mapPerPage = perPage
-	for _, sectionId in ipairs({ "character", "appearance" }) do
+	ns.TRP3MiscSections.BuildLook(page, mv, P, innerW)
+	for _, sectionId in ipairs({ "profile" }) do
 		for i, id in ipairs(TRP3Page.SECTION_MAPPINGS[sectionId]) do
 			local slot = (i - 1) % perPage
 			local row = CreateFrame("Frame", nil, mv)
@@ -810,7 +869,7 @@ function TRP3Page.Build(parent, width, height)
 				TRP3Page.Stage(page, id, policy)
 			end)
 			row.selector.buttons[1]:SetPoint("TOPLEFT", row, "TOPLEFT", innerW - S, 0)
-			if ns.TRP3FieldPlan.BY_ID[id] then
+			if ns.TRP3FieldPlan.BY_ID[id] or ns.TRP3StatusPlan.LOOK.BY_ID[id] then
 				row.import = Widgets.Button(row, "Import", I, TRP3Page.SELECTOR_HEIGHT, "ghost")
 				row.import:SetPoint("TOPLEFT", row, "TOPLEFT", innerW - S - 6 - I, 0)
 				row.import:SetScript("OnClick", function() TRP3Page.AskImport(page, id) end)
@@ -826,20 +885,6 @@ function TRP3Page.Build(parent, width, height)
 	local reasons = {}
 	for _, u in ipairs(ns.TRP3FieldPlan.UNSUPPORTED) do reasons[#reasons + 1] = u.label .. ": " .. u.reason .. "." end
 	Widgets.Tooltip(page.unsupportedHover, "Not synchronised automatically", table.concat(reasons, "\n"))
-	-- Appearance: the At First Glance entries under the rows.
-	local appearanceRows = #TRP3Page.SECTION_MAPPINGS.appearance
-	local glanceTop = TRP3Page.MAP_TOP + appearanceRows * (TRP3Page.MAP_ROW_HEIGHT + TRP3Page.MAP_ROW_GAP) + 8
-	page.glance = box(mv, "plain")
-	page.glance:SetPoint("TOPLEFT", P, -glanceTop)
-	page.glance:SetSize(innerW, mainH - glanceTop - (14 + Style.CONTROL.compact + 12))
-	local glanceHead = Widgets.TrackedLabel(page.glance, "eyebrow", "eyebrow")
-	glanceHead:SetPoint("TOPLEFT", 10, -9)
-	glanceHead:SetText("YOUR AT FIRST GLANCE ENTRIES")
-	page.glanceText = paragraph(page.glance, "navText", innerW - 20,
-		math.max(1, math.floor((page.glance:GetHeight() - 36) / LINE)))
-	page.glanceText:SetPoint("TOPLEFT", 10, -28)
-	page.glanceHover = hoverOver(page.glance, page.glance)
-
 	page.authorize = Widgets.Button(mv, "Authorize…", 150, Style.CONTROL.compact, "primary")
 	page.authorize:SetPoint("BOTTOMLEFT", P, 14)
 	page.resetChoices = Widgets.Button(mv, "Reset choices", 120, Style.CONTROL.compact, "ghost")
@@ -873,6 +918,9 @@ function TRP3Page.Build(parent, width, height)
 	TRP3Page.BuildConnection(page, P, innerW)
 	TRP3Page.BuildStatus(page, P, innerW)
 	TRP3Page.BuildRecovery(page, P, innerW)
+	ns.TRP3MiscSections.BuildGlance(page, P, innerW)
+	ns.TRP3MiscSections.BuildStatus(page, P, innerW)
+	ns.TRP3MiscSections.BuildIconPicker(page)
 
 	-- Actions: the same functions as /dawnward trp3 ... ----------------------------
 
@@ -1039,11 +1087,30 @@ local function keepText(feature, check, view)
 	if not section then
 		return "Your own personality traits are kept and never changed by Dawnward."
 	end
-	local record = check.profileId and view.ledgerProfiles and view.ledgerProfiles[check.profileId]
-	local owned = 0
-	for _ in pairs(record and record.traits and record.traits.owned or {}) do owned = owned + 1 end
-	local own = math.max(0, #(section.PS or {}) - owned)
-	return "Your own traits (kept, never changed by Dawnward): " .. plural(own, "trait", "traits") .. "."
+	return TRP3Page.OwnTraitsText(section, check.profileId and view.ledgerProfiles
+		and view.ledgerProfiles[check.profileId])
+end
+
+--- The player's own Total RP 3 traits (read only): every trait that is not
+-- one Dawnward owns, by its words ("Brave/Cowardly"; a preset trait by its
+-- number). Pure.
+function TRP3Page.OwnTraitsText(section, record)
+	local owned = {}
+	for _, t in pairs(record and record.traits and record.traits.owned or {}) do
+		owned[t.LT .. "\n" .. t.RT] = true
+	end
+	local names = {}
+	for _, trait in ipairs(section and section.PS or {}) do
+		if trait.ID then
+			names[#names + 1] = "preset trait " .. tostring(trait.ID)
+		elseif not owned[tostring(trait.LT) .. "\n" .. tostring(trait.RT)] then
+			names[#names + 1] = plain(tostring(trait.LT or "?") .. "/" .. tostring(trait.RT or "?"))
+		end
+	end
+	if #names == 0 then
+		return "Your own Total RP 3 traits (read only): none yet."
+	end
+	return "Your own Total RP 3 traits (read only, never changed by Dawnward): " .. table.concat(names, ", ") .. "."
 end
 
 local function previewText(feature, preview)
@@ -1107,7 +1174,7 @@ end
 -- fields). Pure (from view).
 function TRP3Page.Conflicts(view, first)
 	local list = {}
-	for _, f in ipairs({ "about", "traits" }) do
+	for _, f in ipairs({ "about", "traits", "glance" }) do
 		if view.checks[f] and view.checks[f].state == "conflict" then
 			list[#list + 1] = { id = f, label = FEATURE_LABEL[f], reason = view.checks[f].reasons[1] }
 		end
@@ -1164,27 +1231,43 @@ local function sectionState(page, view, id)
 		if s == "connected" then return "public", "Connected" end
 		if s == "default" or s == "linked" or s == "switched" then return "waiting", "Needs your choice" end
 		return "muted", "Not connected"
-	elseif id == "character" or id == "appearance" then
+	elseif id == "profile" then
 		local managed, conflict, staged = 0, false, false
-		for _, mid in ipairs(TRP3Page.SECTION_MAPPINGS[id]) do
+		for _, mid in ipairs(TRP3Page.SECTION_MAPPINGS.profile) do
 			if view.fieldConflicts[mid] then conflict = true end
 			if page.staged[mid] then staged = true end
 			if view.bound and view.policies[mid] == "dawnward" then managed = managed + 1 end
 		end
-		if id == "appearance" and view.checks.glance and view.checks.glance.state == "conflict" then conflict = true end
-		if conflict then return "danger", "Conflict: see Conflicts and recovery" end
+		if conflict then return "danger", "Conflict: see Synchronization > Recovery" end
 		if staged then return "waiting", "Not saved yet: Authorize… to save" end
-		return managed > 0 and "public" or "muted", managed .. " of " .. #TRP3Page.SECTION_MAPPINGS[id]
+		return managed > 0 and "public" or "muted", managed .. " of " .. #TRP3Page.SECTION_MAPPINGS.profile
 			.. " kept up to date by Dawnward"
+	elseif id == "glance" then
+		local tone, text = chipOf(view.checks.glance)
+		return tone, "At First Glance: " .. text
 	elseif id == "status" then
+		local managed, conflict = 0, false
+		for _, row in pairs(view.status and view.status.rows or {}) do
+			if row.feature ~= "look" then
+				if row.conflict then conflict = true end
+				if view.bound and row.policy == "dawnward" then managed = managed + 1 end
+			end
+		end
+		if conflict then return "danger", "Conflict: see Synchronization > Recovery" end
+		return managed > 0 and "public" or "muted", managed > 0 and (managed .. " kept in sync by Dawnward")
+			or "Total RP 3 keeps these"
+	elseif id == "sync" or id == "connection" or id == "syncstatus" or id == "recovery" then
+		local n = #TRP3Page.Conflicts(view)
+		if n > 0 then
+			return "waiting", plural(n, "conflict waits", "conflicts wait") .. " for your choice"
+		end
 		for _, f in ipairs(ns.TRP3Sync.ORDER) do
 			if view.checks[f] and view.checks[f].state == "blocked" then return "danger", "Something is blocked" end
 		end
-		return ns.TRP3Commands.AnyManaged(view.bound and view.entry or nil) and "public" or "muted", "Status"
-	elseif id == "recovery" then
-		local n = #TRP3Page.Conflicts(view)
-		return n > 0 and "waiting" or "muted", n > 0 and (plural(n, "conflict waits", "conflicts wait")
-			.. " for your choice") or "No conflicts"
+		local s = view.connection and view.connection.state
+		if s == "connected" then return "public", "Connected" end
+		if s == "default" or s == "linked" or s == "switched" then return "waiting", "Needs your choice" end
+		return "muted", "Not connected"
 	end
 	return "muted", ""
 end
@@ -1228,14 +1311,15 @@ function TRP3Page.Refresh(page)
 	page.absentText:SetText(TRP3Page.OPTIONAL_TEXT)
 	page.absentStatus:SetText(table.concat(Commands.Trp3Lines(status), "\n"))
 
-	-- Earlier names of the sections (v0.9 tabs).
-	if page.feature == "overview" then page.feature = "connection" end
-	if page.feature == "mappings" then page.feature = "character" end
+	-- Earlier names of the sections (v0.9 tabs, v0.10 rail).
+	page.feature = TRP3Page.LEGACY[page.feature] or page.feature
 	if available and not page.feature then
 		page.feature = TRP3Page.DefaultSection(view)
 	end
 	page.feature = page.feature or "about"
 	local feature = page.feature
+	local rail = TRP3Page.RAIL_OF[feature] or feature
+	if rail == "sync" then page.syncView = feature end
 
 	-- The conflicts (the shown part's first) and the callout.
 	page.conflicts = available and TRP3Page.Conflicts(view, feature) or {}
@@ -1288,7 +1372,7 @@ function TRP3Page.Refresh(page)
 	end
 
 	-- The rail: the open section, and every section's state at a glance.
-	page.nav:Select(feature)
+	page.nav:Select(rail)
 	local theme = Style.Current()
 	for _, b in ipairs(page.nav.buttons) do
 		local tone, text = sectionState(page, view, b.segmentId)
@@ -1296,8 +1380,8 @@ function TRP3Page.Refresh(page)
 		b.state = tone
 		Widgets.Tooltip(b, SECTION_LABEL[b.segmentId], text)
 	end
-	-- Biography and Personality share one view, as do the two mapping
-	-- sections: show the open section's view, hide every other one.
+	-- Personality (and the Biography without its editor) share one view:
+	-- show the open section's view, hide every other one.
 	local open = page.views[feature]
 	for _, v in pairs(page.views) do
 		if v ~= open then v:Hide() end
@@ -1305,11 +1389,30 @@ function TRP3Page.Refresh(page)
 	open:Show()
 	page.title:SetText(SECTION_LABEL[feature])
 	page.title:SetWidth(page.innerWidth)
-	if feature == "character" or feature == "appearance" then
+	-- Synchronization's switch (and Status and OOC's) take the explanation's place.
+	local switched = rail == "sync" or rail == "status"
+	page.explain:SetShown(not switched)
+	for _, b in ipairs(page.syncNav.buttons) do b:SetShown(rail == "sync") end
+	if page.syncNav.track then page.syncNav.track:SetShown(rail == "sync") end
+	page.syncNav:Select(feature)
+	ns.TRP3MiscSections.ShowStatusNav(page, rail == "status")
+	if feature == "profile" then
 		TRP3Page.RefreshMappings(page, view)
+		ns.TRP3MiscSections.RefreshLook(page, view)
+	elseif feature == "glance" then
+		ns.TRP3MiscSections.RefreshGlance(page, view)
+	elseif feature == "status" then
+		ns.TRP3MiscSections.RefreshStatus(page, view)
+	elseif feature == "about" and page.biography then
+		local check = view.checks.about
+		local chip = TRP3Page.STATE_CHIP[check.state] or { check.state, "muted" }
+		page.chip:SetChip(chip[1], chip[2])
+		page.explain:SetText(TRP3Page.EXPLAIN.about)
+		local ok, err = pcall(page.biography.Refresh, page.biography, view)
+		if not ok then MainWindow.SetStatus("The biography editor could not be shown: " .. tostring(err)) end
 	elseif feature == "connection" then
 		TRP3Page.RefreshOverview(page, view)
-	elseif feature == "status" then
+	elseif feature == "syncstatus" then
 		TRP3Page.RefreshStatus(page, view)
 	elseif feature == "recovery" then
 		local n = #page.conflicts
@@ -1452,8 +1555,10 @@ function TRP3Page.OverviewLines(view, _, characterKey)
 	add("Active profile", profile and profile.name and (plain(profile.name) .. kind) or "None readable")
 	local managed, total = 0, 0
 	for _, id in ipairs(ns.TRP3Ledger.MAPPINGS) do
-		total = total + 1
-		if view.bound and view.policies[id] == "dawnward" then managed = managed + 1 end
+		local on = view.bound and view.policies[id] == "dawnward"
+		-- A roleplay style preference counts only once handed to Dawnward.
+		if on or not ns.TRP3Ledger.OPT_IN_ONLY[id] then total = total + 1 end
+		if on then managed = managed + 1 end
 	end
 	if c.state == "switched" then
 		add("Connected character", "Paused · connected to " .. (c.connectedName and ("\"" .. plain(c.connectedName)
@@ -1484,14 +1589,18 @@ function TRP3Page.StatusLines(view, char)
 		and "whole story and profile" or "summary block") .. " in " .. layout, reasons(view.checks.about))
 	add("Personality", stateText(view.checks.traits), reasons(view.checks.traits))
 	local fields, fieldTotal = 0, 0
-	for _, id in ipairs(TRP3Page.SECTION_MAPPINGS.character) do
+	for _, id in ipairs(TRP3Page.SECTION_MAPPINGS.profile) do
 		fieldTotal = fieldTotal + 1
 		if view.bound and view.policies[id] == "dawnward" then fields = fields + 1 end
 	end
-	add("Character information", stateText(view.checks.fields) .. " · " .. fields .. " of " .. fieldTotal
+	add("Profile", stateText(view.checks.fields) .. " · " .. fields .. " of " .. fieldTotal
 		.. " by Dawnward", reasons(view.checks.fields))
 	add("Additional information", stateText(view.checks.misc), reasons(view.checks.misc))
 	add("At First Glance", stateText(view.checks.glance), reasons(view.checks.glance))
+	local status, look = view.checks.status, view.checks.look
+	local both = (status and status.state ~= "off") and status or look
+	add("Status, icon and colour", stateText(both), reasons(status) or reasons(look))
+	add("Roleplay style", stateText(view.checks.style), reasons(view.checks.style))
 	local last = TRP3Page.LastWrite(view.log)
 	add("Last successful sync", last and date("%d %b %Y, %H:%M", last) or "Nothing written yet",
 		"Each write is read back from Total RP 3 and counts only when it matched.")
@@ -1499,8 +1608,7 @@ function TRP3Page.StatusLines(view, char)
 	add("Last problem", problem and ((problem.at and problem.at > 0 and (date("%d %b, %H:%M", problem.at) .. " · ")
 		or "") .. excerpt(problem.text, 90)) or "None", problem and plain(problem.text) or nil)
 	local n = #TRP3Page.Conflicts(view)
-	add("Conflicts", n == 0 and "None" or (plural(n, "item waits", "items wait") .. " for your choice (Conflicts "
-		.. "and recovery)"))
+	add("Conflicts", n == 0 and "None" or (plural(n, "item waits", "items wait") .. " for your choice (Recovery)"))
 	return lines
 end
 
@@ -1548,6 +1656,12 @@ function TRP3Page.BuildConnection(page, P, innerW)
 	end)
 	Widgets.Tooltip(page.refreshConnection, "Refresh connection", "Reads Total RP 3 again, for example after you "
 		.. "create or select a profile there. Nothing is written.")
+	-- Disconnect…: Dawnward stops keeping anything in this profile up to date.
+	page.disconnect = Widgets.Button(o, "Disconnect…", 130, Style.CONTROL.compact, "danger")
+	page.disconnect:SetPoint("TOPRIGHT", -P, -(TRP3Page.CONNECTION_NOTE_TOP + 3 * TRP3Page.LINE + 12))
+	page.disconnect:SetScript("OnClick", function() TRP3Page.AskDisconnect(page) end)
+	Widgets.Tooltip(page.disconnect, "Disconnect", "Dawnward stops keeping this Total RP 3 profile up to date. "
+		.. "Nothing is removed: what Dawnward wrote stays in Total RP 3 as it is. You confirm first.")
 end
 TRP3Page.BuildOverview = TRP3Page.BuildConnection
 
@@ -1583,14 +1697,15 @@ function TRP3Page.RefreshOverview(page, view)
 		Widgets.Tooltip(button, (spec[1]:gsub("…$", "")), TRP3Page.ACTION_TIPS[spec[2]])
 	end
 	page.switchModel:SetShown(char ~= nil and ns.Publication.Status(char) == "pending")
+	page.disconnect:SetShown(managed)
 end
 
 -- Synchronization status: one line per part and the never-sent box.
 function TRP3Page.BuildStatus(page, P, innerW)
-	local sv = sectionView(page, "status")
+	local sv = sectionView(page, "syncstatus")
 	page.statusRows = {}
 	local R, LW = TRP3Page.STATUS_ROW, TRP3Page.STATUS_LABEL
-	for i = 1, 8 do
+	for i = 1, TRP3Page.STATUS_LINES do
 		local y = -(TRP3Page.HEAD_HEIGHT + (i - 1) * R)
 		local name = oneLine(sv, "muted", LW - 8)
 		name:SetPoint("TOPLEFT", P, y)
@@ -1601,7 +1716,7 @@ function TRP3Page.BuildStatus(page, P, innerW)
 		hover:SetSize(innerW, R)
 		page.statusRows[i] = { name = name, value = value, hover = hover }
 	end
-	local top = TRP3Page.HEAD_HEIGHT + 8 * R + 10
+	local top = TRP3Page.HEAD_HEIGHT + TRP3Page.STATUS_LINES * R + 10
 	page.hidden = box(sv, "plain")
 	page.hidden:SetPoint("TOPLEFT", P, -top)
 	page.hidden:SetSize(innerW, 28 + 4 * TRP3Page.LINE + 18)
@@ -1782,8 +1897,33 @@ end
 --- The unsupported-fields note (names only; FieldPlan.UNSUPPORTED, with the
 -- reasons, is its tooltip). Pure.
 function TRP3Page.UnsupportedText()
-	return "Never written (hover for why): Currently, OOC and RP status, icon and colours, walk-up and music. "
-		.. "They stay yours in Total RP 3."
+	return "Never written (hover for why): eye colour's colour, the residence map pin, roleplay experience and "
+		.. "music. They stay yours in Total RP 3."
+end
+
+--- "Disconnect…": every item goes back to Total RP 3 (nothing is removed
+-- from it), through the same Authorize as the choices.
+function TRP3Page.AskDisconnect(page)
+	local view = page.view
+	if not view or not view.entry then return end
+	Widgets.Confirm("Disconnect Total RP 3 profile \"" .. plain(view.probe.profile and view.probe.profile.name or "?")
+		.. "\" from this character?\n\nDawnward stops keeping it up to date. Nothing is removed: what Dawnward wrote "
+		.. "stays in Total RP 3 as it is, and your backups stay available.", "Disconnect", function()
+		act(function()
+			local d = deps()
+			if not d then return "Total RP 3 sync is not available." end
+			local choices = {}
+			for _, id in ipairs(ns.TRP3Ledger.MAPPINGS) do
+				choices[id] = ns.TRP3Ledger.BLOCK_FEATURES[id] and "off" or "trp3"
+			end
+			local ok, message = ns.TRP3Sync.Authorize(d, choices)
+			if ok then
+				page.staged = {}
+				return "Disconnected. Dawnward no longer writes to this Total RP 3 profile; what it wrote stays."
+			end
+			return message
+		end)
+	end)
 end
 
 --- The policy shown for a mapping: the staged choice, else the saved one.
@@ -1870,6 +2010,11 @@ function TRP3Page.RowText(page, id)
 		detail = fieldProposal(view, m)
 	elseif row and row.unwritable and policy == "dawnward" then
 		detail = "Not writable: " .. excerpt(row.unwritable, 60)
+	elseif not row and view.status and view.status.rows[id] then
+		-- The profile icon and class colour (set above, not from the profile).
+		local srow = view.status.rows[id]
+		detail = "TRP3: " .. (srow.trp3 and ("\"" .. excerpt(srow.trp3, 22) .. "\"") or "empty") .. " · Yours: "
+			.. (srow.dawnward and ("\"" .. excerpt(srow.dawnward, 22) .. "\"") or "not set") .. (srow.differ and "" or " · same")
 	elseif row then
 		local mine = row.dawnward and ("\"" .. excerpt(row.dawnward, 22) .. "\"")
 			or (row.hidden and "not Public" or "empty")
@@ -1882,7 +2027,7 @@ function TRP3Page.RowText(page, id)
 end
 
 function TRP3Page.RefreshMappings(page, view)
-	local section = page.feature
+	local section = "profile"
 	local ids = TRP3Page.SECTION_MAPPINGS[section]
 	local managed = 0
 	for _, id in ipairs(ids) do
@@ -1890,7 +2035,7 @@ function TRP3Page.RefreshMappings(page, view)
 	end
 	page.chip:SetChip(next(page.staged) and "Not saved yet" or (managed .. " of " .. #ids .. " by Dawnward"),
 		next(page.staged) and "waiting" or "muted")
-	page.explain:SetText(section == "appearance" and TRP3Page.APPEARANCE_EXPLAIN or TRP3Page.MAPPINGS_EXPLAIN)
+	page.explain:SetText(TRP3Page.PROFILE_EXPLAIN)
 	local shared = view.probe.profile and view.probe.profile.sharedWith
 	local warns = (shared and shared > 0) or not view.probe.experimental.allowed
 	TRP3Page.SetWarning(page.sharedWarn, warns)
@@ -1916,15 +2061,7 @@ function TRP3Page.RefreshMappings(page, view)
 	page.mapPageLabel:SetText(string.format("Page %d of %d", page.mapPage, page.mapPages))
 	page.mapPrev:SetEnabled(page.mapPage > 1)
 	page.mapNext:SetEnabled(page.mapPage < page.mapPages)
-	page.unsupportedNote:SetShown(section == "character")
-	page.glance:SetShown(section == "appearance")
-	if section == "appearance" then
-		local lines = ns.TRP3Commands.GlanceLines(realChar())
-		table.remove(lines, 1)
-		for i, line in ipairs(lines) do lines[i] = plain((line:gsub("^%s+", ""))) end
-		page.glanceText:SetText(table.concat(lines, "\n"))
-		Widgets.Tooltip(page.glanceHover, "At First Glance", TRP3Page.EXPLAIN.glance)
-	end
+	page.unsupportedNote:SetShown(true)
 	for _, row in ipairs(page.mapRows) do
 		row:SetShown(row.section == section and row.mapPage == page.mapPage)
 		if row.section == section then
@@ -1932,17 +2069,20 @@ function TRP3Page.RefreshMappings(page, view)
 			row.name:SetText(name)
 			row.detail:SetText(detail)
 			row.selector:Select(TRP3Page.Shown(page, row.id))
-			local m = ns.TRP3Sync.MappingOf(row.id)
+			local m, rowFeature = ns.TRP3Sync.MappingOf(row.id)
 			local where = m and (m.key and ("Total RP 3 field " .. m.key) or "Total RP 3 additional information")
+			if rowFeature == "look" then
+				where = "Total RP 3 field " .. m.key .. ", through Total RP 3's own setter"
+			end
 			local about = m and (where .. (m.msp and (" (MSP " .. m.msp .. "). ") or ". ")
 				.. (m.risk == "high" and "Players usually write this themselves in Total RP 3; it stays managed by "
 					.. "Total RP 3 unless you choose otherwise. " or "")
-				.. "Dawnward writes it only from your " .. m.label .. ", only while Total RP 3 still holds the "
-				.. "value Dawnward last wrote.") or TRP3Page.EXPLAIN[row.id]
+				.. "Dawnward writes it only from your " .. m.label .. (rowFeature == "look" and " (above)" or "")
+				.. ", only while Total RP 3 still holds the value Dawnward last wrote.") or TRP3Page.EXPLAIN[row.id]
 			-- The detail line may be cut on the page; the tooltip has it whole.
 			Widgets.Tooltip(row.hover, name, detail .. "\n\n" .. about)
 			if row.import then
-				local diff = diffRow(view, row.id)
+				local diff = diffRow(view, row.id) or (view.status and view.status.rows[row.id])
 				row.import:SetEnabled(diff ~= nil and diff.importable == true)
 				Widgets.Tooltip(row.import, "Import into Dawnward", "Copies Total RP 3's " .. m.trp3 .. " into your "
 					.. "Dawnward " .. m.label .. " (you confirm first). Never automatic.")
@@ -2019,6 +2159,18 @@ function TRP3Page.AskAuthorize(page)
 end
 
 function TRP3Page.AskImport(page, id)
+	local look = ns.TRP3StatusPlan.LOOK.BY_ID[id]
+	local srow = look and page.view and page.view.status and page.view.status.rows[id]
+	if srow and srow.importable then
+		Widgets.Confirm("Copy Total RP 3's " .. look.trp3 .. " \"" .. plain(srow.trp3) .. "\" into Dawnward?\n\n"
+			.. "Nothing is written to Total RP 3.", "Import", function()
+			act(function()
+				local _, message = ns.TRP3Commands.ImportStatus(ns.ctx, id)
+				return message
+			end)
+		end)
+		return
+	end
 	local m = ns.TRP3FieldPlan.BY_ID[id]
 	local row = page.view and diffRow(page.view, id)
 	if not m or not row or not row.importable then
@@ -2081,4 +2233,17 @@ function TRP3Page.AskRollback(page, mode)
 				return message
 			end)
 		end)
+end
+
+-- Shared with UI/TRP3MiscSections.lua (At First Glance, Status and OOC and
+-- the profile look), so every section draws and acts the same way.
+TRP3Page.H = { label = label, paragraph = paragraph, oneLine = oneLine, hoverOver = hoverOver, box = box,
+	act = act, deps = deps, realChar = realChar, plain = plain, excerpt = excerpt, plural = plural }
+
+--- Opens a section or view by id ("profile", "glance", "status",
+-- "connection", "syncstatus", "recovery", or an earlier name).
+function TRP3Page.Open(page, id)
+	page.feature = TRP3Page.LEGACY[id] or id
+	page.mapPage = 1
+	MainWindow.Refresh()
 end

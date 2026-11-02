@@ -21,6 +21,9 @@ local HELP = {
 	"  trp3 resolve about|traits|glance|<field> keep|reclaim",
 	"  trp3 glance (your At First Glance entries, 1-5) | trp3 glance title|text <n> <words> (|n: new line)",
 	"  trp3 glance icon <n> <icon name>|default | trp3 glance show|hide <n> | trp3 glance clear <n> confirm",
+	"  trp3 glance move <n> up|down (the order Total RP 3 shows them in)",
+	"  trp3 currently <text>|clear | trp3 ooc <text>|clear | trp3 rpstatus ic|ooc | trp3 walkup yes|no",
+	"  trp3 sync-status <currently|ooc|rpStatus|walkup|icon|classColor> on|off (keep it in sync with Total RP 3)",
 	"  trp3 diagnose (read-only: which guard is holding each feature back)",
 }
 
@@ -447,7 +450,11 @@ function TRP3Commands.ConnectAll(ctx, opts)
 	end
 	local choices = {}
 	for _, id in ipairs(Ledger.MAPPINGS) do
-		choices[id] = "dawnward"
+		-- The roleplay style is only ever handed over one preference at a
+		-- time, by the player's own choice (Ledger.OPT_IN_ONLY).
+		if not Ledger.OPT_IN_ONLY[id] then
+			choices[id] = "dawnward"
+		end
 	end
 	local ok, message = Sync.Authorize(deps, choices, { adopt = opts.existing == "replace" })
 	if ok and ctx.trp3RequestSync then
@@ -863,6 +870,150 @@ function TRP3Commands.SetGlance(ctx, what, n, value)
 	end)
 end
 
+--- Moves At First Glance entry n up or down one place (dir -1 or 1): the
+-- order Total RP 3 shows the entries in. Returns ok, message.
+function TRP3Commands.MoveGlance(ctx, n, dir)
+	return ns.Actions.WithCharacter(ctx, function(char)
+		local to, err = ns.Glance.Move(char, n, dir, ctx.now())
+		if not to then return ns.Actions.Fail(err) end
+		return true, "At First Glance " .. n .. " is now " .. to .. ". Total RP 3 follows on the next sync while "
+			.. "At First Glance sync is on."
+	end)
+end
+
+--- Saves At First Glance entry n from the editor in one change: { title,
+-- text, icon, active } (an empty title and text removes it). Returns ok,
+-- message.
+function TRP3Commands.SaveGlance(ctx, n, values)
+	return ns.Actions.WithCharacter(ctx, function(char)
+		local ok, err = ns.Glance.Save(char, n, values, ctx.now())
+		if not ok then return ns.Actions.Fail(err) end
+		return true, "At First Glance " .. n .. " saved. Total RP 3 follows on the next sync while At First Glance "
+			.. "sync is on."
+	end)
+end
+
+--- Status, look and roleplay style (v0.10.1) ----------------------------------
+
+--- Sets (or, with value nil, clears) one status or look value the player
+-- keeps for Total RP 3 (RPStatus). Only Dawnward's own copy changes here;
+-- Total RP 3 follows on the next sync while that row is kept in sync.
+-- Returns ok, message.
+function TRP3Commands.SetStatus(ctx, id, value)
+	local f = ns.RPStatus.BY_ID[id]
+	if not f then
+		return nil, "unknown status value '" .. tostring(id) .. "'"
+	end
+	return ns.Actions.WithCharacter(ctx, function(char)
+		local ok, err
+		if value == nil then
+			ok, err = ns.RPStatus.Clear(char, id, ctx.now())
+		else
+			ok, err = ns.RPStatus.Set(char, id, value, ctx.now())
+		end
+		if ok == nil then return ns.Actions.Fail(err) end
+		return true, f.label .. (value == nil and " cleared" or " saved") .. " in Dawnward."
+	end)
+end
+
+--- Sets (or, with nil, forgets) one roleplay style preference by its Total
+-- RP 3 key. Returns ok, message.
+function TRP3Commands.SetStyle(ctx, key, value)
+	local s = ns.RPStatus.STYLE_BY_KEY[key]
+	if not s then
+		return nil, "unknown roleplay style preference"
+	end
+	return ns.Actions.WithCharacter(ctx, function(char)
+		local ok, err = ns.RPStatus.SetStyle(char, key, value, ctx.now())
+		if not ok then return ns.Actions.Fail(err) end
+		return true, s.label .. ": " .. tostring(ns.RPStatus.OptionLabel(s.options, value) or "not set") .. "."
+	end)
+end
+
+--- Keeps one status, look or style row in sync with Total RP 3 (on), or
+-- hands it back to Total RP 3 (off), through Sync.Authorize (every check
+-- of an authorisation applies). Returns ok, message.
+function TRP3Commands.ManageRow(ctx, id, on)
+	local deps = ctx.trp3Deps and ctx.trp3Deps()
+	if not deps then
+		return nil, "Total RP 3 sync is not available"
+	end
+	local _, feature = Sync.MappingOf(id)
+	if feature ~= "status" and feature ~= "look" and feature ~= "style" then
+		return nil, "unknown status value '" .. tostring(id) .. "'"
+	end
+	local ok, message = Sync.Authorize(deps, { [id] = on and "dawnward" or "trp3" })
+	if ok and on and ctx.trp3RequestSync then
+		ctx.trp3RequestSync()
+	end
+	return ok, message
+end
+
+--- Copies Total RP 3's value of a status, look or style row into Dawnward
+-- (the player confirmed). When that row is kept in sync, the two now agree,
+-- so its pause ends and Dawnward keeps Total RP 3's value from now on;
+-- nothing is written to Total RP 3. Not in simulation mode (Total RP 3 is
+-- the real profile). Returns ok, message.
+function TRP3Commands.ImportStatus(ctx, id)
+	local deps = ctx.trp3Deps and ctx.trp3Deps()
+	if not deps then
+		return nil, "Total RP 3 sync is not available"
+	end
+	if deps.store:IsSimulation() then
+		return nil, "Turn simulation mode off first: Total RP 3 holds your real profile."
+	end
+	local m, feature = Sync.MappingOf(id)
+	local plan = feature and Sync.ROW_FEATURES[feature]
+	if feature ~= "status" and feature ~= "look" and feature ~= "style" then
+		return nil, "unknown status value '" .. tostring(id) .. "'"
+	end
+	local section, err = ns.TRP3Adapter.ReadAudited(deps.env, Sync.FEATURES[feature].section)
+	if not section then
+		return nil, "Nothing was imported: " .. tostring(err) .. "."
+	end
+	local value = plan.Current(section, m)
+	if value == nil or value == "" or not plan.IsOwnedValue(m, value) then
+		return nil, "Total RP 3 has no " .. m.trp3 .. " Dawnward can import"
+	end
+	local ok, message = ns.Actions.WithCharacter(ctx, function(char)
+		local done, why
+		if feature == "style" then
+			done, why = ns.RPStatus.SetStyle(char, m.key, value, ctx.now())
+		else
+			done, why = ns.RPStatus.Set(char, id, value, ctx.now())
+		end
+		if done == nil then return ns.Actions.Fail(why) end
+		return true, "Imported Total RP 3's " .. m.trp3 .. " into Dawnward. Nothing was written to Total RP 3."
+	end)
+	if not ok then
+		return ok, message
+	end
+	local probe = ns.TRP3Adapter.Probe(deps.env)
+	local profileId = probe.profile and probe.profile.id
+	local entry = deps.ledger.optIn[deps.characterKey]
+	local record = not deps.ledgerReadOnly and entry and entry.profileId == profileId
+		and Ledger.Policy(entry, id) == "dawnward" and Ledger.Profile(deps.ledger, profileId)
+	if record then
+		record.fieldConflicts[id] = nil
+		record[feature] = record[feature] or {}
+		record[feature][id] = { value = value }
+	end
+	return ok, message
+end
+
+--- Opens Total RP 3 on the player's own profile page (read only here).
+function TRP3Commands.OpenInTRP3(ctx)
+	local deps = ctx.trp3Deps and ctx.trp3Deps()
+	if not deps then
+		return nil, "Total RP 3 is not available"
+	end
+	local ok, err = ns.TRP3Adapter.OpenProfilePage(deps.env)
+	if not ok then
+		return nil, "Could not open Total RP 3: " .. tostring(err) .. "."
+	end
+	return true, "Opened your profile in Total RP 3. Its Miscellaneous tab holds the roleplay style."
+end
+
 --- Switches a feature on or off: Sync.SetOptIn, then (when turning on) the
 -- same debounced automatic run request the command makes. Returns ok, message.
 function TRP3Commands.SetFeature(ctx, deps, feature, on)
@@ -940,6 +1091,8 @@ function TRP3Commands.Overview(deps)
 	view.connection = TRP3Commands.Connection(deps, { name = named
 		or tostring(deps.characterKey or ""):match("^([^%-]+)") })
 	view.preview = TRP3Commands.PublicPreview(char)
+	-- The status, look and roleplay style rows (v0.10.1).
+	view.status = Sync.StatusView(deps)
 	view.log = deps.ledger.log
 	view.differences = Sync.Differences(deps)
 	view.policies = {}
@@ -1137,6 +1290,44 @@ local function command(ctx, rest)
 	elseif sub == "resolve" then
 		local feature = featureArg(word1) or fieldArg(word1)
 		local _, message = Sync.Resolve(deps, feature, word2)
+		out(ctx, message)
+	elseif sub == "currently" or sub == "ooc" then
+		local text = args
+		if text == "" then
+			out(ctx, "Usage: /dawnward trp3 " .. sub .. " <text> | trp3 " .. sub .. " clear")
+			return
+		end
+		local id = sub == "ooc" and "ooc" or "currently"
+		local _, message = TRP3Commands.SetStatus(ctx, id, text:lower() ~= "clear" and text or nil)
+		out(ctx, message)
+	elseif sub == "rpstatus" or sub == "walkup" then
+		local value = ({ ic = 1, ooc = 2 })[word1:lower()]
+		if sub == "walkup" then value = ({ yes = 2, no = 1 })[word1:lower()] end
+		if not value then
+			out(ctx, sub == "walkup" and "Usage: /dawnward trp3 walkup yes|no" or "Usage: /dawnward trp3 rpstatus ic|ooc")
+			return
+		end
+		local _, message = TRP3Commands.SetStatus(ctx, sub == "walkup" and "walkup" or "rpStatus", value)
+		out(ctx, message)
+	elseif sub == "sync-status" then
+		local m
+		for id in pairs(ns.RPStatus.BY_ID) do
+			if id:lower() == word1:lower() then m = Sync.MappingOf(id) end
+		end
+		if not m or (word2 ~= "on" and word2 ~= "off") then
+			out(ctx, "Usage: /dawnward trp3 sync-status currently|ooc|rpStatus|walkup|icon|classColor on|off")
+			return
+		end
+		local _, message = TRP3Commands.ManageRow(ctx, m.id, word2 == "on")
+		out(ctx, message)
+	elseif sub == "glance" and word1:lower() == "move" then
+		local n, dir = Util.NextWord(tail)
+		local step = ({ up = -1, down = 1 })[(dir or ""):lower():match("^%s*(%a*)")]
+		if not step then
+			out(ctx, "Usage: /dawnward trp3 glance move <n> up|down")
+			return
+		end
+		local _, message = TRP3Commands.MoveGlance(ctx, tonumber(n), step)
 		out(ctx, message)
 	elseif sub == "glance" then
 		local what = word1:lower()
