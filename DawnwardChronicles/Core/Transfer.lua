@@ -111,6 +111,8 @@ function Transfer.Export(char, kind, opts)
 		data.story = Transfer.StoryForBackup(char, includesSecrets)
 		-- The player's own axis words and locks (#21): private, backups only.
 		data.axisMeanings = Util.DeepCopy(char.axisMeanings or {})
+		-- At First Glance entries the player wrote for Total RP 3 (v0.9): backups only.
+		data.glance = Util.DeepCopy(char.glance or {})
 		includesBiography = opts.includeBiography == true and char.sources ~= nil
 		if includesBiography then
 			data.sources = Util.DeepCopy(char.sources)
@@ -271,6 +273,10 @@ function Transfer.MergeForImport(current, imported, includesSecrets, now, includ
 		-- keep the current ones rather than discarding them.
 		if next(result.axisMeanings or {}) == nil and next(current.axisMeanings or {}) ~= nil then
 			result.axisMeanings = Util.DeepCopy(current.axisMeanings)
+		end
+		-- Likewise a backup from before At First Glance entries (v0.9).
+		if next(result.glance or {}) == nil and next(current.glance or {}) ~= nil then
+			result.glance = Util.DeepCopy(current.glance)
 		end
 		if current.story then
 			if not includesStory then

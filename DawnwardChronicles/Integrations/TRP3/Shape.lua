@@ -100,7 +100,41 @@ function Shape.Characteristics(characteristics)
 	return true
 end
 
-Shape.BY_SECTION = { about = Shape.About, characteristics = Shape.Characteristics }
+-- One At First Glance slot (RegisterMisc.lua applyPeekSlot: { IC, AC, TI,
+-- TX }, any of them nil; swapDataFromSlots can leave an empty table).
+local function validGlance(slot)
+	return type(slot) == "table" and optionalString(slot.IC) and optionalString(slot.TI)
+		and optionalString(slot.TX) and (slot.AC == nil or type(slot.AC) == "boolean")
+end
+
+--- The misc section (RegisterMisc.lua default profile: { v = 1, PE = {},
+-- ST = {} }): PE holds the At First Glance slots keyed "1".."5"
+-- (tostring(i)); ST the RP style choices, which Dawnward never changes.
+-- Returns true, or nil plus a reason.
+function Shape.Misc(misc)
+	if type(misc) ~= "table" then
+		return nil, "the miscellaneous section is missing"
+	end
+	if not isVersion(misc.v) then
+		return nil, "the miscellaneous section has no valid version"
+	end
+	if misc.ST ~= nil and type(misc.ST) ~= "table" then
+		return nil, "the roleplay style has an unexpected layout"
+	end
+	if misc.PE ~= nil then
+		if type(misc.PE) ~= "table" then
+			return nil, "At First Glance has an unexpected layout"
+		end
+		for key, slot in pairs(misc.PE) do
+			if type(key) ~= "string" or not key:match("^[1-5]$") or not validGlance(slot) then
+				return nil, "an At First Glance slot has an unexpected layout"
+			end
+		end
+	end
+	return true
+end
+
+Shape.BY_SECTION = { about = Shape.About, characteristics = Shape.Characteristics, misc = Shape.Misc }
 
 --- TRP3's section version rule (Utils.math.incrementNumber(v, 2)): +1, and
 -- 100 wraps to 1. A missing version counts as 1, as TRP3's setters do.

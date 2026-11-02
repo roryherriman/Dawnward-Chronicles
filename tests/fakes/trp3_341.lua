@@ -11,6 +11,14 @@
 --     names the player's own unit ID (RegisterMSP.lua)
 --   * other clients only re-fetch a section whose version number differs
 --     from the one they cached (pull-only exchange)
+--   * v0.9: the misc section (RegisterMisc.lua default { v = 1, PE = {},
+--     ST = {} }) and its At First Glance editor, which has no draft: Apply
+--     writes the slot straight into the live section, bumps v by one
+--     (incrementNumber(v, 2)) and fires REGISTER_DATA_UPDATED(player_id,
+--     profileID, "misc") (applyPeekSlot); the editor frame is declared
+--     hidden="true" (RegisterUIMisc.xml)
+--   * TRP3_API.MiscInfoType and GetMiscTypeInfo as in Core/ProfileUtil.lua
+--     (enUS names; the icons are the first TRP3_InterfaceIcons candidates)
 --
 -- Usage: local fake = Fake.new{ profileName = "Main", isDefault = false }
 --        fake.env      -> environment to pass to TRP3Status.Read
@@ -41,6 +49,7 @@ function Fake.new(opts)
 			characteristics = opts.characteristics or { v = 3, FN = opts.firstName or "Aelin", LN = "Brightwater", PS = {} },
 			about = opts.about or { v = 2, TE = 1, BK = 1, T1 = { TX = "Private about text" } },
 			character = { v = 1, RP = 1, CU = "" },
+			misc = opts.misc or { v = 1, PE = {}, ST = {} },
 		},
 	}
 	fake.profile = profile
@@ -99,7 +108,29 @@ function Fake.new(opts)
 		if opts.triggerFails then error("TriggerEvent exploded") end
 		fire(event, ...)
 	end
+	-- Core/ProfileUtil.lua MiscInfoType and MiscInfoTypeData (enUS).
+	local MISC_TYPES = {
+		{ "Custom", "Name", "Name", "inv_misc_questionmark" },
+		{ "House", "House name", "House name", "inv_misc_kingsring1" },
+		{ "Nickname", "Nickname", "Nickname", "ability_hunter_beastcall" },
+		{ "Motto", "Motto", "Motto", "inv_inscription_scrollofwisdom_01" },
+		{ "FacialFeatures", "Facial features", "Facial features", "spell_shadow_mindsteal" },
+		{ "Piercings", "Piercings", "Piercings", "inv_jewelry_ring_14" },
+		{ "Pronouns", "Pronouns", "Pronouns", "vas_namechange" },
+		{ "GuildName", "Guild name", "Guild name", "vas_guildnamechange" },
+		{ "GuildRank", "Guild rank", "Guild rank", "achievement_guildperk_honorablemention_rank2" },
+		{ "Tattoos", "Tattoos", "Tattoos", "inv_inscription_inkblack01" },
+		{ "VoiceReference", "Voice reference", "Voice reference", "spell_holy_silence" },
+	}
+	local miscInfoType = {}
+	for i, t in ipairs(MISC_TYPES) do miscInfoType[t[1]] = i end
 	local trp3api = {
+		MiscInfoType = miscInfoType,
+		GetMiscTypeInfo = function(miscType)
+			local t = MISC_TYPES[miscType]
+			if not t then return nil end
+			return { type = miscType, englishName = t[2], localizedName = t[3], icon = t[4] }
+		end,
 		globals = { player_id = fake.playerId },
 		RegisterCallback = function(registry, event, fn)
 			assert(registry == addon, "callbacks are registered on TRP3_Addon")
@@ -205,15 +236,46 @@ function Fake.new(opts)
 	-- /reload: Lua state (drafts, page, context) is gone; frames are rebuilt
 	-- from XML; saved profile data stays.
 	function fake.reload()
-		for _, frame in pairs(frames) do frame.shown = true end
+		for _, frame in pairs(frames) do frame.shown = not frame.hiddenInXml end
 		for k in pairs(drafts) do drafts[k] = nil end
 		nav.pageId, nav.context = nil, nil
 	end
+	-- At First Glance (RegisterMisc.lua): the editor frame (hidden until a
+	-- slot is opened) and Apply, which writes the live slot directly.
+	local glanceEditor = newFrame()
+	glanceEditor.shown, glanceEditor.hiddenInXml = false, true
+	frames.TRP3_AtFirstGlanceEditor = glanceEditor
+	fake.glanceEditor = glanceEditor
+	function fake.openGlanceEditor() glanceEditor.shown = true end
+	function fake.closeGlanceEditor() glanceEditor.shown = false end
+	function fake.applyPeekSlot(slot, ic, ac, ti, tx)
+		glanceEditor.shown = false
+		local dataTab = profile.player.misc
+		dataTab.PE = dataTab.PE or {}
+		dataTab.PE[slot] = dataTab.PE[slot] or {}
+		local peek = dataTab.PE[slot]
+		peek.IC, peek.AC, peek.TI, peek.TX = ic, ac, ti, tx
+		dataTab.v = increment(dataTab.v)
+		fire("REGISTER_DATA_UPDATED", fake.playerId, fake.profileId, "misc")
+	end
+	-- getMiscExchangeData: what other players receive (inactive slots dropped).
+	function fake.miscExchange()
+		local data = deepCopy(profile.player.misc)
+		for i = 1, 5 do
+			local key = tostring(i)
+			if data.PE and data.PE[key] and data.PE[key].AC == false then data.PE[key] = nil end
+		end
+		return data
+	end
+
 	-- What another client that cached these versions would re-fetch.
+	-- The misc section is compared only when the caller cached it.
 	function fake.remoteRefetch(cached)
 		local out = {}
-		for _, section in ipairs({ "about", "characteristics" }) do
-			if cached[section] ~= profile.player[section].v then out[#out + 1] = section end
+		for _, section in ipairs({ "about", "characteristics", "misc" }) do
+			if (section ~= "misc" or cached.misc ~= nil) and cached[section] ~= profile.player[section].v then
+				out[#out + 1] = section
+			end
 		end
 		return out
 	end

@@ -17,15 +17,16 @@
 -- "traits" (Dawnward's personality traits), "fields" (every profile
 -- field mapping the player handed to Dawnward, FieldPlan.lua) and, since
 -- v0.9, "misc" (Dawnward's entries in TRP3's additional-information list,
--- MiscPlan.lua). A field or entry in conflict is paused on its own; the
--- others still update.
+-- MiscPlan.lua) and "glance" (the At First Glance entries the player wrote
+-- in Dawnward, in TRP3's misc section, GlancePlan.lua). A field or entry in
+-- conflict is paused on its own; the others still update.
 --
 -- deps: { env, ledger, ledgerReadOnly?, store, characterKey, now(), inCombat() }
 local _, ns = ...
 local Util, Projection, Ledger, Adapter, AboutBlock, TraitPlan, FieldPlan, Presentation, VersionProfiles =
 	ns.Util, ns.Projection, ns.TRP3Ledger, ns.TRP3Adapter, ns.TRP3AboutBlock, ns.TRP3TraitPlan, ns.TRP3FieldPlan,
 	ns.TRP3Presentation, ns.TRP3VersionProfiles
-local MiscPlan, AboutDoc = ns.TRP3MiscPlan, ns.TRP3AboutDoc
+local MiscPlan, AboutDoc, GlancePlan = ns.TRP3MiscPlan, ns.TRP3AboutDoc, ns.TRP3GlancePlan
 
 
 local Sync = {}
@@ -91,15 +92,24 @@ Sync.FEATURES = {
 		plan = function(section, record, public, extra)
 			local desired, unwritable = MiscPlan.Desired(public)
 			return MiscPlan.Plan(section, record, desired, extra.policies, extra.paused, unwritable,
-				{ names = extra.names, adopt = extra.adopt })
+				{ names = extra.names, icons = extra.icons, adopt = extra.adopt })
 		end,
 		planned = "characteristics",
 	},
+	glance = {
+		section = "misc",
+		label = "At First Glance",
+		plan = function(section, record, public)
+			return GlancePlan.Plan(section, record, GlancePlan.Desired(public))
+		end,
+		planned = "misc",
+	},
 }
-Sync.ORDER = { "about", "traits", "fields", "misc" }
+Sync.ORDER = { "about", "traits", "fields", "misc", "glance" }
 
 -- The features stored in one TRP3 section (a backup covers all of them).
-local SECTION_FEATURES = { about = { "about" }, characteristics = { "traits", "fields", "misc" } }
+local SECTION_FEATURES = { about = { "about" }, characteristics = { "traits", "fields", "misc" },
+	misc = { "glance" } }
 Sync.SECTION_FEATURES = SECTION_FEATURES
 
 -- Features made of per-item mappings (one policy and one conflict per
@@ -196,6 +206,9 @@ local function publicOf(deps)
 	local char = realCharacter(deps)
 	local public = (char and Projection.GetPublic(char)) or { facts = {}, personality = {}, fields = {} }
 	Sync.ApplySettings(public, char)
+	-- The At First Glance entries the player wrote for Total RP 3 (only
+	-- here: a release plans with an override that has none).
+	public.glance = char and ns.Glance.Published(char) or nil
 	return public
 end
 Sync.PublicOf = publicOf
@@ -334,7 +347,8 @@ function Sync.Check(deps, feature, publicOverride, fieldScope)
 	local adopt = entry and entry.adopt and entry.adopt[feature] == true or nil
 	local plan = spec.plan(section, record[feature], public,
 		{ policies = policies, paused = record.fieldConflicts, adopt = adopt,
-			defaults = FieldPlan.GameDefaults(deps.env), names = MiscPlan.PresetNames(deps.env) })
+			defaults = FieldPlan.GameDefaults(deps.env), names = MiscPlan.PresetNames(deps.env),
+			icons = MiscPlan.PresetIcons(deps.env) })
 	result.plan = plan
 	result.adopt = adopt
 	result.notes = {}
@@ -664,11 +678,11 @@ function Sync.ApplyPolicy(deps, id, policy)
 			.. " other character(s); they will show the same content.") or "")
 end
 
---- Turns the biography or traits feature on (bound to the active profile)
--- or off. Same as SetPolicy "dawnward" / "off".
+--- Turns the biography, traits or At First Glance feature on (bound to the
+-- active profile) or off. Same as SetPolicy "dawnward" / "off".
 function Sync.SetOptIn(deps, feature, on)
-	if feature ~= "about" and feature ~= "traits" then
-		return nil, "unknown feature '" .. tostring(feature) .. "' (use about or traits)"
+	if not Ledger.BLOCK_FEATURES[feature] then
+		return nil, "unknown feature '" .. tostring(feature) .. "' (use about, traits or glance)"
 	end
 	return Sync.SetPolicy(deps, feature, on and "dawnward" or "off")
 end
@@ -953,9 +967,28 @@ function Sync.RollbackPreview(deps, backupId)
 			end
 		end
 	end
+	if owners.glance then
+		local shown = {}
+		for _, d in ipairs(GlancePlan.Desired(public)) do shown[(d.TI or "") .. "\n" .. (d.TX or "")] = true end
+		local hidden = {}
+		for _, o in pairs(owners.glance.slots or {}) do
+			if not shown[(o.TI or "") .. "\n" .. (o.TX or "")] then
+				hidden[#hidden + 1] = "At First Glance: " .. (o.TI or o.TX)
+			end
+		end
+		table.sort(hidden)
+		for _, item in ipairs(hidden) do items[#items + 1] = item end
+	end
 	local preview = { backup = backup, items = items, ownPossible = true }
 	-- "Your own text only" needs Dawnward's old part to be separable.
-	if backup.section == "about" then
+	if backup.section == "misc" then
+		if owners.glance then
+			local ok, why = GlancePlan.WithoutOwned(data, owners.glance)
+			if not ok then
+				preview.ownPossible, preview.ownReason = false, why
+			end
+		end
+	elseif backup.section == "about" then
 		if owners.about then
 			local ok, why = AboutDoc.Strip(data, owners.about)
 			if not ok then
@@ -1050,6 +1083,22 @@ local function ownOnly(deps, inputs)
 		end
 		return data, newOwners
 	end
+	if backup.section == "misc" then
+		if owners.glance then
+			local stripped, why = GlancePlan.WithoutOwned(data, owners.glance)
+			if not stripped then
+				return nil, "Dawnward's At First Glance entries in that backup cannot be separated (" .. why .. ")"
+			end
+			data = stripped
+		end
+		if featureOn(entry, "glance") then
+			local plan = GlancePlan.Plan(data, nil, GlancePlan.Desired(public))
+			if plan.action == "write" or plan.action == "noop" then
+				data, newOwners.glance = plan.misc, plan.record
+			end
+		end
+		return data, newOwners
+	end
 	if owners.traits then
 		local plan = TraitPlan.Plan(data, owners.traits, {})
 		if plan.action == "conflict" then
@@ -1086,7 +1135,7 @@ local function ownOnly(deps, inputs)
 	if featureOn(entry, "misc") then
 		local desired, unwritable = MiscPlan.Desired(public)
 		local plan = MiscPlan.Plan(data, nil, desired, fieldPolicies(entry), {}, unwritable,
-			{ names = MiscPlan.PresetNames(deps.env) })
+			{ names = MiscPlan.PresetNames(deps.env), icons = MiscPlan.PresetIcons(deps.env) })
 		data, newOwners.misc = plan.characteristics, plan.record
 		for id, reason in pairs(plan.conflicts) do
 			conflicts = conflicts or {}

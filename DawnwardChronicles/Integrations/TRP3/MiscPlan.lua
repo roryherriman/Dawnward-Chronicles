@@ -9,15 +9,24 @@
 --     its name (GetMiscInfoTypeByName), so it counts as custom unless named
 --     like a preset;
 --   * the editor adds a preset as { ID, NA = localized name, VA, IC = the
---     preset icon } (miscAdd), and on Save rewrites NA and VA from its boxes
---     (stEtN(text) or a placeholder), keeping ID and IC;
+--     preset icon } (miscAdd, from GetMiscTypeInfo), its "Create new" entry
+--     as { ID = 1, NA, VA, IC = TRP3_InterfaceIcons.Default }, and on Save
+--     rewrites NA and VA from its boxes (stEtN(text) or a placeholder),
+--     keeping ID and IC;
+--   * the profile page shows each entry with IC, else its type's icon, and
+--     NA, else its type's name (ProfileUtil.lua CreateMiscFieldInfo), in
+--     list order, every entry (setConsultDisplay);
+--   * an entry without ID is typed by NA matching a preset's English or
+--     localized name (GetMiscInfoTypeByName);
 --   * NA and VA are sanitised like the profile fields when a profile loads;
 --   * MSP sends the pronouns entry as PN (RegisterMSP.lua).
 -- So Dawnward writes one-line clean values only (FieldPlan.Check), always
 -- with a name (a missing NA would become "Name" after an editor Save), and
--- recognises its entries by type and value: a preset by ID, a custom entry
--- by its name. The icon is never written or compared, so a player can
--- restyle an entry freely.
+-- recognises its entries by type and value: a preset by ID (or, without
+-- ID, by its English or localized name, as TRP3 types it), a custom entry
+-- by its name. A new entry gets the icon TRP3's editor would give it
+-- (GetMiscTypeInfo(type).icon, resolved for this client); the icon is never
+-- compared or rewritten afterwards, so a player can restyle an entry freely.
 local _, ns = ...
 local FieldPlan = ns.TRP3FieldPlan
 
@@ -56,6 +65,24 @@ function MiscPlan.PresetNames(env)
 	return out
 end
 
+--- Icons a new entry gets, as TRP3's own editor gives them
+-- (TRP3_API.GetMiscTypeInfo(type).icon: the preset's icon, or the custom
+-- type's TRP3_InterfaceIcons.Default). Read only; an id is missing when the
+-- icon cannot be read (TRP3 then shows the type's icon by itself).
+function MiscPlan.PresetIcons(env)
+	local out = {}
+	for _, m in ipairs(MiscPlan.MAPPINGS) do
+		local ok, info = pcall(function()
+			return env.TRP3_API.GetMiscTypeInfo(m.type or MiscPlan.CUSTOM)
+		end)
+		local icon = ok and type(info) == "table" and info.icon
+		if type(icon) == "string" and icon:match("^[%w_%-]+$") then
+			out[m.id] = icon
+		end
+	end
+	return out
+end
+
 --- Desired values: { [id] = value } for Public, writable fields, plus
 -- { [id] = reason } for Public values that cannot be written unchanged.
 function MiscPlan.Desired(public)
@@ -75,23 +102,25 @@ function MiscPlan.Desired(public)
 	return out, unwritable
 end
 
--- Whether a list entry is of mapping m's kind.
-local function sameKind(entry, m)
+-- Whether a list entry is of mapping m's kind. names: PresetNames (the
+-- localized preset names, which TRP3 also types an entry without ID by).
+local function sameKind(entry, m, names)
 	if type(entry) ~= "table" then
 		return false
 	end
 	if m.type then
-		return entry.ID == m.type or (entry.ID == nil and entry.NA == m.name)
+		return entry.ID == m.type
+			or (entry.ID == nil and (entry.NA == m.name or (names ~= nil and entry.NA == names[m.id])))
 	end
 	return (entry.ID == nil or entry.ID == MiscPlan.CUSTOM) and type(entry.NA) == "string"
 		and entry.NA:lower() == m.name:lower()
 end
 
 --- The entries of mapping m's kind: a list of { index, value }.
-function MiscPlan.Find(characteristics, m)
+function MiscPlan.Find(characteristics, m, names)
 	local out = {}
 	for i, entry in ipairs(type(characteristics.MI) == "table" and characteristics.MI or {}) do
-		if sameKind(entry, m) then out[#out + 1] = { index = i, value = entry.VA } end
+		if sameKind(entry, m, names) then out[#out + 1] = { index = i, value = entry.VA } end
 	end
 	return out
 end
@@ -100,13 +129,13 @@ end
 -- characteristics: a COPY (modified in place). record: ledger
 -- { [id] = { value } } of what Dawnward last wrote. desired, unwritable:
 -- from Desired. policies: { [id] = policy }. paused: { [id] = reason }.
--- opts: { names = PresetNames, adopt = bool }.
+-- opts: { names = PresetNames, icons = PresetIcons, adopt = bool }.
 -- Returns { action = "write" | "noop", characteristics, record, rows,
 -- changes, conflicts } like FieldPlan.Plan.
 function MiscPlan.Plan(characteristics, record, desired, policies, paused, unwritable, opts)
 	record, policies, paused, unwritable, opts = record or {}, policies or {}, paused or {}, unwritable or {},
 		opts or {}
-	local names = opts.names or {}
+	local names, icons = opts.names or {}, opts.icons or {}
 	local list = type(characteristics.MI) == "table" and characteristics.MI or {}
 	local newRecord, rows, changes, conflicts = {}, {}, {}, {}
 	for id, owned in pairs(record) do
@@ -119,7 +148,7 @@ function MiscPlan.Plan(characteristics, record, desired, policies, paused, unwri
 			local owned = record[m.id] and record[m.id].value
 			local same = {}
 			for i, entry in ipairs(list) do
-				if sameKind(entry, m) then same[#same + 1] = i end
+				if sameKind(entry, m, names) then same[#same + 1] = i end
 			end
 			local row = { id = m.id, desired = want }
 			rows[#rows + 1] = row
@@ -155,7 +184,8 @@ function MiscPlan.Plan(characteristics, record, desired, policies, paused, unwri
 			elseif want == nil then
 				row.state = "empty"
 			elseif #same == 0 then
-				list[#list + 1] = { ID = m.type or MiscPlan.CUSTOM, NA = names[m.id] or m.name, VA = want }
+				list[#list + 1] = { ID = m.type or MiscPlan.CUSTOM, NA = names[m.id] or m.name, VA = want,
+					IC = icons[m.id] }
 				newRecord[m.id] = { value = want }
 				row.state = "write"
 				changes[#changes + 1] = "added " .. m.id
@@ -193,7 +223,7 @@ end
 
 --- Copy of characteristics without Dawnward's owned entries. Returns the
 -- copy, or nil plus a reason when one cannot be found exactly once.
-function MiscPlan.WithoutOwned(characteristics, record)
+function MiscPlan.WithoutOwned(characteristics, record, names)
 	local copy = ns.Util.DeepCopy(characteristics)
 	local list = type(copy.MI) == "table" and copy.MI or {}
 	for id, owned in pairs(record or {}) do
@@ -201,7 +231,7 @@ function MiscPlan.WithoutOwned(characteristics, record)
 		if m then
 			local found
 			for i, entry in ipairs(list) do
-				if sameKind(entry, m) and entry.VA == owned.value then
+				if sameKind(entry, m, names) and entry.VA == owned.value then
 					if found then return nil, m.trp3 .. " appears more than once" end
 					found = i
 				end
