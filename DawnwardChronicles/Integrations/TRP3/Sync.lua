@@ -765,7 +765,7 @@ function Sync.Authorize(deps, choices, opts)
 		return true, "Saved. Dawnward manages nothing in Total RP 3 for this character."
 	end
 	return true, "Authorised: Dawnward now keeps " .. table.concat(managed, ", ") .. " up to date in Total RP 3 '"
-		.. tostring(probe.profile and probe.profile.name) .. "' from your Public information. Undo any write with "
+		.. tostring(probe.profile and probe.profile.name) .. "' from your Dawnward character. Undo any write with "
 		.. "a rollback."
 end
 

@@ -55,6 +55,13 @@ A draft proposal is in [planning/living-character/trp3-upstream-proposal.md](pla
 - Your own profiles live in `TRP3_Profiles[id]`, with data under `.player` **S**.
 - `TRP3_Characters[characterID].profileID` links characters to profiles, so **several characters can share one profile table** **S**.
 - `CurrentUser:GetProfile()` returns the live `.player` table **S**.
+- Every character starts on the **default profile** (its ID ends in `*`; `CurrentUser:IsProfileDefault()` compares with the `default_profile_id` setting) **S**. Dawnward never writes to it.
+- `TRP3_API.profile` (global through `_G.TRP3_API`, `Init.lua` 62) exposes the profile manager **S** (`Core/Profiles.lua`):
+  - `getProfiles()` (76): the profiles table.
+  - `isProfileNameAvailable(name)` (101): asserts a non-empty string; `false, id` when the name is taken.
+  - `createProfile(name)` (144): a copy of TRP3's blank template (`PR_DEFAULT_PROFILE`, filled by the Register modules), never of another profile; new random ID; prints "Profile … created."
+  - `selectProfile(id)` (193): asserts the ID exists, sets the current profile and `TRP3_Characters[player].profileID`, prints "Profile … is loaded.", fires `REGISTER_PROFILES_LOADED` and `REGISTER_DATA_UPDATED(player_id, id)`. The public `CurrentUser:SetProfileID` (`Core/Player.lua` 391) calls it.
+  - TRP3's own "Create profile" button on the default profile's page does `selectProfile(createProfile(name))` after `isProfileNameAvailable` (`Modules/Register/Characters/RegisterMain.lua` 735-742). Deleting and renaming are local functions, not exposed.
 
 ### About (`player.about`)
 - The layout is `{ v, TE = 1|2|3, BK, MU, T1 = {TX}, T2 = { {TX, IC, BK}, … }, T3 = { PH, PS, HI = {TX, BK, IC} } }` **S**.
@@ -287,6 +294,24 @@ The page opens on **Mappings** while nothing is managed yet:
 4. Choices are only staged. **Authorize…** opens a confirmation listing, per mapping, what the first sync would do (Public only: "writes \"Elf\"", "already shows the same text (stays yours)", "Total RP 3 has your own value: paused until you choose, never overwritten", "nothing Public to write"), plus the shared-profile and experimental warnings. Cancel saves nothing.
 5. After **Authorize**, the normal debounced, guarded run does the writing.
 6. **Import** (per field, with a confirmation) copies TRP3's value into Dawnward through the normal Actions write path, as **Private**. Nothing is ever imported automatically.
+
+## Connecting from setup, and the connection area (v0.9)
+
+`TRP3Commands.Connection` (read only, one probe) gives the setup's Total RP 3 stage and the Overview tab the same view: the version and whether it is supported, the active profile and its kind, and what Finish / Connect would do.
+
+- **Default profile, or a profile another character already keeps up to date** (Sync.Authorize would refuse): connecting is not offered. The player is guided to a profile of their own:
+  - **Create a profile…** (after a confirmation naming it): `Adapter.CreateProfile` calls `createProfile(name)` with the character's name (or "name 2" … when taken), then `selectProfile`. No other profile is changed; the default profile is never touched. Not offered when a free profile already has that name: switching to it is offered instead.
+  - **Switch profile…** (after a confirmation naming it): `Adapter.SelectProfile` with one of the player's named profiles (never the default one, never one another character keeps up to date); each click offers the next one.
+  - Both are refused while a TRP3 editor holds an unsaved draft, in simulation or on read-only data, and on any version without `tiers.profileTools` (3.4.1 only). Without the functions, the stage shows the steps in Total RP 3 (Profiles, create or select) instead.
+  - **Refresh connection** reads Total RP 3 again; `REGISTER_PROFILES_LOADED` also redraws the stage and the page.
+  - Creating or switching connects nothing and writes no profile data; the single authorisation is still Finish (or **Connect everything…**).
+- **Shared profile** (other characters use it): connectable, with a note that they would show the same; a profile of its own is offered.
+- **Unsupported version:** explained; nothing to connect; never written.
+- **Switched after connecting:** the guards pause sync. The Overview opens by itself, says "Paused" and which profile is connected, and offers **Switch back…** (sync carries on) and **Reconnect…** (connects the active profile instead).
+
+| Dependency | Why | If TRP3 changes |
+|---|---|---|
+| `TRP3_API.profile.getProfiles`, `isProfileNameAvailable`, `createProfile`, `selectProfile` | Create or select a named profile, only after the player confirms | Missing → the step-by-step help instead; any error is caught and reported, and the result is read back |
 
 ## Multiplayer test procedure (two clients; not yet performed)
 

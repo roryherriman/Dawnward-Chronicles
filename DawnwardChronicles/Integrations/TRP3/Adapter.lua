@@ -408,3 +408,223 @@ function Adapter.Listen(env, onHint)
 	end)
 	return ok and registered == true
 end
+
+--- Profiles (v0.9 setup) ---------------------------------------------------------
+-- Dawnward never writes to Total RP 3's default profile. A player still on
+-- it (every new character starts there) can, after confirming, have
+-- Dawnward create a named profile for this character, or switch to one of
+-- their own, through the functions TRP3 3.4.1 itself uses for that
+-- (totalRP3/Core/Profiles.lua): isProfileNameAvailable (101),
+-- createProfile (144; a copy of TRP3's blank template, never of another
+-- profile), selectProfile (193; sets this character's profile and fires
+-- REGISTER_PROFILES_LOADED and REGISTER_DATA_UPDATED) and getProfiles (76).
+-- TRP3's own "Create profile" button on the default profile's page makes
+-- exactly these calls (Modules/Register/Characters/RegisterMain.lua
+-- 735-742). Nothing is ever deleted or renamed, no other profile is
+-- changed, and the default profile is never touched. Only for versions
+-- whose profile functions were audited (VersionProfiles tiers.profileTools).
+
+Adapter.PROFILE_NAME_MAX = 50
+
+-- TRP3_API.profile, or nil plus a reason.
+local function profileApi(env)
+	local status = Status.Read(env)
+	if status.error or not status.loaded then
+		return nil, "Total RP 3 is not loaded"
+	end
+	if not VersionProfiles.Get(status.version).tiers.profileTools then
+		return nil, "Dawnward has not checked how Total RP 3 " .. tostring(status.version) .. " manages profiles"
+	end
+	local api = env.TRP3_API
+	local profile = type(api) == "table" and type(api.profile) == "table" and api.profile or nil
+	if not profile then
+		return nil, "Total RP 3's profile functions are unavailable"
+	end
+	return profile
+end
+
+local function isDefaultId(id)
+	return type(id) ~= "string" or id == "" or id:sub(-1) == "*"
+end
+
+--- What Dawnward may offer here: { create, select } (booleans). Read only.
+function Adapter.ProfileTools(env)
+	local ok, tools = pcall(function()
+		local out = { create = false, select = false }
+		local p = profileApi(env)
+		if not p then
+			return out
+		end
+		out.select = type(p.getProfiles) == "function" and type(p.selectProfile) == "function"
+		out.create = out.select and type(p.createProfile) == "function" and type(p.isProfileNameAvailable) == "function"
+		return out
+	end)
+	return ok and tools or { create = false, select = false }
+end
+
+--- The player's named profiles (never the default one), read only:
+-- { { id, name, current, sharedWith }, ... } sorted by name, or nil when
+-- they cannot be read. sharedWith: other characters using that profile.
+function Adapter.ListProfiles(env)
+	local ok, list = pcall(function()
+		local p = profileApi(env)
+		if not p or type(p.getProfiles) ~= "function" then
+			return nil
+		end
+		local profiles = p.getProfiles()
+		if type(profiles) ~= "table" then
+			return nil
+		end
+		local user = currentUser(env)
+		local currentId = user and call(user, "GetProfileID")
+		local characterId = user and call(user, "GetCharacterID")
+		local out = {}
+		for id, profile in pairs(profiles) do
+			if not isDefaultId(id) and type(profile) == "table" and type(profile.profileName) == "string" then
+				out[#out + 1] = { id = id, name = profile.profileName, current = id == currentId,
+					sharedWith = sharedCount(env, id, characterId) or 0 }
+			end
+		end
+		table.sort(out, function(a, b)
+			if a.name ~= b.name then return a.name < b.name end
+			return a.id < b.id
+		end)
+		return out
+	end)
+	return ok and list or nil
+end
+
+--- A name Total RP 3 accepts for a new profile (no markup, at most
+-- PROFILE_NAME_MAX bytes), or nil. Pure.
+function Adapter.CleanProfileName(name)
+	local clean = Util.CleanText(name, Adapter.PROFILE_NAME_MAX)
+	return clean ~= "" and clean or nil
+end
+
+local function nameAvailable(p, name)
+	local ok, available = pcall(p.isProfileNameAvailable, name)
+	return ok and available == true
+end
+
+--- The name Dawnward would give a new profile for this character: base
+-- itself when free, else "base 2" ... "base 9". Read only. nil when none
+-- is free or the profile functions are unavailable.
+function Adapter.SuggestProfileName(env, base)
+	local clean = Adapter.CleanProfileName(base)
+	if not clean or not Adapter.ProfileTools(env).create then
+		return nil
+	end
+	local p = profileApi(env)
+	if nameAvailable(p, clean) then
+		return clean
+	end
+	for n = 2, 9 do
+		local candidate = Util.TruncateUtf8(clean, Adapter.PROFILE_NAME_MAX - 2) .. " " .. n
+		if nameAvailable(p, candidate) then
+			return candidate
+		end
+	end
+	return nil
+end
+
+-- Whether an unsaved Total RP 3 editor draft is open (switching then could
+-- carry it to another profile).
+local function draftOpen(env)
+	for section in pairs(Adapter.EDITOR_FRAMES) do
+		if Adapter.EditorState(env, section).open == true then
+			return true
+		end
+	end
+	return false
+end
+
+local function activeId(env)
+	local user = currentUser(env)
+	return user and call(user, "GetProfileID")
+end
+
+--- Makes profile id this character's active Total RP 3 profile (the
+-- player confirmed first). Refuses the default profile, an unknown ID and
+-- an open editor draft. Returns id (and true when it was already active),
+-- or nil plus a reason. Writes no profile data.
+function Adapter.SelectProfile(env, id)
+	if isDefaultId(id) then
+		return nil, "Dawnward never switches to the default profile"
+	end
+	local ok, result, err = pcall(function()
+		local p, why = profileApi(env)
+		if not p then
+			return nil, why
+		end
+		if not Adapter.ProfileTools(env).select then
+			return nil, "Total RP 3's profile functions are unavailable"
+		end
+		local profiles = p.getProfiles()
+		if type(profiles) ~= "table" or type(profiles[id]) ~= "table" then
+			return nil, "Total RP 3 has no such profile"
+		end
+		if activeId(env) == id then
+			return id, true
+		end
+		if draftOpen(env) then
+			return nil, "the Total RP 3 editor holds unsaved changes; save or cancel them first"
+		end
+		-- selectProfile switches first, then fires TRP3's events: an error
+		-- from some other listener does not undo the switch, so the result
+		-- is what TRP3 now reports.
+		local called, callErr = pcall(p.selectProfile, id)
+		if activeId(env) ~= id then
+			return nil, called and "Total RP 3 did not switch profiles"
+				or ("Total RP 3 behaved unexpectedly (" .. tostring(callErr) .. ")")
+		end
+		return id
+	end)
+	if not ok then
+		return nil, "Total RP 3 behaved unexpectedly (" .. tostring(result) .. ")"
+	end
+	return result, err
+end
+
+--- Creates a profile named name from Total RP 3's blank template and makes
+-- it this character's active profile (the player confirmed first). Never
+-- copies, changes or deletes another profile. Returns the new profile ID,
+-- or nil plus a reason.
+function Adapter.CreateProfile(env, name)
+	local clean = Adapter.CleanProfileName(name)
+	if not clean then
+		return nil, "the new profile needs a name"
+	end
+	local ok, result, err = pcall(function()
+		local p, why = profileApi(env)
+		if not p then
+			return nil, why
+		end
+		if not Adapter.ProfileTools(env).create then
+			return nil, "Total RP 3's profile functions are unavailable"
+		end
+		if draftOpen(env) then
+			return nil, "the Total RP 3 editor holds unsaved changes; save or cancel them first"
+		end
+		if not nameAvailable(p, clean) then
+			return nil, "Total RP 3 already has a profile named \"" .. clean .. "\""
+		end
+		local id = p.createProfile(clean)
+		local profiles = p.getProfiles()
+		if isDefaultId(id) or type(profiles) ~= "table" or type(profiles[id]) ~= "table" then
+			return nil, "Total RP 3 did not create the profile"
+		end
+		return id
+	end)
+	if not ok then
+		return nil, "Total RP 3 behaved unexpectedly (" .. tostring(result) .. ")"
+	end
+	if not result then
+		return nil, err
+	end
+	local selected, why = Adapter.SelectProfile(env, result)
+	if not selected then
+		return nil, "the profile \"" .. clean .. "\" was created, but Dawnward could not switch to it (" .. tostring(why)
+			.. "); select it in Total RP 3 > Profiles"
+	end
+	return result
+end

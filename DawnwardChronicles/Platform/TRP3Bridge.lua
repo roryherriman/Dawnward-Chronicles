@@ -136,6 +136,11 @@ end
 -- (Adapter.IsOwnHint), checked last so the common case stays cheap.
 local function onHint(name, ...)
 	local ctx = Bridge.ctx
+	if name == "REGISTER_PROFILES_LOADED" then
+		-- The player switched (or created) a Total RP 3 profile: the setup's
+		-- Total RP 3 stage and the Total RP 3 page show the new one at once.
+		pcall(Bridge.ProfileChanged)
+	end
 	if Bridge.flushing or pending or not ctx or not anyOptIn(ctx) then
 		return
 	end
@@ -144,6 +149,16 @@ local function onHint(name, ...)
 	end
 end
 Bridge.OnHint = onHint
+
+--- Redraws what shows the active Total RP 3 profile (read only).
+function Bridge.ProfileChanged()
+	if ns.SetupWizard and ns.SetupWizard.IsShown() then
+		ns.SetupWizard.Refresh()
+	end
+	if ns.MainWindow and ns.MainWindow.IsShown and ns.MainWindow.IsShown() then
+		ns.MainWindow.Refresh()
+	end
+end
 
 --- At PLAYER_LOGIN, once the core context exists.
 function Bridge.Attach(ctx)

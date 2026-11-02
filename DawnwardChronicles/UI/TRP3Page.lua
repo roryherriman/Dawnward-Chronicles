@@ -102,8 +102,8 @@ local TITLE_PHRASE = {
 }
 
 TRP3Page.OPTIONAL_TEXT = "Total RP 3 is optional. Dawnward works fully without it: your journal, character, "
-	.. "story and chronicle never need it. If you use Total RP 3 3.4.1, this page can keep one Dawnward "
-	.. "section of your profile up to date, but only after you turn it on, and only with what you made Public."
+	.. "story and chronicle never need it. If you use Total RP 3 3.4.1, Dawnward keeps your Total RP 3 profile "
+	.. "up to date from your Dawnward character once you connect it here."
 
 TRP3Page.EXPLAIN = {
 	about = "Dawnward only writes its own block inside your \"About\" text. Everything you wrote in Total RP 3 "
@@ -219,7 +219,7 @@ function TRP3Page.Summary(status, view)
 	elseif profile.isDefault or (profile.id and profile.id:sub(-1) == "*") then
 		s.profile = "\"" .. plain(profile.name or "?") .. "\" · default profile, never written"
 	elseif on and entry.profileId ~= profile.id then
-		s.profile = "\"" .. plain(profile.name or "?") .. "\" · sync was set up for another profile"
+		s.profile = "\"" .. plain(profile.name or "?") .. "\" · sync paused: another profile is connected"
 	elseif on then
 		local shared = profile.sharedWith
 		s.profile = "\"" .. plain(profile.name or "?") .. "\" · "
@@ -828,8 +828,14 @@ function TRP3Page.Refresh(page)
 	page.absentText:SetText(TRP3Page.OPTIONAL_TEXT)
 	page.absentStatus:SetText(table.concat(Commands.Trp3Lines(status), "\n"))
 
-	-- Feature: the player's choice, else the first one needing attention,
+	-- Feature: the player's choice, else the Overview when the connection
+	-- itself needs the player (default profile, a profile another character
+	-- keeps, or a switched profile), else the first one needing attention,
 	-- else the Mappings tab while nothing is set up yet (first connection).
+	local state = available and view.connection and view.connection.state
+	if available and not page.feature and (state == "default" or state == "linked" or state == "switched") then
+		page.feature = "overview"
+	end
 	if available and not page.feature then
 		for _, f in ipairs(TRP3Page.FEATURES) do
 			local c = view.checks[f.id]
@@ -996,9 +1002,17 @@ function TRP3Page.OverviewLines(view, char, characterKey)
 	local function add(name, value) lines[#lines + 1] = { name, value } end
 	local profile = view.probe.profile
 	local shared = profile and profile.sharedWith or 0
-	add("Active profile", profile and profile.name and (plain(profile.name) .. (shared > 0
-		and (" · shared with " .. plural(shared, "other character", "other characters")) or " · this character only"))
-		or "None readable")
+	local c = view.connection or {}
+	local kind = shared > 0 and (" · shared with " .. plural(shared, "other character", "other characters"))
+		or " · this character only"
+	if c.state == "default" then
+		kind = " · Total RP 3's default profile, never written"
+	elseif c.state == "linked" then
+		kind = " · already connected to " .. plain(c.linkedBy)
+	elseif c.state == "switched" then
+		kind = " · not the connected profile"
+	end
+	add("Active profile", profile and profile.name and (plain(profile.name) .. kind) or "None readable")
 	local managed, total, conflicts = 0, 0, 0
 	for _, id in ipairs(ns.TRP3Ledger.MAPPINGS) do
 		total = total + 1
@@ -1008,8 +1022,13 @@ function TRP3Page.OverviewLines(view, char, characterKey)
 	for _, f in ipairs({ "about", "traits" }) do
 		if view.checks[f] and view.checks[f].state == "conflict" then conflicts = conflicts + 1 end
 	end
-	add("Connected character", managed > 0 and (tostring(characterKey) .. " · " .. managed .. " of " .. total
-		.. " items kept up to date") or "Not connected")
+	if c.state == "switched" then
+		add("Connected character", "Paused · connected to " .. (c.connectedName and ("\"" .. plain(c.connectedName)
+			.. "\"") or "another profile") .. ", not the active one")
+	else
+		add("Connected character", managed > 0 and (tostring(characterKey) .. " · " .. managed .. " of " .. total
+			.. " items kept up to date") or "Not connected")
+	end
 	local last = TRP3Page.LastWrite(view.log)
 	add("Last update", last and date("%d %b %Y, %H:%M", last) or "Nothing written yet")
 	local prefs = char and char.story and char.story.prefs or {}
@@ -1063,18 +1082,28 @@ function TRP3Page.BuildOverview(page, P, innerW)
 		seg.key = choice.key
 		page.overviewChoices[i] = seg
 	end
-	page.connectAll = Widgets.Button(o, "Connect everything…", 180, Style.CONTROL.compact, "primary")
+	-- The connection (v0.9): what is connected or what stops it, under the
+	-- choices; the primary and second buttons change with the state
+	-- (TRP3Page.ConnectionButtons) and Refresh connection reads Total RP 3 again.
+	local B = TRP3Page.CONNECTION_BUTTONS
+	page.connectionNote = paragraph(o, "body", innerW, 2)
+	page.connectionNote:SetPoint("TOPLEFT", P, -TRP3Page.CONNECTION_NOTE_TOP)
+	page.connectAll = Widgets.Button(o, "Connect everything…", B.primary, Style.CONTROL.compact, "primary")
 	page.connectAll:SetPoint("BOTTOMLEFT", P, 14)
-	page.connectAll:SetScript("OnClick", function() TRP3Page.AskConnectAll(page) end)
-	Widgets.Tooltip(page.connectAll, "Connect everything", "Dawnward keeps every supported part of this Total RP 3 "
-		.. "profile up to date from your Public information: names, titles, details, About page, personality and "
-		.. "additional information. Your own Total RP 3 text is never overwritten; a backup is taken before every "
-		.. "write.")
-	page.previewProfile = Widgets.Button(o, "Preview profile", 140, Style.CONTROL.compact)
+	page.connectAll:SetScript("OnClick", function() TRP3Page.RunConnectionAction(page, page.connectAll.action) end)
+	page.previewProfile = Widgets.Button(o, "Preview profile", B.second, Style.CONTROL.compact)
 	page.previewProfile:SetPoint("LEFT", page.connectAll, "RIGHT", 8, 0)
-	page.previewProfile:SetScript("OnClick", function() Commands.Execute(ns.ctx, "trp3 profile") end)
-	Widgets.Tooltip(page.previewProfile, "Preview profile", "Everything Dawnward would publish, in a window you can "
-		.. "copy from. Nothing is written. Same as /dawnward trp3 profile.")
+	page.previewProfile:SetScript("OnClick", function()
+		TRP3Page.RunConnectionAction(page, page.previewProfile.action)
+	end)
+	page.refreshConnection = Widgets.Button(o, "Refresh connection", B.refresh, Style.CONTROL.compact, "ghost")
+	page.refreshConnection:SetPoint("BOTTOMRIGHT", -P, 14)
+	page.refreshConnection:SetScript("OnClick", function()
+		MainWindow.SetStatus("Read Total RP 3 again. Nothing was written.")
+		MainWindow.Refresh()
+	end)
+	Widgets.Tooltip(page.refreshConnection, "Refresh connection", "Reads Total RP 3 again, for example after you "
+		.. "create or select a profile there. Nothing is written.")
 	-- Only for older characters, at the right of the title line.
 	page.switchModel = Widgets.Button(o, "Publish whole profile…", 190, Style.CONTROL.compact, "ghost")
 	page.switchModel:SetPoint("TOPRIGHT", -P, -54)
@@ -1104,8 +1133,110 @@ function TRP3Page.RefreshOverview(page, view)
 	for _, seg in ipairs(page.overviewChoices) do
 		seg:Select(prefs[seg.key] or ns.StorySchema.DEFAULT_PREFS[seg.key])
 	end
-	page.connectAll:SetEnabled(view.probe.experimental.allowed == true)
+	local c = view.connection or {}
+	if c.state == "switched" then
+		page.chip:SetChip("Paused", "waiting")
+	end
+	page.connectionNote:SetText(TRP3Page.ConnectionNote(c))
+	local text = ns.TRP3Commands.ConnectionText(c)
+	TRP3Page.SetWarning(page.connectionNote, text.guide ~= nil and text.guideTone ~= "muted")
+	local primary, second = TRP3Page.ConnectionButtons(c)
+	for _, pair in ipairs({ { page.connectAll, primary }, { page.previewProfile, second } }) do
+		local button, spec = pair[1], pair[2]
+		button:SetText(spec[1])
+		button.action = spec[2]
+		button:SetEnabled(spec[3])
+		Widgets.Tooltip(button, (spec[1]:gsub("…$", "")), TRP3Page.ACTION_TIPS[spec[2]])
+	end
 	page.switchModel:SetShown(char ~= nil and ns.Publication.Status(char) == "pending")
+end
+
+-- Overview button sizes and the connection note's place (below the choices).
+TRP3Page.CONNECTION_BUTTONS = { primary = 168, second = 128, refresh = 150 }
+TRP3Page.CONNECTION_NOTE_TOP = 88 + 8 * TRP3Page.OVERVIEW_ROW + 10 + 3 * (TRP3Page.SELECTOR_HEIGHT + 10) + 4
+
+TRP3Page.ACTION_TIPS = {
+	connect = "Dawnward keeps every supported part of this Total RP 3 profile up to date from your Dawnward "
+		.. "character: names, titles, details, About page, personality and additional information. Your own Total "
+		.. "RP 3 text is never overwritten; a backup is taken before every write. You confirm first.",
+	preview = "Everything Dawnward would publish, in a window you can copy from. Nothing is written. Same as "
+		.. "/dawnward trp3 profile.",
+	create = "Creates a Total RP 3 profile named after this character and starts using it (you confirm first). "
+		.. "No other profile is changed.",
+	switch = "Uses one of your own Total RP 3 profiles for this character (you confirm first). No profile is "
+		.. "changed.",
+	switchBack = "Goes back to the Total RP 3 profile this character is connected to, so sync carries on (you "
+		.. "confirm first).",
+}
+
+--- The Overview's connection note (what Connect will do, or what stops
+-- it and what to do). Pure, from TRP3Commands.Connection.
+function TRP3Page.ConnectionNote(c)
+	local guide = ns.TRP3Commands.ConnectionText(c).guide
+	if guide then
+		return guide
+	end
+	local name = c.profile and c.profile.name and ("\"" .. plain(c.profile.name) .. "\"") or "this profile"
+	if c.state == "connected" then
+		return "Dawnward keeps " .. name .. " up to date from your Dawnward character. A backup is taken before every "
+			.. "write; any write can be rolled back."
+	elseif c.state == "ready" then
+		return "Connect everything… links " .. name .. " to this character: your one authorisation. Dawnward then "
+			.. "keeps it up to date from your Dawnward character."
+	end
+	return ""
+end
+
+--- The Overview's primary and second buttons for a connection state:
+-- { label, action, enabled } each. Pure.
+function TRP3Page.ConnectionButtons(c)
+	local preview = { "Preview profile", "preview", true }
+	local connect = { "Connect everything…", "connect", c.canConnect == true }
+	if c.state == "default" or c.state == "linked" then
+		return c.canCreate and { "Create a profile…", "create", true } or connect,
+			c.canSwitch and { "Switch profile…", "switch", true } or preview
+	elseif c.state == "switched" then
+		local reconnect = { "Reconnect…", "connect", c.canConnect == true }
+		if c.canSwitchBack then
+			return { "Switch back…", "switchBack", true }, c.canConnect and reconnect or preview
+		end
+		return reconnect, preview
+	end
+	return connect, c.canCreate and { "Create a profile…", "create", true } or preview
+end
+
+--- Runs an Overview connection button's action (each asks first).
+function TRP3Page.RunConnectionAction(page, action)
+	local c = page.view and page.view.connection
+	if action == "preview" then
+		Commands.Execute(ns.ctx, "trp3 profile")
+	elseif action == "connect" then
+		TRP3Page.AskConnectAll(page)
+	elseif action == "create" and c and c.suggestedName then
+		Widgets.Confirm(ns.TRP3Commands.CreateQuestion(c.suggestedName), "Create", function()
+			act(function()
+				local _, message = ns.TRP3Commands.CreateProfile(ns.ctx, c.suggestedName)
+				return message
+			end)
+		end)
+	elseif (action == "switch" or action == "switchBack") and c then
+		local target, question
+		if action == "switchBack" then
+			target = { id = c.connectedProfileId, name = c.connectedName, sharedWith = 0 }
+			question = ns.TRP3Commands.SwitchQuestion(target, nil, nil, true)
+		elseif #c.candidates > 0 then
+			page.switchPick = (page.switchPick or 0) % #c.candidates + 1
+			target = c.candidates[page.switchPick]
+			question = ns.TRP3Commands.SwitchQuestion(target, page.switchPick, #c.candidates)
+		end
+		if not target then return end
+		Widgets.Confirm(question, "Switch", function()
+			act(function()
+				local _, message = ns.TRP3Commands.SelectProfile(ns.ctx, target.id, target.name)
+				return message
+			end)
+		end)
+	end
 end
 
 --- "Connect everything…": the same single authorisation as setup's
@@ -1115,9 +1246,10 @@ function TRP3Page.AskConnectAll(page)
 	if not view then return end
 	local shared = view.probe.profile and view.probe.profile.sharedWith or 0
 	Widgets.Confirm("Connect Total RP 3 profile \"" .. plain(view.probe.profile and view.probe.profile.name or "?")
-		.. "\" to this character?\n\nDawnward will keep your names, titles, details, About page (your whole story), "
-		.. "personality and additional information up to date from your Public information. Where Total RP 3 already "
-		.. "has your own text, it is kept and that item waits for your choice. A backup is taken before every write."
+		.. "\" to this character?\n\nThis is your one authorisation: Dawnward will keep your names, titles, details, "
+		.. "About page (your whole story), personality and additional information up to date from your Dawnward "
+		.. "character. Where Total RP 3 already has your own text, it is kept and that item waits for your choice. "
+		.. "A backup is taken before every write."
 		.. (shared > 0 and ("\n\nThis profile is shared with " .. plural(shared, "other character",
 			"other characters") .. "; they will show the same.") or ""), "Connect", function()
 		act(function()
