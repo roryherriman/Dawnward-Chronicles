@@ -208,7 +208,7 @@ TRP3Page.EXPLAIN = {
 		.. "yourself stays exactly as it is.",
 	traits = "Dawnward only adds and updates its own personality traits, one per personality axis you set. "
 		.. "Preset traits and traits you made yourself are never changed.",
-	glance = "Dawnward only writes the At First Glance entries you wrote for it (/dawnward trp3 glance), into "
+	glance = "Dawnward only writes the At First Glance entries you write in its At First Glance section, into "
 		.. "free slots. Slots you filled in Total RP 3 are never changed.",
 }
 
