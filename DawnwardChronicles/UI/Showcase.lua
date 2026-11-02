@@ -361,6 +361,11 @@ function Showcase.Model(parent, width, height)
 	f.zoomOut = controlButton("-", C.zoomButton, "default", "Zoom out", "The mouse wheel over the model also zooms.")
 	f.zoomOut:SetPoint("TOP", f.zoomIn, "BOTTOM", 0, -4)
 	f.zoomOut:SetScript("OnClick", function() f:Zoom(-Showcase.ZOOM_STEP) end)
+	-- v0.10.1: plus and minus line icons, as the turn buttons (the glyphs stay
+	-- where the client cannot draw lines).
+	for _, pair in ipairs({ { f.zoomIn, "plus" }, { f.zoomOut, "minus" } }) do
+		if pair[1]:SetIcon(pair[2], Widgets.BUTTON_ICON.compact) then pair[1]:SetText("") end
+	end
 	raise(f.zoomIn)
 	raise(f.zoomOut)
 

@@ -567,7 +567,8 @@ local function create(parent)
 	end
 	-- Family (mockup: FAMILY with its Add on the eyebrow row).
 	section.familyPanel = backPanel("Family")
-	section.familyPanel.empty = Widgets.Label(section.familyPanel, "meta", true, "muted")
+	-- Side-panel notes use the small muted style on every screen (v0.10.1).
+	section.familyPanel.empty = Widgets.Label(section.familyPanel, "small", true, "muted")
 	section.familyPanel.empty:SetPoint("TOPLEFT", L.pad, -L.famHead)
 	section.familyPanel.empty:SetWidth(cols.right - 2 * L.pad)
 	section.familyPanel.empty:SetText(CharacterView.FAMILY_HINT)
@@ -1125,6 +1126,13 @@ local function create(parent)
 		self.sideScroll:ClearAllPoints()
 		self.sideScroll:SetPoint("TOPLEFT", cols.rightX, -(L.scrollTop + drop))
 		self.sideScroll:SetSize(cols.right, height)
+		-- v0.10.1: a taller or shorter view changes the range; keep the place
+		-- inside it and the slim thumbs in proportion at once (the client also
+		-- reports the change through OnScrollRangeChanged, a frame later).
+		for _, pair in ipairs({ { self.scroll, self.scrollBar }, { self.sideScroll, self.sideBar } }) do
+			Widgets.ScrollTo(pair[1], pair[1]:GetVerticalScroll())
+			if pair[2] and pair[2].UpdateThumb then pair[2].UpdateThumb() end
+		end
 	end
 
 	--- The header's eyebrow names the view (mockup: "CHARACTER · SHOWCASE").

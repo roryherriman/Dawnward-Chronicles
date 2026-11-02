@@ -62,6 +62,42 @@ return function(t, expect)
 			end
 		end)
 
+		t:it("never clips a button label or a one-line label of fixed width (estimated from the fonts)", function()
+			for _, start in ipairs({ Sweep.Sample, Sweep.Empty }) do
+				local mock, _, ns = start()
+				local byName = Sweep.FontByName(ns)
+				local clipped, buttons, labels = {}, 0, 0
+				Sweep.Walk(ns, function(name)
+					for _, f in ipairs(mock.allFrames) do
+						if f:IsVisible() then
+							local text = f.__text
+							if f.__kind == "Button" and f.label and f.variant and f.variant ~= "choice"
+								and f.label:IsShown() and type(text) == "string" and text ~= "" then
+								buttons = buttons + 1
+								local icon = f.icon and f.icon.size and true or false
+								if not ns.Widgets.LabelFits(text, f:GetWidth(), f:GetHeight(), f.variant, icon) then
+									clipped[#clipped + 1] = name .. ": button " .. text
+								end
+							elseif f.__kind == "FontString" and f.__wordWrap == false and (f.__width or 0) > 0
+								and type(text) == "string" and text ~= "" then
+								local obj = f.__fontObject
+								local spec = byName[obj and obj.__name or f.__template]
+								if spec then
+									labels = labels + 1
+									local size = Sweep.TextSize(ns, f)
+									if ns.Style.TextWidth(text, spec.style) * size / spec.size > f.__width + 0.5 then
+										clipped[#clipped + 1] = name .. ": label " .. text
+									end
+								end
+							end
+						end
+					end
+				end)
+				expect.truthy(buttons > 300 and labels > 150, buttons .. " buttons, " .. labels .. " labels checked")
+				expect.equal(#clipped, 0, table.concat(clipped, " | ", 1, math.min(#clipped, 20)))
+			end
+		end)
+
 		for _, theme in ipairs(THEMES) do
 			t:it("switching to " .. theme .. " with every screen built repaints everything (no stale colour)", function()
 				local start = theme == "dawnward" and "shadowbound" or "dawnward"
