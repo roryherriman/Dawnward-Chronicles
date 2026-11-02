@@ -133,11 +133,15 @@ local function legacySpec(t, expect)
 			end
 			expect.truthy(page.connectAll:GetWidth() + page.previewProfile:GetWidth() + 8 + 2 * 18
 				<= page.card:GetWidth(), "the two buttons do not overlap")
-			expect.truthy(ns.Style.TextWidth(page.overviewTitle:GetText(), "title") + 12 + page.switchModel:GetWidth()
-				+ 2 * 18 <= page.card:GetWidth(), "the switch button sits beside the title")
-			local lastRow = 88 + 8 * ns.TRP3Page.OVERVIEW_ROW + 10 + 3 * (ns.TRP3Page.SELECTOR_HEIGHT + 10)
+			-- v0.10: the lines, the note (three lines) and Publish whole profile… stack above the buttons;
+			-- the About choices moved to the Biography section.
+			local P = ns.TRP3Page
+			expect.equal(P.CONNECTION_NOTE_TOP, P.HEAD_HEIGHT + 3 * P.STATUS_ROW + 10)
+			local lastRow = P.CONNECTION_NOTE_TOP + 3 * P.LINE + 12 + page.switchModel:GetHeight()
 			expect.truthy(lastRow <= page.card:GetHeight() - 14 - ns.Style.CONTROL.compact - 8,
-				"choices stay above the buttons")
+				"the note and Publish whole profile… stay above the buttons")
+			expect.truthy(ns.Widgets.LabelFits(page.switchModel:GetText(), page.switchModel:GetWidth(),
+				page.switchModel:GetHeight(), "ghost"))
 		end)
 
 		t:it("previews everything it would publish without writing", function()

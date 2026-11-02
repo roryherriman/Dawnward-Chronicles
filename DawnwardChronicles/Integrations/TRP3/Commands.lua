@@ -330,6 +330,48 @@ function TRP3Commands.Approve(deps, feature)
 	return Sync.RunFeature(deps, feature)
 end
 
+--- Preview items (TRP3Presentation.DisplayItems) as plain lines for the copy
+-- window: a heading as "== Title ==" (h1), "-- Title --" (h2/h3), colour
+-- codes and icons removed, one blank line between items, as TRP3 spaces
+-- them. Pure.
+function TRP3Commands.PlainLines(items)
+	local result = {}
+	for i, item in ipairs(items or {}) do
+		local text = item.text:gsub("|T.-|t%s?", ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("||", "|")
+		if item.kind == "h1" then
+			text = "== " .. text .. " =="
+		elseif item.kind ~= "p" then
+			text = "-- " .. text .. " --"
+		elseif i > 1 and items[i - 1].kind == "p" then
+			result[#result + 1] = ""
+		end
+		result[#result + 1] = text
+	end
+	return result
+end
+
+--- What the About page will look like in Total RP 3, for the settings
+-- page's preview: TRP3Presentation.Display blocks for the template the next
+-- write uses (the chosen layout, else currentTemplate, the About's own TE),
+-- planned the same way as the sync (whole profile, or the summary block as
+-- one section without a heading). Returns blocks, template. Read only.
+function TRP3Commands.AboutDisplay(char, currentTemplate)
+	local public = char and Projection.GetPublic(char) or { facts = {}, personality = {}, fields = {} }
+	Sync.ApplySettings(public, char)
+	local LAYOUT = { text = 1, frames = 2, sections = 3 }
+	local template = LAYOUT[public.trp3Layout] or (currentTemplate == 2 or currentTemplate == 3) and currentTemplate
+		or 1
+	local doc
+	if Sync.UsesProfile(public) then
+		doc = ns.TRP3AboutDoc.Build(public)
+	else
+		local block = AboutBlock.Compose(public)
+		doc = block ~= "" and { { id = "notes", body = block, raw = true } } or {}
+	end
+	local rendered = ns.TRP3AboutDoc.Render(doc, template, public.trp3Style)
+	return ns.TRP3Presentation.Display(rendered, template), template
+end
+
 --- The public profile Dawnward would publish, as text (read only): the
 -- About page for the given template (1, 2 or 3; default 1) in the
 -- character's style and layout settings, then every Public profile field and
@@ -341,21 +383,25 @@ function TRP3Commands.ProfilePreview(char, template)
 	local LAYOUT = { text = 1, frames = 2, sections = 3 }
 	template = LAYOUT[public.trp3Layout] or template or 1
 	if Sync.UsesProfile(public) then
+		-- v0.10: laid out as Total RP 3 shows it (TRP3Presentation.Display):
+		-- the same order, frames and template 3 titles, headings on their
+		-- own line, markup shown as plain text (TRP3Commands.PlainLines).
 		local rendered = ns.TRP3AboutDoc.Render(ns.TRP3AboutDoc.Build(public), template, public.trp3Style)
-		lines[#lines + 1] = "ABOUT PAGE (template " .. template .. ")"
-		if template == 2 then
-			for i, frame in ipairs(rendered.frames) do
-				lines[#lines + 1] = string.format("--- Frame %d (icon %s) ---", i, frame.IC)
-				lines[#lines + 1] = frame.TX
+		local style = ns.TRP3Presentation.Get(public.trp3Style)
+		lines[#lines + 1] = "ABOUT PAGE (template " .. template .. ") · style: " .. style.label
+		local blocks = ns.TRP3Presentation.Display(rendered, template)
+		for i, block in ipairs(blocks) do
+			if block.kind == "frame" then
+				local bk = ns.TRP3Presentation.BACKGROUNDS[block.background]
+				lines[#lines + 1] = string.format("--- Frame %d (icon %s, background %s) ---", i, tostring(block.icon),
+					bk and tostring(block.background) or (tostring(block.background) .. ", your own"))
+			elseif block.kind == "part" then
+				lines[#lines + 1] = "--- " .. block.title .. " ---"
 			end
-		elseif template == 3 then
-			for _, part in ipairs({ { "PH", "Physical description" }, { "PS", "Personality traits" },
-				{ "HI", "History" } }) do
-				lines[#lines + 1] = "--- " .. part[2] .. " ---"
-				lines[#lines + 1] = rendered[part[1]] ~= "" and rendered[part[1]] or "(nothing yet)"
-			end
-		else
-			lines[#lines + 1] = rendered.T1 ~= "" and rendered.T1 or "(nothing yet)"
+			for _, line in ipairs(TRP3Commands.PlainLines(block.items)) do lines[#lines + 1] = line end
+		end
+		if #blocks == 0 or (#blocks == 1 and #blocks[1].items == 0) then
+			lines[#lines + 1] = "(nothing yet)"
 		end
 	else
 		lines[#lines + 1] = "ABOUT PAGE (summary block)"

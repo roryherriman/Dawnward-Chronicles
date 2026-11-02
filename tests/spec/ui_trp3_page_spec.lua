@@ -53,6 +53,13 @@ local function open(ns)
 	return ns.SettingsPanel.panel.trp3Page
 end
 
+-- Opens a section of the page from the rail (v0.10).
+local function go(page, id)
+	for _, b in ipairs(page.nav.buttons) do
+		if b.segmentId == id then click(b) end
+	end
+end
+
 local function status(ns)
 	return ns.MainWindow.GetFrame().status:GetText() or ""
 end
@@ -94,24 +101,27 @@ local function legacySpec(t, expect)
 			publicFact(mock)
 			local page = open(ns)
 			expect.truthy(page.body:IsShown())
-			-- Nothing set up yet: the page opens on the first-connection Mappings tab (v0.8).
-			expect.equal(page.feature, "mappings")
+			-- Nothing set up yet: the page opens on Connection (v0.10), whose
+			-- Connect everything… is the first connection.
+			expect.equal(page.feature, "connection")
+			expect.truthy(page.overview:IsShown())
+			go(page, "character")
 			expect.truthy(page.map:IsShown())
-			click(page.nav.buttons[2])
+			go(page, "about")
 			expect.falsy(page.map:IsShown())
 			expect.equal(page.columns[1]:GetText(), "Installed · 3.4.1 · supported")
 			expect.truthy(page.columns[2]:GetText():find("not linked", 1, true))
 			expect.equal(page.columns[3]:GetText(), "Off for Biography and Traits")
 			expect.equal(page.chip.label:GetText(), "Sync off")
-			expect.truthy(page.unsupported:GetText():find("name, pronouns and the other fields never", 1, true))
+			expect.truthy(page.unsupported:GetText():find("Never written: Currently and RP status", 1, true))
 			mock.Slash("trp3 enable about confirm")
 			ns.MainWindow.Refresh()
 			expect.truthy(page.columns[2]:GetText():find("\"Aelin (RP)\" · this character only", 1, true))
 			expect.equal(page.columns[3]:GetText(), "On for Biography · off for Traits")
 			expect.equal(page.chip.label:GetText(), "Needs your approval")
 			expect.truthy(page.reasons:GetText():find("Proposed change: insert", 1, true))
-			click(page.nav.buttons[3])
-			expect.equal(page.title:GetText(), "Traits: sync is off")
+			go(page, "traits")
+			expect.equal(page.title:GetText(), "Personality: sync is off")
 		end)
 
 		t:it("writes nothing to Total RP 3 when the page is opened, refreshed or previewed", function()
@@ -125,22 +135,24 @@ local function legacySpec(t, expect)
 			local events = #fake.events
 			local page = open(ns)
 			ns.MainWindow.Refresh()
-			click(page.nav.buttons[3])
-			click(page.nav.buttons[2])
+			for _, b in ipairs(page.nav.buttons) do click(b) end
+			go(page, "about")
 			click(page.notNow)
 			expect.deepEqual(fake.snapshot(), before)
 			expect.equal(#fake.events, events)
 			expect.equal(#env.DawnwardChroniclesTRP3DB.backups, 0)
 			expect.equal(#mock.timers, 0, "opening the page requests no automatic run")
 			expect.equal(#fake.setterCalls, 0)
-			expect.truthy(page.previewText:GetText():find("Origin: Born in Stormwind", 1, true))
+			-- The preview is drawn as Total RP 3 will show it (v0.10).
+			expect.truthy(ns.TRP3Page.PreviewText(page):find("Origin: Born in Stormwind", 1, true),
+				ns.TRP3Page.PreviewText(page))
 		end)
 
 		t:it("approve needs the opt-in, asks before turning sync on, then runs the guarded write", function()
 			local mock, env, ns, fake = start()
 			publicFact(mock)
 			local page = open(ns)
-			click(page.nav.buttons[2])
+			go(page, "about")
 			expect.falsy(page.approve:IsEnabled())
 			click(page.approve) -- even if forced, nothing is written without the opt-in
 			expect.equal(fake.profile.player.about.T1.TX, "Private about text")
@@ -173,6 +185,7 @@ local function legacySpec(t, expect)
 			mock.timers = {}
 			mock.inCombat = true
 			local page = open(ns)
+			go(page, "about")
 			expect.equal(page.chip.label:GetText(), "Waiting")
 			expect.truthy(page.reasons:GetText():find("in combat", 1, true))
 			expect.falsy(page.approve:IsEnabled())
@@ -196,10 +209,16 @@ local function legacySpec(t, expect)
 			mock.Vis("fact vis 2 public")
 			mock.timers = {}
 			local page = open(ns)
-			expect.equal(page.chip.label:GetText(), "Conflict")
-			expect.truthy(page.conflict:IsShown())
+			-- A conflict opens Conflicts and recovery (v0.10); the rail marks it.
+			expect.equal(page.feature, "recovery")
+			expect.equal(page.chip.label:GetText(), "1 conflict")
+			expect.truthy(page.conflict:IsVisible())
+			expect.equal(page.nav.buttons[7].state, "waiting")
 			expect.equal(page.conflict.title:GetText(), "CONFLICT ON BIOGRAPHY")
 			expect.truthy(page.conflictText:GetText():find("Nothing will be overwritten", 1, true))
+			go(page, "about")
+			expect.equal(page.chip.label:GetText(), "Conflict")
+			expect.equal(page.nav.buttons[3].state, "danger")
 			expect.falsy(page.approve:IsEnabled())
 			click(page.approve)
 			expect.equal(fake.profile.player.about.T1.TX, "Rewritten by the player")
@@ -266,50 +285,91 @@ local function legacySpec(t, expect)
 				for _, row in ipairs(page.overviewRows) do
 					all[#all + 1] = (row.name:GetText() or "") .. " " .. (row.value:GetText() or "")
 				end
+				for _, row in ipairs(page.statusRows) do
+					all[#all + 1] = (row.name:GetText() or "") .. " " .. (row.value:GetText() or "")
+				end
+				all[#all + 1] = ns.TRP3Page.PreviewText(page)
 				for _, fs in ipairs({}) do
 					all[#all + 1] = fs:GetText() or ""
 				end
 				return table.concat(all, "\n")
 			end
-			for _, feature in ipairs({ 1, 2, 3 }) do
-				click(page.nav.buttons[feature])
+			for _, b in ipairs(page.nav.buttons) do
+				click(b)
 				local shown = texts()
 				expect.falsy(shown:find("Duskwood", 1, true), "private fact leaked")
 				expect.falsy(shown:find("Alterac", 1, true), "secret fact leaked")
 				expect.falsy(shown:find("Sceptical", 1, true) or shown:find("Devout", 1, true), "private axis leaked")
 			end
-			click(page.nav.buttons[2])
-			expect.truthy(page.previewText:GetText():find("Born in Stormwind", 1, true))
+			go(page, "about")
+			expect.truthy(ns.TRP3Page.PreviewText(page):find("Born in Stormwind", 1, true))
+			go(page, "status")
 			expect.truthy(page.hiddenText:GetText():find("3 items an earlier version kept back", 1, true),
 				page.hiddenText:GetText())
 			expect.falsy(page.hiddenText:GetText():find("Duskwood", 1, true), "counts only, never content")
-			click(page.nav.buttons[3])
+			go(page, "traits")
 			expect.truthy(page.previewText:GetText():find(" 5 / 15 ", 1, true), page.previewText:GetText())
+			expect.truthy(page.traitRows[1]:IsShown(), "drawn as Total RP 3's trait bar")
+			expect.equal(page.traitRows[1].fill:GetWidth(), math.floor(page.traitRows[1].barWidth * 5 / 20))
 		end)
 
-		t:it("fits the strip, the feature card and the right column inside the settings page", function()
+		t:it("v0.10 layout: strip, section rail and card fill the settings page without overlapping", function()
 			local _, _, ns = start()
 			local page = open(ns)
+			local P = ns.TRP3Page
 			local L = ns.MainWindow.LAYOUT
 			local pageHeight = L.height - L.contentTop - L.contentBottom - ns.SettingsPanel.LAYOUT.pageTop
 			local cardH = page.card:GetHeight()
-			expect.equal(-top(page.card) + cardH, pageHeight, "card ends at the bottom of the page")
-			for _, w in ipairs({ page.keep, page.preview, page.hidden }) do
-				expect.truthy(-top(w) + w:GetHeight() <= cardH - 46, "above the button row")
+			expect.equal(P.SUMMARY_HEIGHT + P.STRIP_GAP + cardH, pageHeight, "card ends at the bottom of the page")
+			expect.equal(P.RAIL_WIDTH + P.COLUMN_GAP + page.card:GetWidth(), ns.MainWindow.ContentWidth(),
+				"the rail and the card fill the content width")
+			-- The rail: seven items in order, all inside the card's height, every name in two lines at most.
+			expect.equal(#page.nav.buttons, 7)
+			local ids = {}
+			for i, b in ipairs(page.nav.buttons) do
+				ids[i] = b.segmentId
+				expect.equal(b:GetHeight(), ns.Style.CONTROL.nav)
+				expect.truthy(ns.Style.TextWidth(b.name:GetText(), "body") <= 2 * b.name:GetWidth(), b.name:GetText())
+				expect.truthy(14 + b.name:GetWidth() + 8 + 8 + 14 <= b:GetWidth(), "name clear of the state mark")
 			end
-			expect.truthy(page.conflict:GetHeight() + ns.TRP3Page.GAP + page.backups:GetHeight() <= cardH)
-			expect.equal(page.card:GetWidth() + ns.TRP3Page.COLUMN_GAP + ns.TRP3Page.RIGHT_WIDTH,
-				ns.MainWindow.ContentWidth(), "the two columns fill the content width")
+			expect.deepEqual(ids, { "connection", "character", "about", "traits", "appearance", "status", "recovery" })
+			expect.truthy(7 * P.RAIL_ITEM + 6 * P.RAIL_GAP <= cardH, "the rail fits beside the card")
+			-- Section titles fit beside the widest state chip.
+			for _, s in ipairs(P.SECTIONS) do
+				expect.truthy(ns.Style.TextWidth(s.label, "title") + 12 + 180 <= page.innerWidth, s.label)
+			end
+			for _, t in ipairs({ "Biography: proposed change", "Personality: sync is off" }) do
+				expect.truthy(ns.Style.TextWidth(t, "title") + 12 + 180 <= page.innerWidth, t)
+			end
 			expect.truthy(page.approve:GetWidth() + page.notNow:GetWidth() + page.toggle:GetWidth() + 8 + 28
 				< page.card:GetWidth(), "the three actions do not overlap")
-			-- Mappings: every row and the note stay above the Authorize row.
-			local last = page.mapRows[#page.mapRows]
-			expect.truthy(-top(last) + last:GetHeight() + 4 + ns.TRP3Page.LINE <= cardH - 14 - page.authorize:GetHeight(),
+			-- Character information: every row and the note stay above the Authorize row.
+			local perPage = page.mapPerPage
+			local rowsEnd = P.MAP_TOP + perPage * (P.MAP_ROW_HEIGHT + P.MAP_ROW_GAP) - P.MAP_ROW_GAP
+			expect.truthy(rowsEnd + 4 + P.LINE <= cardH - 14 - page.authorize:GetHeight(),
 				"rows and the one-line note stay above the Authorize row")
 			local r = page.mapRows[1]
-			expect.truthy(r.name:GetWidth() + ns.TRP3Page.IMPORT_WIDTH + ns.TRP3Page.SELECTOR_WIDTH + 12
-				<= r:GetWidth(), "row text, Import and the selector do not overlap")
+			expect.truthy(r.name:GetWidth() + P.IMPORT_WIDTH + P.SELECTOR_WIDTH + 12 <= r:GetWidth(),
+				"row text, Import and the selector do not overlap")
 			expect.truthy(page.authorize:GetWidth() + page.resetChoices:GetWidth() + 8 + 28 < page.card:GetWidth())
+			-- Appearance: the At First Glance box between its rows and the Authorize row.
+			expect.truthy(-top(page.glance) >= P.MAP_TOP + #P.SECTION_MAPPINGS.appearance
+				* (P.MAP_ROW_HEIGHT + P.MAP_ROW_GAP))
+			expect.truthy(-top(page.glance) + page.glance:GetHeight() <= cardH - 14 - page.authorize:GetHeight() - 8)
+			-- Conflicts and recovery: two columns inside the card.
+			expect.truthy(P.HEAD_HEIGHT + P.CONFLICT_HEIGHT <= cardH)
+			expect.truthy(-top(page.backups) + page.backups:GetHeight() <= cardH)
+			expect.truthy(page.recoveryColumn * 2 + P.GAP <= page.innerWidth)
+			local inner = page.backups:GetHeight() - 2 * ns.Widgets.PANEL_PAD - 22
+			local used = P.BACKUP_ROWS * (P.BACKUP_ROW_HEIGHT + 4) - 4 + 10 + 2 * ns.Style.CONTROL.compact + 6 + 10
+				+ 3 * 16
+			expect.truthy(used <= inner, "backups, both restores and the note fit")
+			for _, b in ipairs({ page.keepYours, page.reclaim }) do
+				expect.truthy(ns.Widgets.LabelFits(b:GetText(), b:GetWidth(), b:GetHeight()), b:GetText())
+			end
+			-- Status: eight lines and the never-sent box above the bottom.
+			expect.truthy(-top(page.hidden) + page.hidden:GetHeight() <= cardH - 14)
+			expect.truthy(P.HEAD_HEIGHT + 8 * P.STATUS_ROW <= -top(page.hidden))
 		end)
 
 		t:it("v0.8 layout: every Mappings selector item fits \"Dawnward\", and the right column's labels fit", function()
@@ -346,40 +406,86 @@ local function legacySpec(t, expect)
 			end
 			local W = page.columnWidths
 			expect.truthy(16 + W[1] + W[2] + W[3] + 12 + page.experimental:GetWidth() + 16 <= page.width)
-			-- The nav and the state chip share the top row of the card.
-			expect.truthy(18 + 3 * 92 + 12 + ns.Style.TextWidth("Needs your approval", "small") + 20
-				<= page.leftWidth - 18)
 			expect.equal(ns.TRP3Page.STATE_CHIP.ready[2], "waiting", "needs-you chips are amber, as the design")
 		end)
 
-		t:it("v0.8 layout: the Biography boxes stack without overlapping, above the action row", function()
-			local _, _, ns = start()
+		t:it("v0.10 layout: the Biography's boxes, choices and preview stack above the action row", function()
+			local mock, _, ns = start()
+			publicFact(mock)
 			local page = open(ns)
-			local boxes = { page.keep, page.preview, page.hidden }
-			for i = 2, #boxes do
-				expect.truthy(-top(boxes[i]) >= -top(boxes[i - 1]) + boxes[i - 1]:GetHeight() + 4, "gap between boxes")
+			go(page, "about")
+			local P = ns.TRP3Page
+			local stack = { page.reasons, page.keep, page.choices, page.preview }
+			local heights = { P.LINE, page.keep:GetHeight(), page.choices:GetHeight(), page.preview:GetHeight() }
+			for i = 2, #stack do
+				expect.truthy(-top(stack[i]) >= -top(stack[i - 1]) + heights[i - 1] + 4, "gap " .. i)
 			end
-			local actionTop = page.mainHeight - 14 - ns.TRP3Page.ACTION_HEIGHT
-			expect.truthy(-top(page.hidden) + page.hidden:GetHeight() + 6 <= actionTop - 8, "above the rule")
-			expect.truthy(28 + ns.TRP3Page.PREVIEW_LINES * 16 + 8 <= page.preview:GetHeight(), "preview lines fit")
-			-- The two never-shared paragraphs fit their two lines each.
-			local w = page.innerWidth - 20
-			expect.truthy(ns.Style.TextWidth(ns.TRP3Page.UNSUPPORTED_TEXT, "meta") <= 2 * w)
-			expect.truthy(ns.Style.TextWidth(ns.TRP3Page.EXPLAIN.about, "meta") <= 2 * page.innerWidth)
-			expect.truthy(ns.Style.TextWidth(ns.TRP3Page.EXPLAIN.traits, "meta") <= 2 * page.innerWidth)
-			expect.truthy(ns.Style.TextWidth(ns.TRP3Page.MAPPINGS_EXPLAIN, "meta") <= 2 * page.innerWidth)
-			-- Right column: the callout and the backups stay inside the page.
-			expect.truthy(page.conflict:GetHeight() + ns.TRP3Page.GAP + page.backups:GetHeight() <= page.mainHeight)
+			local actionTop = page.mainHeight - 14 - P.ACTION_HEIGHT
+			expect.truthy(-top(page.preview) + page.preview:GetHeight() <= actionTop - 8, "above the rule")
+			expect.truthy(page.preview:GetHeight() >= 100, "room for the preview")
+			for _, seg in ipairs(page.overviewChoices) do
+				local last = seg.buttons[#seg.buttons]
+				expect.truthy(P.CHOICE_LABEL + #seg.buttons * (last:GetWidth() + 2) <= page.innerWidth)
+				expect.truthy(ns.Style.TextWidth(seg.name:GetText(), "body") <= P.CHOICE_LABEL - 8)
+			end
+			-- Personality: the preview takes the choices' room; six trait bars fit.
+			go(page, "traits")
+			expect.falsy(page.choices:IsShown())
+			expect.truthy(30 + 6 * 28 <= page.preview:GetHeight())
+			local row = page.traitRows[1]
+			expect.truthy(158 + row.barWidth + 8 + row.right:GetWidth() <= row:GetWidth(), "words and bar fit")
+			-- The explanations fit their two lines.
+			for _, text in ipairs({ P.EXPLAIN.about, P.EXPLAIN.traits, P.MAPPINGS_EXPLAIN, P.APPEARANCE_EXPLAIN,
+				P.CONNECTION_EXPLAIN, P.STATUS_EXPLAIN, P.RECOVERY_EXPLAIN }) do
+				expect.truthy(ns.Style.TextWidth(text, "meta") <= 2 * page.innerWidth, text)
+			end
+			expect.truthy(ns.Style.TextWidth(P.UNSUPPORTED_TEXT, "meta") <= 2 * (page.innerWidth - 20))
+		end)
+
+		t:it("v0.10: the Biography preview mirrors Total RP 3's headings, order and frames", function()
+			local mock, _, ns = start()
+			publicFact(mock)
+			mock.Slash("fact add belief Protect the weak")
+			mock.Vis("fact vis 2 public")
+			local char = ns.ctx.store.real.characters[CHAR]
+			ns.Publication.Adopt(char, 1)
+			ns.Actions.WithCharacter(ns.ctx, function(c)
+				return ns.Sources.Capture(c, "paste", "# The fall\nThe walls fell.\n\nShe hid.", nil, 5)
+			end)
+			local page = open(ns)
+			go(page, "about")
+			local text = ns.TRP3Page.PreviewText(page)
+			local a, b = text:find("The fall", 1, true), text:find("Beliefs and motivations", 1, true)
+			expect.truthy(a and b and a < b, "the order of the About page: " .. text)
+			expect.truthy(text:find("The walls fell.", 1, true) and text:find("She hid.", 1, true))
+			expect.truthy(page.render.pools.h2[1]:IsShown(), "headings drawn as headings")
+			expect.equal(page.render.usedFrames, 0, "template 1 has no frames")
+			-- Frames and the Silver Hand style: one frame per section, its icon and a verified background.
+			for _, seg in ipairs(page.overviewChoices) do
+				for _, btn in ipairs(seg.buttons) do
+					if btn.segmentId == "frames" or btn.segmentId == "silverhand" then click(btn) end
+				end
+			end
+			text = ns.TRP3Page.PreviewText(page)
+			expect.truthy(page.render.usedFrames >= 2, "one frame per section")
+			local f = page.render.frames[1]
+			expect.truthy(f:IsShown())
+			expect.equal(f.bg.__texture, ns.TRP3Presentation.BACKGROUNDS[3].file)
+			expect.truthy(f.icon.__texture:find("^Interface\\ICONS\\"))
+			expect.truthy(text:find("|cffe6c35c", 1, true), "gold headings: " .. text)
+			expect.truthy(page.previewHead:GetText():find("TEMPLATE 2", 1, true))
 		end)
 
 		t:it("v0.8 look: the preview box uses the Public chip's colours, and the plain boxes the input well", function()
 			local _, _, ns = start()
 			local page = open(ns)
+			go(page, "about")
 			local theme = ns.Style.Current()
 			local fill, edge = ns.Widgets.ChipColors(ns.Themes.VISIBILITY_COLORS.public, theme, theme.surface)
 			expect.equal(page.preview.bg.__color[1], fill[1])
 			expect.equal(page.preview.edges.top.__color[2], edge[2])
 			expect.equal(page.keep.bg.__color[1], ns.Style.Tones(theme).field[1])
+			go(page, "status")
 			expect.equal(page.hidden.bg.__color[3], ns.Style.Tones(theme).field[3])
 		end)
 
@@ -417,19 +523,31 @@ local function legacySpec(t, expect)
 			mock.Vis("vis race public")
 			mock.timers = {}
 			local page = open(ns)
-			expect.equal(page.feature, "mappings")
-			expect.equal(#page.mapRows, #ns.TRP3Ledger.MAPPINGS, "every mapping has a row (v0.9: 20, with At First Glance)")
-			expect.equal(#page.mapRows, 20)
+			expect.equal(page.feature, "connection")
+			-- v0.10: every mapping but the biography and traits (switched on their own sections) has a row,
+			-- in Character information or in Appearance and At First Glance.
+			expect.equal(#page.mapRows, #ns.TRP3Ledger.MAPPINGS - 2)
+			go(page, "appearance")
+			local appearance = {}
+			for _, r in ipairs(page.mapRows) do
+				if r:IsShown() then appearance[#appearance + 1] = r.id end
+			end
+			expect.deepEqual(appearance, { "eyes", "height", "weight", "glance" })
+			expect.equal(row(page, "glance").selector.selected, "off")
+			expect.truthy(page.glance:IsShown())
+			go(page, "character")
+			local characterRows = #ns.TRP3Page.SECTION_MAPPINGS.character
+			expect.equal(characterRows + 4, #page.mapRows)
 			expect.truthy(page.mapPages > 1, "paged: more than fit at once")
 			expect.truthy(page.mapRows[1]:IsShown())
-			expect.falsy(page.mapRows[#page.mapRows]:IsShown(), "later rows are on a later page")
+			expect.falsy(page.mapRows[characterRows]:IsShown(), "later rows are on a later page")
+			expect.falsy(row(page, "eyes"):IsShown(), "the appearance rows are on their own section")
 			click(page.mapNext)
-			expect.truthy(page.mapRows[#page.mapRows]:IsShown() or page.mapPages > 2)
+			expect.truthy(page.mapRows[characterRows]:IsShown())
 			click(page.mapPrev)
 			expect.truthy(page.unsupportedNote:GetText():find("Currently", 1, true), page.unsupportedNote:GetText())
 			expect.truthy(page.sharedWarn:GetText():find("this character only", 1, true))
 			expect.equal(row(page, "race").selector.selected, "trp3", "a field starts managed by Total RP 3")
-			expect.equal(row(page, "about").selector.selected, "off")
 			expect.falsy(page.authorize:IsEnabled())
 			choose(row(page, "race"), "dawnward")
 			expect.equal(env.DawnwardChroniclesTRP3DB.optIn[CHAR], nil, "staged only")
@@ -459,6 +577,7 @@ local function legacySpec(t, expect)
 			mock.Vis("vis race secret")
 			mock.Slash("set age PRIVATEAGE")
 			local page = open(ns)
+			go(page, "character")
 			choose(row(page, "race"), "dawnward")
 			choose(row(page, "age"), "dawnward")
 			local shown = {}
@@ -478,6 +597,7 @@ local function legacySpec(t, expect)
 				["Alt-TestRealm"] = { profileID = "1700000000ABCDE" } } })
 			mock.timers = {}
 			local page = open(ns)
+			go(page, "character")
 			expect.truthy(page.sharedWarn:GetText():find("shared with 1 other character", 1, true))
 			choose(row(page, "age"), "dawnward")
 			click(page.authorize)
@@ -487,6 +607,7 @@ local function legacySpec(t, expect)
 		t:it("imports a Total RP 3 value only after confirmation, as Private", function()
 			local mock, _, ns, fake = start({ characteristics = { v = 3, FN = "Aelin", CL = "Lightbringer", PS = {} } })
 			local page = open(ns)
+			go(page, "character")
 			local before = fake.snapshot()
 			local r = row(page, "class")
 			expect.truthy(r.import:IsEnabled())
@@ -506,8 +627,11 @@ local function legacySpec(t, expect)
 			mock.Slash("trp3 field age dawnward confirm")
 			mock.RunTimers()
 			local page = open(ns)
+			expect.equal(page.feature, "recovery")
 			expect.truthy(page.conflict:IsShown())
 			expect.equal(page.conflict.title:GetText(), "CONFLICT ON AGE")
+			go(page, "character")
+			expect.equal(page.nav.buttons[2].state, "danger", "the rail marks the field's section")
 			click(page.keepYours)
 			expect.equal(fake.profile.player.characteristics.AG, "40")
 			expect.equal(ns.TRP3Ledger.Policy(env.DawnwardChroniclesTRP3DB.optIn[CHAR], "age"), "trp3")
@@ -523,7 +647,7 @@ local function legacySpec(t, expect)
 			mock.Vis("vis age private")
 			mock.timers = {}
 			local page = open(ns)
-			click(page.nav.buttons[4])
+			go(page, "character")
 			choose(row(page, "age"), "trp3")
 			expect.truthy(row(page, "age").detail:GetText():find("will be removed from TRP3 first", 1, true))
 			click(page.authorize)
