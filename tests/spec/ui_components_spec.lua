@@ -240,4 +240,205 @@ return function(t, expect)
 			expect.truthy(area:IsMouseEnabled())
 		end)
 	end)
+
+	t:describe("v0.10 components (design-system.png, Main.dc.html)", function()
+		t:it("stores a tooltip on a font string or texture without hooking it (no mouse scripts there)", function()
+			local _, env, ns = load()
+			local parent = env.CreateFrame("Frame")
+			local fs = parent:CreateFontString(nil, "OVERLAY")
+			local tex = parent:CreateTexture(nil, "ARTWORK")
+			for _, region in ipairs({ fs, tex }) do
+				local hooked = false
+				region.HookScript = function() hooked = true end
+				region.SetScript = function() hooked = true end
+				expect.falsy(ns.Widgets.CanHaveTooltip(region))
+				ns.Widgets.Tooltip(region, "Title", "Text")
+				expect.equal(region.tooltipTitle, "Title", "the text is kept for the caller")
+				expect.falsy(hooked, "no script is set or hooked on a " .. region:GetObjectType())
+				expect.falsy(region.tooltipHooked)
+			end
+			expect.falsy(ns.Widgets.CanHaveTooltip(nil))
+			local frame = env.CreateFrame("Frame")
+			expect.truthy(ns.Widgets.CanHaveTooltip(frame))
+			ns.Widgets.Tooltip(frame, "Title")
+			expect.truthy(frame:GetScript("OnEnter") ~= nil, "frames still get their tooltip")
+		end)
+
+		t:it("draws line icons from the design's strokes, inside their box, recoloured by the theme", function()
+			local _, env, ns = load()
+			local S = ns.Style
+			local parent = env.CreateFrame("Frame")
+			for name in pairs(S.ICONS) do
+				local icon = S.LineIcon(parent, name, 20)
+				expect.truthy(icon ~= nil, name)
+				expect.truthy(#icon.lines > 0, name .. " has strokes")
+				for _, line in ipairs(icon.lines) do
+					for _, p in ipairs({ line.__start, line.__end }) do
+						expect.equal(p[1], "TOPLEFT")
+						expect.truthy(p[3] >= -0.01 and p[3] <= 20.01 and -p[4] >= -0.01 and -p[4] <= 20.01,
+							name .. " stays inside its 20 px box")
+					end
+					expect.truthy(line.__thickness >= 1, "strokes at least 1 px")
+				end
+				icon:SetColor({ 1, 0, 0 })
+				expect.deepEqual(icon.lines[1].__color, { 1, 0, 0, 1 })
+			end
+			expect.equal(S.LineIcon(parent, "no such icon", 20), nil)
+			-- A client without line regions: nil, so callers keep their text.
+			local bare = env.CreateFrame("Frame")
+			local createFrame = env.CreateFrame
+			env.CreateFrame = function(...)
+				local f = createFrame(...)
+				f.CreateLine = false
+				return f
+			end
+			expect.equal(S.LineIcon(bare, "close", 18), nil)
+			local b = ns.Widgets.Button(bare, "New entry", 120, 36, "primary")
+			expect.falsy(b:SetIcon("plus"), "SetIcon reports that no icon is drawn")
+			env.CreateFrame = createFrame
+		end)
+
+		t:it("centres a button's icon and label together and colours the icon with the label", function()
+			local _, env, ns = load()
+			local W, S = ns.Widgets, ns.Style
+			local b = W.Button(env.CreateFrame("Frame"), "Edit", W.ButtonWidth("Edit", 30, true), 30)
+			expect.truthy(b:SetIcon("edit"))
+			expect.equal(b.icon.size, W.BUTTON_ICON.compact)
+			local text = S.TextWidth("Edit", "buttonSmall")
+			local group = W.BUTTON_ICON.compact + W.BUTTON_ICON.gap + text
+			local p = b.icon.__points[#b.icon.__points]
+			expect.equal(p[3], "CENTER")
+			expect.equal(p[4], math.floor(-group / 2 + 0.5), "the group is centred on the button")
+			expect.equal(b.label.__points[1][2], W.BUTTON.inset + W.BUTTON_ICON.compact + W.BUTTON_ICON.gap)
+			expect.deepEqual(b.icon.lines[1].__color, { b.label.__textColor[1], b.label.__textColor[2],
+				b.label.__textColor[3], 1 })
+			expect.truthy(W.LabelFits("Edit", b:GetWidth(), 30, nil, true))
+			expect.equal(W.ButtonWidth("Edit", 30, true), math.ceil(group + 24), "12 px padding on compact buttons")
+			expect.equal(W.ButtonWidth("New entry", 36, true), math.ceil(S.TextWidth("New entry", "button") + 16 + 8
+				+ 32), "16 px padding and a 16 px icon on standard buttons")
+			-- The close button: the design's line X, the glyph kept as its text.
+			local close = W.IconButton(env.CreateFrame("Frame"), "X", "Close")
+			expect.equal(close.icon.name, "close")
+			expect.falsy(close.label:IsShown())
+			close:SetSize(36, 36)
+			expect.equal(close.icon.__scale, 1)
+		end)
+
+		t:it("sets eyebrows in tracked capitals that keep the text and fit their box", function()
+			local _, env, ns = load()
+			local W, S = ns.Widgets, ns.Style
+			local label = W.TrackedLabel(env.CreateFrame("Frame"), "eyebrow", "eyebrow")
+			label:SetText("ACTIVE GOALS")
+			expect.equal(label:GetText(), "ACTIVE GOALS")
+			local plain = S.TextWidth("ACTIVE GOALS", "eyebrow")
+			local tracked = plain + 11 * W.TRACKING * S.FONT_BY_STYLE.eyebrow.size
+			expect.truthy(math.abs(label:GetStringWidth() - tracked) < 0.01, "0.16 em between letters")
+			-- Each letter after the first starts its advance plus the tracking further on.
+			local a, b = label.letters[1].__points[1][4], label.letters[2].__points[1][4]
+			expect.truthy(math.abs(b - a - S.TextWidth("A", "eyebrow") - W.TRACKING * 13) < 0.01)
+			-- A narrow box tightens the tracking rather than cutting letters.
+			label:SetWidth(plain + 4)
+			expect.truthy(label:GetStringWidth() <= plain + 4.01)
+			expect.falsy(label:IsTruncated())
+			-- Centred in its box (date months).
+			label:SetWidth(200)
+			label:SetJustifyH("CENTER")
+			expect.truthy(math.abs(label.letters[1].__points[1][4] - math.floor((200 - label:GetStringWidth()) / 2))
+				< 0.01)
+			-- Colour follows the theme role.
+			ns.Style.Apply(ns.Themes.Get("shadowbound"))
+			expect.equal(label.letters[1].__textColor[1], ns.Themes.Get("shadowbound").ornament[1])
+			-- Shorter text hides the letters it no longer uses.
+			label:SetText("AB")
+			expect.falsy(label.letters[3]:IsShown())
+			-- Panels and callouts use it for their titles.
+			local panel = W.Panel(env.CreateFrame("Frame"), "Recent places", { padX = 16 })
+			expect.equal(panel.title:GetText(), "RECENT PLACES")
+			expect.equal(panel.title.__points[1][2], 16, "the title follows the side padding")
+			expect.equal(panel.inner.__points[1][2], 16)
+		end)
+
+		t:it("sizes segmented items to their words on a framed, padded track", function()
+			local _, env, ns = load()
+			local W = ns.Widgets
+			local items = { { id = "all", label = "All" }, { id = "defining", label = "Defining" } }
+			local seg = W.Segmented(env.CreateFrame("Frame"), items, 200, 30, function() end, { fit = true, framed = true })
+			local widths = W.SegmentWidths(items, 30, true)
+			expect.equal(seg.buttons[1]:GetWidth(), widths[1])
+			expect.truthy(widths[1] < widths[2])
+			expect.equal(seg.width, widths[1] + widths[2] + W.SEGMENT.gap + 2 * (W.SEGMENT.pad + 1))
+			expect.equal(seg.height, 30 + 2 * (W.SEGMENT.pad + 1))
+			expect.equal(seg.buttons[1]:GetParent(), seg.frame)
+			for i, item in ipairs(items) do
+				expect.truthy(W.LabelFits(item.label, seg.buttons[i]:GetWidth(), 30, "segment"))
+			end
+			-- Without options: the v0.9 equal widths (other screens rely on them).
+			local old = W.Segmented(env.CreateFrame("Frame"), items, 200, 30, function() end)
+			expect.equal(old.buttons[1]:GetWidth(), 98)
+			expect.equal(old.frame, nil)
+		end)
+
+		t:it("gives chips an optional icon, cards a featured state and progress bars round ends", function()
+			local _, env, ns = load()
+			local W, S = ns.Widgets, ns.Style
+			local chip = W.Chip(env.CreateFrame("Frame"), "Goldshire", "accent")
+			local before = chip:GetWidth()
+			expect.truthy(chip:SetIcon("home"))
+			expect.equal(chip:GetWidth(), before + W.CHIP_ICON + W.CHIP_ICON_GAP)
+			expect.equal(chip.label.__template, S.FontFor("chip"), "chip text: Alegreya Sans Medium 13")
+			local theme = S.Current()
+			local color, fill, edge = W.ChipTone("accent", theme)
+			expect.deepEqual(fill, S.Tones(theme).accentWell, "gold chips on the design's dark gold")
+			expect.deepEqual(edge, theme.border)
+			expect.truthy(ns.Themes.Contrast(color, fill) >= 4.5)
+			local card = W.Card(env.CreateFrame("Frame"))
+			card:SetFeatured(true)
+			expect.equal(card.bg.__color[1], S.Tones(theme).cardHover[1], "featured: the lifted fill")
+			expect.equal(card.edges.top.__color[1], S.Tones(theme).selectedEdge[1])
+			card:SetRowHover(true)
+			expect.equal(card.edges.top.__color[1], theme.border[1], "hovered featured: the gold edge")
+			-- Round ends where the client has masks (stubbed as in ui_shell_spec).
+			S.NewMask = function(f) return f:CreateTexture() end
+			local bar = W.ProgressBar(env.CreateFrame("Frame"), 200, 6)
+			expect.truthy(bar.trackPill ~= nil and bar.fillPill ~= nil)
+			bar:SetValue(0.5)
+			expect.equal(bar.fillFrame:GetWidth(), 100)
+			bar:SetValue(0.01)
+			expect.equal(bar.fillFrame:GetWidth(), 6, "never narrower than its round ends")
+			bar:SetValue(0)
+			expect.falsy(bar.fillFrame:IsShown())
+		end)
+
+		t:it("puts the magnifier in the search box and the placeholder in the input size", function()
+			local _, env, ns = load()
+			local W = ns.Widgets
+			local box = W.SearchBox(env.CreateFrame("Frame"), 230, "Search the journal", nil, 36)
+			expect.equal(box.icon.name, "search")
+			expect.equal(box.__insets[1], W.SEARCH.textLeft, "text starts after the icon")
+			expect.equal(box.placeholder.__points[1][2], W.SEARCH.textLeft)
+			expect.equal(box.placeholder.__template, ns.Style.FontFor("placeholder"))
+			expect.equal(ns.Style.FONT_BY_STYLE.placeholder.size, 15)
+		end)
+
+		t:it("keeps gold, edges and fills close to the design's values (Classic Dawnward)", function()
+			local _, _, ns = load()
+			local S = ns.Style
+			local tones = S.Tones(ns.Themes.Get("dawnward"))
+			local function near(c, hex, tol)
+				for i = 1, 3 do
+					local v = tonumber(hex:sub(2 * i - 1, 2 * i), 16) / 255
+					if math.abs(c[i] - v) > (tol or 6) / 255 then return false end
+				end
+				return true
+			end
+			expect.truthy(near(tones.accentBright, "F0D08E"), "bright gold, not greyed")
+			expect.truthy(near(tones.edgeStrong, "3E4C66"))
+			expect.truthy(near(tones.selectedEdge, "4A5874"))
+			expect.truthy(near(tones.selectedFill, "2A3346"))
+			expect.truthy(near(tones.fieldEdge, "33405A"))
+			expect.truthy(near(tones.dot, "6E7891"))
+			expect.truthy(near(tones.calloutFill, "1A1A17"))
+			expect.truthy(near(tones.accentWell, "2A2213"))
+		end)
+	end)
 end

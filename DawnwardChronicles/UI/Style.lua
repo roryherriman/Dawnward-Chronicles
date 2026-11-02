@@ -86,7 +86,7 @@ local function deriveTones(t)
 		label = Style.Mix(accent, text, 0.4),           -- D8C49A field labels, the rail's title
 		ghostText = Style.Mix(text, muted, 0.25),       -- D9D2C2 ghost button text
 		navText = Style.Mix(text, muted, 0.5),          -- C9C2B2 rail navigation
-		accentBright = Style.Brighten(accent, 0.94, 0.12), -- F0D08E primary edge, gold chips, dates
+		accentBright = Style.Brighten(accent, 0.94, 0.15), -- F0D08E primary edge, gold chips, dates
 		-- Lighter edges keep the edge's blue (v0.10: scaled, not mixed with white).
 		edgeStrong = Style.Scale(edge, 1.4),            -- 3E4C66 secondary button edge
 		selectedFill = Style.Scale(t.surfaceHover, 1.27), -- 2A3346 selected segment
@@ -100,7 +100,7 @@ local function deriveTones(t)
 		track = Style.Mix(edge, t.background, 0.3),     -- 232C3D progress track
 		-- A warm dark (the background toward the dark accent text, a touch of gold).
 		calloutFill = Style.Mix(Style.Mix(t.background, t.accentText, 0.5), accent, 0.04), -- 1A1A17 callout
-		dot = Style.Lighten(Style.Scale(edge, 2), 0.1), -- 6E7891 neutral status dot
+		dot = Style.Mix(Style.Scale(edge, 2), muted, 0.25), -- 6E7891 neutral status dot
 		-- Gold and amber chips: their colour darkened (Main.dc.html .goldtag #2A2213, .amber #2E2410).
 		accentWell = Style.Scale(accent, 0.2),
 	}

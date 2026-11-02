@@ -192,9 +192,19 @@ local function hook(frame, script, fn)
 	end
 end
 
+-- Regions without mouse scripts (font strings, textures, lines) cannot show
+-- a tooltip: the text is stored and nothing is hooked (hooking would error
+-- in the client).
+local SCRIPTLESS = { FontString = true, Texture = true, Line = true, MaskTexture = true }
+function Widgets.CanHaveTooltip(frame)
+	if type(frame) ~= "table" or type(frame.SetScript) ~= "function" then return false end
+	local kind = frame.GetObjectType and frame:GetObjectType()
+	return not SCRIPTLESS[kind]
+end
+
 function Widgets.Tooltip(frame, title, text)
 	frame.tooltipTitle, frame.tooltipText = title, text
-	if frame.tooltipHooked then
+	if frame.tooltipHooked or not Widgets.CanHaveTooltip(frame) then
 		return
 	end
 	frame.tooltipHooked = true
