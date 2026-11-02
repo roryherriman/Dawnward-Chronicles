@@ -1256,6 +1256,17 @@ function CharacterView.AttachReader(section)
 		end
 	end)
 
+	-- v0.10.1: an empty reader shows the shared empty-state card with the
+	-- reader's action (the foot's action button hides meanwhile).
+	reader.empty = Widgets.EmptyState(reader.child, "character")
+	reader.empty:SetPoint("TOPLEFT", 0, 0)
+	reader.empty:Hide()
+	CharacterView.READER_EMPTY = {
+		story = { "No story yet", "Paste a backstory you already wrote, or read your Total RP 3 About text. "
+			.. "It is kept exactly as you wrote it.", "Import a story" },
+		family = { "No family yet", CharacterView.FAMILY_HINT, "Add family member" },
+	}
+
 	reader.paras, reader.cards = {}, {}
 	local function para(i)
 		local fs = reader.paras[i]
@@ -1340,6 +1351,15 @@ function CharacterView.AttachReader(section)
 		end
 		for k = p + 1, #reader.paras do reader.paras[k]:Hide() end
 		for k = c + 1, #reader.cards do reader.cards[k]:Hide() end
+		local isEmpty = p == 0 and c == 0
+		reader.empty:SetShown(isEmpty)
+		reader.action:SetShown(not isEmpty)
+		reader.hint:SetShown(not isEmpty)
+		if isEmpty then
+			local e = CharacterView.READER_EMPTY[kind]
+			reader.empty:Set(e[1], e[2], e[3], function() reader.action:GetScript("OnClick")(reader.action) end)
+			y = reader.empty:Layout(width - 8)
+		end
 		reader.child:SetHeight(math.max(y, 1))
 		Widgets.ScrollTo(reader.scroll, reader.scroll:GetVerticalScroll())
 		reader.height = y

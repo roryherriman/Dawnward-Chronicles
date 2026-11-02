@@ -41,7 +41,8 @@ SettingsPanel.STORY_SETTINGS = {
 		help = "How often Dawnward may offer a story moment. Off still records events." },
 	{ key = "threshold", group = "moments", label = "Significance", values = { 1, 2, 3 },
 		short = "Which recorded events may become a moment.",
-		help = "1: any recorded event may become a moment. 3: only major ones." },
+		help = "Any event: every recorded event may become a moment. Notable: the more important ones. "
+			.. "Major only: only the biggest events of your story." },
 	{ key = "places", group = "moments", label = "Places", values = { "on", "fewer", "off" },
 		short = "Moments about beginnings, settlements and returns.",
 		help = "Moments about places: beginnings, settlements, returns. Fewer: notable places only. "
@@ -51,7 +52,7 @@ SettingsPanel.STORY_SETTINGS = {
 		short = "How much play makes one narrative day.",
 		help = "How much play makes a narrative day: Brisk 1 hour, Standard 2 hours, Slow 4 hours. Returns to a "
 			.. "place and story cooldowns count only time you play, never time offline." },
-	{ key = "card", group = "moments", label = "Card", values = { true, false },
+	{ key = "card", group = "moments", label = "Moment card", values = { true, false },
 		short = "A small card when a moment waits (never in combat).",
 		help = "Show a small card when a moment is waiting (never in combat). Off: one chat line only." },
 	{ key = "flavor", group = "moments", label = "Class flavour", values = { true, false },

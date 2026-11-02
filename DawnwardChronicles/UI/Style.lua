@@ -357,6 +357,52 @@ function Style.TextWidth(text, style)
 	return units * spec.size / 1000
 end
 
+--- Height of lines of text at size with spacing between lines. Pure.
+function Style.TextHeight(lines, size, spacing)
+	if not lines or lines <= 0 then return 0 end
+	return lines * size + (lines - 1) * spacing
+end
+
+--- Estimated number of lines text wraps to at width, set in a Dawnward
+-- style's font at size (word wrap, real advance widths, Style.TextWidth).
+-- indent narrows the first line. Pure. (Moved from StoryView in v0.10.1.)
+function Style.WrapLines(text, style, size, width, indent)
+	local spec = Style.FONT_BY_STYLE[style] or Style.FONT_BY_STYLE.body
+	local scale = (size or spec.size) / spec.size
+	local space = Style.TextWidth(" ", style) * scale
+	local total = 0
+	for paragraph in (tostring(text or "") .. "\n"):gmatch("(.-)\n") do
+		local lines, x = 1, indent or 0
+		indent = nil
+		local first = true
+		for word in paragraph:gmatch("%S+") do
+			local w = Style.TextWidth(word, style) * scale
+			if first then
+				-- After an indent (an inline label), a first word that does not
+				-- fit starts the next line.
+				if x > 0 and x + space + w > width then
+					lines = lines + 1
+					x = w
+				else
+					x = x + w
+				end
+				first = false
+			elseif x + space + w <= width then
+				x = x + space + w
+			else
+				lines = lines + 1
+				x = w
+			end
+			while x > width do -- a word longer than the line breaks anywhere
+				lines = lines + 1
+				x = x - width
+			end
+		end
+		total = total + lines
+	end
+	return math.max(1, total)
+end
+
 --- Painting ------------------------------------------------------------------------
 
 -- Weak keys: objects that disappear are forgotten.

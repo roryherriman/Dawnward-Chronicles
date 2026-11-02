@@ -703,6 +703,82 @@ function Widgets.Card(parent)
 end
 Widgets.EntryRow = Widgets.Card
 
+--- Empty states (v0.10.1) -----------------------------------------------------------
+-- One look for "nothing here yet" on every screen (the Journal's empty card,
+-- Main.dc.html): a plain card, a centred line icon in gold, a title, a short
+-- friendly explanation centred under it and, where there is one obvious next
+-- step, one button. Sized to its words, so nothing is cut.
+Widgets.EMPTY = { pad = 24, icon = 28, iconGap = 12, titleH = 20, titleGap = 8, textInset = 40,
+	actionGap = 16, actionH = 30 }
+
+--- An empty-state card on parent. icon: a Style.ICONS name (optional).
+-- state:Set(title, text, actionLabel, onAction) fills it (no action: nil);
+-- state:Layout(width) sizes it to width and its words and returns the height.
+-- state.title, state.text and state.action are its parts.
+function Widgets.EmptyState(parent, icon)
+	local E = Widgets.EMPTY
+	local state = Widgets.Card(parent)
+	state:SetPlain(false)
+	-- Not a record: no hover lift.
+	if state.EnableMouse then state:EnableMouse(false) end
+	if icon then
+		state.icon = Style.LineIcon(state, icon, E.icon)
+		if state.icon then
+			state.icon:SetPoint("TOP", 0, -E.pad)
+			Style.Register(state.icon, function(i, theme) i:SetColor(theme.accent) end)
+		end
+	end
+	state.titleTop = E.pad + (state.icon and (E.icon + E.iconGap) or 0)
+	state.title = Widgets.Label(state, "label", false, "heading")
+	state.title:SetJustifyH("CENTER")
+	state.title:SetPoint("TOP", 0, -state.titleTop)
+	state.text = Widgets.Label(state, "reading", true, "muted")
+	state.text:SetJustifyH("CENTER")
+	state.action = Widgets.Button(state, "", 120, E.actionH, "default")
+	state.action:Hide()
+
+	function state.Set(self, title, text, actionLabel, onAction)
+		self.title:SetText(title or "")
+		self.title:SetShown((title or "") ~= "")
+		self.text:SetText(text or "")
+		self.action:SetShown(actionLabel ~= nil and onAction ~= nil)
+		if actionLabel and onAction then
+			self.action:SetText(actionLabel)
+			self.action:SetWidth(Widgets.ButtonWidth(actionLabel, E.actionH))
+			self.action:SetScript("OnClick", function() onAction() end)
+		end
+		if self.width then self:Layout(self.width) end
+	end
+
+	function state.Layout(self, width)
+		self.width = width
+		self:SetWidth(width)
+		local textW = math.max(1, width - 2 * E.textInset)
+		self.title:SetWidth(textW)
+		self.text:SetWidth(textW)
+		local y = self.titleTop
+		if self.title:IsShown() then y = y + E.titleH + E.titleGap end
+		self.text:ClearAllPoints()
+		self.text:SetPoint("TOP", 0, -y)
+		local reading = Style.FONT_BY_STYLE.reading
+		local lines = Style.WrapLines(self.text:GetText(), "reading", reading.size, textW)
+		local h = Style.TextHeight(lines, reading.size, reading.spacing or 0)
+		local measured = self.text.GetStringHeight and self.text:GetStringHeight()
+		if type(measured) == "number" then h = math.max(h, measured) end
+		self.text:SetHeight(h)
+		y = y + h
+		if self.action:IsShown() then
+			self.action:ClearAllPoints()
+			self.action:SetPoint("TOP", 0, -(y + E.actionGap))
+			y = y + E.actionGap + E.actionH
+		end
+		self.height = y + E.pad
+		self:SetHeight(self.height)
+		return self.height
+	end
+	return state
+end
+
 --- A 1 px line in the theme's edge colour. Anchor it yourself.
 function Widgets.Divider(parent, layer)
 	local line = Style.Solid(parent, layer or "ARTWORK")
