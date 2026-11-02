@@ -67,25 +67,29 @@ FieldPlan.RELATIONSHIP_UNKNOWN = 0
 
 -- Values Total RP 3 fills in by itself on a new profile (the character's
 -- own name, race and class from the game; RegisterCharacteristics.lua's
--- default profile) are not the player's writing: Dawnward may replace them
--- (after a backup), and restores nothing when it later clears its value.
--- RS 0 means "do not show".
+-- default profile: RA = Globals.player_race_loc, CL = player_class_loc,
+-- FN = Globals.player) are not the player's writing: Dawnward may replace
+-- them (after a backup). RS 0 means "do not show".
 FieldPlan.GAME_DEFAULT_KEYS = { FN = true, RA = true, CL = true }
 
+-- v0.9: fields whose game value stays published when the player has no
+-- Public value of their own (none written, or not Public): the game shows
+-- every player's race and class anyway, and TRP3 itself starts a profile
+-- with them (so on a fresh profile they already show). When Dawnward takes
+-- its own value back out (made Private, cleared, released), the field goes
+-- back to the game's value instead of being left empty, without claiming
+-- ownership (the game's value is never Dawnward's), so the next run sees it
+-- as the replaceable default. A field the player emptied or wrote in TRP3
+-- is never touched. Nothing is invented for fields the game does not know.
+FieldPlan.GAME_FILL = { FN = true, RA = true, CL = true }
+
 --- The game's own values for the replaceable defaults, read from env
--- (UnitName, UnitRace, UnitClass). Read only; missing functions are skipped.
+-- (UnitName, UnitRace, UnitClass through Character.GameValue). Read only;
+-- missing functions are skipped.
 function FieldPlan.GameDefaults(env)
-	local out = { RS = FieldPlan.RELATIONSHIP_UNKNOWN }
-	local function read(fn, ...)
-		local f = env and env[fn]
-		if type(f) ~= "function" then return nil end
-		local ok, value = pcall(f, ...)
-		return ok and type(value) == "string" and value ~= "" and value or nil
-	end
-	out.FN = read("UnitName", "player")
-	out.RA = read("UnitRace", "player")
-	out.CL = read("UnitClass", "player")
-	return out
+	local GameValue = ns.Character.GameValue
+	return { RS = FieldPlan.RELATIONSHIP_UNKNOWN, FN = env and GameValue("firstName", env) or nil,
+		RA = env and GameValue("race", env) or nil, CL = env and GameValue("class", env) or nil }
 end
 FieldPlan.BY_ID = {}
 for _, m in ipairs(FieldPlan.MAPPINGS) do
@@ -229,6 +233,8 @@ function FieldPlan.Plan(characteristics, record, desired, policies, paused, unwr
 			local row = { id = m.id, current = current, desired = want }
 			rows[#rows + 1] = row
 			local valueType = m.kind == "relationship" and "number" or "string"
+			-- The game's value to publish when the player has none (GAME_FILL).
+			local fill = want == nil and FieldPlan.GAME_FILL[m.key] and defaults[m.key] or nil
 			-- The game's own default (or "do not show") counts as empty.
 			local isDefault = owned == nil and current ~= nil and defaults[m.key] ~= nil and current == defaults[m.key]
 			if paused[m.id] then
@@ -243,7 +249,7 @@ function FieldPlan.Plan(characteristics, record, desired, policies, paused, unwr
 				row.state = "write"
 				changes[#changes + 1] = "added " .. m.id
 			elseif isDefault then
-				row.state = want == nil and "empty" or "matches"
+				row.state = (want == nil and not fill) and "empty" or "matches"
 			elseif current ~= nil and type(current) ~= valueType then
 				row.state, row.reason = "conflict", m.trp3 .. " has an unexpected value in Total RP 3"
 				conflicts[m.id] = row.reason
@@ -256,6 +262,16 @@ function FieldPlan.Plan(characteristics, record, desired, policies, paused, unwr
 					row.state = "conflict"
 					row.reason = m.trp3 .. " was changed in Total RP 3 since Dawnward last wrote it"
 					conflicts[m.id] = row.reason
+				elseif want == nil and fill and current == fill then
+					-- Dawnward's value already is the game's: nothing to change.
+					row.state = "noop"
+				elseif want == nil and fill then
+					-- No longer Public in Dawnward: back to the game's own value
+					-- (not owned; the next run sees it as the default).
+					characteristics[m.key] = fill
+					newRecord[m.id] = nil
+					row.state = "write"
+					changes[#changes + 1] = "restored the game's " .. m.id
 				elseif want == nil then
 					-- No longer Public in Dawnward: take Dawnward's value back out.
 					characteristics[m.key] = nil

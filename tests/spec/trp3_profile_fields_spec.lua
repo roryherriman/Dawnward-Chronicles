@@ -128,8 +128,9 @@ return function(t, expect)
 			local mi = w.ch().MI
 			expect.equal(#mi, 5)
 			expect.deepEqual(mi[1], { ID = 3, NA = "Nickname", VA = "Kys" }, "the player's own entry is untouched")
-			expect.deepEqual(mi[2], { ID = 7, NA = "Pronouns", VA = "she/her" })
-			expect.deepEqual(mi[3], { ID = 1, NA = "Faith", VA = "The Holy Light" })
+			-- As TRP3's editor adds them (miscAdd with GetMiscTypeInfo's name and icon).
+			expect.deepEqual(mi[2], { ID = 7, NA = "Pronouns", VA = "she/her", IC = "vas_namechange" })
+			expect.deepEqual(mi[3], { ID = 1, NA = "Faith", VA = "The Holy Light", IC = "inv_misc_questionmark" })
 			expect.equal(mi[4].VA, "Paladin of the Silver Hand")
 			expect.equal(w.run("misc").state, "noop")
 		end)

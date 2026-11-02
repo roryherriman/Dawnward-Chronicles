@@ -14,13 +14,29 @@ local Util, Schema = ns.Util, ns.Schema
 local TraitPlan = {}
 ns.TRP3TraitPlan = TraitPlan
 
+-- TRP3 3.4.1 (Core/Globals.lua): PSYCHO_MAX_VALUE_V2 = 20, and a trait
+-- without V2 shows PSYCHO_DEFAULT_VALUE_V2 = 10.
 TraitPlan.MIN, TraitPlan.MAX = 0, 20
 
+-- The icon TRP3's editor gives a new custom trait on both sides
+-- (RegisterCharacteristics.lua psychoAdd("new"): LI = RI =
+-- "INV_Misc_QuestionMark"), so Dawnward's traits never lack an icon. Never
+-- compared: a player may pick other icons in TRP3.
+TraitPlan.ICON = "INV_Misc_QuestionMark"
+
 --- Dawnward value (0 = left pole, 20 = right pole) to TRP3's V2.
--- In TRP3 3.4.1, V2 is the number of points toward the LEFT trait and the
--- right trait gets 20 - V2 (RegisterCharacteristics.lua, refreshPsycho).
+-- In TRP3 3.4.1, V2 is the number of points toward the LEFT trait (LT) and
+-- the right trait (RT) gets 20 - V2: refreshPsycho sets leftCount = value,
+-- rightCount = PSYCHO_MAX_VALUE_V2 - value, and the bar (0..20) fills from
+-- the left (RegisterCharacteristics.lua). MSP sends V2 / 20 the same way
+-- (MSP/Fields.lua, PS). So a Dawnward 0 ("fully Cautious") is V2 = 20.
 function TraitPlan.ToTRP3(value)
 	return TraitPlan.MAX - value
+end
+
+--- TRP3's V2 back to a Dawnward value (the inverse of ToTRP3).
+function TraitPlan.FromTRP3(v2)
+	return TraitPlan.MAX - v2
 end
 
 --- Desired owned traits from a public projection:
@@ -30,7 +46,10 @@ function TraitPlan.Desired(public)
 	for axisId, entry in pairs(public and public.personality or {}) do
 		local axis = Schema.PERSONALITY_AXIS_BY_ID[axisId]
 		if axis then
-			out[axisId] = { LT = axis.left, RT = axis.right, V2 = TraitPlan.ToTRP3(entry.value) }
+			-- The player's own words for the axis (#21), when the profile has them.
+			local words = public.axisWords and public.axisWords[axisId] or {}
+			out[axisId] = { LT = words.left or axis.left, RT = words.right or axis.right,
+				V2 = TraitPlan.ToTRP3(entry.value) }
 		end
 	end
 	return out
@@ -102,8 +121,17 @@ function TraitPlan.Plan(characteristics, record, desired, maxTraits)
 		local d = desired[axisId]
 		local trait = list[index[axisId]]
 		if d then
+			if trait.LT ~= d.LT or trait.RT ~= d.RT then
+				-- The player renamed the axis in Dawnward: the same trait, new words.
+				trait.LT, trait.RT = d.LT, d.RT
+				changes[#changes + 1] = "renamed " .. axisId
+			end
 			if trait.V2 ~= d.V2 then
 				trait.V2 = d.V2
+				-- A trait written before Dawnward set icons gets TRP3's own
+				-- default with this update (never over an icon the player chose).
+				trait.LI = trait.LI or TraitPlan.ICON
+				trait.RI = trait.RI or TraitPlan.ICON
 				changes[#changes + 1] = "updated " .. axisId
 			end
 			newOwned[axisId] = { LT = d.LT, RT = d.RT, V2 = d.V2 }
@@ -123,7 +151,7 @@ function TraitPlan.Plan(characteristics, record, desired, maxTraits)
 					reason = "Total RP 3 allows at most " .. maxTraits .. " personality traits" }
 			end
 			local d = desired[axisId]
-			list[#list + 1] = { LT = d.LT, RT = d.RT, V2 = d.V2 }
+			list[#list + 1] = { LT = d.LT, LI = TraitPlan.ICON, RT = d.RT, RI = TraitPlan.ICON, V2 = d.V2 }
 			newOwned[axisId] = { LT = d.LT, RT = d.RT, V2 = d.V2 }
 			changes[#changes + 1] = "added " .. axisId
 		end

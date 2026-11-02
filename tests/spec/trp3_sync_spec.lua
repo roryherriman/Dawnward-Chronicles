@@ -312,7 +312,8 @@ return function(t, expect)
 			expect.equal(#ps, 3)
 			expect.deepEqual(ps[1], { ID = 3, V2 = 12 })
 			expect.deepEqual(ps[2], { LT = "Gloomy", RT = "Cheerful", V2 = 4, LI = "a", RI = "b" })
-			expect.deepEqual(ps[3], { LT = "Cautious", RT = "Bold", V2 = 5 }, "15 toward Bold = 5 points toward Cautious")
+			expect.deepEqual(ps[3], { LT = "Cautious", LI = "INV_Misc_QuestionMark", RT = "Bold",
+				RI = "INV_Misc_QuestionMark", V2 = 5 }, "15 toward Bold = 5 points toward Cautious")
 			expect.equal(w.fake.profile.player.characteristics.TI, "Knight")
 			expect.equal(w.fake.profile.player.characteristics.v, 7)
 			expect.deepEqual(w.fake.events[#w.fake.events].args, { KEY, w.fake.profileId, "characteristics" })
@@ -636,6 +637,35 @@ return function(t, expect)
 			local w = world()
 			w.fake.env.TRP3_API.navigation.page.getCurrentContext = function() error("boom") end
 			expect.equal(w.ns.TRP3Adapter.EditorState(w.fake.env, "about").open, nil)
+		end)
+	end)
+
+	t:describe("TRP3 sync: the player's own axis words (v0.10)", function()
+		t:it("names Dawnward's trait with the player's words, and renames the same trait without a duplicate", function()
+			local w = world()
+			local char = w.char()
+			w.ns.Publication.Adopt(char, 1)
+			w.ns.Personality.Set(char, "faith", 4)
+			assert(w.ns.AxisMeanings.Set(char, "faith", { left = "Trusts no god", right = "Trusts the Ancestors" }, 2))
+			w.enable("traits")
+			expect.equal(w.Sync.RunFeature(w.deps, "traits").state, "written")
+			local count = #w.ps()
+			local mine
+			for _, trait in ipairs(w.ps()) do
+				if trait.LT == "Trusts no god" then mine = trait end
+			end
+			expect.truthy(mine, "the trait carries the player's words")
+			expect.equal(mine.RT, "Trusts the Ancestors")
+			assert(w.ns.AxisMeanings.Set(char, "faith", { left = "Godless" }, 3))
+			expect.equal(w.Sync.RunFeature(w.deps, "traits").state, "written")
+			expect.equal(#w.ps(), count, "renamed in place, not added again")
+			local renamed = 0
+			for _, trait in ipairs(w.ps()) do
+				if trait.LT == "Godless" and trait.RT == "Trusts the Ancestors" then renamed = renamed + 1 end
+				expect.falsy(trait.LT == "Trusts no god", "the old words are gone")
+			end
+			expect.equal(renamed, 1)
+			expect.equal(w.Sync.RunFeature(w.deps, "traits").state, "noop")
 		end)
 	end)
 end

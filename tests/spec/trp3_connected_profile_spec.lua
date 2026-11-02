@@ -82,7 +82,7 @@ return function(t, expect)
 			expect.equal(fake.profile.player.characteristics.FN, "Mirelle")
 			expect.equal(fake.profile.player.characteristics.MI[1].VA, "she/her")
 			ns.MainWindow.Refresh()
-			expect.truthy(page.overviewRows[2].value:GetText():find("19 of 19 items", 1, true))
+			expect.truthy(page.overviewRows[2].value:GetText():find("20 of 20 items", 1, true))
 			expect.falsy(page.overviewRows[3].value:GetText():find("Nothing written", 1, true), "a last update time")
 		end)
 

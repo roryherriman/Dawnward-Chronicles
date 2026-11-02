@@ -180,3 +180,46 @@ function Character.FoundationCounts(char)
 		biography = sources ~= nil and sources.current ~= nil,
 	}
 end
+
+--- Game-derived values -------------------------------------------------------
+
+-- Profile fields the game itself knows about the player's character, and
+-- where: the first value UnitRace / UnitClass / UnitName return is the name
+-- in the client's language ("Human", "Paladin"), the same value Total RP 3
+-- puts in a new profile (Globals.lua player_race_loc, player_class_loc,
+-- player; RegisterCharacteristics.lua default characteristics RA, CL, FN).
+-- Nothing else is derived: a field the game does not know has no value.
+Character.GAME_SOURCES = { race = "UnitRace", class = "UnitClass", firstName = "UnitName" }
+
+--- The game's own value for a profile field (race, class, firstName), for
+-- display where the player has written nothing ("Human" until they write
+-- "Quel'dorei"). Read only; nil when the field has no game value or the
+-- client function is missing or fails. env defaults to the global table.
+function Character.GameValue(key, env)
+	local fnName = Character.GAME_SOURCES[key]
+	env = env or _G
+	local fn = fnName and type(env) == "table" and env[fnName]
+	if type(fn) ~= "function" then
+		return nil
+	end
+	local ok, value = pcall(fn, "player")
+	if ok and type(value) == "string" and value ~= "" then
+		return value
+	end
+	return nil
+end
+
+--- A profile field as it should read: the player's own value when they
+-- wrote one, else the game's value (race, class, first name), else nil.
+-- Returns value, source ("player" | "game").
+function Character.FieldOrGame(char, key, env)
+	local entry = char and char.fields and char.fields[key]
+	if entry and type(entry.value) == "string" and entry.value ~= "" then
+		return entry.value, "player"
+	end
+	local game = Character.GameValue(key, env)
+	if game then
+		return game, "game"
+	end
+	return nil
+end

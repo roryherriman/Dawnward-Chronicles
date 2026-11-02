@@ -34,7 +34,7 @@ TRP3Page.FEATURES = {
 	{ id = "mappings", label = "Mappings" },
 }
 local FEATURE_LABEL = { about = "Biography", traits = "Traits", fields = "Profile fields", mappings = "Mappings",
-	misc = "Additional information", overview = "Overview" }
+	misc = "Additional information", glance = "At First Glance", overview = "Overview" }
 
 -- Overview (v0.9): the connected-profile screen. Its choices, each a
 -- segmented control writing one story preference (Actions.SetStoryPref).
@@ -110,6 +110,8 @@ TRP3Page.EXPLAIN = {
 		.. "yourself stays exactly as it is.",
 	traits = "Dawnward only adds and updates its own personality traits, one per Public axis. Preset traits and "
 		.. "traits you made yourself are never changed.",
+	glance = "Dawnward only writes the At First Glance entries you wrote for it (/dawnward trp3 glance), into "
+		.. "free slots. Slots you filled in Total RP 3 are never changed.",
 }
 
 TRP3Page.UNSUPPORTED_TEXT = "Title, race, class, age and homeland: only if you hand them over on Mappings; "
@@ -1465,6 +1467,8 @@ function TRP3Page.AuthorizeText(page)
 					what = fieldProposal(view, m)
 				elseif id == "about" then
 					what = view.preview.about == "" and "nothing Public yet" or "adds Dawnward's own block to your About"
+				elseif id == "glance" then
+					what = "writes the At First Glance entries you wrote for it, into free slots"
 				else
 					what = #view.preview.traits == 0 and "nothing Public yet"
 						or ("adds " .. plural(#view.preview.traits, "trait", "traits") .. " of its own")
