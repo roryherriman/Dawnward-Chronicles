@@ -6,7 +6,8 @@
 -- card, the panels and the portrait fallback closer to the mockup
 -- (docs/design/audit/character.md); the model's loading is unchanged.
 -- v0.10 (docs/design/audit/v10-character.md): the turn buttons show the
--- client's own rotate arrows, and "In your own words" leads with the title
+-- client's own rotate arrows (v0.10.1: Dawnward's line icons where the client
+-- draws lines, the client's arrows otherwise), and "In your own words" leads with the title
 -- the player wrote, as the mockup.
 --
 -- Client APIs (checked against the Classic Era 1.15.9.70576 UI source,
@@ -61,6 +62,10 @@ Showcase.BAR_HEIGHT = 56 -- the control bar under the model (mockup: 36 px butto
 Showcase.ROTATE_ICONS = { left = "Interface\\Buttons\\UI-RotationLeft-Button-Up",
 	right = "Interface\\Buttons\\UI-RotationRight-Button-Up" }
 Showcase.ROTATE_ICON_SIZE = 30
+-- v0.10.1: Dawnward's line icons for the turn buttons where the client draws
+-- line regions (18 px in the 36 px button, as Widgets.IconButton).
+Showcase.ROTATE_LINE_ICONS = { left = "rotateLeft", right = "rotateRight" }
+Showcase.ROTATE_LINE_SIZE = 18
 Showcase.BAR_NOTE = "Drag to turn, scroll to zoom. Shows the gear you are wearing now."
 Showcase.MODEL_WIDTH = 330 -- the model card in the showcase view
 Showcase.GAP = 18
@@ -325,15 +330,21 @@ function Showcase.Model(parent, width, height)
 		Widgets.Tooltip(b, title, tip)
 		return b
 	end
-	-- The turn buttons show the client's rotate arrows (mockup: rotate icons
-	-- in 36 px icon buttons), not text glyphs.
+	-- The turn buttons (mockup: rotate icons in 36 px icon buttons). v0.10.1:
+	-- Dawnward's own line icons (Style.ICONS rotateLeft / rotateRight) in the
+	-- ghost button, so the icon matches every other control. A client without
+	-- line regions gets the client's rotate arrows instead; that art has its
+	-- own round frame, so the button then draws no edge of its own (no frame
+	-- inside a frame) and keeps only the hover fill.
 	local function rotateButton(side, title)
 		local b = controlButton("", C.button, "ghost", title, "Dragging the model also turns it.")
+		if b:SetIcon(Showcase.ROTATE_LINE_ICONS[side], Showcase.ROTATE_LINE_SIZE) then return b end
 		b.icon = b:CreateTexture(nil, "ARTWORK")
 		b.icon:SetTexture(Showcase.ROTATE_ICONS[side])
 		b.icon:SetSize(Showcase.ROTATE_ICON_SIZE, Showcase.ROTATE_ICON_SIZE)
 		b.icon:SetPoint("CENTER", 0, 0)
 		b.icon.fullColor = true -- the client's coloured art: dimmed when disabled, never tinted
+		b.edgeless = true
 		Style.Repaint(b)
 		return b
 	end
@@ -350,6 +361,11 @@ function Showcase.Model(parent, width, height)
 	f.zoomOut = controlButton("-", C.zoomButton, "default", "Zoom out", "The mouse wheel over the model also zooms.")
 	f.zoomOut:SetPoint("TOP", f.zoomIn, "BOTTOM", 0, -4)
 	f.zoomOut:SetScript("OnClick", function() f:Zoom(-Showcase.ZOOM_STEP) end)
+	-- v0.10.1: plus and minus line icons, as the turn buttons (the glyphs stay
+	-- where the client cannot draw lines).
+	for _, pair in ipairs({ { f.zoomIn, "plus" }, { f.zoomOut, "minus" } }) do
+		if pair[1]:SetIcon(pair[2], Widgets.BUTTON_ICON.compact) then pair[1]:SetText("") end
+	end
 	raise(f.zoomIn)
 	raise(f.zoomOut)
 
@@ -365,8 +381,11 @@ function Showcase.Model(parent, width, height)
 		local on = f.modelShown and true or false
 		for _, b in ipairs({ f.left, f.right }) do
 			b:SetEnabled(on)
-			if b.icon.SetDesaturated then b.icon:SetDesaturated(not on) end
-			b.icon:SetAlpha(on and 1 or Widgets.BUTTON.disabledAlpha)
+			-- The button painter dims a line icon; the client's art is dimmed here.
+			if b.icon.fullColor then
+				if b.icon.SetDesaturated then b.icon:SetDesaturated(not on) end
+				b.icon:SetAlpha(on and 1 or Widgets.BUTTON.disabledAlpha)
+			end
 		end
 		f.zoomOut:SetEnabled(on and f.zoom > Showcase.ZOOM_MIN)
 		f.zoomIn:SetEnabled(on and f.zoom < Showcase.ZOOM_MAX)

@@ -1085,13 +1085,13 @@ local function create(parent)
 	section.count:SetPoint("RIGHT", f, "TOPRIGHT", -L.inset, -(L.toolbarTop + L.toolbarHeight / 2))
 	section.toolbar = { section.new, section.search, section.count }
 
-	-- Empty state: what the tab holds and how to fill it.
-	section.emptyPanel = Widgets.Panel(f, "Nothing here yet")
+	-- Empty state: what the tab holds and how to fill it (v0.10.1: the shared
+	-- empty-state card, as the Journal's: icon, title, centred text and the
+	-- tab's New button as its action; sized to its words).
+	section.emptyPanel = Widgets.EmptyState(f, "chronicle")
 	section.emptyPanel:SetPoint("TOPLEFT", L.inset, -L.gridTop)
-	section.emptyPanel:SetSize(L.width, 110)
-	section.empty = Widgets.Label(section.emptyPanel.inner, "reading", true, "reading")
-	section.empty:SetPoint("TOPLEFT", 0, 0)
-	section.empty:SetWidth(L.width - 2 * Widgets.PANEL_PAD)
+	section.emptyPanel:Layout(L.width)
+	section.empty = section.emptyPanel.text
 
 	-- The parts every record view has (a card, and the full view): status
 	-- chip, date, title, meta, text, progress, chips, divider,
@@ -1635,12 +1635,19 @@ local function create(parent)
 		self.emptyPanel:SetShown(#items == 0)
 		self.empty:SetShown(#items == 0)
 		if #all > 0 and #items == 0 then
-			self.emptyPanel:SetTitle("No match")
-			self.empty:SetText(string.format("Nothing matches \"%s\". Clear the search to see all %d %s.",
-				self.query, #all, spec.noun[#all == 1 and 1 or 2]))
+			self.emptyPanel:Set("No match", string.format(
+				"Nothing matches \"%s\". Clear the search to see all %d %s.",
+				self.query, #all, spec.noun[#all == 1 and 1 or 2]), "Clear search", function()
+				self.search:SetText("")
+				self.query, self.offset = "", 0
+				MainWindow.Refresh()
+			end)
+		elseif spec.new and not review then
+			self.emptyPanel:Set(empty[1], empty[2], spec.new, function()
+				self:OpenForm(ChronicleView.FORMS[self.tab]())
+			end)
 		else
-			self.emptyPanel:SetTitle(empty[1])
-			self.empty:SetText(empty[2])
+			self.emptyPanel:Set(empty[1], empty[2])
 		end
 
 		self.items, self.contents, self.layouts = items, contents, layouts

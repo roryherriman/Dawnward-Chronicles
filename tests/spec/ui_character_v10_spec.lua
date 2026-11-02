@@ -458,21 +458,38 @@ return function(t, expect)
 			return section.showcase, section.showcaseView, section
 		end
 
-		t:it("turns with the client's own rotate arrows, dimmed while the portrait shows", function()
+		t:it("turns with Dawnward's rotate line icons, dimmed while the portrait shows (v0.10.1)", function()
 			local _, _, ns = openCharacter()
 			local model = showcase(ns)
 			local S = ns.Showcase
-			expect.equal(model.left.icon.__texture, S.ROTATE_ICONS.left)
-			expect.equal(model.right.icon.__texture, S.ROTATE_ICONS.right)
+			expect.equal(model.left.icon.name, "rotateLeft")
+			expect.equal(model.right.icon.name, "rotateRight")
+			expect.equal(model.left.icon.size, S.ROTATE_LINE_SIZE)
+			expect.falsy(model.left.edgeless, "a line icon keeps the ghost button's own edge")
+			expect.equal(model.left.label:GetText(), "", "no text glyph")
+			expect.truthy(S.ROTATE_LINE_SIZE <= S.CARD.button - 12, "inside the 36 px button")
+			-- The client's arrows stay the fallback art (Classic's TabardFrame.xml).
 			expect.equal(S.ROTATE_ICONS.left, "Interface\\Buttons\\UI-RotationLeft-Button-Up")
 			expect.equal(S.ROTATE_ICONS.right, "Interface\\Buttons\\UI-RotationRight-Button-Up")
-			expect.equal(model.left.label:GetText(), "", "no text glyph")
-			expect.truthy(S.ROTATE_ICON_SIZE <= S.CARD.button - 4, "inside the 36 px button")
 			model:SetPreferPortrait(true)
 			expect.falsy(model.left:IsEnabled())
-			expect.equal(model.left.icon.__alpha, ns.Widgets.BUTTON.disabledAlpha)
+			expect.equal(model.left.icon.lines[1].__color[4], ns.Widgets.BUTTON.disabledAlpha, "stroke dimmed")
+			expect.equal(model.left.icon:GetAlpha(), 1, "dimmed once, by the painter only")
 			model:SetPreferPortrait(false)
 			expect.truthy(model.left:IsEnabled())
+			expect.equal(model.left.icon.lines[1].__color[4], 1)
+		end)
+
+		t:it("draws the rotate icons as mirror images inside the 24 px box (v0.10.1)", function()
+			local _, _, ns = openCharacter()
+			local L, R = ns.Style.IconPaths("rotateLeft"), ns.Style.IconPaths("rotateRight")
+			expect.equal(#L, #R)
+			for i, line in ipairs(L) do
+				for j = 1, #line, 2 do
+					expect.truthy(line[j] >= 2 and line[j] <= 22 and line[j + 1] >= 2 and line[j + 1] <= 22, "in the box")
+					expect.truthy(math.abs(R[i][j] - (24 - line[j])) < 1e-9, "mirrored")
+				end
+			end
 		end)
 
 		t:it("zooms with the wheel over the live model only, and keeps zoom and turn across the portrait", function()

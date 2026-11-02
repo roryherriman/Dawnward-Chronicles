@@ -10,13 +10,32 @@ local function click(b) b:GetScript("OnClick")(b) end
 
 return function(t, expect)
 	t:describe("Showcase with native texture icons (L2, regression)", function()
+		-- v0.10.1: the turn buttons draw Dawnward's line icons where the client
+		-- has line regions; the client's Texture arrows are the fallback. These
+		-- tests run on a client without line regions, so the native art is used.
 		local function open()
 			local mock, env, ns = Boot.Start()
+			local createFrame = env.CreateFrame
+			env.CreateFrame = function(...)
+				local f = createFrame(...)
+				f.CreateLine = false
+				return f
+			end
 			mock.Slash("")
 			ns.MainWindow.Select("character")
 			click(ns.CharacterView.section.showcaseButton)
 			return mock, env, ns, ns.CharacterView.section.showcase
 		end
+
+		t:it("falls back to the client's arrows, edgeless (no frame inside a frame), when lines cannot be drawn", function()
+			local _, _, ns, showcase = open()
+			expect.equal(showcase.left.icon.__texture, ns.Showcase.ROTATE_ICONS.left)
+			expect.equal(showcase.right.icon.__texture, ns.Showcase.ROTATE_ICONS.right)
+			expect.truthy(showcase.left.edgeless)
+			for _, side in ipairs({ "top", "bottom", "left", "right" }) do
+				expect.equal(showcase.left.edges[side].__color[4], 0, "no edge drawn: " .. side)
+			end
+		end)
 
 		t:it("a client Texture has no SetColor, as in game", function()
 			local _, _, _, showcase = open()

@@ -844,7 +844,7 @@ local function buildRail(r)
 	frame.gear:SetIcon("settings")
 	frame.gear:SetScript("OnClick", function() MainWindow.ToggleSettings() end)
 	Widgets.Tooltip(frame.gear, "Settings",
-		"Theme, story moments and pace, backup and import, simulation mode, Total RP 3 status.")
+		"Theme, story moments and pace, backup and import, help, Total RP 3 status.")
 end
 
 local function build()
