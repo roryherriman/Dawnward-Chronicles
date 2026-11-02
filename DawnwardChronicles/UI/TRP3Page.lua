@@ -1661,7 +1661,7 @@ function TRP3Page.BuildConnection(page, P, innerW)
 	page.disconnect:SetPoint("TOPRIGHT", -P, -(TRP3Page.CONNECTION_NOTE_TOP + 3 * TRP3Page.LINE + 12))
 	page.disconnect:SetScript("OnClick", function() TRP3Page.AskDisconnect(page) end)
 	Widgets.Tooltip(page.disconnect, "Disconnect", "Dawnward stops keeping this Total RP 3 profile up to date. "
-		.. "Nothing is removed: what Dawnward wrote stays in Total RP 3 as it is. You confirm first.")
+		.. "What Dawnward wrote stays in Total RP 3 as it is. You confirm first.")
 end
 TRP3Page.BuildOverview = TRP3Page.BuildConnection
 
@@ -1907,8 +1907,9 @@ function TRP3Page.AskDisconnect(page)
 	local view = page.view
 	if not view or not view.entry then return end
 	Widgets.Confirm("Disconnect Total RP 3 profile \"" .. plain(view.probe.profile and view.probe.profile.name or "?")
-		.. "\" from this character?\n\nDawnward stops keeping it up to date. Nothing is removed: what Dawnward wrote "
-		.. "stays in Total RP 3 as it is, and your backups stay available.", "Disconnect", function()
+		.. "\" from this character?\n\nDawnward stops keeping it up to date. What Dawnward wrote stays in Total RP 3 "
+		.. "as it is (only a value that is no longer in your profile is taken out first), and your backups stay "
+		.. "available.", "Disconnect", function()
 		act(function()
 			local d = deps()
 			if not d then return "Total RP 3 sync is not available." end

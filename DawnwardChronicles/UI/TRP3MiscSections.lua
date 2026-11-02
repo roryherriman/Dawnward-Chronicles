@@ -285,6 +285,7 @@ function M.BuildGlance(page, P, innerW)
 	end
 	page.glanceState = H().paragraph(v, "muted", LW, 3, "small")
 	page.glanceState:SetPoint("TOPLEFT", P, -(syncTop + Style.CONTROL.segment + 6))
+	page.glanceStateHover = H().hoverOver(v, page.glanceState)
 
 	-- The editor, right of the list.
 	local x = P + LW + M.GLANCE_GAP
@@ -422,7 +423,8 @@ function M.RefreshGlance(page, view)
 	page.glanceSync:Select(on and "dawnward" or "off")
 	page.glanceState:SetText((on and ("Sync on · " .. chip[1]) or "Sync off · nothing is written")
 		.. (own > 0 and (" · " .. H().plural(own, "slot", "slots") .. " you filled in Total RP 3 (kept)") or ""))
-	Widgets.Tooltip(page.glanceRows[1], "At First Glance", plain(table.concat(check.reasons or {}, "; ")))
+	Widgets.Tooltip(page.glanceStateHover, "At First Glance sync", page.glanceState:GetText()
+		.. (#(check.reasons or {}) > 0 and ("\n\n" .. plain(table.concat(check.reasons, "; "))) or ""))
 	-- The editor for the selected entry.
 	local n = page.glanceSel
 	local e = entries[n]

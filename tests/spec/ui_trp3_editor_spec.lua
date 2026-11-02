@@ -285,6 +285,26 @@ return function(t, expect)
 			expect.truthy(ns.TRP3Page.HEAD_HEIGHT + page.iconPicker:GetHeight() <= cardH)
 		end)
 
+		t:it("Disconnect… stops every part after a confirmation, leaving Total RP 3 as it is", function()
+			local mock, env, ns, fake, page = start()
+			mock.Slash("fact add origin Born in Stormwind")
+			mock.Vis("fact vis 1 public")
+			assert(ns.TRP3Commands.ConnectAll(ns.ctx, {}))
+			mock.RunTimers()
+			local about = fake.profile.player.about.T1.TX
+			ns.TRP3Page.Open(page, "connection")
+			expect.truthy(page.disconnect:IsShown())
+			click(page.disconnect)
+			local asked = mock.AcceptPopup()
+			expect.truthy(asked:find("stops keeping it up to date", 1, true), asked)
+			local entry = env.DawnwardChroniclesTRP3DB.optIn[CHAR]
+			for _, id in ipairs(ns.TRP3Ledger.MAPPINGS) do
+				expect.truthy(ns.TRP3Ledger.Policy(entry, id) ~= "dawnward", id)
+			end
+			expect.equal(fake.profile.player.about.T1.TX, about, "what Dawnward wrote stays")
+			expect.falsy(page.disconnect:IsShown())
+		end)
+
 		t:it("Synchronization holds Connection, Status and Recovery behind one switch", function()
 			local _, _, _, _, page = start()
 			click(page.nav.buttons[6])
