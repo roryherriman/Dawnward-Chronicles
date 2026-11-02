@@ -370,8 +370,12 @@ function ChroniclePlaces.Create(parent, width, api)
 	d.tiedLabel:SetText("TIED MEMORIES")
 	for i = 1, L.tied do
 		local row = Widgets.Card(d)
-		row.text = Widgets.Label(row, "GameFontHighlight", false, "body")
+		-- The memory's name in the reading type, then its status in the
+		-- smaller muted type (two font strings: one string has one size).
+		row.text = Widgets.Label(row, "reading", false, "body")
 		row.text:SetPoint("LEFT", 14, 0)
+		row.status = Widgets.Label(row, "small", false, "muted")
+		row.status:SetPoint("LEFT", row.text, "RIGHT", 6, -1)
 		Widgets.Tooltip(row, nil)
 		view.tiedRows[i] = row
 	end
@@ -518,17 +522,20 @@ function ChroniclePlaces.Create(parent, width, api)
 		end
 		placeRect(d.tiedLabel, r.tiedLabel)
 
-		local muted = Style.Current().muted
-		local hexMuted = string.format("%02x%02x%02x", math.floor(muted[1] * 255 + 0.5),
-			math.floor(muted[2] * 255 + 0.5), math.floor(muted[3] * 255 + 0.5))
 		for i, row in ipairs(self.tiedRows) do
 			local m = i <= r.shown and tied[i] or nil
 			row:SetShown(m ~= nil)
 			if m then
 				placeRect(row, r.tied[i])
-				row.text:SetWidth(r.tied[i].w - 28)
 				local mname, mnote = ChroniclePlaces.MemoryParts(m)
-				row.text:SetText(string.format("%s  |cff%s·  %s|r", mname, hexMuted, mnote))
+				row.status:SetText("· " .. mnote)
+				local statusW = math.ceil(Style.TextWidth(row.status:GetText(), "small")) + 2
+				local room = r.tied[i].w - 28 - statusW - 6
+				row.text:SetText(mname)
+				local nameW = row.text.GetStringWidth and row.text:GetStringWidth() or 0
+				if type(nameW) ~= "number" or nameW <= 0 then nameW = Style.TextWidth(mname, "reading") end
+				-- As wide as the name (the status follows it), cut when it is longer.
+				row.text:SetWidth(math.max(1, math.min(room, math.ceil(nameW) + 1)))
 				-- The memory whole on hover: its title and text.
 				Widgets.Tooltip(row, m.title or mname, m.text)
 			end

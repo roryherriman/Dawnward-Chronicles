@@ -366,7 +366,9 @@ return function(t, expect)
 			end
 			expect.equal(labels[1], "Why now:")
 			expect.equal(labels[#labels], "Last time:")
-			local echo = section.whyRows[#labels].text:GetText()
+			-- The text runs on after its label (no-break spaces hold the label's room).
+			local echo = section.whyRows[#labels].plain
+			expect.truthy(section.whyRows[#labels].text:GetText():find(echo, 1, true))
 			expect.equal(echo, "Morrow came back more careful.")
 			expect.falsy(section.whyRows[1].text:GetText():find("Last time", 1, true), "not repeated in Why now")
 			expect.truthy(section.context:GetText():find("Last time: Morrow came back more careful.", 1, true))
@@ -458,16 +460,27 @@ return function(t, expect)
 			mock.RunTimers()
 			local card = ns.ReactionCard.Frame()
 			local L = ns.ReactionCard.LAYOUT
-			local lines = ns.StoryView.WrapLines(card.question:GetText(), "reading", 16, L.questionW)
-			expect.equal(card:GetHeight(), ns.ReactionCard.Height(lines))
+			local lines = math.min(3, ns.StoryView.WrapLines(card.question:GetText(), "reading", L.question.size,
+				L.questionW * 0.96))
+			expect.truthy(card.why:IsShown(), "the Director's reason, as in the Story section")
+			expect.equal(card.whyLabel:GetText(), "Why now:")
+			local h = card:GetHeight()
+			expect.truthy(h == ns.ReactionCard.Height(lines, 1) or h == ns.ReactionCard.Height(lines, 2), "height " .. h)
 			expect.truthy(ns.ReactionCard.Height(3) > ns.ReactionCard.Height(1))
-			expect.equal(ns.ReactionCard.Height(9), ns.ReactionCard.Height(3), "at most three lines")
+			expect.truthy(ns.ReactionCard.Height(1, 2) > ns.ReactionCard.Height(1, 0), "the reason adds its lines")
+			expect.equal(ns.ReactionCard.Height(9, 9), ns.ReactionCard.Height(3, 2), "at most three and two lines")
 			for _, b in ipairs({ card.answer, card.later, card.dismiss }) do
 				expect.equal(b:GetHeight(), ns.Style.CONTROL.compact)
 				expect.truthy(ns.Widgets.LabelFits(b:GetText(), b:GetWidth(), b:GetHeight(), b.variant), b:GetText())
 			end
-			-- The meta line ends left of the close button.
-			expect.truthy(L.pad + card.meta:GetWidth() <= ns.ReactionCard.WIDTH - 10 - L.close)
+			-- The chips: the gold place, then the event; they end left of the close button.
+			expect.equal(card.chips[1].label:GetText(), "Goldshire, Elwynn Forest")
+			expect.equal(card.chips[2].label:GetText(), "Quest completed")
+			local x = L.pad
+			for _, chip in ipairs(card.chips) do
+				if chip:IsShown() then x = x + chip:GetWidth() + 8 end
+			end
+			expect.truthy(x - 8 <= ns.ReactionCard.WIDTH - 10 - L.close, "chips end at " .. x)
 		end)
 
 		t:it("is never shown in combat and hides when combat starts", function()
