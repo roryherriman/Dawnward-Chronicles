@@ -94,7 +94,10 @@ return function(t, expect)
 			local age, name = rowFor(section, "age"), rowFor(section, "name")
 			expect.equal(age.bg.__color[4], 0, "an empty tile is only its edge")
 			expect.equal(name.bg.__color[4], 1)
-			expect.equal(age.edges.top.__color[4], 1)
+			-- v0.10: the edge is dashed (mockup: the Age tile), the solid one off.
+			expect.equal(age.edges.top.__color[4], 0)
+			expect.equal(name.edges.top.__color[4], 1)
+			expect.truthy(age.dashes and age.dashes.shown, "dashes drawn")
 			expect.equal(age.key:GetText(), "AGE")
 			expect.equal(age.key.__template, ns.Style.Font("GameFontNormalSmall"))
 		end)
@@ -208,15 +211,20 @@ return function(t, expect)
 				if spec.kind == "item" and spec.list == "family" then row = section.rows[i] end
 			end
 			expect.equal(row.title:GetText(), "Maybell Dawnwhisper")
-			expect.equal(row.detail:GetText(), "Mother · living")
-			expect.equal(row.notes:GetText(), "innkeeper, Goldshire")
+			-- v0.10: one meta line (mockup: "Mother · innkeeper, Goldshire"); the
+			-- full notes are the card's tooltip.
+			expect.equal(row.detail:GetText(), "Mother · living · innkeeper, Goldshire")
+			expect.falsy(row.notes:IsShown())
+			expect.truthy(row.tooltipText:find("innkeeper, Goldshire", 1, true))
 			local w = row:GetWidth()
 			expect.truthy(10 + row.title:GetWidth() + 8 + row.edit:GetWidth() + 10 <= w, "text clear of Edit")
 			expect.equal(row.vis, nil, "no visibility chip")
 			local textBottom = 0
 			for _, fs in ipairs({ row.title, row.detail, row.notes }) do
-				local _, _, fy = anchor(fs)
-				textBottom = math.max(textBottom, -fy + fs:GetStringHeight())
+				if fs:IsShown() then
+					local _, _, fy = anchor(fs)
+					textBottom = math.max(textBottom, -fy + fs:GetStringHeight())
+				end
 			end
 			expect.truthy(textBottom + 10 <= row:GetHeight(), "the card ends just under its text, no hole")
 			expect.truthy(row:GetHeight() <= textBottom + 10 + 1 or row:GetHeight() == 10 + L.controlHeight + 10,

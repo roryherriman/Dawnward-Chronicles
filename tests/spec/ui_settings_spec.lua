@@ -140,17 +140,46 @@ return function(t, expect)
 			end
 		end)
 
-		t:it("every panel of General, Story and Data fits inside its page", function()
+		t:it("every panel of General, Story, Data and Help fits inside its page", function()
 			local _, _, ns, panel = openSettings()
-			for _, p in ipairs({ panel.appearance, panel.interface, panel.story, panel.backupPanel, panel.storyPanel,
-				panel.simPanel }) do
+			local all = { panel.appearance, panel.interface, panel.backupPanel, panel.storyPanel, panel.helpPanel,
+				panel.simPanel }
+			for _, p in ipairs(panel.storyPanels) do all[#all + 1] = p end
+			for _, p in ipairs(all) do
 				expect.truthy(-topOf(p) + p:GetHeight() <= panel.pageHeight, "panel inside the page")
 				expect.equal(p:GetWidth(), ns.MainWindow.ContentWidth())
 			end
 			-- Panels on one page never overlap.
 			expect.truthy(-topOf(panel.interface) >= panel.appearance:GetHeight())
 			expect.truthy(-topOf(panel.storyPanel) >= panel.backupPanel:GetHeight())
-			expect.truthy(-topOf(panel.simPanel) >= -topOf(panel.storyPanel) + panel.storyPanel:GetHeight())
+			expect.truthy(-topOf(panel.storyPanels[2]) >= panel.storyPanels[1]:GetHeight())
+			expect.truthy(-topOf(panel.simPanel) >= panel.helpPanel:GetHeight() + ns.SettingsPanel.LAYOUT.gap)
+		end)
+
+		t:it("v0.10: five pages by purpose; developer tools only in development builds", function()
+			local mock, _, ns, panel = openSettings()
+			local ids = {}
+			for i, b in ipairs(panel.nav.buttons) do ids[i] = b.segmentId end
+			expect.deepEqual(ids, { "general", "story", "data", "trp3", "help" })
+			expect.truthy(ns.SettingsPanel.OpenPage("help"))
+			expect.truthy(panel.guide:IsVisible() and panel.setup:IsVisible() and panel.commands:IsVisible())
+			-- A release build hides simulation mode (unless it is on) and the setup preview.
+			ns.ctx.version = "1.0.0"
+			ns.MainWindow.Refresh()
+			expect.falsy(panel.simPanel:IsShown())
+			expect.falsy(panel.setupPreview:IsShown())
+			mock.Slash("sim on")
+			ns.MainWindow.Refresh()
+			expect.truthy(panel.simPanel:IsShown(), "while it is on, it can be turned off")
+			expect.falsy(panel.setupPreview:IsShown())
+			mock.Slash("sim off")
+			ns.ctx.version = "0.10.0-dev"
+			ns.MainWindow.Refresh()
+			expect.truthy(panel.simPanel:IsShown() and panel.setupPreview:IsShown())
+			-- No developer words on the ordinary pages.
+			for _, row in ipairs(panel.storyRows) do
+				expect.falsy(row.setting.label:find("TRP3", 1, true), "the Total RP 3 style lives on its own page")
+			end
 		end)
 
 		t:it("Story: one row per setting, every option shown and fitting, descriptions on one line", function()
@@ -158,7 +187,7 @@ return function(t, expect)
 			local S = ns.SettingsPanel
 			expect.equal(#panel.storyRows, #S.STORY_SETTINGS)
 			local rowsEnd = -topOf(panel.storyRows[#panel.storyRows]) + S.LAYOUT.row
-			expect.truthy(rowsEnd <= panel.story:GetHeight() - 36, "rows inside the Story panel")
+			expect.truthy(rowsEnd <= panel.storyPanels[2]:GetHeight() - 36, "rows inside the second Story panel")
 			for _, row in ipairs(panel.storyRows) do
 				local seg = row.control
 				expect.equal(#seg.buttons, #row.setting.values, row.setting.label .. ": every option")
@@ -201,13 +230,20 @@ return function(t, expect)
 				expect.truthy(ns.Style.TextWidth(row.description:GetText(), "meta") <= row.textWidth,
 					row.name:GetText())
 			end
-			for _, b in ipairs({ panel.minimap, panel.guide, panel.setup, panel.resetSize, panel.exportBackup,
-				panel.exportShare, panel.import, panel.importStory, panel.simToggle, panel.simReset, panel.done }) do
+			local buttons = { panel.guide, panel.setup, panel.commands, panel.resetSize, panel.exportBackup,
+				panel.exportShare, panel.import, panel.importStory, panel.simToggle, panel.simReset, panel.setupPreview,
+				panel.done }
+			for _, b in ipairs(panel.minimap.buttons) do buttons[#buttons + 1] = b end
+			for _, row in ipairs(panel.helpRows) do
+				expect.truthy(ns.Style.TextWidth(row.description:GetText(), "meta") <= row.textWidth,
+					row.name:GetText())
+			end
+			for _, b in ipairs(buttons) do
 				expect.truthy(ns.Widgets.LabelFits(b:GetText(), b:GetWidth(), b:GetHeight()), b:GetText())
 				expect.truthy(b:GetHeight() >= ns.Style.CONTROL.compact, b:GetText() .. " uses a design-system height")
 			end
-			expect.truthy(ns.Widgets.LabelFits("Minimap button: hidden", panel.minimap:GetWidth(),
-				panel.minimap:GetHeight()))
+			expect.equal(#panel.minimap.buttons * panel.minimap.buttons[1]:GetWidth() <= ns.SettingsPanel.LAYOUT.button,
+				true, "the minimap choice fits the control column")
 			expect.truthy(ns.Widgets.LabelFits("Turn off", panel.simToggle:GetWidth(), panel.simToggle:GetHeight()))
 		end)
 

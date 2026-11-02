@@ -23,8 +23,10 @@
 --       the answers given, each with Undo answer.
 --
 -- Every button calls the same core functions as the chat commands, through
--- Actions.WithCharacter (read-only data refused). Cards come from a fixed
--- pool and long lists are paged by what fits, so a refresh creates no frames.
+-- Actions.WithCharacter (read-only data refused). The cards scroll in one
+-- list, as in the mockup (a slim bar at the right); only the cards in view
+-- have frames, drawn from a pool that grows to what one view needs, so
+-- scrolling and refreshing reuse frames however long a list grows.
 local _, ns = ...
 local Widgets, MainWindow, Actions, Forms, Style = ns.Widgets, ns.MainWindow, ns.Actions, ns.Forms, ns.Style
 
@@ -33,17 +35,17 @@ ns.ChronicleView = ChronicleView
 
 ChronicleView.TABS = {
 	{ id = "memories", label = "Memories", module = "Memories", new = "New memory", noun = { "memory", "memories" },
-		search = "Search memories", width = 112 },
+		search = "Search memories" },
 	{ id = "arcs", label = "Arcs", module = "Arcs", new = "New arc", noun = { "arc", "arcs" },
-		search = "Search arcs", width = 74 },
+		search = "Search arcs" },
 	{ id = "goals", label = "Goals", module = "Goals", new = "New goal", noun = { "goal", "goals" },
-		search = "Search goals", width = 78 },
+		search = "Search goals" },
 	{ id = "identity", label = "Stances", module = "Identity", new = "New stance", noun = { "stance", "stances" },
-		search = "Search stances", width = 92 },
+		search = "Search stances" },
 	{ id = "people", label = "People", module = "People", new = "New person", noun = { "person", "people" },
-		search = "Search people", width = 86 },
-	{ id = "places", label = "Places", width = 86 },
-	{ id = "review", label = "Review", noun = { "finding", "findings" }, search = "Search findings", width = 86 },
+		search = "Search people" },
+	{ id = "places", label = "Places" },
+	{ id = "review", label = "Review", noun = { "finding", "findings" }, search = "Search findings" },
 }
 ChronicleView.REVIEW_CHOICES = { "growth", "unreliable", "secret", "correction", "ignore" }
 -- How each answer reads on its button, and what it means (tooltip).
@@ -68,31 +70,35 @@ ChronicleView.UNDO_HELP = "Takes this answer back. The finding returns if the re
 
 -- Layout in section units (the content area is 772 x 588, the mockup's main
 -- column; ChronicleMemories.dc.html). Tabs on top (a 34 px segmented row on
--- a 3 px padded track), a toolbar (New, search, count, pager) below them,
--- then the cards in two columns.
+-- a 3 px padded track, each count in a smaller, quieter type; Review's in an
+-- amber badge), a toolbar (New, search, count) below them, then the cards
+-- in two columns that scroll, with the slim bar in a 12 px gutter.
 --
 -- Cards are sized to their content (v0.8): a short memory is a short card,
 -- a long one grows up to maxTextLines of text and offers Read, which shows
 -- the whole record. Each card goes to the shorter column, so no card waits
--- for a taller neighbour, and a page holds as many cards as fit (at most
--- `pool`, the frames that exist). All sizes are computed by pure functions
--- (CardLayout, Paginate) from the bundled fonts' real advance widths, so a
--- refresh creates no frames and tests can check nothing overlaps.
+-- for a taller neighbour (ChronicleView.Masonry). All sizes are computed by
+-- pure functions (CardLayout, Masonry, Visible) from the bundled fonts' real
+-- advance widths, so tests can check nothing overlaps.
 ChronicleView.LAYOUT = {
 	inset = 0, width = 772, height = 588,
 	tabHeight = 40, tabGap = 4, tabPad = 3, tabTextPad = 12,
 	toolbarTop = 54, toolbarHeight = 36, searchWidth = 240, newWidth = 148,
-	gridTop = 102, cols = 2, colGap = 12, rowGap = 12, pool = 8,
-	cardWidth = 380, cardPad = 16, padY = 14, gap = 8, dateWidth = 96,
+	gridTop = 102, cols = 2, colGap = 12, rowGap = 12, barGap = 6, barWidth = 6, pool = 8,
+	cardWidth = 374, cardPad = 16, padY = 14, gap = 8, dateWidth = 96,
 	chipRow = 24, chipGap = 6, chips = 4,
-	titleHeight = 22, metaLine = 18, maxMetaLines = 2, textLine = 20, maxTextLines = 6, progressHeight = 6,
-	dividerGap = 10, buttons = 6, buttonHeight = 30, buttonGap = 6, buttonPad = 12, buttonPadTight = 8,
+	titleHeight = 22, metaLine = 18, maxMetaLines = 2, textLine = 20, maxTextLines = 8, progressHeight = 6,
+	countGap = 6, badge = 20,
+	dividerGap = 10, buttons = 6, buttonHeight = 30, buttonGap = 6, buttonGapTight = 4, buttonPad = 12,
+	buttonPadTight = 8,
 	minButton = 44,
 	-- The full view of one record (Read).
 	detailPad = 20, detailTitleLines = 3, detailTitleLine = 24, detailMetaLines = 3,
 }
+-- The scrolling view under the toolbar; no card is taller than it.
 ChronicleView.LAYOUT.gridHeight = ChronicleView.LAYOUT.height - ChronicleView.LAYOUT.gridTop
-ChronicleView.ROWS = ChronicleView.LAYOUT.pool
+ChronicleView.LAYOUT.gridWidth = ChronicleView.LAYOUT.cols * ChronicleView.LAYOUT.cardWidth
+	+ (ChronicleView.LAYOUT.cols - 1) * ChronicleView.LAYOUT.colGap
 
 -- The Examine button at a finding card's top right (where a record's date
 -- sits): a compact button, the top row grows to its height.
@@ -155,23 +161,25 @@ function ChronicleView.ButtonRows(left, right, width, L)
 	for _, e in ipairs(left or {}) do all[#all + 1] = e end
 	if right then all[#all + 1] = right end
 	if #all == 0 then return { items = {}, rows = 0, height = 0 } end
-	local function widths(pad)
+	local function widths(pad, gap)
 		local out, total = {}, 0
 		for i, e in ipairs(all) do
 			out[i] = ChronicleView.ButtonWidth(e[2], pad, L)
 			total = total + out[i]
 		end
-		return out, total + L.buttonGap * (#all - 1)
+		return out, total + (gap or L.buttonGap) * (#all - 1)
 	end
 	local items = {}
-	for _, pad in ipairs({ L.buttonPad, L.buttonPadTight }) do
-		local w, total = widths(pad)
+	-- The usual padding, then a tighter one, then tighter gaps too.
+	for _, try in ipairs({ { L.buttonPad, L.buttonGap }, { L.buttonPadTight, L.buttonGap },
+		{ L.buttonPadTight, L.buttonGapTight } }) do
+		local w, total = widths(try[1], try[2])
 		if total <= width then
 			local x = 0
 			for i, e in ipairs(all) do
 				local bx = (right and i == #all) and (width - w[i]) or x
 				items[i] = { x = bx, y = 0, w = w[i], id = e[1], label = e[2] }
-				x = x + w[i] + L.buttonGap
+				x = x + w[i] + try[2]
 			end
 			return { items = items, rows = 1, height = L.buttonHeight }
 		end
@@ -263,6 +271,14 @@ function ChronicleView.CardLayout(content, actions, L)
 		r.text = { x = pad, y = y, w = inner, h = lines * L.textLine, lines = lines, total = total }
 		y = y + r.text.h + L.gap
 	end
+	-- A quiet line after the text (a Review finding's question to the player).
+	if content.note then
+		local all = math.max(1, ChronicleView.WrapLines(content.note, inner, "meta"))
+		local lines = math.min(all, L.maxMetaLines)
+		cut = cut or all > lines
+		r.note = { x = pad, y = y, w = inner, h = lines * L.metaLine, lines = lines }
+		y = y + r.note.h + L.gap
+	end
 	if content.progress then
 		r.progress = { x = pad, y = y, w = inner, h = L.progressHeight }
 		y = y + L.progressHeight + L.gap
@@ -288,46 +304,65 @@ function ChronicleView.CardLayout(content, actions, L)
 	return r
 end
 
---- Splits cards of the given heights into pages: each card goes to the
--- shorter column of the page (the left one on a tie), and a page ends when
--- the next card no longer fits under it, or when `pool` cards are on it.
--- Every page holds at least one card. Returns pages = { { { index, x, y, h,
--- col } } } (positions in the grid, from its top-left), at least one
--- (empty) page. Pure.
-function ChronicleView.Paginate(heights, L)
+--- Places cards of the given heights in the scrolling grid: each card
+-- goes to the shorter column (the left one on a tie), rowGap under the card
+-- above it. Returns placed = { { index, col, x, y, h } } (positions from the
+-- grid's top-left) and the grid's total height. Pure.
+function ChronicleView.Masonry(heights, L)
 	L = L or ChronicleView.LAYOUT
-	local pages, i, n = {}, 1, #heights
-	repeat
-		local page, colY = {}, {}
-		for c = 1, L.cols do colY[c] = 0 end
-		while i <= n and #page < L.pool do
-			local col = 1
-			for c = 2, L.cols do
-				if colY[c] < colY[col] then col = c end
-			end
-			local h = math.min(heights[i], L.gridHeight)
-			if #page > 0 and colY[col] + h > L.gridHeight then break end
-			page[#page + 1] = { index = i, col = col, x = L.inset + (col - 1) * (L.cardWidth + L.colGap),
-				y = colY[col], h = h }
-			colY[col] = colY[col] + h + L.rowGap
-			i = i + 1
+	local placed, colY = {}, {}
+	for c = 1, L.cols do colY[c] = 0 end
+	for i, height in ipairs(heights) do
+		local col = 1
+		for c = 2, L.cols do
+			if colY[c] < colY[col] then col = c end
 		end
-		pages[#pages + 1] = page
-	until i > n
-	return pages
+		local h = math.min(height, L.gridHeight)
+		placed[i] = { index = i, col = col, x = L.inset + (col - 1) * (L.cardWidth + L.colGap), y = colY[col], h = h }
+		colY[col] = colY[col] + h + L.rowGap
+	end
+	local total = 0
+	for c = 1, L.cols do total = math.max(total, colY[c] - L.rowGap) end
+	return placed, math.max(0, total)
 end
 
---- The clamped page number for a list of pages. Pure.
-function ChronicleView.Pages(pages, page)
-	local count = math.max(1, #pages)
-	return count, math.min(math.max(page or 1, 1), count)
+--- Indexes (in list order) of the placed cards that intersect the view
+-- [offset, offset + viewH]. Pure.
+function ChronicleView.Visible(placed, offset, viewH, out)
+	out = out or {}
+	for i = #out, 1, -1 do out[i] = nil end
+	local bottom = offset + viewH
+	for i, p in ipairs(placed) do
+		if p.y < bottom and p.y + p.h > offset then out[#out + 1] = i end
+	end
+	return out
 end
 
---- A tab's width for its label and count (the count may be nil). Pure.
+--- The scroll range for a grid of total height: 0 .. max(0, total - view),
+-- offset clamped into it. Pure.
+function ChronicleView.ClampOffset(offset, total, viewH)
+	local max = math.max(0, (total or 0) - (viewH or 0))
+	return math.max(0, math.min(max, offset or 0)), max
+end
+
+--- Width of a tab's count: the number in the small type, or for Review
+-- the amber badge around it; 0 without a count. Pure.
+function ChronicleView.CountWidth(spec, count, L)
+	L = L or ChronicleView.LAYOUT
+	if not count or count == 0 then return 0 end
+	local w = math.ceil(ns.Style.TextWidth(tostring(count), spec.id == "review" and "badge" or "small"))
+	if spec.id == "review" then return math.max(L.badge, w + 12) end
+	return w
+end
+
+--- A tab's width for its label and count (the count may be nil): the
+-- label, a gap and the count, padded on both sides. Pure.
 function ChronicleView.TabWidth(spec, count, L)
 	L = L or ChronicleView.LAYOUT
-	local text = spec.label .. ((count and count > 0) and ("  " .. count) or "")
-	return math.max(spec.width, math.ceil(ns.Style.TextWidth(text, "button")) + 2 * L.tabTextPad)
+	local countW = ChronicleView.CountWidth(spec, count, L)
+	local w = math.ceil(ns.Style.TextWidth(spec.label, "button")) + (countW > 0 and (L.countGap + countW) or 0)
+	-- Each tab hugs its words, as the mockup's track does.
+	return w + 2 * L.tabTextPad
 end
 
 local IMPORTANCE_CHIPS = { { "Ordinary", "muted" }, { "Notable", "muted" }, { "Defining", "accent" } }
@@ -458,8 +493,9 @@ function ChronicleView.ReviewContent(item, now)
 		return c
 	end
 	c.chip = { FINDING[item.kind] or "Continuity", "accent" }
+	-- What Dawnward noticed first, then the question it puts to the player.
 	c.text = item.message
-	c.meta = kind == "finding" and "Examined: the records are shown side by side above."
+	c.note = kind == "finding" and "Examined: the records are shown side by side above."
 		or "What is it? Choose how your story reads it; canon is not changed."
 	return c
 end
@@ -853,20 +889,12 @@ local function itemKey(item)
 end
 ChronicleView.ItemKey = itemKey
 
--- "rrggbb" of a colour, for inline colour codes.
-local function hex(color)
-	return string.format("%02x%02x%02x", math.floor(color[1] * 255 + 0.5), math.floor(color[2] * 255 + 0.5),
-		math.floor(color[3] * 255 + 0.5))
-end
-
---- A tab's label: its name, then its count in a quieter colour (the
--- "needs you" amber on Review, as the mockup's count badge). Pure.
-function ChronicleView.TabLabel(spec, count, selected, theme)
-	if not count or count == 0 then return spec.label end
+--- The colour of a tab's count: quieter than its label (the label gold
+-- on the selected tab); Review's is the "needs you" amber. Pure.
+function ChronicleView.CountColor(spec, selected, theme)
 	local tones = ns.Style.Tones(theme)
-	local color = spec.id == "review" and ns.Themes.STATUS_COLORS.waiting
-		or (selected and tones.label or ns.Style.Mix(theme.muted, theme.edge, 0.2))
-	return string.format("%s  |cff%s%d|r", spec.label, hex(color), count)
+	if spec.id == "review" then return ns.Themes.STATUS_COLORS.waiting end
+	return selected and tones.label or ns.Style.Mix(theme.muted, theme.edge, 0.2)
 end
 
 -- Card painting (Widgets.Card, plus the design's "needs your call" card:
@@ -889,8 +917,8 @@ end
 
 local function create(parent)
 	local L = ChronicleView.LAYOUT
-	local section = { frame = CreateFrame("Frame", nil, parent), tab = "memories", page = 1, rows = {},
-		tabButtons = {}, query = "", reviewMode = "open" }
+	local section = { frame = CreateFrame("Frame", nil, parent), tab = "memories", offset = 0, rows = {},
+		tabButtons = {}, query = "", reviewMode = "open", placed = {}, visible = {} }
 	local f = section.frame
 	section.form = Forms.Create(f, L.width + 2 * L.inset)
 
@@ -928,7 +956,7 @@ local function create(parent)
 	end)
 	section.tabs = Widgets.Segmented(f, tabItems, L.width, L.tabHeight - 2 * L.tabPad, function(id)
 		if id ~= section.tab then
-			section.tab, section.page, section.query = id, 1, ""
+			section.tab, section.offset, section.query = id, 0, ""
 			section.reviewMode, section.examineKey = "open", nil
 			section.search:SetText("")
 			section.search:ClearFocus()
@@ -939,27 +967,98 @@ local function create(parent)
 		if SECTION_DEF then SECTION_DEF.heading = tabSpec(id).label end
 		MainWindow.Refresh()
 	end)
+	-- Each tab: its name at the left (in the button's own label), then its
+	-- count in the smaller type, a separate font string because one string
+	-- has one size. Review's count sits in a round amber badge.
 	for i, b in ipairs(section.tabs.buttons) do
-		b.tabId = ChronicleView.TABS[i].id
+		local spec = ChronicleView.TABS[i]
+		b.tabId = spec.id
+		b.textInset = L.tabTextPad
+		b.label:SetJustifyH("LEFT")
+		if spec.id == "review" then
+			b.badge = CreateFrame("Frame", nil, b)
+			b.badge:SetSize(L.badge, L.badge)
+			b.badge.pill = Style.Pill(b.badge, L.badge)
+			if not b.badge.pill then
+				b.badge.bg = Style.Solid(b.badge, "BACKGROUND")
+				b.badge.bg:SetAllPoints(b.badge)
+				b.badge.edges = Style.Edge(b.badge, "BORDER")
+			end
+			Style.Register(b.badge, function(badge, theme)
+				local amber = ns.Themes.STATUS_COLORS.waiting
+				local fill = Style.Mix(theme.surface, amber, 0.16)
+				local edge = Style.Mix(theme.surface, amber, 0.55)
+				if badge.pill then
+					badge.pill:Paint(fill, edge)
+				else
+					Style.Color(badge.bg, fill)
+					badge.edges:Paint(edge, 1)
+				end
+			end)
+			b.count = Widgets.Label(b.badge, "badge", false)
+			b.count:SetPoint("CENTER", 0, 0)
+			b.count:SetJustifyH("CENTER")
+		else
+			b.count = Widgets.Label(b, "small", false)
+			b.count:SetJustifyH("LEFT")
+		end
 		section.tabButtons[i] = b
 	end
 	section.tabBar:SetPoint("TOPLEFT", L.inset, 0)
 
-	--- Sizes each tab to its label and lines them up on the track.
-	function section:LayoutTabs(counts)
+	--- Sizes each tab to its label and count, and lines them up on the track.
+	function section:LayoutTabs(counts, theme)
+		theme = theme or Style.Current()
 		local x = L.tabPad
 		for i, b in ipairs(self.tabButtons) do
 			local spec = ChronicleView.TABS[i]
-			b:SetWidth(ChronicleView.TabWidth(spec, counts and counts[i]))
+			local count = counts and counts[i] or 0
+			b:SetText(spec.label)
+			b:SetWidth(ChronicleView.TabWidth(spec, count))
 			b:ClearAllPoints()
 			b:SetPoint("TOPLEFT", L.inset + x, -L.tabPad)
 			x = x + b:GetWidth() + L.tabGap
+			-- The count follows the label: its left edge after the label's
+			-- measured width (the client's own where it gives one).
+			local labelW = b.label.GetStringWidth and b.label:GetStringWidth() or 0
+			if type(labelW) ~= "number" or labelW <= 0 then labelW = Style.TextWidth(spec.label, "button") end
+			local countX = L.tabTextPad + math.ceil(labelW) + L.countGap
+			b.count:SetText(count > 0 and tostring(count) or "")
+			if b.badge then
+				b.badge:SetShown(count > 0)
+				local w = ChronicleView.CountWidth(spec, count)
+				b.badge:SetSize(math.max(L.badge, w), L.badge)
+				if b.badge.pill then b.badge.pill:Resize(L.badge) end
+				b.badge:ClearAllPoints()
+				b.badge:SetPoint("LEFT", b, "LEFT", countX, 0)
+				Style.TextColor(b.count, ChronicleView.CountColor(spec, b.tabId == self.tab, theme))
+			else
+				b.count:SetShown(count > 0)
+				b.count:ClearAllPoints()
+				-- On the label's baseline: the smaller type sits 1 px lower.
+				b.count:SetPoint("LEFT", b, "LEFT", countX, -1)
+				Style.TextColor(b.count, ChronicleView.CountColor(spec, b.tabId == self.tab, theme))
+			end
 		end
 		self.tabBar:SetSize(x - L.tabGap + L.tabPad, L.tabHeight)
 	end
 	section:LayoutTabs()
 
-	-- Toolbar: New, search, count and pager (the pager only with more than one page).
+	--- Chooses the tab shown next time the section is drawn (from another
+	-- section: the Journal's goal and place panels).
+	function section:SelectTab(id)
+		if not tabSpec(id) then return end
+		if id ~= self.tab then
+			self.tab, self.offset, self.query = id, 0, ""
+			self.reviewMode, self.examineKey = "open", nil
+			self.search:SetText("")
+		end
+		self.detailKey = nil
+		self.form:Close()
+		if SECTION_DEF then SECTION_DEF.heading = tabSpec(id).label end
+	end
+
+	-- Toolbar: New, search, and the order and count at the right (as the mockup).
 	local barY = -L.toolbarTop
 	section.new = Widgets.Button(f, "New", L.newWidth, L.toolbarHeight, "primary")
 	section.new:SetPoint("TOPLEFT", L.inset, barY)
@@ -967,7 +1066,7 @@ local function create(parent)
 		if section.tab == "review" then
 			-- Review: the toolbar button switches between the findings and the answers.
 			section.reviewMode = section.reviewMode == "open" and "answered" or "open"
-			section.examineKey, section.page = nil, 1
+			section.examineKey, section.offset = nil, 0
 			MainWindow.Refresh()
 			return
 		end
@@ -975,29 +1074,16 @@ local function create(parent)
 	end)
 	section.search = Widgets.SearchBox(f, L.searchWidth, "Search", function(text)
 		if text ~= section.query then
-			section.query, section.page = text, 1
+			section.query, section.offset = text, 0
 			MainWindow.Refresh()
 		end
 	end, Style.CONTROL.input)
 	section.search:SetHeight(L.toolbarHeight)
-	local pagerY = barY - (L.toolbarHeight - Style.CONTROL.compact) / 2
-	section.next = Widgets.Button(f, ">", Style.CONTROL.compact, Style.CONTROL.compact, "ghost")
-	section.next:SetPoint("TOPRIGHT", -L.inset, pagerY)
-	section.next:SetScript("OnClick", function() section.page = section.page + 1; MainWindow.Refresh() end)
-	Widgets.Tooltip(section.next, "Next page")
-	section.pageLabel = Widgets.Label(f, "meta", false, "muted")
-	section.pageLabel:SetJustifyH("CENTER")
-	section.pageLabel:SetWidth(84)
-	section.pageLabel:SetPoint("RIGHT", section.next, "LEFT", -4, 0)
-	section.prev = Widgets.Button(f, "<", Style.CONTROL.compact, Style.CONTROL.compact, "ghost")
-	section.prev:SetPoint("RIGHT", section.pageLabel, "LEFT", -4, 0)
-	section.prev:SetScript("OnClick", function() section.page = section.page - 1; MainWindow.Refresh() end)
-	Widgets.Tooltip(section.prev, "Previous page")
 	section.count = Widgets.Label(f, "meta", false, "muted")
 	section.count:SetJustifyH("RIGHT")
-	section.count:SetWidth(220)
-	section.toolbar = { section.new, section.search, section.prev, section.pageLabel, section.next, section.count }
-	section.pager = { section.prev, section.pageLabel, section.next }
+	section.count:SetWidth(L.width - L.newWidth - L.searchWidth - 2 * 10)
+	section.count:SetPoint("RIGHT", f, "TOPRIGHT", -L.inset, -(L.toolbarTop + L.toolbarHeight / 2))
+	section.toolbar = { section.new, section.search, section.count }
 
 	-- Empty state: what the tab holds and how to fill it.
 	section.emptyPanel = Widgets.Panel(f, "Nothing here yet")
@@ -1015,6 +1101,7 @@ local function create(parent)
 		row.date = Widgets.Label(row, "GameFontHighlightSmall", false, "muted")
 		row.date:SetJustifyH("RIGHT")
 		row.meta = Widgets.Label(row, "meta", true, "muted")
+		row.note = Widgets.Label(row, "meta", true, "muted")
 		row.progress = Widgets.ProgressBar(row, width, Style.CONTROL.progress)
 		row.chips = {}
 		for c = 1, L.chips do row.chips[c] = Widgets.Chip(row, "", "muted") end
@@ -1033,9 +1120,36 @@ local function create(parent)
 		end
 	end
 
-	-- The card pool.
-	for i = 1, L.pool do
-		local row = Widgets.Card(f)
+	-- The cards: one scrolling list under the toolbar (a plain scroll frame
+	-- from the 1.15.9 template, its bar restyled as the design's slim bar in
+	-- the gutter at the right). Cards are children of the scroll child, at
+	-- their place in the whole grid; only those in view have a frame.
+	local scroll = CreateFrame("ScrollFrame", Widgets.NextName("ChronicleScroll"), f, "UIPanelScrollFrameTemplate")
+	scroll:SetPoint("TOPLEFT", L.inset, -L.gridTop)
+	scroll:SetSize(L.gridWidth, L.gridHeight)
+	local child = CreateFrame("Frame", nil, scroll)
+	child:SetSize(L.gridWidth, 1)
+	scroll:SetScrollChild(child)
+	section.scroll, section.child = scroll, child
+	section.scrollBar = Widgets.SlimScrollBar(scroll, L.barGap, L.barWidth)
+	-- The wheel moves the list by the shared step; the thumb (the template)
+	-- moves it too, and either way the cards coming into view are drawn.
+	if scroll.EnableMouseWheel then scroll:EnableMouseWheel(true) end
+	scroll:SetScript("OnMouseWheel", function(_, delta)
+		section:ScrollTo((section.offset or 0) - (delta or 0) * Widgets.WHEEL_STEP)
+	end)
+	if scroll.HookScript then
+		scroll:HookScript("OnVerticalScroll", function(_, offset)
+			if offset ~= section.offset then section:RenderWindow(offset) end
+		end)
+	end
+
+	-- A card from the pool (made the first time a view needs that many).
+	section.pool = {}
+	local function getRow(index)
+		local row = section.pool[index]
+		if row then return row end
+		row = Widgets.Card(child)
 		Style.Register(row, paintCard)
 		row:SetSize(L.cardWidth, 200)
 		row.title = Widgets.Label(row, nil, false, "title")
@@ -1058,8 +1172,13 @@ local function create(parent)
 		row.textHover:Hide()
 		addParts(row, L.cardWidth - 2 * L.cardPad)
 		row:Hide()
-		section.rows[i] = row
+		section.pool[index] = row
+		return row
 	end
+	section.getRow = getRow
+	-- Enough cards for a usual view, made now; a view of many short cards
+	-- adds more once (they are then reused).
+	for i = 1, L.pool do section.rows[i] = getRow(i) end
 
 	-- The full view of one record (Read): over the toolbar and the cards,
 	-- under the forms. Title and meta wrap; the text scrolls.
@@ -1166,7 +1285,7 @@ local function create(parent)
 		row.examine:SetShown(tabId == "review" and item.reviewKind == nil)
 		if tabId == "review" then
 			row.examine:SetScript("OnClick", function()
-				section.reviewMode, section.examineKey, section.page, section.detailKey = "examine", item.key, 1, nil
+				section.reviewMode, section.examineKey, section.offset, section.detailKey = "examine", item.key, 0, nil
 				MainWindow.Refresh()
 			end)
 		end
@@ -1230,6 +1349,12 @@ local function create(parent)
 			if row.text.SetMaxLines then row.text:SetMaxLines(layout.text.lines) end
 		end
 		row.text:SetText(content.text or "")
+		row.note:SetShown(layout.note ~= nil)
+		if layout.note then
+			place(row.note, layout.note)
+			if row.note.SetMaxLines then row.note:SetMaxLines(layout.note.lines) end
+			row.note:SetText(content.note)
+		end
 		row.readKey = nil
 		if ChronicleView.ClientCut(row, layout) then
 			row.readKey = itemKey(item)
@@ -1253,6 +1378,9 @@ local function create(parent)
 	--- The full view of item: everything a card shows, nothing cut.
 	function section:ShowDetail(tabId, item, char, now)
 		local content = ChronicleView.CardContent(tabId, item, char, now)
+		-- The full view has one quiet line under the title: the meta line, or
+		-- a finding's question.
+		if content.note and not content.meta then content.meta, content.note = content.note, nil end
 		local d = self.detail
 		d.item, d.content = item, content
 		local spec = tabSpec(tabId)
@@ -1322,6 +1450,7 @@ local function create(parent)
 		-- The text, whole, scrolling when it is longer than the room left.
 		-- The scroll bar (UIPanelScrollFrameTemplate) sits just right of the
 		-- frame, so the frame leaves it room inside the panel.
+		d.note:Hide()
 		place(d.scroll, { x = DP, y = y, w = dInner - 26, h = math.max(L.textLine, bottom - y) })
 		local text = content.text or ""
 		d.text:SetText(text)
@@ -1334,6 +1463,58 @@ local function create(parent)
 		fillChips(d, chips, content)
 		fillButtons(d, buttons, tabId, item)
 		d:Show()
+	end
+
+	--- Draws the cards that intersect the view at offset. Cards already
+	-- showing the right item stay as they are; the others are refilled.
+	-- Afterwards self.rows lists the shown cards in list order, then the
+	-- free ones.
+	function section:RenderWindow(offset)
+		local max
+		offset, max = ChronicleView.ClampOffset(offset, self.totalHeight, L.gridHeight)
+		self.offset, self.maxOffset = offset, max
+		local visible = ChronicleView.Visible(self.placed, offset, L.gridHeight, self.visible)
+		local keep, free = {}, {}
+		local want = {}
+		for _, i in ipairs(visible) do want[i] = true end
+		for _, row in ipairs(self.pool) do
+			local i = row.itemIndex
+			if row:IsShown() and row.gen == self.gen and i and want[i] then
+				keep[i] = row
+			else
+				free[#free + 1] = row
+			end
+		end
+		local ordered = {}
+		for _, i in ipairs(visible) do
+			local row = keep[i]
+			if not row then
+				row = table.remove(free) or getRow(#self.pool + 1)
+				local at, item = self.placed[i], self.items[i]
+				row:ClearAllPoints()
+				row:SetPoint("TOPLEFT", at.x, -at.y)
+				row:Show()
+				row.record = item
+				fillCard(row, self.contents[i], self.layouts[i], self.tab, item)
+				row.itemIndex, row.gen = i, self.gen
+			end
+			ordered[#ordered + 1] = row
+		end
+		for _, row in ipairs(free) do
+			row:Hide()
+			row.itemIndex, row.record = nil, nil
+			ordered[#ordered + 1] = row
+		end
+		self.rows = ordered
+	end
+
+	--- Scrolls the list to offset (clamped) and draws the cards there.
+	function section:ScrollTo(offset)
+		offset = ChronicleView.ClampOffset(offset, self.totalHeight, L.gridHeight)
+		self.offset = offset
+		if self.scrollBar and self.scrollBar.SetValue then self.scrollBar:SetValue(offset) end
+		if self.scroll:GetVerticalScroll() ~= offset then self.scroll:SetVerticalScroll(offset) end
+		self:RenderWindow(offset)
 	end
 
 	function section:ApplyTheme(theme)
@@ -1385,12 +1566,10 @@ local function create(parent)
 		if SECTION_DEF then SECTION_DEF.heading = spec.label end
 		self.tabs:Select(self.tab)
 		local counts = {}
-		for i, b in ipairs(self.tabButtons) do
-			local tab = ChronicleView.TABS[i]
+		for i, tab in ipairs(ChronicleView.TABS) do
 			counts[i] = char and #self:Items(char, tab.id) or 0
-			b:SetText(ChronicleView.TabLabel(tab, counts[i], tab.id == self.tab, theme))
 		end
-		self:LayoutTabs(counts)
+		self:LayoutTabs(counts, theme)
 
 		local places = self.tab == "places"
 		if places then
@@ -1404,7 +1583,8 @@ local function create(parent)
 			self.detail:Hide()
 			self.emptyPanel:Hide()
 			self.empty:Hide()
-			for _, row in ipairs(self.rows) do row:Hide() end
+			self.scroll:Hide()
+			for _, row in ipairs(self.pool) do row:Hide() end
 			self.places:Refresh(char, self:Items(char))
 			return
 		end
@@ -1430,27 +1610,14 @@ local function create(parent)
 			if ChronicleView.Matches(self.tab, item, self.query) then items[#items + 1] = item end
 		end
 
-		-- Each card sized to its content, then paged by what fits.
+		-- Each card sized to its content, then placed in the scrolling grid.
 		local contents, layouts, heights = {}, {}, {}
 		for i, item in ipairs(items) do
 			contents[i], layouts[i] = ChronicleView.ItemLayout(self.tab, item, char, now)
 			heights[i] = layouts[i].height
 		end
-		local pageList = ChronicleView.Paginate(heights)
-		local pages
-		pages, self.page = ChronicleView.Pages(pageList, self.page)
-		self.prev:SetEnabled(self.page > 1)
-		self.next:SetEnabled(self.page < pages)
-		self.pageLabel:SetText(string.format("Page %d of %d", self.page, pages))
-		for _, region in ipairs(self.pager) do region:SetShown(pages > 1) end
 		local noun = spec.noun[#all == 1 and 1 or 2]
 		if review and self.reviewMode == "answered" then noun = #all == 1 and "answer" or "answers" end
-		self.count:ClearAllPoints()
-		if pages > 1 then
-			self.count:SetPoint("RIGHT", self.prev, "LEFT", -10, 0)
-		else
-			self.count:SetPoint("RIGHT", f, "TOPRIGHT", -L.inset, -(L.toolbarTop + L.toolbarHeight / 2))
-		end
 		if self.query ~= "" then
 			self.count:SetText(string.format("%d of %d %s", #items, #all, spec.noun[2]))
 		else
@@ -1476,18 +1643,13 @@ local function create(parent)
 			self.empty:SetText(empty[2])
 		end
 
-		local page = pageList[self.page] or {}
-		for i, row in ipairs(self.rows) do
-			local at = page[i]
-			local item = at and items[at.index]
-			row:SetShown(item ~= nil)
-			row.record = item
-			if item then
-				row:ClearAllPoints()
-				row:SetPoint("TOPLEFT", at.x, -(L.gridTop + at.y))
-				fillCard(row, contents[at.index], layouts[at.index], self.tab, item)
-			end
-		end
+		self.items, self.contents, self.layouts = items, contents, layouts
+		self.placed, self.totalHeight = ChronicleView.Masonry(heights)
+		self.gen = (self.gen or 0) + 1
+		self.child:SetHeight(math.max(1, self.totalHeight))
+		self.scroll:SetShown(#items > 0)
+		if self.scrollBar and self.scrollBar.UpdateThumb then self.scrollBar:UpdateThumb() end
+		self:ScrollTo(self.offset)
 
 		-- The full view stays on its record while it exists (an action may
 		-- have changed it); it closes when the record is gone.
@@ -1503,6 +1665,7 @@ local function create(parent)
 		else
 			self.detail:Hide()
 		end
+		self.scroll:SetShown(#items > 0 and not shownItem)
 	end
 
 	ChronicleView.section = section

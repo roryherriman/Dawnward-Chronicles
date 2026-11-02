@@ -260,7 +260,8 @@ return function(t, expect)
 				if spec.kind == "item" then items[#items + 1] = spec.text end
 			end
 			expect.equal(fields, #ns.Schema.FIELDS)
-			expect.deepEqual(items, { "Mother: Ilsa Brightwater (deceased)", "Took the oath" })
+			-- v0.10: History is in the left column, before Family on the right.
+			expect.deepEqual(items, { "Took the oath", "Mother: Ilsa Brightwater (deceased)" })
 		end)
 	end)
 

@@ -125,7 +125,7 @@ return function(t, expect)
 			expect.equal(input(ns, "name"):GetText(), "Testchar", "the in-game name is suggested")
 			input(ns, "name"):SetText("Lirael Dawnward")
 			click(wizard(ns).next)
-			click(cycle(ns, "frequency"))
+			click(cycle(ns, "frequency"):Option("rare"))
 			expect.equal(cycle(ns, "frequency"):GetText(), "Rarely")
 			click(wizard(ns).back)
 			expect.equal(input(ns, "name"):GetText(), "Lirael Dawnward")
@@ -141,14 +141,14 @@ return function(t, expect)
 			input(ns, "name"):SetText("Lirael")
 			input(ns, "homeland"):SetText("Goldshire")
 			goTo(ns, 3)
-			click(cycle(ns, "places")) -- on -> fewer
+			click(cycle(ns, "places"):Option("fewer"))
 			goTo(ns, 4)
 			click(wizard(ns).themeTiles[3]) -- Shadowbound
 			expect.equal(ns.Style.Current().id, "shadowbound", "previewed at once")
-			click(cycle(ns, "minimap")) -- hide
+			click(cycle(ns, "minimap"):Option(false)) -- hide
 			goTo(ns, 6)
 			expect.equal(wizard(ns).next:GetText(), "Finish")
-			expect.truthy(wizard(ns).summary:GetText():find("Homeland: Goldshire", 1, true))
+			expect.truthy(table.concat(wizard(ns).summaryLines, "\n"):find("Homeland: Goldshire", 1, true))
 			click(wizard(ns).next)
 
 			local char = db(env).characters[CHAR]

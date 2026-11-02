@@ -22,6 +22,10 @@
 -- Look (v0.8): the setup wizard's header (eyebrow, Cinzel title, subtitle,
 -- 36 px close), 36 px inputs and buttons, the split choice as a segmented
 -- control showing both options, notes in plain panels.
+-- v0.10: the two steps are shown as in the setup's rail, beside the
+-- eyebrow: round numbered badges (gold for the step you are on, a check
+-- for one behind you), each a click away; the stage title in the setup's
+-- Cinzel 26.
 local _, ns = ...
 local Widgets, Style, Schema, MainWindow = ns.Widgets, ns.Style, ns.Schema, ns.MainWindow
 
@@ -49,6 +53,9 @@ ImportWizard.REVIEW_NOTE = "Approve adds this to your character's canon, as part
 	.. "means it is not suggested again. Later keeps it waiting. Your saved story is never changed."
 ImportWizard.MODE_LABELS = { sentence = "Split: by sentence", paragraph = "Split: by paragraph" }
 ImportWizard.MODES = { { id = "sentence", label = "By sentence" }, { id = "paragraph", label = "By paragraph" } }
+-- The two steps, as the setup rail shows its stages.
+ImportWizard.STEPS = { { id = "text", label = "Paste your story" }, { id = "review", label = "Review the pieces" } }
+ImportWizard.STEP = { badge = 22, gap = 8, x = 214, width = 168 }
 
 local L = ImportWizard.LAYOUT
 local BODY = L.width - 2 * L.pad
@@ -232,6 +239,60 @@ local function buildReview()
 	wizard.empty = label(p, "reading", true, "reading", 0, -30, BODY)
 end
 
+-- A step's look (the setup rail's badges): current gold, done with the
+-- game's check mark, upcoming edged with a muted number.
+local function paintStep(step, theme)
+	local tones = Style.Tones(theme)
+	local current, done = step.state == "current", step.state == "done"
+	Style.Color(step.ring, current and theme.accent or done and theme.border or tones.edgeStrong)
+	Style.Color(step.fill, current and theme.accent or done and Style.Mix(theme.surface, theme.accent, 0.12)
+		or theme.panel)
+	if not step.ring.round then step.edges:Paint(current and theme.accent or tones.edgeStrong, 1) end
+	Style.TextColor(step.num, current and theme.accentText or theme.muted)
+	step.num:SetShown(not done)
+	step.check:SetShown(done)
+	local gold = tones.accentBright
+	step.check:SetVertexColor(gold[1], gold[2], gold[3])
+	Style.TextColor(step.label, current and tones.heading or done and tones.ghostText or theme.muted)
+end
+
+local function buildSteps()
+	local S = ImportWizard.STEP
+	wizard.steps = {}
+	for i, def in ipairs(ImportWizard.STEPS) do
+		local step = CreateFrame("Button", nil, wizard)
+		step:SetSize(S.width, S.badge)
+		step:SetPoint("TOPLEFT", L.pad + S.x + (i - 1) * (S.width + S.gap), -L.top + 3)
+		step.id = def.id
+		step.ring = Style.Disc(step, "BACKGROUND", 0, S.badge)
+		step.ring:SetPoint("LEFT", 0, 0)
+		step.fill = Style.Disc(step, "BACKGROUND", 1, step.ring.round and S.badge - 2 or S.badge)
+		step.fill:SetPoint("CENTER", step.ring, "CENTER", 0, 0)
+		step.edges = Style.Edge(step, "BORDER")
+		step.edges:SetShown(not step.ring.round)
+		step.num = step:CreateFontString(nil, "OVERLAY", Style.FontFor("badge"))
+		step.num:SetPoint("CENTER", step.ring, "CENTER", 0, 0)
+		step.num:SetText(tostring(i))
+		step.check = step:CreateTexture(nil, "OVERLAY")
+		step.check:SetTexture(ns.SetupWizard and ns.SetupWizard.CHECK_TEXTURE or "Interface\\Buttons\\UI-CheckBox-Check")
+		step.check:SetSize(18, 18)
+		step.check:SetPoint("CENTER", step.ring, "CENTER", 0, 0)
+		step.label = Widgets.Label(step, "meta", false, nil)
+		step.label:SetPoint("LEFT", S.badge + 8, 0)
+		step.label:SetWidth(S.width - S.badge - 8)
+		step.label:SetText(def.label)
+		step.state = "future"
+		step:SetScript("OnClick", function(self)
+			if self.id ~= wizard.page then
+				ImportWizard.Show(self.id)
+			end
+		end)
+		Widgets.Tooltip(step, def.label, i == 1 and "Paste or read your story, then Save and review."
+			or "Approve, edit or skip each piece Dawnward found in your story.")
+		wizard.steps[i] = Style.Register(step, paintStep)
+	end
+end
+
 local function build()
 	wizard = CreateFrame("Frame", ImportWizard.FRAME_NAME, UIParent)
 	wizard:SetSize(L.width, L.height)
@@ -249,7 +310,7 @@ local function build()
 
 	wizard.eyebrow = label(wizard, "GameFontNormalSmall", false, "eyebrow", L.pad, -L.top)
 	wizard.eyebrow:SetText("STORY IMPORT")
-	wizard.title = label(wizard, "GameFontNormalHuge", false, "title", L.pad, -L.top - 20)
+	wizard.title = label(wizard, "stage", false, "title", L.pad, -L.top - 22)
 	wizard.subtitle = label(wizard, "GameFontHighlight", true, "muted", L.pad, -L.top - 60, BODY - 48)
 	Widgets.SetTextRole(wizard.subtitle, "navText")
 	wizard.subtitle:SetMaxLines(2)
@@ -259,6 +320,7 @@ local function build()
 	wizard.close:SetPoint("TOPRIGHT", -L.pad, -L.top)
 	wizard.close:SetScript("OnClick", function() ImportWizard.Close() end)
 
+	buildSteps()
 	buildText()
 	buildReview()
 
@@ -350,6 +412,12 @@ function ImportWizard.Refresh()
 	for id, p in pairs(wizard.pages) do p:SetShown(id == wizard.page) end
 	wizard.title:SetText(onText and "Your story" or "Review")
 	wizard.subtitle:SetText(ImportWizard.SUBTITLES[wizard.page])
+	wizard.eyebrow:SetText("STORY IMPORT · STEP " .. (onText and 1 or 2) .. " OF 2")
+	for i, step in ipairs(wizard.steps) do
+		step.state = (onText and i == 1 or not onText and i == 2) and "current" or (not onText and i == 1) and "done"
+			or "future"
+		Style.Repaint(step)
+	end
 	local char = character()
 	local counts = ns.StoryImport.Counts(char)
 	if onText then
@@ -399,6 +467,13 @@ local function show(pageId)
 	wizard.page = pageId
 	wizard.shownKey = nil
 	ImportWizard.Refresh()
+end
+
+--- Shows a step ("text" or "review"); what was typed is kept.
+function ImportWizard.Show(pageId)
+	if wizard and (pageId == "text" or pageId == "review") then
+		show(pageId)
+	end
 end
 
 --- Opens the window. opts.from: "setup", "character", "settings" or "chat".

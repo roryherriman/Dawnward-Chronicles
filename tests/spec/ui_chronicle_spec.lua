@@ -77,6 +77,9 @@ local function legacySpec(t, expect)
 					chips = { { "Elwynn Forest and its many quiet places", "muted" }, { "Suggested by Dawnward", "muted" },
 						{ "Established", "muted" }, { "Fourth chip", "muted" } }, vis = "secret" },
 				{ text = "", chips = {} },
+				-- A Review finding: the message, then the question to the player.
+				{ chip = { "Stance", "accent" }, examine = true, text = "About the Circle, they say Loyal.",
+					note = "What is it? Choose how your story reads it; canon is not changed.", chips = {} },
 			}
 		end
 		local ACTIONS = {
@@ -103,7 +106,7 @@ local function legacySpec(t, expect)
 
 		local function parts(r)
 			local out = { r.chip }
-			for _, k in ipairs({ "date", "examine", "title", "meta", "text", "progress", "chips", "divider" }) do
+			for _, k in ipairs({ "date", "examine", "title", "meta", "text", "note", "progress", "chips", "divider" }) do
 				if r[k] then out[#out + 1] = r[k] end
 			end
 			if r.buttons then
@@ -159,34 +162,49 @@ local function legacySpec(t, expect)
 			-- Grid and toolbar fit the content area.
 			expect.truthy(L.inset * 2 + L.width <= PNS.MainWindow.ContentWidth())
 			expect.equal(L.height, PNS.MainWindow.ContentHeight())
-			expect.equal(L.cols * L.cardWidth + (L.cols - 1) * L.colGap, L.width, "two columns fill the width")
+			expect.equal(L.cols * L.cardWidth + (L.cols - 1) * L.colGap + L.barGap + L.barWidth, L.width,
+				"two columns and the scroll bar's gutter fill the width")
 			expect.truthy(L.tabHeight <= L.toolbarTop and L.toolbarTop + L.toolbarHeight <= L.gridTop,
 				"tabs, then the toolbar, then the cards")
 		end)
 
-		t:it("pages cards by what fits: the shorter column first, never past the grid", function()
+		t:it("places cards in the shorter column and draws only those in view", function()
 			local L = PCV.LAYOUT
-			expect.equal(#PCV.Paginate({}), 1, "an empty list is one empty page")
-			local pages = PCV.Paginate({ 150, 300, 150, 150, 150 })
-			expect.equal(pages[1][1].col, 1)
-			expect.equal(pages[1][2].col, 2)
-			expect.equal(pages[1][3].col, 1, "the third card goes under the shorter first one")
-			expect.equal(pages[1][3].y, 150 + L.rowGap)
-			expect.equal(pages[1][4].col, 2, "the fourth: under the 300 card, now the shorter column")
-			for _, page in ipairs(PCV.Paginate({ 480, 200, 200, 200, 120, 170, 300, 486, 600, 160, 160, 160, 160, 160 })) do
-				expect.truthy(#page >= 1 and #page <= L.pool)
-				for i, a in ipairs(page) do
-					expect.truthy(a.y + a.h <= L.gridHeight, "inside the grid")
-					for j = i + 1, #page do
-						local b = page[j]
-						expect.falsy(a.col == b.col and a.y < b.y + b.h + L.rowGap and b.y < a.y + a.h + L.rowGap,
-							"cards in a column keep their gap")
-					end
+			local placed, total = PCV.Masonry({})
+			expect.equal(#placed, 0)
+			expect.equal(total, 0, "an empty list has no height")
+			placed, total = PCV.Masonry({ 150, 300, 150, 150, 150 })
+			expect.equal(placed[1].col, 1)
+			expect.equal(placed[2].col, 2)
+			expect.equal(placed[3].col, 1, "the third card goes under the shorter first one")
+			expect.equal(placed[3].y, 150 + L.rowGap)
+			expect.equal(placed[4].col, 2, "the fourth: under the 300 card, now the shorter column")
+			expect.equal(placed[5].col, 1, "the fifth: back under the first column")
+			expect.equal(total, 3 * 150 + 2 * L.rowGap)
+			local heights = { 480, 200, 200, 200, 120, 170, 300, 486, 600, 160, 160, 160, 160, 160 }
+			placed, total = PCV.Masonry(heights)
+			for i, a in ipairs(placed) do
+				expect.truthy(a.h <= L.gridHeight, "no card is taller than the view")
+				expect.truthy(a.x + L.cardWidth <= L.gridWidth, "inside the grid")
+				expect.truthy(a.y + a.h <= total, "inside the total height")
+				for j = i + 1, #placed do
+					local b = placed[j]
+					expect.falsy(a.col == b.col and a.y < b.y + b.h + L.rowGap and b.y < a.y + a.h + L.rowGap,
+						"cards in a column keep their gap")
 				end
 			end
-			local n, page = PCV.Pages(pages, 9)
-			expect.equal(n, #pages)
-			expect.equal(page, n, "a page past the end shows the last one")
+			-- Only cards that intersect the view are drawn.
+			for _, offset in ipairs({ 0, 300, total - L.gridHeight }) do
+				local seen = {}
+				for _, i in ipairs(PCV.Visible(placed, offset, L.gridHeight)) do seen[i] = true end
+				for i, p in ipairs(placed) do
+					local inView = p.y < offset + L.gridHeight and p.y + p.h > offset
+					expect.equal(seen[i] == true, inView, "card " .. i .. " at offset " .. offset)
+				end
+			end
+			expect.equal(PCV.ClampOffset(9999, total, L.gridHeight), total - L.gridHeight, "clamped to the end")
+			expect.equal(PCV.ClampOffset(-5, total, L.gridHeight), 0)
+			expect.equal(PCV.ClampOffset(50, 100, L.gridHeight), 0, "a short list does not scroll")
 		end)
 
 		t:it("fits each tab's buttons inside a card, the five answers in one row", function()
@@ -224,6 +242,48 @@ local function legacySpec(t, expect)
 			expect.truthy(width - L.tabGap + L.tabPad <= L.width, "tabs fit one row")
 		end)
 
+		t:it("puts a finding's question under its message", function()
+			local r = PCV.CardLayout(shapes()[6], ACTIONS[4])
+			expect.truthy(r.note and r.text, "both parts")
+			expect.truthy(r.note.y >= r.text.y + r.text.h, "the question follows the message")
+			expect.truthy(r.buttons.y >= r.note.y + r.note.h, "and the answers follow the question")
+			local c = PCV.ReviewContent({ kind = "persona", message = "About the Circle" }, 1)
+			expect.equal(c.text, "About the Circle")
+			expect.truthy(c.note:find("What is it?", 1, true))
+			expect.falsy(c.meta, "nothing above the message")
+		end)
+
+		t:it("draws each tab's count after its label, inside the tab, Review's in a badge", function()
+			local mock, env, ns, section = start()
+			local L = ns.ChronicleView.LAYOUT
+			local char = env.DawnwardChroniclesDB.characters[CHAR]
+			for i = 1, 12 do ns.Memories.Add(char, { text = "M" .. i }, "player", i) end
+			mock.Slash("stance add The Cenarion Circle; Loyal; Doubts its leaders")
+			ns.MainWindow.Refresh()
+			local right = 0
+			for i, b in ipairs(section.tabButtons) do
+				local spec = ns.ChronicleView.TABS[i]
+				local x = b.__points[1][2]
+				expect.truthy(x >= right, spec.label .. " starts after the previous tab")
+				right = x + b:GetWidth()
+				expect.truthy(right <= L.width, spec.label .. " inside the track")
+				expect.equal(b:GetText(), spec.label, "the button's own label is the name alone")
+				local count = b.badge or b.count
+				if count:IsShown() then
+					local cx = count.__points[1][4]
+					local labelW = ns.Style.TextWidth(spec.label, "button")
+					expect.truthy(cx >= L.tabTextPad + labelW, spec.label .. ": the count follows the label")
+					expect.truthy(cx + ns.ChronicleView.CountWidth(spec, tonumber(b.count:GetText()))
+						<= b:GetWidth() - L.tabTextPad + 1, spec.label .. ": the count stays inside its tab")
+				end
+			end
+			expect.equal(section.tabButtons[1].count:GetText(), "12")
+			local review = section.tabButtons[#section.tabButtons]
+			expect.truthy(review.badge and review.badge:IsShown(), "Review's count sits in its badge")
+			expect.equal(review.count:GetText(), "1")
+			expect.falsy(section.tabButtons[2].count:IsShown(), "no count without records")
+		end)
+
 		t:it("places each card's frames from its layout, two cards side by side", function()
 			local _, env, ns, section = start()
 			local CV = ns.ChronicleView
@@ -243,19 +303,53 @@ local function legacySpec(t, expect)
 			expect.truthy(section.rows[1]:GetHeight() < row:GetHeight(), "no title: a shorter card")
 		end)
 
-		t:it("pages long lists", function()
+		t:it("scrolls long lists with the wheel, reusing a small pool of cards", function()
 			local _, env, ns, section = start()
+			local CV = ns.ChronicleView
+			local L = CV.LAYOUT
 			local char = env.DawnwardChroniclesDB.characters[CHAR]
-			for i = 1, 6 do ns.Memories.Add(char, { title = "Title " .. i, text = "Memory " .. i }, "player", i) end
+			for i = 1, 30 do ns.Memories.Add(char, { title = "Title " .. i, text = "Memory " .. i }, "player", i) end
 			ns.MainWindow.Refresh()
-			expect.equal(section.pageLabel:GetText(), "Page 1 of 2")
-			expect.truthy(section.next:IsShown(), "the pager shows with more than one page")
-			expect.equal(section.rows[1].text:GetText(), "Memory 6")
-			expect.equal(section.count:GetText(), "Newest first · 6 memories")
-			click(section.next)
-			expect.equal(section.rows[1].text:GetText(), "Memory 2")
-			expect.falsy(section.rows[3]:IsShown())
-			expect.falsy(section.next:IsEnabled())
+			expect.equal(section.rows[1].text:GetText(), "Memory 30", "newest first")
+			expect.equal(section.count:GetText(), "Newest first · 30 memories")
+			expect.truthy(section.totalHeight > L.gridHeight, "taller than the view")
+			expect.equal(section.child:GetHeight(), section.totalHeight)
+			expect.truthy(section.scroll:IsShown())
+			local before = #section.pool
+			expect.truthy(before < 30, "only the cards in view have frames: " .. before)
+			-- Every shown card intersects the view and sits inside the grid.
+			local function check()
+				for _, row in ipairs(section.rows) do
+					if row:IsShown() then
+						local p = row.__points[1]
+						local y = -p[3]
+						expect.truthy(y < section.offset + L.gridHeight and y + row:GetHeight() > section.offset,
+							"in view")
+						expect.truthy(p[2] >= 0 and p[2] + row:GetWidth() <= L.gridWidth, "inside the grid")
+					end
+				end
+			end
+			check()
+			local wheel = section.scroll:GetScript("OnMouseWheel")
+			wheel(section.scroll, -1)
+			expect.equal(section.offset, ns.Widgets.WHEEL_STEP, "one notch down")
+			expect.equal(section.scroll:GetVerticalScroll(), section.offset)
+			for _ = 1, 80 do wheel(section.scroll, -1) end
+			expect.equal(section.offset, section.totalHeight - L.gridHeight, "stops at the end")
+			check()
+			local texts = {}
+			for _, row in ipairs(section.rows) do
+				if row:IsShown() then texts[row.text:GetText()] = true end
+			end
+			expect.truthy(texts["Memory 1"], "the oldest is reachable")
+			expect.falsy(texts["Memory 30"], "the newest has scrolled away")
+			expect.truthy(#section.pool <= before + 4, "scrolling reuses the cards")
+			-- A refresh keeps the place; a new tab starts at the top.
+			ns.MainWindow.Refresh()
+			expect.equal(section.offset, section.totalHeight - L.gridHeight)
+			tab(section, "arcs")
+			tab(section, "memories")
+			expect.equal(section.offset, 0)
 		end)
 
 		t:it("fills a page with short cards and hides the pager for one page", function()
@@ -289,9 +383,10 @@ local function legacySpec(t, expect)
 			ns.MainWindow.Refresh()
 			expect.equal(ns.MainWindow.HeadingFor(ns.MainWindow.Sections()[4], char, false), "Memories")
 			local labels = {}
-			-- The count is drawn in a quieter colour (inline colour code).
+			-- The count is its own, smaller and quieter font string after the label.
 			for _, b in ipairs(section.tabButtons) do
-				labels[b.tabId] = b:GetText():gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+				local count = b.count:GetText()
+				labels[b.tabId] = b:GetText() .. ((count ~= "" and b.count:IsVisible()) and ("  " .. count) or "")
 			end
 			expect.equal(labels.memories, "Memories  1")
 			expect.equal(labels.identity, "Stances  1")
@@ -513,7 +608,7 @@ local function legacySpec(t, expect)
 		t:it("shows a long record whole in its full view, with the same actions, and goes back", function()
 			local mock, env, ns, section = start()
 			local char = env.DawnwardChroniclesDB.characters[CHAR]
-			local long = string.rep("She walked the whole Lantern Road with a single candle. ", 10)
+			local long = string.rep("She walked the whole Lantern Road with a single candle. ", 16)
 			ns.Memories.Add(char, { title = "The night the lanterns went out", text = long }, "player", 1)
 			ns.Memories.Add(char, { title = "Short", text = "Short" }, "player", 2)
 			ns.MainWindow.Refresh()
