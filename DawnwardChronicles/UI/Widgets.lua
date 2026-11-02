@@ -435,17 +435,11 @@ function Widgets.Divider(parent, layer)
 	return Style.Register(line, function(l, theme) Style.Color(l, theme.edge) end)
 end
 
---- Visibility -------------------------------------------------------------------
-
-local CYCLE = { private = "public", public = "secret", secret = "private" }
-
-Widgets.VISIBILITY_HELP = "Public: may be shared (share exports, and Total RP 3 if you turned sync on).\n"
-	.. "Private: only you; included in your personal backups.\n"
-	.. "Secret: only you; left out of backups unless you ask.\nClick to change."
+--- Chip colours -----------------------------------------------------------------
 
 -- Chip tints: a chip's fill and edge are its text colour mixed into the
--- surface it sits on (opaque, so round ends can be layered). The design
--- system's Private chip is #B4C6EA on #1B2436 with a #3A4D73 edge.
+-- surface it sits on (opaque, so round ends can be layered); e.g. a
+-- #B4C6EA chip on #1B2436 gets a #3A4D73 edge.
 Widgets.CHIP_TINT = { fill = 0.12, edge = 0.36, hoverFill = 0.2, hoverEdge = 0.7 }
 
 --- Fill and edge colours of a chip of color on base (default theme.surface). Pure.
@@ -461,56 +455,6 @@ local function followHeight(frame, pill)
 		height = height or self:GetHeight()
 		if type(height) == "number" and height > 2 then pill:Resize(height) end
 	end)
-end
-
--- Paints a visibility button as a chip in its fixed colour. Called directly
--- (not only through the registry) so the chip stays right even where a
--- screen registers its own painter for the button.
-local function paintVisibilityChip(b, theme)
-	theme = theme or Style.Current()
-	local color = Themes.VISIBILITY_COLORS[b.level] or Themes.VISIBILITY_COLORS.private
-	local hover = b.hover and b:IsEnabled()
-	local fill, edge = Widgets.ChipColors(color, theme, b.chipBase and Style.Tone(theme, b.chipBase), hover)
-	if b.pill then
-		b.pill:Paint(fill, edge)
-		b.bg:Hide()
-		b.edges:SetShown(false)
-	else
-		Style.Color(b.bg, fill)
-		b.edges:Paint(edge, 1)
-	end
-	Style.TextColor(b.label, b:IsEnabled() and color or theme.muted)
-end
-
---- A visibility chip showing Public / Private / Secret in its fixed colour
--- (a pill with round ends where the client can draw them). It stays a
--- button: clicking cycles the level and calls onChange(newLevel); the caller
--- saves. :SetChipBase(role) names the surface it sits on (default surface).
-function Widgets.VisibilityButton(parent, onChange)
-	local button = Widgets.Button(parent, "Private", 72, Style.SIZE.compact, "ghost")
-	button.pill = Style.Pill(button, Style.SIZE.compact)
-	if button.pill then followHeight(button, button.pill) end
-	button.level = "private"
-	function button:SetLevel(level)
-		self.level = level
-		self:SetText(Themes.VISIBILITY_LABELS[level] or level)
-		self.textColor = Themes.VISIBILITY_COLORS[level] or Themes.VISIBILITY_COLORS.private
-		paintVisibilityChip(self)
-		Style.Repaint(self)
-	end
-	function button:SetChipBase(role)
-		self.chipBase = role
-		paintVisibilityChip(self)
-	end
-	Style.Register(button, paintVisibilityChip)
-	hook(button, "OnEnter", function(self) paintVisibilityChip(self) end)
-	hook(button, "OnLeave", function(self) paintVisibilityChip(self) end)
-	button:SetLevel("private")
-	button:SetScript("OnClick", function(self)
-		onChange(CYCLE[self.level] or "private", self)
-	end)
-	Widgets.Tooltip(button, "Visibility", Widgets.VISIBILITY_HELP)
-	return button
 end
 
 --- Text input --------------------------------------------------------------------
@@ -857,7 +801,8 @@ end
 -- round ends where the client can draw them. Tones:
 --   accent    gold ("Defining", "Homeland")         waiting  amber ("Waiting for approval")
 --   muted     neutral tag ("Recorded event")         danger   red
---   public / private / secret  the fixed visibility colours, whatever the theme
+--   public / private / secret  fixed colours, whatever the theme (the legacy
+--             visibility palette; "public" is the Total RP 3 page's green)
 Widgets.CHIP_HEIGHT = 24
 Widgets.CHIP_PAD = 10
 

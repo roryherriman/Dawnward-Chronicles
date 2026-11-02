@@ -83,7 +83,7 @@ return function(t, expect)
 			local s = ns.Identity.Add(char, { subject = "Darnassus", persona = "Devoted", conviction = "Abandoned" }, NOW)
 			c = CV.CardContent("identity", s, char, NOW)
 			expect.equal(c.title, "Darnassus")
-			expect.equal(c.text, "In public: Devoted\nPrivately (Private): Abandoned")
+			expect.equal(c.text, "Persona: Devoted\nInner conviction: Abandoned")
 			local p = ns.People.Add(char, { name = "Aria", kind = "player", realm = "Silverhand",
 				feelings = "Never trusted her" }, NOW)
 			c = CV.CardContent("people", p, char, NOW)

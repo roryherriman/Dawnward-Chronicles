@@ -10,12 +10,15 @@
 -- restore preview can warn before one character's backup replaces another's.
 -- Older readers ignore it.
 --
--- Share exports carry the public projection only: no biography sources, no
--- interpretations and no key memory. Backups carry facts, interpretations
--- and key memory; biography sources only when asked (includeBiography).
+-- Share exports carry the published profile only (Projection.GetPublic): no
+-- biography sources, no interpretations and no key memory. A personal
+-- backup (v0.10) carries everything: every record whatever its old
+-- visibility, interpretations, key memory, the story and the biography
+-- sources. Backups made by older versions could leave secrets or the
+-- biography out; they still import (MergeForImport keeps what they lack).
 local _, ns = ...
-local Schema, Privacy, Projection, Serializer, Util, Character, Facts =
-	ns.Schema, ns.Privacy, ns.Projection, ns.Serializer, ns.Util, ns.Character, ns.Facts
+local Schema, Privacy, Projection, Serializer, Util, Facts =
+	ns.Schema, ns.Privacy, ns.Projection, ns.Serializer, ns.Util, ns.Facts
 
 local Transfer = {}
 ns.Transfer = Transfer
@@ -84,8 +87,11 @@ function Transfer.StoryForBackup(char, includeSecrets)
 	return story
 end
 
---- opts: { includeSecrets = bool, includeBiography = bool, addonVersion = string,
--- characterKey = string (backups record it as the owner) }
+--- opts: { addonVersion = string, characterKey = string (backups record it
+-- as the owner) }. A backup includes everything. includeSecrets = false or
+-- includeBiography = false (never passed by Dawnward itself since v0.10)
+-- write the smaller backup older versions made by default, so importing such
+-- a backup stays covered by tests.
 function Transfer.Export(char, kind, opts)
 	opts = opts or {}
 	local data, includesSecrets, includesBiography
@@ -93,7 +99,7 @@ function Transfer.Export(char, kind, opts)
 		data = Projection.GetPublic(char)
 		includesSecrets, includesBiography = false, false
 	elseif kind == Transfer.KIND_BACKUP then
-		includesSecrets = opts.includeSecrets == true
+		includesSecrets = opts.includeSecrets ~= false
 		local allowed = { public = true, private = true, secret = includesSecrets }
 		data = Projection.Filter(char, allowed)
 		-- A personal backup keeps milestone and suggestion keys so a restore
@@ -106,14 +112,17 @@ function Transfer.Export(char, kind, opts)
 				data.interpretations[#data.interpretations + 1] = Util.DeepCopy(item)
 			end
 		end
-		-- The living chronicle travels only in personal backups, filtered
-		-- like everything else: no secrets unless asked (Transfer.StoryForBackup).
+		-- The living chronicle travels only in personal backups
+		-- (Transfer.StoryForBackup).
 		data.story = Transfer.StoryForBackup(char, includesSecrets)
 		-- The player's own axis words and locks (#21): private, backups only.
 		data.axisMeanings = Util.DeepCopy(char.axisMeanings or {})
 		-- At First Glance entries the player wrote for Total RP 3 (v0.9): backups only.
 		data.glance = Util.DeepCopy(char.glance or {})
-		includesBiography = opts.includeBiography == true and char.sources ~= nil
+		-- With no stored story there is nothing to carry: such a backup then
+		-- keeps whatever story is stored when it is restored.
+		includesBiography = opts.includeBiography ~= false and char.sources ~= nil
+			and ns.Sources.Current(char) ~= nil
 		if includesBiography then
 			data.sources = Util.DeepCopy(char.sources)
 		end
@@ -337,13 +346,10 @@ end
 --- One-line summary of an import plan, for confirmation prompts.
 function Transfer.Describe(plan)
 	local char = plan.character
-	local counts = Character.CountByVisibility(char)
 	local name = char.fields.name and char.fields.name.value or "(unnamed)"
-	return string.format("%s: %d fields, %d family, %d history, %d journal, %d facts "
-		.. "(%d public, %d private, %d secret)%s%s",
+	return string.format("%s: %d fields, %d family, %d history, %d journal, %d facts%s%s",
 		name, Util.CountKeys(char.fields), #char.family, #char.history, #char.journal, #char.facts,
-		counts.public, counts.private, counts.secret,
-		plan.includesSecrets and "" or "; secrets not included in this backup",
+		plan.includesSecrets and "" or "; an older backup that left some records out (your current ones are kept)",
 		plan.includesBiography and "; includes the stored biography"
 			or "; no biography in this backup (the current one is kept)")
 		.. (plan.includesStory and "; replaces your story (moments, decisions, memories, arcs, goals) with the backup's; "

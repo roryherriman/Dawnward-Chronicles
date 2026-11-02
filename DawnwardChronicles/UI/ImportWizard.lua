@@ -12,11 +12,10 @@
 --                split choice (by sentence or by paragraph) and Save and
 --                review, which stores the text verbatim (Core/StoryImport.lua).
 --   Review       one waiting piece at a time: the exact quote and where it
---                is in the story, an editable fact, its category (a keyword
---                guess, marked as suggested) and its visibility (Private by
---                default). Approve adds it to canon; choosing Public first
---                shows exactly what would become public and asks. Skip
---                removes it for good; Later moves on and keeps it waiting.
+--                is in the story, an editable fact and its category (a
+--                keyword guess, marked as suggested). Approve adds it to
+--                canon (part of the profile, v0.10). Skip removes it for
+--                good; Later moves on and keeps it waiting.
 -- Nothing becomes canon without Approve, and every write goes through
 -- Actions.WithCharacter (read-only data refused).
 --
@@ -45,8 +44,8 @@ ImportWizard.SUBTITLES = {
 }
 ImportWizard.TEXT_NOTE = "Saved word for word, line breaks and all. Dawnward splits it into sentences (or "
 	.. "paragraphs) by simple rules; it never rewrites or invents. With Total RP 3 connected, the whole story "
-	.. "becomes your profile's About text while it is Public."
-ImportWizard.REVIEW_NOTE = "Approve adds this to your character's canon, with the visibility shown below. Skip "
+	.. "becomes your profile's About text."
+ImportWizard.REVIEW_NOTE = "Approve adds this to your character's canon, as part of your profile. Skip "
 	.. "means it is not suggested again. Later keeps it waiting. Your saved story is never changed."
 ImportWizard.MODE_LABELS = { sentence = "Split: by sentence", paragraph = "Split: by paragraph" }
 ImportWizard.MODES = { { id = "sentence", label = "By sentence" }, { id = "paragraph", label = "By paragraph" } }
@@ -71,12 +70,6 @@ function ImportWizard.CountText(text)
 	return line, over
 end
 
---- The confirmation shown before approving a piece as Public.
-function ImportWizard.PublicConfirmText(statement, category)
-	return "Approve as Public?\n\nThis is exactly what becomes public:\n\n\"" .. ns.StoryImport.PublicPreview(statement,
-		category) .. "\"\n\nPublic facts can appear in share exports and, only if you turned sync on, in "
-		.. "Total RP 3. You can make it Private again at any time."
-end
 
 --- Reads the player's own About text from Total RP 3 (read-only). Returns
 -- text, profileName; or nil plus a reason.
@@ -150,30 +143,7 @@ local function buildText()
 	wizard.area.frame:SetSize(BODY, L.area)
 	wizard.edit = wizard.area.edit
 	wizard.edit:SetScript("OnTextChanged", function() ImportWizard.UpdateCount() end)
-	wizard.count = label(p, "meta", false, "muted", 0, -L.area - 6, BODY - 180)
-	-- v0.9: who may see the saved story as a whole (Public: share exports
-	-- and, when connected, the Total RP 3 About page). Making it Public asks.
-	wizard.bioVis = Widgets.VisibilityButton(p, function(level)
-		local function apply()
-			local _, message = ns.Actions.SetBiographyVisibility(ns.ctx, level)
-			MainWindow.SetStatus(message)
-			ImportWizard.Refresh()
-		end
-		if level == "public" then
-			Widgets.Confirm("Make your whole saved story Public?\n\nIt becomes part of share exports and, if Total "
-				.. "RP 3 is connected, your About page there, exactly as written.", "Make Public", apply)
-		else
-			apply()
-		end
-	end)
-	wizard.bioVis:SetPoint("TOPRIGHT", p, "TOPLEFT", BODY, -L.area - 4)
-	wizard.bioVisLabel = label(p, "meta", false, "muted", 0, 0, 90)
-	wizard.bioVisLabel:ClearAllPoints()
-	wizard.bioVisLabel:SetPoint("RIGHT", wizard.bioVis, "LEFT", -6, 0)
-	wizard.bioVisLabel:SetJustifyH("RIGHT")
-	wizard.bioVisLabel:SetText("Saved story:")
-	Widgets.Tooltip(wizard.bioVis, "Who sees your saved story", "Public: share exports and, when Total RP 3 is "
-		.. "connected, your About page. Private or Secret: only you. Click to change.")
+	wizard.count = label(p, "meta", false, "muted", 0, -L.area - 6, BODY)
 
 	local y = -L.area - 34
 	wizard.readTRP3 = Widgets.Button(p, "Read from Total RP 3", 180, L.control)
@@ -239,12 +209,6 @@ local function buildReview()
 	wizard.category:SetScript("OnClick", function() ImportWizard.CycleCategory() end)
 	Widgets.Tooltip(wizard.category, "Category", "Click for the next category. A suggested category is only a "
 		.. "guess from a few words; change it freely.")
-	wizard.vis = Widgets.VisibilityButton(p, function(level, button)
-		button:SetLevel(level)
-		ImportWizard.RememberEdits()
-	end)
-	wizard.vis:SetSize(84, Style.CONTROL.compact)
-	wizard.vis:SetPoint("LEFT", wizard.category, "RIGHT", 12, 0)
 
 	y = y - L.control - 14
 	wizard.approve = Widgets.Button(p, "Approve", 130, L.control, "primary")
@@ -358,7 +322,6 @@ function ImportWizard.RememberEdits()
 	if not item then return end
 	local e = wizard.edits[item.key] or {}
 	e.statement = wizard.statement:GetText()
-	e.visibility = wizard.vis.level
 	wizard.edits[item.key] = e
 end
 
@@ -393,9 +356,6 @@ function ImportWizard.Refresh()
 		wizard.mode:Select(wizard.modeValue)
 		local saved = char ~= nil and ns.Sources.Current(char) ~= nil
 		wizard.loadSaved:SetEnabled(saved)
-		wizard.bioVis:SetShown(saved)
-		wizard.bioVisLabel:SetShown(saved)
-		if saved then wizard.bioVis:SetLevel(ns.Sources.Visibility(char)) end
 		ImportWizard.UpdateCount()
 		wizard.primary:SetText("Save and review")
 		wizard.secondary:SetText(counts.waiting > 0 and ("Review waiting (" .. counts.waiting .. ")") or "Close")
@@ -404,7 +364,7 @@ function ImportWizard.Refresh()
 	local item, items = current()
 	wizard.primary:SetText("Done")
 	wizard.secondary:SetText("Back to text")
-	local controls = { wizard.quote, wizard.statement, wizard.category, wizard.vis, wizard.approve, wizard.skip,
+	local controls = { wizard.quote, wizard.statement, wizard.category, wizard.approve, wizard.skip,
 		wizard.later, wizard.previous }
 	for _, c in ipairs(controls) do c:SetShown(item ~= nil) end
 	wizard.empty:SetShown(item == nil)
@@ -414,9 +374,8 @@ function ImportWizard.Refresh()
 	if not item then
 		wizard.ref:SetText("")
 		wizard.excerpt:SetText("")
-		wizard.empty:SetText("Every piece has been reviewed. Approved pieces are part of your character now (see "
-			.. "Character > Preview public view for anything you made Public). Import again at any time: only new "
-			.. "parts are suggested.")
+		wizard.empty:SetText("Every piece has been reviewed. Approved pieces are part of your character's profile "
+			.. "now. Import again at any time: only new parts are suggested.")
 		return
 	end
 	local e = wizard.edits[item.key] or {}
@@ -427,7 +386,6 @@ function ImportWizard.Refresh()
 	if wizard.shownKey ~= item.key then
 		wizard.statement:SetText(e.statement or item.statement)
 		Widgets.SetFieldError(wizard.statement, nil)
-		wizard.vis:SetLevel(e.visibility or item.visibility or ns.Privacy.DEFAULT)
 		wizard.shownKey = item.key
 	end
 	local category = categoryOf(item)
@@ -575,20 +533,13 @@ local function approveNow(item, edits)
 	return true
 end
 
---- Approve: into canon with the player's edits. Public asks first, showing
--- exactly what would become public.
+--- Approve: into canon with the player's edits.
 function ImportWizard.Approve()
 	local item = current()
 	if not item then return false end
 	ImportWizard.RememberEdits()
 	local e = wizard.edits[item.key]
-	local edits = { statement = e.statement, category = categoryOf(item), visibility = e.visibility }
-	if edits.visibility == ns.Privacy.PUBLIC then
-		Widgets.Confirm(ImportWizard.PublicConfirmText(edits.statement, edits.category), "Approve as Public",
-			function() approveNow(item, edits) end)
-		return false
-	end
-	return approveNow(item, edits)
+	return approveNow(item, { statement = e.statement, category = categoryOf(item) })
 end
 
 function ImportWizard.Skip()

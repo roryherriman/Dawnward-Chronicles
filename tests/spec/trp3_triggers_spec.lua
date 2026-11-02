@@ -23,7 +23,7 @@ return function(t, expect)
 
 	local function managedAge(mock)
 		mock.Slash("set age 31")
-		mock.Slash("vis age public")
+		mock.Vis("vis age public")
 		mock.Slash("trp3 field age dawnward confirm")
 	end
 
@@ -31,7 +31,7 @@ return function(t, expect)
 		t:it("a field policy needs confirm through the command, then one debounced run writes", function()
 			local mock, env, _, fake = start()
 			mock.Slash("set age 31")
-			mock.Slash("vis age public")
+			mock.Vis("vis age public")
 			expect.equal(#mock.timers, 0, "nothing managed: no run is even scheduled")
 			expect.truthy(mock.Slash("trp3 field age dawnward"):find("Type: /dawnward trp3 field age dawnward confirm",
 				1, true))
@@ -55,7 +55,8 @@ return function(t, expect)
 			expect.equal(fake.profile.player.characteristics.v, v)
 		end)
 
-		t:it("editing a mapped public field, its visibility or the TRP3 style requests a run (window path too)",
+		t:it("editing a mapped field, a fact, personality, a journal entry or the TRP3 style requests a run "
+			.. "(window path too)",
 			function()
 			local _, _, ns = start()
 			local requests = 0
@@ -64,17 +65,16 @@ return function(t, expect)
 			local noteId
 			local calls = {
 				function() return A.SetField(ctx, "race", "Elf") end,
-				function() return A.SetFieldVisibility(ctx, "race", "public") end,
 				function() return A.AddFact(ctx, "origin", "Born in Stormwind", "public") end,
-				function() return A.SetFactVisibility(ctx, 1, "private") end,
+				function() return A.RemoveFact(ctx, 1) end,
 				function() return A.SetPersonality(ctx, "courage", 14) end,
-				function() return A.SetPersonalityVisibility(ctx, "courage", "public") end,
+				function() return A.ClearPersonality(ctx, "courage") end,
 				function()
 					local entry, message = A.AddNote(ctx, "A day", "Text", "private")
 					noteId = entry and entry.id
 					return entry, message
 				end,
-				function() return A.SetEntryVisibility(ctx, noteId, "public") end,
+				function() return A.UpdateNote(ctx, noteId, "A day", "New text") end,
 				function() return A.SetStoryPref(ctx, "trp3Style", "arcane") end,
 			}
 			for i, call in ipairs(calls) do
@@ -90,7 +90,7 @@ return function(t, expect)
 			-- which requests a sync after every successful change.
 			local source = assert(io.open("DawnwardChronicles/Core/Actions.lua")):read("*a")
 			for _, name in ipairs({ "ApproveEntry", "SetEntryImportant", "ApplyChange", "ReverseChange", "Decide",
-				"SetEntryVisibility", "CompleteSetup" }) do
+				"UpdateNote", "CompleteSetup" }) do
 				local body = source:match("function Actions%." .. name .. "%(.-\nend")
 				expect.truthy(body and body:find("withCharacter", 1, true), name .. " uses withCharacter")
 			end
@@ -179,7 +179,7 @@ return function(t, expect)
 			local mock, env, _, fake = start()
 			managedAge(mock)
 			mock.RunTimers()
-			mock.Slash("vis age private")
+			mock.Vis("vis age private")
 			mock.timers = {}
 			local out = mock.Slash("trp3 field age trp3")
 			expect.truthy(out:find("no longer your Public Age", 1, true), out)
@@ -194,7 +194,7 @@ return function(t, expect)
 			local mock, _, _, fake = start()
 			managedAge(mock)
 			mock.RunTimers()
-			mock.Slash("vis age secret")
+			mock.Vis("vis age secret")
 			mock.RunTimers()
 			expect.equal(fake.profile.player.characteristics.AG, nil)
 			local out = mock.Slash("trp3 rollback 2")

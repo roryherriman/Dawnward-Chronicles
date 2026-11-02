@@ -27,8 +27,8 @@ ns.StoryView = StoryView
 StoryView.HEADING = "Your story is still being written"
 StoryView.BODY = "When something worth remembering happens on your adventures, a quiet question "
 	.. "will wait for you here: how did it affect your character?\n\n"
-	.. "Your answers shape their personality only when you approve it, and become private journal drafts "
-	.. "you can edit, approve and choose to share. Nothing changes your character without you."
+	.. "Your answers shape their personality only when you approve it, and become journal drafts "
+	.. "you can edit and approve. Nothing changes your character without you."
 -- Template answers (4), a class flavour answer, two from the character's
 -- own goals and arcs, and the neutral one: at most 8, four rows of two.
 StoryView.MAX_OPTIONS = 8

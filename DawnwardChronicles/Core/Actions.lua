@@ -36,7 +36,7 @@ local function withCharacter(ctx, change)
 	if not result and not existed then
 		ctx.store:Root().characters[ctx.characterKey] = nil
 	end
-	-- A change made in the window may change what is public, so ask an
+	-- A change made in the window may change the published profile, so ask an
 	-- opted-in Total RP 3 sync to catch up, as slash commands already do
 	-- (debounced; nothing happens unless sync was turned on).
 	if result and ctx.trp3RequestSync then
@@ -83,14 +83,6 @@ function Actions.UpdateNote(ctx, id, title, text, visibility)
 			{ title = title, text = text, visibility = visibility }, ctx.now())
 		if not entry then return fail(result) end
 		return entry, "Updated journal entry #" .. id .. "."
-	end)
-end
-
-function Actions.SetEntryVisibility(ctx, id, level)
-	return withCharacter(ctx, function(char)
-		local entry, result = Journal.SetVisibility(char, id, level, ctx.now())
-		if not entry then return fail(result) end
-		return entry, "Journal entry #" .. id .. " is now " .. level .. "."
 	end)
 end
 
@@ -156,14 +148,6 @@ function Actions.ClearField(ctx, key)
 	end)
 end
 
-function Actions.SetFieldVisibility(ctx, key, level)
-	return withCharacter(ctx, function(char)
-		local ok, result = Character.SetFieldVisibility(char, key, level, ctx.now())
-		if not ok then return fail(result) end
-		return true, key .. " is now " .. level .. "."
-	end)
-end
-
 --- Facts (canon) --------------------------------------------------------------
 
 function Actions.AddFact(ctx, category, statement, visibility)
@@ -171,16 +155,7 @@ function Actions.AddFact(ctx, category, statement, visibility)
 		local fact, err = Facts.Add(char, { category = category, statement = statement, visibility = visibility },
 			nil, ctx.now())
 		if not fact then return fail(err) end
-		return fact, string.format("Added fact #%d (%s) [%s].", fact.id, Facts.DisplayCategory(fact.category).label,
-			fact.visibility)
-	end)
-end
-
-function Actions.SetFactVisibility(ctx, id, level)
-	return withCharacter(ctx, function(char)
-		local fact, err = Facts.SetVisibility(char, id, level, ctx.now())
-		if not fact then return fail(err) end
-		return fact, "Fact #" .. id .. " is now " .. level .. "."
+		return fact, string.format("Added fact #%d (%s).", fact.id, Facts.DisplayCategory(fact.category).label)
 	end)
 end
 
@@ -202,16 +177,8 @@ function Actions.SetPersonality(ctx, axisId, value)
 		-- The development history explains every value, including the player's own.
 		Evolution.RecordManual(char, axisId, before, value, ctx.now())
 		local axis = Personality.AXIS_BY_ID[axisId]
-		return entry, string.format("%s: %d/20 (%s %d - %d %s) [%s].", axisId, value, axis.left, 20 - value, value,
-			axis.right, entry.visibility)
-	end)
-end
-
-function Actions.SetPersonalityVisibility(ctx, axisId, level)
-	return withCharacter(ctx, function(char)
-		local entry, err = Personality.SetVisibility(char, axisId, level, ctx.now())
-		if not entry then return fail(err) end
-		return entry, axisId .. " is now " .. level .. "."
+		return entry, string.format("%s: %d/20 (%s %d - %d %s).", axisId, value, axis.left, 20 - value, value,
+			axis.right)
 	end)
 end
 
@@ -339,7 +306,7 @@ function Actions.MarkPlace(ctx, name, on)
 			return nil, "Not changed: " .. err .. "."
 		end
 		return entry, string.format("%s is %s.", ns.Places.Label(entry),
-			on and "now marked as meaningful to your character (private)" or "no longer marked as meaningful")
+			on and "now marked as meaningful to your character" or "no longer marked as meaningful")
 	end)
 end
 
@@ -382,7 +349,7 @@ function Actions.Decide(ctx, reactionId, choice)
 					or "applied (reversible)")
 		end
 		if result.entry then
-			parts[#parts + 1] = "Private journal draft #" .. result.entry.id .. " written."
+			parts[#parts + 1] = "Journal draft #" .. result.entry.id .. " written."
 		elseif result.draftError then
 			parts[#parts + 1] = "No journal draft: " .. result.draftError
 		end
@@ -435,8 +402,9 @@ function Actions.ApproveEntry(ctx, id)
 	return withCharacter(ctx, function(char)
 		local entry, err = Journal.Approve(char, id, ctx.now())
 		if not entry then return fail(err) end
-		return entry, "Approved journal entry #" .. id .. ". It is still " .. entry.visibility
-			.. "; make it public with: /dawnward journal vis " .. id .. " public"
+		return entry, "Approved journal entry #" .. id .. "." .. (entry.important and ""
+			or " Mark it as a defining moment (/dawnward journal important " .. id .. ") to make it part of your "
+				.. "profile.")
 	end)
 end
 
@@ -653,18 +621,6 @@ function Actions.CompleteSetup(ctx, values, opts)
 		end
 	end
 	return ok, message
-end
-
---- Who may see the biography (the story kept word for word). Public: it
--- is part of share exports and, when Total RP 3 is connected, the About
--- page. Returns ok, message.
-function Actions.SetBiographyVisibility(ctx, level)
-	return withCharacter(ctx, function(char)
-		local ok, err = ns.Sources.SetVisibility(char, level, ctx.now())
-		if not ok then return fail(err) end
-		return true, "Your story is now " .. (ns.Themes.VISIBILITY_LABELS[level] or level) .. "."
-			.. (level == "public" and " With Total RP 3 connected, it becomes your About page." or "")
-	end)
 end
 
 --- The one-time confirmation (Core/Publication.lua): the whole profile of

@@ -216,8 +216,10 @@ local FrameMT = {
 function Mock.new(opts)
 	opts = opts or {}
 	-- clock: what time() returns (real dates); mono: what GetTime() returns.
-	local mock = { eventFrames = {}, framesByName = {}, chat = {}, clock = 1700000000, popups = {}, timers = {},
-		tickers = {}, mono = 1000,
+	-- allFrames: every frame, texture and font string, in creation order (for
+	-- sweeps over everything a screen shows, e.g. tests/spec/ui_no_privacy_spec.lua).
+	local mock = { eventFrames = {}, framesByName = {}, allFrames = {}, chat = {}, clock = 1700000000, popups = {},
+		timers = {}, tickers = {}, mono = 1000,
 		zone = "Elwynn Forest", subzone = "Goldshire" }
 
 	--- Accepts the most recent confirmation dialog, like clicking its first button.
@@ -237,6 +239,7 @@ function Mock.new(opts)
 		if name then
 			mock.framesByName[name] = f
 		end
+		mock.allFrames[#mock.allFrames + 1] = f
 		return f
 	end
 

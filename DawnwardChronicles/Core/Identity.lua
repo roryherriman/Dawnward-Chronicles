@@ -34,7 +34,7 @@ function Identity.Add(char, values, now)
 	i.deliberate = values.deliberate
 	local clean = RecordTypes.CleanIdentity(i)
 	if not clean then
-		return nil, "an identity statement needs a subject and a public stance or a private conviction"
+		return nil, "an identity statement needs a subject and a persona or an inner conviction"
 	end
 	if not Records.Append(list(char), clean, RecordTypes.LIMITS.identity) then
 		return nil, "there are too many identity statements; remove some first"
@@ -60,7 +60,7 @@ function Identity.Edit(char, id, values, now)
 	if values.persona ~= nil then persona = Records.Text(values.persona, 300, true) end
 	if values.conviction ~= nil then conviction = Records.Text(values.conviction, 300, true) end
 	if not persona and not conviction then
-		return nil, "a stance needs a public stance or a private conviction"
+		return nil, "a stance needs a persona or an inner conviction"
 	end
 	i.subject, i.persona, i.conviction = subject, persona, conviction
 	if values.deliberate ~= nil then i.deliberate = values.deliberate == true or nil end

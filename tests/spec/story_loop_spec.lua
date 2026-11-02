@@ -18,8 +18,8 @@ return function(t, expect)
 	end
 
 	t:describe("living chronicle loop (L2)", function()
-		t:it("quest -> safe notice -> answer -> approval -> draft -> public", function()
-			local mock, env = start()
+		t:it("quest -> safe notice -> answer -> approval -> draft -> defining moment in the profile", function()
+			local mock, env, ns = start()
 			turnIn(mock, 1234, "Burning Blade Medallion", 22)
 			local char = env.DawnwardChroniclesDB.characters[KEY]
 			local record = char.story.events[1]
@@ -51,9 +51,13 @@ return function(t, expect)
 			local entry = char.journal[#char.journal]
 			expect.equal(entry.kind, "story")
 			expect.equal(entry.visibility, "private")
-			expect.truthy(mock.Slash("journal vis " .. entry.id .. " public"):find("approve it before"))
 			expect.truthy(mock.Slash("journal approve " .. entry.id):find("Approved"))
-			expect.truthy(mock.Slash("journal vis " .. entry.id .. " public"):find("now public"))
+			expect.truthy(mock.Slash("journal important " .. entry.id):find("defining", 1, true))
+			-- v0.10: an approved defining moment is part of the profile.
+			ns.Publication.Adopt(char, 1)
+			local moments = ns.Projection.GetPublic(char).journal
+			expect.equal(#moments, 1)
+			expect.equal(moments[1].id, entry.id)
 			expect.truthy(mock.Slash("journal list"):find("[story]", 1, true))
 		end)
 

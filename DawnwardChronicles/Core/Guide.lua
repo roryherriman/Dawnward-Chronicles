@@ -16,7 +16,8 @@ Guide.TOPICS = {
 	{ id = "welcome", title = "Welcome", lines = {
 		"Dawnward Chronicles keeps a living chronicle of your character: what happens on their travels, the "
 			.. "choices you make about it, and who they slowly become.",
-		"Everything starts private. Nothing is shared, published or sent to Total RP 3 unless you choose it.",
+		"Nothing is sent to Total RP 3 until you connect it. Your journal notes, drafts and story answers "
+			.. "always stay in Dawnward.",
 		"This guide takes a minute. Use Next, or pick a topic on the left. You can reopen it any time from "
 			.. "the ? button at the top of the journal, from Settings, or with /dawnward guide.",
 	} },
@@ -28,9 +29,8 @@ Guide.TOPICS = {
 	} },
 	{ id = "character", title = "Character", lines = {
 		"The Character tab holds the profile: name, homeland, faith, appearance and more, plus family and "
-			.. "history. Every field is optional and starts private.",
-		"Use Edit beside a field, and the Private / Public / Secret button to choose who may see it. Family and "
-			.. "history have their own Add buttons.",
+			.. "history. Every field is optional.",
+		"Use Edit beside a field to write or change it. Family and history have their own Add buttons.",
 		"Dawnward never decides who your character is from their race, class or faction.",
 	} },
 	{ id = "story", title = "Story moments", lines = {
@@ -45,11 +45,11 @@ Guide.TOPICS = {
 	} },
 	{ id = "chronicle", title = "Chronicle", lines = {
 		"The Chronicle tab holds your story's threads: memories, arcs, goals, stances (what your character "
-			.. "says in public and believes in private) and the people they know.",
+			.. "shows others, and the inner conviction behind it) and the people they know.",
 		"Use New to add one and Edit to change it. Suggestions from Dawnward stay proposals until you Accept "
 			.. "them. Goals are never completed for you: you tick their steps.",
 		"The Review tab lists possible contradictions. You decide whether each is growth, an unreliable "
-			.. "narrator, a secret, a correction, or nothing.",
+			.. "narrator, intended, a correction, or nothing.",
 	} },
 	{ id = "places", title = "Places", lines = {
 		"Dawnward logs the towns, inns and other named places your character visits. Logging a visit is "
@@ -58,18 +58,20 @@ Guide.TOPICS = {
 			.. "memory there. Returning to a meaningful place is more likely to prompt a moment.",
 		"Place names come from the game. Dawnward never invents where you have been.",
 	} },
-	{ id = "privacy", title = "Privacy", lines = {
-		"Private: only you; included in your personal backups. Secret: only you; left out of backups unless "
-			.. "you ask. Public: may be shared through share exports and, if you connect it, Total RP 3.",
-		"Characters set up since v0.9 start their profile details Public, so nothing has to be sorted item by "
-			.. "item; your journal and story answers stay Private. Older characters can switch once with "
-			.. "/dawnward publish (Secret items never change).",
-		"Suggestions cannot be public until you accept them. Exports for sharing contain public items only.",
+	{ id = "profile", title = "Your profile", lines = {
+		"Your profile is what describes your character: profile details, your story, family, history, facts, "
+			.. "personality, the persona of a stance and the defining moments you approved. Once you connect "
+			.. "Total RP 3, the whole profile is published there. Nothing is sorted item by item.",
+		"Never part of the profile: journal notes, drafts and suggestions you have not approved, story answers, "
+			.. "memories and a stance's inner conviction.",
+		"An older character may wait for a one-time confirmation before everything an earlier version kept "
+			.. "back is published: Publish whole profile on the Character page, or /dawnward publish.",
+		"A personal backup holds everything; keep it to yourself. Export for sharing holds your profile only.",
 	} },
 	{ id = "trp3", title = "Total RP 3", lines = {
 		"Dawnward complements Total RP 3; it does not replace it. Sync is experimental and off by default.",
-		"If you opt in, Dawnward only writes what you made public, takes a backup first, never writes while "
-			.. "the TRP3 editor is open, and can roll back. See /dawnward trp3 help.",
+		"Once you connect it, Dawnward writes your profile, takes a backup first, never writes while the TRP3 "
+			.. "editor is open, and can roll back. See /dawnward trp3 help.",
 	} },
 	{ id = "commands", title = "Commands", lines = {
 		"Everything above works from the window. Chat commands are optional shortcuts:",

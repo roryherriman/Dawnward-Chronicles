@@ -635,8 +635,8 @@ function Places.Mark(char, name, on)
 end
 
 --- The player names a visited place as their character's homeland: the
--- Homeland profile field is set to the place's name (private unless the
--- player already made it public) and the place is linked as the homeland,
+-- Homeland profile field is set to the place's name and the place is
+-- linked as the homeland,
 -- replacing any earlier link. A homeland is only ever the player's choice.
 function Places.SetHomeland(char, entry, now)
 	local ok, err = ns.Character.SetField(char, "homeland", entry.subzone or entry.zone, now)

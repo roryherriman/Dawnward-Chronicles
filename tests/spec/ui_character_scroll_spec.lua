@@ -11,8 +11,11 @@ local function click(button)
 	button:GetScript("OnClick")(button)
 end
 
+-- A character on the v0.10 model (as setup makes it), so no one-time
+-- publish callout takes room above the columns.
 local function openCharacter()
 	local mock, env, ns = Boot.Start()
+	ns.Actions.WithCharacter(ns.ctx, function(c) return ns.Publication.Adopt(c, 1) end)
 	mock.Slash("")
 	ns.MainWindow.Select("character")
 	return mock, env, ns, ns.CharacterView.section
@@ -161,12 +164,30 @@ return function(t, expect)
 			mock.Slash("clear background")
 			click(section.showcaseButton)
 			expect.equal(section.scroll:GetVerticalScroll(), section.scroll:GetVerticalScrollRange())
-			-- Preview hides both columns and shows its own scroll.
-			click(section.previewButton)
-			expect.falsy(section.scroll:IsShown() or section.sideScroll:IsShown())
-			expect.truthy(section.previewScroll:IsShown() and section.previewScroll:IsMouseWheelEnabled())
-			click(section.previewButton)
-			expect.truthy(section.scroll:IsShown() and section.sideScroll:IsShown())
+			expect.equal(section.previewButton, nil, "no public preview any more (v0.10)")
+		end)
+
+		t:it("an older character's publish callout pushes both columns down and gives them less room", function()
+			local mock, _, ns = Boot.Start()
+			mock.Slash("set name Lirael")
+			mock.Slash("")
+			ns.MainWindow.Select("character")
+			local section = ns.CharacterView.section
+			local L = ns.CharacterView.LAYOUT
+			local full = ns.MainWindow.ContentHeight() - L.scrollTop
+			expect.equal(ns.Publication.Status(ns.Actions.Character(ns.ctx)), "pending")
+			expect.truthy(section.callout:IsShown())
+			local drop = L.calloutHeight + L.calloutGap
+			expect.equal(section.scroll:GetHeight(), full - drop)
+			expect.equal(section.sideScroll:GetHeight(), full - drop)
+			expect.equal(top(section.scroll), L.scrollTop + drop)
+			expect.equal(top(section.sideScroll), L.scrollTop + drop)
+			expect.equal(top(section.callout), L.scrollTop)
+			mock.Slash("publish confirm")
+			ns.MainWindow.Refresh()
+			expect.falsy(section.callout:IsShown())
+			expect.equal(section.scroll:GetHeight(), full, "the room comes back")
+			expect.equal(top(section.scroll), L.scrollTop)
 		end)
 
 		t:it("keeps the same geometry in layout units at window scale 0.7 and 1.4", function()

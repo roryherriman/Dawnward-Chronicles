@@ -20,7 +20,7 @@ end
 
 function GuidePanel.ResultsText(query, results)
 	if #results == 0 then
-		return string.format("Nothing matches '%s'. Try a single word, such as goal, privacy or minimap.", query)
+		return string.format("Nothing matches '%s'. Try a single word, such as goal, profile or minimap.", query)
 	end
 	local lines = { string.format("%d match%s for '%s':", #results, #results == 1 and "" or "es", query) }
 	for i = 1, math.min(#results, 10) do

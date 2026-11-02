@@ -2,17 +2,17 @@
 -- docs/design/mockups/character-profile.png and proposed-character-showcase.png;
 -- the remaining differences are in docs/design/audit/character.md).
 --
--- Three views of the same character, switched from the header:
+-- Two views of the same character, switched from the header:
 --   Profile    field groups: Identity and Background & biography as tiles on
 --              the window ground (three to a row), then Summary & motivation
---              as cards (each with its own visibility chip and Edit button),
---              and beside them Personality (the six axes,
---              real values, changes waiting for approval) and Family &
---              relationships (family and history).
---   Preview    exactly what is public: the core's public projection
---              (Projection.GetPublic, the same one `/dawnward show public`,
---              share exports and Total RP 3 sync use). Nothing is filtered
---              here; the UI only lays it out.
+--              as cards (each with its Edit button), and beside them
+--              Personality (the six axes, real values, changes waiting for
+--              approval) and Family & relationships (family and history).
+--              v0.10: the whole profile is what Total RP 3 shows once it is
+--              connected (Core/Publication.lua), so nothing here is sorted
+--              into Public / Private / Secret. A character an earlier version
+--              kept partly back shows a callout over the profile with the
+--              one-time "Publish whole profile..." confirmation.
 --   Showcase   the live model with what the game says about the character
 --              and what the player wrote, kept apart (UI/Showcase.lua).
 -- Deliberately small: it is not a copy of Total RP 3's editor. All writes
@@ -25,10 +25,11 @@ ns.CharacterView = CharacterView
 
 CharacterView.FAMILY_HINT = "Parents, siblings, a lost cousin: anyone your character counts as family."
 CharacterView.HISTORY_HINT = "Moments from before the story Dawnward records, in your own words."
-CharacterView.INTRO = "Only fields marked Public can ever reach Total RP 3 or a shared export."
-CharacterView.PREVIEW_INTRO = "This is everything about your character that can leave Dawnward: a share "
-	.. "export, and Total RP 3 if you turn sync on. Private and secret details are never included."
-CharacterView.NOTHING_PUBLIC = "Nothing is public yet. Use a field's visibility chip to make it Public."
+CharacterView.INTRO = "Who your character is, in your own words. Once Total RP 3 is connected, this whole "
+	.. "profile is what it shows."
+-- The pending callout (Publication.Status "pending").
+CharacterView.PENDING_TEXT = "An earlier version of Dawnward kept part of this profile back from Total RP 3."
+CharacterView.PUBLISH_LABEL = "Publish whole profile…"
 
 -- The profile's groups, in order (mockup: identity tiles, then background,
 -- then the long texts). Any field not named here joins "background", so a
@@ -82,9 +83,10 @@ local L = {
 	editWidth = 48,
 	cardEditWidth = 60,
 	controlHeight = Style.CONTROL.compact, -- 30: buttons inside tiles and cards
-	chipHeight = Style.CONTROL.chip,       -- 24: visibility chips
 	headerHeight = Style.CONTROL.standard, -- 36: header buttons, as the close button
 	headerOffset = 74,  -- header buttons above the content area, level with the close button
+	calloutHeight = 44, -- the pending callout over the profile (compact: one line and a button)
+	calloutGap = 10,
 	axisGap = 10,
 	knob = 14,          -- personality knob (mockup: 14 with a 2 px ring in the window colour)
 	track = 6,
@@ -103,9 +105,9 @@ function CharacterView.HistoryText(item)
 	return (item.when and (item.when .. ": ") or "") .. (item.text or "")
 end
 
---- Column widths for a content width: { child (both columns: the public
--- preview's width), left, right, rightX }. The left column scrolls by
--- itself; the right one stands at rightX. Pure.
+--- Column widths for a content width: { child (both columns), left, right,
+-- rightX }. The left column scrolls by itself; the right one stands at
+-- rightX. Pure.
 function CharacterView.Columns(contentWidth)
 	local child = contentWidth - L.scrollBar
 	local left = child - L.rightWidth - L.colGap
@@ -116,13 +118,6 @@ end
 function CharacterView.TileWidth(contentWidth)
 	local inner = CharacterView.Columns(contentWidth).left
 	return math.floor((inner - (L.tileCols - 1) * L.tileGap) / L.tileCols)
-end
-
---- Width of a visibility chip showing level (its text plus the chip's
--- padding). Pure.
-function CharacterView.ChipWidth(level)
-	local text = Themes.VISIBILITY_LABELS[level] or tostring(level)
-	return math.ceil(Style.TextWidth(text, Widgets.ButtonFontStyle(Style.SIZE.compact, "ghost"))) + 2 * Widgets.CHIP_PAD
 end
 
 --- Display parts of a family member or history entry: a title, a meta line
@@ -166,7 +161,7 @@ function CharacterView.BuildSpecs(char)
 end
 
 --- Personality rows (pure; tested): one per axis, in registry order,
--- { axis, value (nil when not set), visibility, pending = net waiting delta,
+-- { axis, value (nil when not set), pending = net waiting delta,
 -- waiting = number of waiting changes, left / right / meaning = the words
 -- shown (the player's own where they wrote any, #21), custom, locked },
 -- plus the total waiting.
@@ -185,9 +180,9 @@ function CharacterView.PersonalityRows(char)
 		local entry = char and char.personality and char.personality[axis.id]
 		local p = pendingBy[axis.id]
 		local left, right, meaning, custom = ns.AxisMeanings.Labels(char, axis)
-		rows[#rows + 1] = { axis = axis, value = entry and entry.value, visibility = entry and entry.visibility,
-			pending = p and p.delta or 0, waiting = p and p.count or 0, left = left, right = right,
-			meaning = meaning, custom = custom, locked = ns.AxisMeanings.IsLocked(char, axis.id) }
+		rows[#rows + 1] = { axis = axis, value = entry and entry.value, pending = p and p.delta or 0,
+			waiting = p and p.count or 0, left = left, right = right, meaning = meaning, custom = custom,
+			locked = ns.AxisMeanings.IsLocked(char, axis.id) }
 	end
 	return rows, total
 end
@@ -205,60 +200,10 @@ function CharacterView.ApprovalText(char, waiting)
 	return "Changes from your story choices need your approval."
 end
 
---- The public preview, from a public projection (Projection.GetPublic).
--- Returns { { title, lines = { text } } } and whether anything is public.
--- Pure: it only lays out what the projection already contains.
-function CharacterView.PublicPreview(public)
-	local sections, any = {}, false
-	local function add(title, lines)
-		if #lines > 0 then
-			any = true
-			sections[#sections + 1] = { title = title, lines = lines }
-		end
-	end
-	local lines = {}
-	for _, field in ipairs(Schema.FIELDS) do
-		local entry = public.fields and public.fields[field.key]
-		if entry then lines[#lines + 1] = field.label .. ": " .. tostring(entry.value) end
-	end
-	add("Profile", lines)
-	lines = {}
-	for _, axis in ipairs(Schema.PERSONALITY_AXES) do
-		local entry = public.personality and public.personality[axis.id]
-		if entry then
-			lines[#lines + 1] = string.format("%s - %s: %d/20", axis.left, axis.right, entry.value or 0)
-		end
-	end
-	add("Personality", lines)
-	lines = {}
-	for _, item in ipairs(public.family or {}) do
-		lines[#lines + 1] = CharacterView.FamilyText(item) .. (item.notes and (" - " .. item.notes) or "")
-	end
-	add("Family", lines)
-	lines = {}
-	for _, item in ipairs(public.history or {}) do lines[#lines + 1] = CharacterView.HistoryText(item) end
-	add("History", lines)
-	lines = {}
-	for _, fact in ipairs(public.facts or {}) do lines[#lines + 1] = tostring(fact.statement or "") end
-	add("Facts", lines)
-	lines = {}
-	for _, stance in ipairs(public.stances or {}) do
-		local parts = {}
-		if stance.persona then parts[#parts + 1] = stance.persona end
-		if stance.conviction then parts[#parts + 1] = stance.conviction end
-		lines[#lines + 1] = tostring(stance.subject or "") .. ": " .. table.concat(parts, "; ")
-	end
-	add("Identity", lines)
-	local journal = #(public.journal or {})
-	if journal > 0 then
-		add("Journal", { journal == 1 and "1 public journal entry" or (journal .. " public journal entries") })
-	end
-	return sections, any
-end
-
-local function hex(color)
-	return string.format("%02x%02x%02x", math.floor(color[1] * 255 + 0.5), math.floor(color[2] * 255 + 0.5),
-		math.floor(color[3] * 255 + 0.5))
+--- Whether the Character page shows the one-time publish callout: only for
+-- a character an earlier version kept partly back. Pure.
+function CharacterView.ShowsPublishCallout(char)
+	return char ~= nil and ns.Publication.Status(char) == "pending"
 end
 
 --- Opens the Total RP 3 page of Settings (UI/SettingsPanel.lua).
@@ -298,17 +243,14 @@ local function create(parent)
 	local cols = CharacterView.Columns(contentWidth)
 
 	-- Header actions, level with the close button above the content area
-	-- (mockup: "Preview public view" as a 36 px secondary button).
+	-- (mockup: 36 px buttons, the secondary one at the right).
 	local H = L.headerHeight
 	local header = CreateFrame("Frame", nil, f)
 	header:SetSize(540, H)
 	header:SetPoint("TOPRIGHT", f, "TOPRIGHT", -(36 + 12), L.headerOffset)
 	section.header = header
-	section.previewButton = Widgets.Button(header, "Preview public view", 168, H)
-	section.previewButton:SetPoint("TOPRIGHT", 0, 0)
-	Widgets.Tooltip(section.previewButton, "Public profile preview",
-		"Shows exactly what can be shared: share exports, and Total RP 3 if you turn sync on.")
 	section.showcaseButton = Widgets.Button(header, "Showcase", 128, H)
+	section.showcaseButton:SetPoint("TOPRIGHT", 0, 0)
 	Widgets.Tooltip(section.showcaseButton, "Character Showcase",
 		"Your character's live model, what the game says about them, and what you wrote.")
 	section.trp3Button = Widgets.Button(header, "Total RP 3...", 112, H, "ghost")
@@ -330,6 +272,25 @@ local function create(parent)
 	section.intro:SetWidth(contentWidth - 2)
 	section.intro:SetText(CharacterView.INTRO)
 
+	-- Only for a character an earlier version kept partly back from Total
+	-- RP 3: one compact line over the profile and the one-time confirmation
+	-- (the same as the Total RP 3 page's, MainWindow.AskPublishWholeProfile).
+	local callout = Widgets.Callout(f)
+	callout:SetPoint("TOPLEFT", 0, -L.scrollTop)
+	callout:SetSize(contentWidth - L.scrollBar, L.calloutHeight)
+	callout.button = Widgets.Button(callout, CharacterView.PUBLISH_LABEL, 190, L.controlHeight, "primary")
+	callout.button:SetPoint("RIGHT", -L.pad, 0)
+	callout.button:SetScript("OnClick", function() MainWindow.AskPublishWholeProfile() end)
+	Widgets.Tooltip(callout.button, "Publish whole profile", "Lists what an earlier version kept back, then "
+		.. "publishes your whole profile to Total RP 3 once it is connected. One time only; undo with "
+		.. "/dawnward publish undo.")
+	callout.text = Widgets.Label(callout, "GameFontHighlight", false, "body")
+	callout.text:SetPoint("LEFT", L.pad, 0)
+	callout.text:SetPoint("RIGHT", callout.button, "LEFT", -12, 0)
+	callout.text:SetText(CharacterView.PENDING_TEXT)
+	callout:Hide()
+	section.callout = callout
+
 	-- Profile: only the left column (the field groups) scrolls, with the slim
 	-- bar in the column gap; the right column (Personality, Family) and the
 	-- header stay put (mockup: character-profile.png). Both views have fixed
@@ -344,6 +305,7 @@ local function create(parent)
 	section.scroll, section.child = scroll, child
 	section.scrollBar = Widgets.SlimScrollBar(scroll, math.floor((L.colGap - Widgets.SLIM_BAR.width) / 2))
 	Widgets.WheelScroll(scroll)
+	section.viewHeight = viewHeight
 
 	-- The right column does not move with the left. It can still be taller
 	-- than the room (unset axes carry a note; family and history entries
@@ -429,26 +391,6 @@ local function create(parent)
 		pers.axes[i] = a
 	end
 
-	-- Preview: the public projection, read-only, as reading text in a panel
-	-- (lines kept to a readable measure, as the mockup's 62 characters).
-	local preview = CreateFrame("ScrollFrame", Widgets.NextName("CharacterPreview"), f, "UIPanelScrollFrameTemplate")
-	preview:SetPoint("TOPLEFT", 0, -L.scrollTop)
-	preview:SetPoint("BOTTOMRIGHT", -L.scrollBar, 0)
-	local previewChild = CreateFrame("Frame", nil, preview)
-	previewChild:SetSize(cols.child, 100)
-	preview:SetScrollChild(previewChild)
-	section.previewBar = Widgets.SlimScrollBar(preview, L.scrollBar - Widgets.SLIM_BAR.width - 4)
-	Widgets.WheelScroll(preview)
-	section.previewScroll = preview
-	section.previewPanel = Widgets.Panel(previewChild, "Public profile preview")
-	section.previewPanel:SetPoint("TOPLEFT", 0, 0)
-	section.previewPanel:SetWidth(cols.child)
-	CharacterView.PREVIEW_MEASURE = math.min(cols.child - 2 * L.cardPadX, 620)
-	section.previewText = Widgets.Label(section.previewPanel, "reading", true, "reading")
-	section.previewText:SetPoint("TOPLEFT", L.cardPadX, -L.panelTop)
-	section.previewText:SetWidth(CharacterView.PREVIEW_MEASURE)
-	preview:Hide()
-
 	-- Showcase: model, game identity and the player's own words.
 	section.showcaseView = ns.Showcase.View(f, contentWidth, contentHeight, {
 		onPreferPortrait = function(on)
@@ -473,7 +415,7 @@ local function create(parent)
 			return row
 		end
 		-- Each field, family member and history entry is its own card, with
-		-- its Edit and visibility controls inside it (Widgets.EntryRow).
+		-- its Edit button inside it (Widgets.EntryRow).
 		row = Widgets.EntryRow(column)
 		Style.Register(row, paintFieldCard)
 		row.key = Widgets.Label(row, "GameFontNormalSmall", false, "eyebrow") -- field label, Cinzel 13
@@ -508,7 +450,6 @@ local function create(parent)
 			fs:Hide()
 		end
 		row.rule:Hide()
-		row.vis:Hide()
 		row.edit:Hide()
 		row.theme = theme
 		row.emptyField = nil
@@ -523,8 +464,7 @@ local function create(parent)
 	end
 
 	-- A short field: a tile in a three-column grid (label, value in title
-	-- white 17, then the visibility chip and Edit along the bottom). Returns
-	-- its height.
+	-- white 17, then Edit along the bottom). Returns its height.
 	local function measureTile(row, spec, width, theme)
 		resetRow(row, spec, theme)
 		local entry = spec.entry
@@ -543,8 +483,8 @@ local function create(parent)
 			L.tileValueTop + math.max(row.value:GetStringHeight(), 20) + 8 + L.controlHeight + L.tilePadY)
 	end
 
-	-- A long field: a full-width card (label, chip and Edit on one row, then
-	-- the text in the reading style). Returns its height.
+	-- A long field: a full-width card (label and Edit on one row, then the
+	-- text in the reading style). Returns its height.
 	local function measureCard(row, spec, width, theme)
 		resetRow(row, spec, theme)
 		local entry = spec.entry
@@ -562,8 +502,7 @@ local function create(parent)
 	end
 
 	-- A family member or history entry: a card with the name (or what
-	-- happened), a meta line and notes; Edit at the top right and the
-	-- visibility chip under the text.
+	-- happened), a meta line and notes; Edit at the top right.
 	local function measureItem(row, spec, width, theme)
 		resetRow(row, spec, theme)
 		local title, meta, notes = CharacterView.ItemParts(spec.list, spec.item)
@@ -588,8 +527,8 @@ local function create(parent)
 				y = y + 2 + fs:GetStringHeight()
 			end
 		end
-		section.updateItemActions(row, spec, y + 8)
-		return math.max(y + 8 + L.chipHeight + 10, 10 + L.controlHeight + 10)
+		section.updateItemActions(row, spec)
+		return math.max(y + 10, 10 + L.controlHeight + 10)
 	end
 
 	-- Headings and the Add line inside the Family & relationships panel.
@@ -676,8 +615,7 @@ local function create(parent)
 		if noteColor then Style.TextColor(a.note, noteColor) end
 		local value = row.value and (row.value .. "/20 (" .. axis.left .. " " .. (20 - row.value) .. ", "
 			.. axis.right .. " " .. row.value .. ")") or "Not set"
-		local vis = row.visibility and Themes.VISIBILITY_LABELS[row.visibility] or nil
-		Widgets.Tooltip(a, axis.left .. " - " .. axis.right, value .. (vis and ("\nVisibility: " .. vis) or "")
+		Widgets.Tooltip(a, axis.left .. " - " .. axis.right, value
 			.. (row.meaning and ("\n\n" .. row.meaning) or "")
 			.. (row.waiting > 0 and "\nA change from your story choices waits in Story." or "")
 			.. "\n\nClick to name this axis in your own words, say what it means, or lock it.")
@@ -812,33 +750,25 @@ local function create(parent)
 		self.rows, self.specs = rows, specs
 	end
 
-	function section:RenderPreview(char)
-		local public = char and ns.Projection.GetPublic(char) or nil
-		local sections, any = CharacterView.PublicPreview(public or {})
-		local theme = self.theme or Style.Current()
-		local tones = Style.Tones(theme)
-		local label = "|cff" .. hex(theme.ornament or theme.accent)
-		local muted = "|cff" .. hex(theme.muted)
-		local text = "|cff" .. hex(tones.reading)
-		local out = { muted .. CharacterView.PREVIEW_INTRO .. "|r", "" }
-		if not any then
-			out[#out + 1] = CharacterView.NOTHING_PUBLIC
-		end
-		for _, s in ipairs(sections) do
-			out[#out + 1] = label .. s.title:upper() .. "|r"
-			for _, line in ipairs(s.lines) do out[#out + 1] = text .. line .. "|r" end
-			out[#out + 1] = ""
-		end
-		self.previewText:SetText(table.concat(out, "\n"))
-		self.previewSections, self.previewAny = sections, any
-		local h = L.panelTop + self.previewText:GetStringHeight() + L.pad
-		self.previewPanel:SetHeight(h)
-		previewChild:SetHeight(math.max(h, 1))
+	-- The pending callout (shown only while it applies) and the two columns
+	-- under it: they start below the callout and lose its height.
+	function section:LayoutCallout(char)
+		local shown = self.mode == "profile" and CharacterView.ShowsPublishCallout(char)
+		self.callout:SetShown(shown)
+		local drop = shown and (L.calloutHeight + L.calloutGap) or 0
+		if self.calloutDrop == drop then return end
+		self.calloutDrop = drop
+		local height = self.viewHeight - drop
+		self.scroll:ClearAllPoints()
+		self.scroll:SetPoint("TOPLEFT", 0, -(L.scrollTop + drop))
+		self.scroll:SetSize(cols.left, height)
+		self.sideScroll:ClearAllPoints()
+		self.sideScroll:SetPoint("TOPLEFT", cols.rightX, -(L.scrollTop + drop))
+		self.sideScroll:SetSize(cols.right, height)
 	end
 
 	--- The header's eyebrow names the view (mockup: "CHARACTER · SHOWCASE").
-	CharacterView.EYEBROWS = { profile = "CHARACTER", preview = "CHARACTER · PUBLIC PREVIEW",
-		showcase = "CHARACTER · SHOWCASE" }
+	CharacterView.EYEBROWS = { profile = "CHARACTER", showcase = "CHARACTER · SHOWCASE" }
 	local function setEyebrow(mode)
 		local window = MainWindow.GetFrame and MainWindow.GetFrame()
 		if window and window.eyebrow and MainWindow.CurrentSection() == "character" then
@@ -846,16 +776,17 @@ local function create(parent)
 		end
 	end
 
-	--- profile | preview | showcase. Only the chosen view is shown, so the
-	-- model renders only in the showcase. quiet: only show and hide (while
-	-- the window is still being built).
+	--- profile | showcase. Only the chosen view is shown, so the model
+	-- renders only in the showcase. quiet: only show and hide (while the
+	-- window is still being built).
 	function section:SetMode(mode, quiet)
+		if mode ~= "showcase" then mode = "profile" end
 		self.mode = mode
 		local showcase = mode == "showcase"
 		self.intro:SetShown(not showcase)
-		self.scroll:SetShown(mode == "profile")
-		self.sideScroll:SetShown(mode == "profile")
-		self.previewScroll:SetShown(mode == "preview")
+		self.scroll:SetShown(not showcase)
+		self.sideScroll:SetShown(not showcase)
+		if showcase then self.callout:Hide() end
 		if showcase then
 			self.showcaseView:Show()
 			self.showcase:Show()
@@ -865,26 +796,15 @@ local function create(parent)
 		end
 		-- The showcase's header has only the way back (mockup: "Profile fields");
 		-- the other actions are one click away on the profile.
-		for _, b in ipairs({ self.previewButton, self.trp3Button, self.importButton }) do
+		for _, b in ipairs({ self.trp3Button, self.importButton }) do
 			b:SetShown(not showcase)
 		end
-		self.showcaseButton:ClearAllPoints()
-		if showcase then
-			self.showcaseButton:SetPoint("TOPRIGHT", 0, 0)
-		else
-			self.showcaseButton:SetPoint("RIGHT", self.previewButton, "LEFT", -8, 0)
-		end
-		self.previewButton:SetSelected(mode == "preview")
-		self.previewButton:SetText(mode == "preview" and "Back to profile" or "Preview public view")
 		self.showcaseButton:SetText(showcase and "Profile fields" or "Showcase")
 		if quiet then return end
 		MainWindow.SetStatus("")
 		MainWindow.Refresh()
 	end
 
-	section.previewButton:SetScript("OnClick", function()
-		section:SetMode(section.mode == "preview" and "profile" or "preview")
-	end)
 	section.showcaseButton:SetScript("OnClick", function()
 		section:SetMode(section.mode == "showcase" and "profile" or "showcase")
 	end)
@@ -902,11 +822,10 @@ local function create(parent)
 		end
 		self.header:SetShown(not self.form:IsOpen())
 		setEyebrow(self.mode)
-		if self.mode == "preview" then
-			self:RenderPreview(view.char)
-		elseif self.mode == "showcase" then
+		if self.mode == "showcase" then
 			self.showcaseView:Refresh(view.char, ns.Actions.ShowcasePortrait(ns.ctx))
 		else
+			self:LayoutCallout(view.char)
 			self:RenderList(view)
 		end
 	end
@@ -921,27 +840,12 @@ end
 
 --- Editing ---------------------------------------------------------------------
 
---- Adds per-field Edit and visibility buttons and the field editor.
+--- Adds per-field Edit buttons and the field editor.
 function CharacterView.AttachEditing(section)
 	local f = section.frame
 	local Actions = ns.Actions
 
 	function section.decorateRow(row)
-		row.vis = Widgets.VisibilityButton(row, function(level)
-			local spec, _, message = row.spec
-			if spec.kind == "item" then
-				_, message = section.ChangeItem(function(char, now)
-					return ns.Character.SetItemVisibility(char, spec.list, spec.item.id, level, now)
-				end)
-			else
-				_, message = Actions.SetFieldVisibility(ns.ctx, spec.field.key, level)
-			end
-			MainWindow.SetStatus(message)
-			MainWindow.Refresh()
-		end)
-		-- The shared visibility chip (Widgets.VisibilityButton), at the
-		-- design's chip height.
-		row.vis:SetHeight(L.chipHeight)
 		row.edit = Widgets.Button(row, "Edit", L.editWidth, L.controlHeight, "ghost")
 		row.edit:SetScript("OnClick", function()
 			local spec = row.spec
@@ -970,7 +874,7 @@ function CharacterView.AttachEditing(section)
 	CharacterView.ITEM_FORMS = {
 		family = {
 			noun = "family member",
-			hint = "Only you write this. New entries start private.",
+			hint = "Only you write this.",
 			fields = {
 				{ key = "relation", label = "Relation", kind = "line", max = Schema.LIMITS.short },
 				{ key = "name", label = "Name", kind = "line", max = Schema.LIMITS.short },
@@ -980,8 +884,7 @@ function CharacterView.AttachEditing(section)
 		},
 		history = {
 			noun = "history entry",
-			hint = "When it happened, in any words (\"as a child\", \"the Third War\"), and what happened. "
-				.. "New entries start private.",
+			hint = "When it happened, in any words (\"as a child\", \"the Third War\"), and what happened.",
 			fields = {
 				{ key = "when", label = "When", kind = "line", max = Schema.LIMITS.short },
 				{ key = "text", label = "What happened", kind = "area", max = Schema.LIMITS.long },
@@ -1044,7 +947,7 @@ function CharacterView.AttachEditing(section)
 		self.form:Open({
 			title = "Personality: " .. axis.left .. " - " .. axis.right,
 			hint = "Your own words for this axis. Leave a label empty to keep Dawnward's (" .. axis.left .. " / "
-				.. axis.right .. "). Values, history and Total RP 3 traits are not changed. Private.",
+				.. axis.right .. "). Values, history and Total RP 3 traits are not changed.",
 			fields = {
 				{ key = "left", label = "Left end", kind = "line", max = L2.label },
 				{ key = "right", label = "Right end", kind = "line", max = L2.label },
@@ -1066,40 +969,28 @@ function CharacterView.AttachEditing(section)
 		self.header:Hide()
 	end
 
-	-- Fields always offer Edit (Add while empty); visibility only once a
-	-- value exists. shape: "tile" (chip and a quiet Edit along the bottom, as
-	-- the mockup's tiles) or "card" (chip and a secondary Edit on the label
-	-- row, as the mockup's Summary card).
+	-- Fields always offer Edit (Add while empty). shape: "tile" (a quiet
+	-- Edit at the bottom right, as the mockup's tiles) or "card" (a secondary
+	-- Edit on the label row, as the mockup's Summary card).
 	function section.updateFieldActions(row, spec, shape)
 		local entry = spec.entry
 		row.edit:SetText(entry and "Edit" or "Add")
 		row.edit:ClearAllPoints()
-		row.vis:ClearAllPoints()
 		if shape == "card" then
 			row.edit:SetVariant(entry and "default" or "ghost")
 			row.edit:SetSize(L.cardEditWidth, L.controlHeight)
 			row.edit:SetPoint("TOPRIGHT", -L.cardPadX, -L.cardPadY)
-			row.vis:SetPoint("RIGHT", row.edit, "LEFT", -8, 0)
 		else
 			row.edit:SetVariant("ghost")
 			row.edit:SetSize(L.editWidth, L.controlHeight)
 			row.edit:SetPoint("BOTTOMRIGHT", -L.tilePadY, L.tilePadY)
-			row.vis:SetPoint("BOTTOMLEFT", L.tilePadX, L.tilePadY + (L.controlHeight - L.chipHeight) / 2)
 		end
 		Widgets.Tooltip(row.edit, (entry and "Edit " or "Add ") .. spec.field.label)
 		row.edit:Show()
-		if entry then
-			row.vis:Show()
-			row.vis:SetLevel(entry.visibility)
-			row.vis:SetWidth(CharacterView.ChipWidth(entry.visibility))
-		else
-			row.vis:Hide()
-		end
 	end
 
-	-- Family members and history entries: Edit at the top right, the
-	-- visibility chip under the text (chipY below the entry's top).
-	function section.updateItemActions(row, spec, chipY)
+	-- Family members and history entries: Edit at the top right.
+	function section.updateItemActions(row)
 		row.edit:SetText("Edit")
 		row.edit:SetVariant("ghost")
 		row.edit:SetSize(L.editWidth, L.controlHeight)
@@ -1107,11 +998,6 @@ function CharacterView.AttachEditing(section)
 		row.edit:SetPoint("TOPRIGHT", -10, -10)
 		Widgets.Tooltip(row.edit, "Edit")
 		row.edit:Show()
-		row.vis:ClearAllPoints()
-		row.vis:SetPoint("TOPLEFT", 10, -(chipY or 10))
-		row.vis:Show()
-		row.vis:SetLevel(spec.item.visibility)
-		row.vis:SetWidth(CharacterView.ChipWidth(spec.item.visibility))
 	end
 
 	local INSET = 8
@@ -1162,8 +1048,8 @@ function CharacterView.AttachEditing(section)
 		editor.field = field
 		editor.heading:SetText(field.label)
 		editor.hint:SetText(field.kind == "long"
-			and "A few sentences are plenty. New fields start private; change visibility from the profile."
-			or "One line. New fields start private; change visibility from the profile.")
+			and "A few sentences are plenty. Your profile is what Total RP 3 shows once it is connected."
+			or "One line. Your profile is what Total RP 3 shows once it is connected.")
 		local long = field.kind == "long"
 		editor.area.frame:SetShown(long)
 		editor.line:SetShown(not long)
@@ -1174,7 +1060,7 @@ function CharacterView.AttachEditing(section)
 		-- The editor takes the whole section; the other views step aside.
 		section.scroll:Hide()
 		section.sideScroll:Hide()
-		section.previewScroll:Hide()
+		section.callout:Hide()
 		section.showcase:Hide()
 		section.showcaseView:Hide()
 		section.intro:Hide()

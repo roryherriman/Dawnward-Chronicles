@@ -43,7 +43,7 @@ MainWindow.LAYOUT = {
 	nameTop = 190,        -- name block top (name, title, identity line, chips)
 	nameLines = 2,
 	identityGap = 4,
-	chipGap = 10,         -- identity line to the homeland and privacy chips
+	chipGap = 10,         -- identity line to the homeland chip
 	navTop = 344,         -- first navigation button top
 	navHeight = 44,
 	navGap = 4,
@@ -276,7 +276,7 @@ local function makeView(theme, char)
 	}
 end
 
-MainWindow.TRP3_HELP = "Optional. Open the Total RP 3 page to see its status, preview what would be shared "
+MainWindow.TRP3_HELP = "Optional. Open the Total RP 3 page to see its status, preview your profile there "
 	.. "and manage sync."
 
 --- The Total RP 3 line in the rail: availability only (read-only). Pure.
@@ -328,62 +328,40 @@ function MainWindow.HomelandOf(char)
 	return type(value) == "string" and value ~= "" and value or nil
 end
 
---- The privacy chip under the identity: how much of the profile is Public,
--- from the profile fields' own visibility. nil when no field is set (there
--- is nothing to summarise). Returns { text, tone, tooltip }. Pure.
-function MainWindow.PrivacySummary(char)
-	if not (char and char.fields) then return nil end
-	local set, public = 0, 0
-	for _, entry in pairs(char.fields) do
-		local value = entry.value
-		if value ~= nil and value ~= "" then
-			set = set + 1
-			if entry.visibility == "public" then public = public + 1 end
-		end
-	end
-	if set == 0 then return nil end
-	local fields = set == 1 and "field" or "fields"
-	if public == 0 then
-		return { text = "Private", tone = "private", tooltip = "None of your " .. set .. " profile " .. fields
-			.. " is Public, so nothing from your profile is shared." }
-	end
-	local shared = "may be shared (share exports, and Total RP 3 if you turned sync on)."
-	if public == set then
-		return { text = "Public", tone = "public", tooltip = "All " .. set .. " profile " .. fields .. " are Public: they "
-			.. shared }
-	end
-	return { text = public .. " of " .. set .. " public", tone = "public", tooltip = public .. " of your " .. set
-		.. " profile fields are Public: only those " .. shared }
+--- The one-time confirmation for a character an earlier version kept
+-- partly back from Total RP 3 (Publication.Status "pending"): lists what
+-- would be published, then Actions.TransitionPublication (undo:
+-- /dawnward publish undo). Shared by the Character page's callout and the
+-- Total RP 3 page. Returns the dialog, or nil when there is nothing to confirm.
+function MainWindow.AskPublishWholeProfile()
+	local c = ctx()
+	local char = c and c.store and c.store.real.characters[c.characterKey] or nil
+	if not char or ns.Publication.Status(char) ~= "pending" then return nil end
+	local lines = ns.Publication.PreviewLines(char)
+	return Widgets.Confirm("Publish your whole character profile?\n\nAn earlier version of Dawnward kept part of "
+		.. "this character back from Total RP 3:\n\n" .. table.concat(lines, "\n")
+		.. "\n\nFrom now on your whole Dawnward profile is the source for Total RP 3. You can undo this with "
+		.. "/dawnward publish undo.", "Publish", function()
+		-- A surprise must never break the window (as the Total RP 3 page's act()).
+		local ok, result, message = pcall(ns.Actions.TransitionPublication, ns.ctx)
+		setStatus(ok and (message or "") or ("Not changed: " .. tostring(result)))
+		MainWindow.Refresh()
+	end)
 end
 
--- Lays out the homeland and privacy chips, centred under the identity line
--- and never wider than the rail.
+-- Lays out the homeland chip, centred under the identity line and never
+-- wider than the rail.
 local function layoutChips(char)
 	local L = layout
-	local width = L.railWidth - 2 * L.railPad
-	local homeland, privacy = MainWindow.HomelandOf(char), MainWindow.PrivacySummary(char)
-	local chips, gap = {}, 6
-	local privacyChip, homeChip = frame.privacyChip, frame.homelandChip
-	privacyChip:SetShown(privacy ~= nil)
-	if privacy then
-		privacyChip:SetChip(privacy.text, privacy.tone)
-		Widgets.Tooltip(privacyChip, "Profile visibility", privacy.tooltip)
-	end
+	local homeland, homeChip = MainWindow.HomelandOf(char), frame.homelandChip
 	homeChip:SetShown(homeland ~= nil)
-	if homeland then
-		local room = width - (privacy and (privacyChip:GetWidth() + gap) or 0)
-		homeChip.maxWidth = room
-		homeChip:SetChip(homeland, "accent")
-		chips[#chips + 1] = homeChip
-	end
-	if privacy then chips[#chips + 1] = privacyChip end
 	local total = 0
-	for i, chip in ipairs(chips) do total = total + chip:GetWidth() + (i > 1 and gap or 0) end
-	local x = -total / 2
-	for _, chip in ipairs(chips) do
-		chip:ClearAllPoints()
-		chip:SetPoint("TOPLEFT", frame.chipRow, "TOP", x, 0)
-		x = x + chip:GetWidth() + gap
+	if homeland then
+		homeChip.maxWidth = L.railWidth - 2 * L.railPad
+		homeChip:SetChip(homeland, "accent")
+		total = homeChip:GetWidth()
+		homeChip:ClearAllPoints()
+		homeChip:SetPoint("TOPLEFT", frame.chipRow, "TOP", -total / 2, 0)
 	end
 	frame.chipRow.total = total
 end
@@ -737,7 +715,7 @@ local function buildRail(r)
 
 	-- Name (Cinzel 21, at most two lines), title (one line, warm gold),
 	-- race · class · pronouns (14, muted, class in its colour), then the
-	-- homeland and privacy chips.
+	-- homeland chip.
 	local width = L.railWidth - 2 * L.railPad
 	frame.charName = Widgets.Label(frame, "railName", true, "body")
 	frame.charName:SetPoint("TOP", frame, "TOPLEFT", L.railWidth / 2, -L.nameTop)
@@ -758,8 +736,6 @@ local function buildRail(r)
 	frame.chipRow:SetPoint("TOP", frame.charLine, "BOTTOM", 0, -L.chipGap)
 	frame.homelandChip = Widgets.Chip(frame.chipRow, "", "accent")
 	frame.homelandChip:SetBase("panel")
-	frame.privacyChip = Widgets.Chip(frame.chipRow, "", "private")
-	frame.privacyChip:SetBase("panel")
 	-- Hover area over the name and title: the full text when either is cut.
 	frame.identityHover = CreateFrame("Frame", nil, frame)
 	frame.identityHover:SetPoint("TOPLEFT", frame.charName, "TOPLEFT", 0, 0)
