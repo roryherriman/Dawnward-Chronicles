@@ -12,8 +12,8 @@ These fonts ship in `DawnwardChronicles/Media/Fonts/`, with their licence files 
 
 | Font | Files | Licence | Notes |
 |---|---|---|---|
-| [Cinzel](https://github.com/NDISCOVER/Cinzel) | `Cinzel-SemiBold.ttf` | SIL Open Font License 1.1 | A static weight-600 instance made from the variable font with fontTools. The name is unchanged because Cinzel declares no Reserved Font Name. Used for display text: titles, names and eyebrows |
-| [Alegreya Sans](https://github.com/huertatipografica/Alegreya-Sans) | `AlegreyaSans-Regular.ttf`, `AlegreyaSans-Bold.ttf` | SIL Open Font License 1.1 | Unmodified. Used for reading text and labels |
+| [Cinzel](https://github.com/NDISCOVER/Cinzel) | `Cinzel-SemiBold.ttf`, `Cinzel-Bold.ttf` (from v0.10) | SIL Open Font License 1.1 | Static weight-600 and weight-700 instances made from the variable font with fontTools. The name is unchanged because Cinzel declares no Reserved Font Name. Used for display text: titles, names and eyebrows (600) and dates (700) |
+| [Alegreya Sans](https://github.com/huertatipografica/Alegreya-Sans) | `AlegreyaSans-Regular.ttf`, `AlegreyaSans-Bold.ttf`, `AlegreyaSans-Italic.ttf` and `AlegreyaSans-Medium.ttf` (from v0.10) | SIL Open Font License 1.1 | Unmodified. Used for reading text and labels; italic for the character's title, medium for navigation and chips |
 
 On clients whose language the fonts do not cover, or when a file fails to load, the addon uses the game's own fonts instead.
 

@@ -1,7 +1,7 @@
 Fonts bundled with Dawnward Chronicles
 
-Both are licensed under the SIL Open Font License 1.1 (the OFL-*.txt files
-here). They are used for Dawnward's own interface only.
+Both families are licensed under the SIL Open Font License 1.1 (the
+OFL-*.txt files here). They are used for Dawnward's own interface only.
 
 Cinzel-SemiBold.ttf
   Display and heading font. A static weight-600 instance made with fontTools
@@ -10,12 +10,31 @@ Cinzel-SemiBold.ttf
   needs no variable-font support. Not modified otherwise.
   Copyright 2020 The Cinzel Project Authors (https://github.com/NDISCOVER/Cinzel)
 
+Cinzel-Bold.ttf (v0.10)
+  The dates on journal cards (the design's Cinzel 700). Made the same way:
+  fontTools 4.67.0, fontTools.varLib.instancer.instantiateVariableFont with
+  {"wght": 700}, from ofl/cinzel/Cinzel[wght].ttf in github.com/google/fonts
+  (main branch, 2026-11-02; input SHA-256
+  f4d83d34d1f6c741193e4acf4b3dff9531e5a67b6aa65228d00a7db72a4e0f34,
+  output SHA-256
+  22f63a4ab16e050390b68b60be7af6d0c772acc91757c60660232fc94120adaf).
+  Not modified otherwise.
+
 AlegreyaSans-Regular.ttf, AlegreyaSans-Bold.ttf
   Body and label font, unmodified from ofl/alegreyasans in
   github.com/google/fonts.
   Copyright 2013 The Alegreya Sans Project Authors
   (https://github.com/huertatipografica/Alegreya-Sans)
 
+AlegreyaSans-Italic.ttf, AlegreyaSans-Medium.ttf (v0.10)
+  The character's title in the rail (italic) and navigation and chip labels
+  (medium, the design's weight 500). Unmodified from ofl/alegreyasans in
+  github.com/google/fonts (main branch, 2026-11-02; SHA-256
+  f49f6f2bdd84df850b25b0f8185d8a051e1d1eb2dd08e2f91b8c7b86d9a9e1a6 and
+  4b89fe7804fd1485ec2757795a53ffdb66e1206dd56f844c2d72b3c944815b43). The
+  same source gives AlegreyaSans-Regular.ttf byte for byte.
+
 Both fonts cover Latin scripts only. On Russian, Korean and Chinese
 clients, and whenever a font file fails to load, Dawnward uses the game's
-own fonts instead (UI/Style.lua).
+own fonts instead (UI/Style.lua). If only one of the v0.10 files fails, its
+styles use the nearest v0.9 file (Style.FILE_FALLBACK).
