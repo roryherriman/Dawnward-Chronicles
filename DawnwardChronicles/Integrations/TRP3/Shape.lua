@@ -109,7 +109,8 @@ end
 
 --- The misc section (RegisterMisc.lua default profile: { v = 1, PE = {},
 -- ST = {} }): PE holds the At First Glance slots keyed "1".."5"
--- (tostring(i)); ST the RP style choices, which Dawnward never changes.
+-- (tostring(i)); ST the RP style choices (numbers keyed by STYLE_FIELDS
+-- id), which Dawnward changes only for preferences the player handed to it.
 -- Returns true, or nil plus a reason.
 function Shape.Misc(misc)
 	if type(misc) ~= "table" then
@@ -118,8 +119,15 @@ function Shape.Misc(misc)
 	if not isVersion(misc.v) then
 		return nil, "the miscellaneous section has no valid version"
 	end
-	if misc.ST ~= nil and type(misc.ST) ~= "table" then
-		return nil, "the roleplay style has an unexpected layout"
+	if misc.ST ~= nil then
+		if type(misc.ST) ~= "table" then
+			return nil, "the roleplay style has an unexpected layout"
+		end
+		for key, v in pairs(misc.ST) do
+			if type(key) ~= "string" or type(v) ~= "number" then
+				return nil, "the roleplay style has an unexpected layout"
+			end
+		end
 	end
 	if misc.PE ~= nil then
 		if type(misc.PE) ~= "table" then
@@ -134,7 +142,29 @@ function Shape.Misc(misc)
 	return true
 end
 
-Shape.BY_SECTION = { about = Shape.About, characteristics = Shape.Characteristics, misc = Shape.Misc }
+--- The character section (Dashboard.lua 30: the default profile's
+-- { v = 1, RP = 2, WU = 1 }; Core/Player.lua 438-452 adds CU and CO through
+-- the setters). Returns true, or nil plus a reason.
+function Shape.Character(character)
+	if type(character) ~= "table" then
+		return nil, "the status section is missing"
+	end
+	if character.v ~= nil and not isVersion(character.v) then
+		return nil, "the status section has no valid version"
+	end
+	if not optionalString(character.CU) or not optionalString(character.CO) then
+		return nil, "Currently or OOC information has an unexpected layout"
+	end
+	for _, key in ipairs({ "RP", "WU" }) do
+		if character[key] ~= nil and type(character[key]) ~= "number" then
+			return nil, "the roleplay status or walk-up has an unexpected layout"
+		end
+	end
+	return true
+end
+
+Shape.BY_SECTION = { about = Shape.About, characteristics = Shape.Characteristics, misc = Shape.Misc,
+	character = Shape.Character }
 
 --- TRP3's section version rule (Utils.math.incrementNumber(v, 2)): +1, and
 -- 100 wraps to 1. A missing version counts as 1, as TRP3's setters do.

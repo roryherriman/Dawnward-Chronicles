@@ -39,7 +39,7 @@ end
 local function open(ns)
 	ns.SettingsPanel.OpenPage("trp3")
 	local page = ns.SettingsPanel.panel.trp3Page
-	click(page.nav.buttons[1])
+	ns.TRP3Page.Open(page, "connection")
 	return page
 end
 
@@ -74,7 +74,8 @@ local function legacySpec(t, expect)
 			expect.truthy(asked:find("About page (your whole story)", 1, true))
 			local entry = env.DawnwardChroniclesTRP3DB.optIn[CHAR]
 			for _, id in ipairs(ns.TRP3Ledger.MAPPINGS) do
-				expect.equal(ns.TRP3Ledger.Policy(entry, id), "dawnward", id)
+				-- v0.10.1: the roleplay style is only ever handed over one by one.
+				expect.equal(ns.TRP3Ledger.Policy(entry, id), ns.TRP3Ledger.OPT_IN_ONLY[id] and "trp3" or "dawnward", id)
 			end
 			expect.equal(#fake.events, 0, "nothing written until the debounced run")
 			mock.RunTimers()
@@ -84,7 +85,8 @@ local function legacySpec(t, expect)
 			expect.equal(fake.profile.player.characteristics.FN, "Mirelle")
 			expect.equal(fake.profile.player.characteristics.MI[1].VA, "she/her")
 			ns.MainWindow.Refresh()
-			expect.truthy(page.overviewRows[2].value:GetText():find("20 of 20 items", 1, true))
+			-- v0.10.1: a roleplay style preference counts only once handed over.
+			expect.truthy(page.overviewRows[2].value:GetText():find("26 of 26 items", 1, true))
 			expect.falsy(page.overviewRows[3].value:GetText():find("Nothing written", 1, true), "a last update time")
 		end)
 

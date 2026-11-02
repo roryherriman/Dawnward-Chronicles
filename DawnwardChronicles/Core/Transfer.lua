@@ -122,6 +122,8 @@ function Transfer.Export(char, kind, opts)
 		data.publication = Util.DeepCopy(char.publication or {})
 		-- At First Glance entries the player wrote for Total RP 3 (v0.9): backups only.
 		data.glance = Util.DeepCopy(char.glance or {})
+		-- The status and look set for Total RP 3 (v0.10.1): backups only.
+		data.trp3status = Util.DeepCopy(char.trp3status or {})
 		-- With no stored story there is nothing to carry: such a backup then
 		-- keeps whatever story is stored when it is restored.
 		includesBiography = opts.includeBiography ~= false and char.sources ~= nil
@@ -289,6 +291,17 @@ function Transfer.MergeForImport(current, imported, includesSecrets, now, includ
 		-- Likewise a backup from before At First Glance entries (v0.9).
 		if next(result.glance or {}) == nil and next(current.glance or {}) ~= nil then
 			result.glance = Util.DeepCopy(current.glance)
+		end
+		-- And one from before the Total RP 3 status values (v0.10.1).
+		local function holds(st)
+			if type(st) ~= "table" then return false end
+			for key, v in pairs(st) do
+				if key ~= "style" or next(v) ~= nil then return true end
+			end
+			return false
+		end
+		if not holds(result.trp3status) and holds(current.trp3status) then
+			result.trp3status = Util.DeepCopy(current.trp3status)
 		end
 		-- The publication model never goes backwards on a restore: once the
 		-- whole profile publishes (Publication.IsComplete), a restore keeps it

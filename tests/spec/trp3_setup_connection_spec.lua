@@ -162,7 +162,8 @@ return function(t, expect)
 			local entry = ledger(env).optIn[CHAR]
 			expect.equal(entry.profileId, newId)
 			for _, id in ipairs(ns.TRP3Ledger.MAPPINGS) do
-				expect.equal(ns.TRP3Ledger.Policy(entry, id), "dawnward", id)
+				-- v0.10.1: the roleplay style is only ever handed over one by one.
+				expect.equal(ns.TRP3Ledger.Policy(entry, id), ns.TRP3Ledger.OPT_IN_ONLY[id] and "trp3" or "dawnward", id)
 			end
 			mock.RunTimers()
 			expect.equal(fake.profiles[newId].player.characteristics.BP, "Goldshire", "published after Finish")

@@ -1,7 +1,15 @@
 -- Fake of Total RP 3 3.4.1, shaped after the audited source
 -- (docs/TRP3_INTEGRATION.md). It is not TRP3 code. Behaviour mirrored:
 --   * GetProfile/GetCharacteristics return live tables (so mutation is detectable)
---   * setters exist; here they raise, so any call from Dawnward fails the test
+--   * v0.10.1: CurrentUser's setters behave as Core/Player.lua 413-494
+--     (UpdateProfileField): every field but character.RP and WU is refused
+--     on the default profile, an unchanged value does nothing, else the
+--     value is stored, the section's v goes up by one (incrementNumber(v, 2))
+--     and REGISTER_DATA_UPDATED(player_id, profileID, section) fires;
+--     SetCustomClassColor raises unless given six hex digits. Every call is
+--     recorded in fake.setterCalls (opts.settersRaise makes them raise, for
+--     tests that must prove no setter is reached). TRP3_API.navigation
+--     .openMainFrame and .menu.selectMenu are recorded in fake.opened
 --   * TRP3_Addon:TriggerEvent / TRP3_API.RegisterCallback (events recorded)
 --   * the About and characteristics editors work on a draft copied when the
 --     editor opens; Save wipes the live table, copies the draft back and sets
@@ -26,10 +34,14 @@
 
 local Fake = {}
 
+-- Each setter's section and key (Core/Player.lua 438-494).
 local SETTERS = {
-	"SetRoleplayStatus", "SetOutOfCharacterInfo", "SetCurrentlyText", "SetWalkup",
-	"SetFirstName", "SetLastName", "SetCustomIcon", "SetTitle", "SetFullTitle",
-	"SetCustomClass", "SetCustomClassColor", "SetCustomRace", "SetRoleplayExperience", "SetProfileID",
+	SetRoleplayStatus = { "character", "RP" }, SetOutOfCharacterInfo = { "character", "CO" },
+	SetCurrentlyText = { "character", "CU" }, SetWalkup = { "character", "WU" },
+	SetFirstName = { "characteristics", "FN" }, SetLastName = { "characteristics", "LN" },
+	SetCustomIcon = { "characteristics", "IC" }, SetTitle = { "characteristics", "TI" },
+	SetFullTitle = { "characteristics", "FT" }, SetCustomClass = { "characteristics", "CL" },
+	SetCustomClassColor = { "characteristics", "CH" }, SetCustomRace = { "characteristics", "RA" },
 }
 
 local function deepCopy(v)
@@ -72,19 +84,51 @@ function Fake.new(opts)
 	function user:GetRoleplayingName()
 		return profile.player.characteristics.FN .. " " .. profile.player.characteristics.LN
 	end
-	for _, name in ipairs(SETTERS) do
+	local function updateProfileField(sectionName, key, value)
+		-- ShouldAllowFieldModification (Player.lua 413-417).
+		local allowed = (sectionName == "character" and (key == "RP" or key == "WU")) or not user:IsProfileDefault()
+		if not allowed then return end
+		local subtable = profile.player[sectionName]
+		if subtable == nil then
+			subtable = {}
+			profile.player[sectionName] = subtable
+		end
+		if subtable[key] == value then return end
+		subtable[key] = value
+		local n = (subtable.v or 1) + 1
+		if n >= 100 then n = 1 end
+		subtable.v = n
+		fake.fire("REGISTER_DATA_UPDATED", fake.playerId, fake.profileId, sectionName)
+	end
+	fake.setterLog = {}
+	for name, target in pairs(SETTERS) do
+		user[name] = function(_, value)
+			fake.setterCalls[#fake.setterCalls + 1] = name
+			fake.setterLog[#fake.setterLog + 1] = { name = name, value = value }
+			if opts.settersRaise then error("Dawnward must not call TRP3 setter " .. name) end
+			if name == "SetCustomClassColor" and not (type(value) == "string" and #value == 6) then
+				error("bad argument #2 to 'SetCustomClassColor': expected hex color string or color object", 2)
+			end
+			updateProfileField(target[1], target[2], value)
+		end
+	end
+	for _, name in ipairs({ "SetRoleplayExperience", "SetProfileID" }) do
 		user[name] = function()
 			fake.setterCalls[#fake.setterCalls + 1] = name
 			error("Dawnward must not call TRP3 setter " .. name)
 		end
 	end
+	function user:GetRoleplayStatus() return profile.player.character and profile.player.character.RP end
+	function user:GetCurrentlyText() return profile.player.character and profile.player.character.CU end
+	function user:GetWalkup() return profile.player.character and profile.player.character.WU or 1 end
 	if opts.override then
 		for k, v in pairs(opts.override) do user[k] = v end
 	end
 
 	local api = {
 		Player = { GetCurrentUser = function() return user end },
-		Enums = {},
+		-- Core/Enums.lua 25-28 and 50-53.
+		Enums = { ROLEPLAY_STATUS = { IN_CHARACTER = 1, OUT_OF_CHARACTER = 2 }, WALKUP = { NO = 1, YES = 2 } },
 	}
 	if opts.noPlayerApi then
 		api.Player = nil
@@ -102,6 +146,7 @@ function Fake.new(opts)
 			cb(...)
 		end
 	end
+	fake.fire = fire
 
 	local addon = {
 		Events = { REGISTER_DATA_UPDATED = "REGISTER_DATA_UPDATED", REGISTER_PROFILES_LOADED = "REGISTER_PROFILES_LOADED" },
@@ -191,10 +236,22 @@ function Fake.new(opts)
 		fake[section .. "Tab"] = frames[TAB[section]]
 	end
 	fake.nav = nav
+	fake.opened = {}
 	trp3api.navigation = { page = {
 		getCurrentPageID = function() return nav.pageId end,
 		getCurrentContext = function() return nav.context end,
 	} }
+	-- Core/MainStructure.lua 253 (openMainFrame) and 156 (selectMenu);
+	-- selecting "main_12_player_character" opens the player's own page
+	-- with a fresh context (RegisterMain.lua 771-780).
+	trp3api.navigation.openMainFrame = function()
+		fake.mainFrameShown = true
+		fake.opened[#fake.opened + 1] = "openMainFrame"
+	end
+	trp3api.navigation.menu = { selectMenu = function(id)
+		fake.opened[#fake.opened + 1] = id
+		if id == "main_12_player_character" then fake.openProfilePage() end
+	end }
 	if opts.noNavigation then
 		trp3api.navigation = nil
 	end
@@ -301,7 +358,7 @@ function Fake.new(opts)
 		fake.profiles[fake.defaultProfileId] = { profileName = "Default profile",
 			player = { characteristics = { v = 2, FN = "Testchar", MI = {}, PS = {} },
 				about = { v = 1, TE = 1, T1 = {}, T2 = {}, T3 = { PH = {}, PS = {}, HI = {} } },
-				character = { v = 1, RP = 2, WU = 2 } } }
+				character = { v = 1, RP = 2, WU = 1 } } }
 	end
 	for id, p in pairs(opts.profiles or {}) do
 		fake.profiles[id] = p
@@ -318,7 +375,7 @@ function Fake.new(opts)
 				IC = "Achievement_Character_Human_Female", MI = {}, PS = {} },
 			about = { v = 1, TE = 1, T1 = {}, T2 = {}, T3 = { PH = {}, PS = {}, HI = {} } },
 			misc = { v = 1, PE = {}, ST = {} },
-			character = { v = 1, RP = 2, WU = 2 },
+			character = { v = 1, RP = 2, WU = 1 },
 		} }
 	end
 	local function isNameAvailable(name)

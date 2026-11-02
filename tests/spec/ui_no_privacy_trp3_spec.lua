@@ -1,6 +1,7 @@
 -- L2 (v0.10): the Total RP 3 page and the setup wizard, with Total RP 3
 -- installed (the 3.4.1 fake), show no Public / Private / Secret
--- classification either. Completes ui_no_privacy_spec.lua, which covers
+-- classification either (v0.10.1: including the Profile, At First Glance,
+-- Status and OOC and Synchronization sections and their switches). Completes ui_no_privacy_spec.lua, which covers
 -- every other screen.
 local Boot = require("support.boot")
 local Fake = require("fakes.trp3_341")
@@ -60,6 +61,24 @@ return function(t, expect)
 					click(page.nav.buttons[i])
 					local found = hits(mock)
 					expect.equal(#found, 0, where .. " tab " .. i .. ": " .. table.concat(found, " | "))
+				end
+				-- v0.10.1: the views behind Status and OOC's and Synchronization's switches,
+				-- and the At First Glance icon picker.
+				ns.TRP3Page.Open(page, "status")
+				for i, b in ipairs(page.statusNav.buttons) do
+					click(b)
+					local found = hits(mock)
+					expect.equal(#found, 0, where .. " status view " .. i .. ": " .. table.concat(found, " | "))
+				end
+				ns.TRP3Page.Open(page, "glance")
+				click(page.glanceChoose)
+				local picked = hits(mock)
+				expect.equal(#picked, 0, where .. " icon picker: " .. table.concat(picked, " | "))
+				click(page.iconPicker.close)
+				for _, id in ipairs({ "connection", "syncstatus", "recovery" }) do
+					ns.TRP3Page.Open(page, id)
+					local found = hits(mock)
+					expect.equal(#found, 0, where .. " " .. id .. ": " .. table.concat(found, " | "))
 				end
 			end
 			sweep("not connected")

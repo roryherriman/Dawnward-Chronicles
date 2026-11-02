@@ -200,7 +200,8 @@ return function(t, expect)
 			local entry = env.DawnwardChroniclesTRP3DB.optIn[CHAR]
 			expect.truthy(entry, "authorised once")
 			for _, id in ipairs(ns.TRP3Ledger.MAPPINGS) do
-				expect.equal(ns.TRP3Ledger.Policy(entry, id), "dawnward", id)
+				-- v0.10.1: the roleplay style is only ever handed over one by one.
+				expect.equal(ns.TRP3Ledger.Policy(entry, id), ns.TRP3Ledger.OPT_IN_ONLY[id] and "trp3" or "dawnward", id)
 			end
 			expect.equal(entry.profileId, fake.profileId)
 			expect.falsy(entry.adopt, "keep: nothing is taken over")

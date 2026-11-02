@@ -611,7 +611,7 @@ local function legacySpec(t, expect)
 			local view = w.ns.TRP3Commands.Overview(w.deps)
 			Adapter.Probe, Adapter.ReadSection = probe, read
 			expect.equal(probes, 1)
-			expect.equal(reads, 2, "about and characteristics")
+			expect.equal(reads, 4, "about, characteristics, and (v0.10.1, the Status and OOC section) character and misc")
 			expect.equal(view.checks.fields.state, "ready")
 			expect.equal(w.deps.cache, nil, "the caller's deps are not cached")
 		end)

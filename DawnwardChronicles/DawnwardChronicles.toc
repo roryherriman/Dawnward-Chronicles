@@ -20,6 +20,7 @@ Core\Atlas.lua
 Core\Onboarding.lua
 Core\AxisMeanings.lua
 Core\Glance.lua
+Core\RPStatus.lua
 Core\StorySchema.lua
 Core\Schema.lua
 Core\Migrations.lua
@@ -63,6 +64,8 @@ Integrations\TRP3\Status.lua
 Integrations\TRP3\FieldPlan.lua
 Integrations\TRP3\MiscPlan.lua
 Integrations\TRP3\GlancePlan.lua
+Integrations\TRP3\StatusPlan.lua
+Integrations\TRP3\StylePlan.lua
 Integrations\TRP3\Ledger.lua
 Integrations\TRP3\Presentation.lua
 Integrations\TRP3\AboutBlock.lua
@@ -92,6 +95,7 @@ UI\ReactionCard.lua
 UI\ChroniclePlaces.lua
 UI\ChronicleView.lua
 UI\TRP3Page.lua
+UI\TRP3MiscSections.lua
 UI\SettingsPanel.lua
 UI\GuidePanel.lua
 UI\SetupWizard.lua
