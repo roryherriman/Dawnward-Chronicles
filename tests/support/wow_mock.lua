@@ -130,6 +130,16 @@ function Methods:CreateTexture(name, layer, _, sublevel)
 	return tex
 end
 
+-- Line regions (SimpleLineAPI): start and end points and thickness recorded.
+function Methods:CreateLine(name, layer, _, sublevel)
+	local line = self.__mock.newFrame("Line", name, self)
+	line.__layer, line.__sublevel = layer, sublevel
+	return line
+end
+function Methods:SetStartPoint(...) self.__start = { ... } end
+function Methods:SetEndPoint(...) self.__end = { ... } end
+function Methods:SetThickness(t) self.__thickness = t end
+
 -- Layout and layering state, recorded so UI tests can check it.
 function Methods:SetFrameStrata(strata) self.__strata = strata end
 function Methods:GetFrameStrata() return self.__strata or "MEDIUM" end

@@ -60,6 +60,114 @@ function Widgets.SetTextRole(fs, colorRole)
 	return fs
 end
 
+--- Tracked capitals ------------------------------------------------------------------
+-- The design's eyebrows are small capitals with letter spacing (0.16 em,
+-- Main.dc.html .eyebrow). A font string has no tracking, so a tracked label
+-- sets each letter in its own font string, placed by the bundled font's
+-- advance widths (Style.TextWidth) plus the tracking. It offers the font
+-- string calls labels get (SetText, GetText, SetTextColor, SetJustifyH,
+-- GetStringWidth, GetStringHeight, SetWidth) and is a Frame, so it anchors and
+-- shows like one. Letters are created once per position and reused. When the
+-- bundled font is not in use (non-Latin clients) it is one plain font string.
+Widgets.TRACKING = 0.16
+
+local function layoutTracked(t)
+	local text = t.text or ""
+	local letters = t.letters
+	local bundled = Style.UsesBundledFont(t.style)
+	local chars = {}
+	if bundled then
+		for ch in text:gmatch("[%z\1-\127\194-\244][\128-\191]*") do chars[#chars + 1] = ch end
+	elseif text ~= "" then
+		chars[1] = text
+	end
+	local track = bundled and t.tracking or 0
+	local widths, natural = {}, 0
+	for i, ch in ipairs(chars) do
+		widths[i] = Style.TextWidth(ch, t.style)
+		natural = natural + widths[i] + (i < #chars and track or 0)
+	end
+	-- Too wide for a fixed box: tighten the tracking first.
+	local box = t.boxWidth
+	if box and natural > box and #chars > 1 and track > 0 then
+		local plain = natural - track * (#chars - 1)
+		track = math.max(0, (box - plain) / (#chars - 1))
+		natural = plain + track * (#chars - 1)
+	end
+	t.textWidth = natural
+	local start = 0
+	if box and t.justify == "CENTER" then
+		start = math.floor((box - natural) / 2)
+	elseif box and t.justify == "RIGHT" then
+		start = box - natural
+	end
+	local x, cut = start, false
+	for i, ch in ipairs(chars) do
+		local fs = letters[i]
+		if not fs then
+			fs = t:CreateFontString(nil, "OVERLAY", Style.FontFor(t.style))
+			fs:SetJustifyH("LEFT")
+			fs:SetWordWrap(false)
+			letters[i] = fs
+		end
+		fs:SetText(ch)
+		fs:ClearAllPoints()
+		fs:SetPoint("LEFT", t, "LEFT", x, 0)
+		if t.color then fs:SetTextColor(t.color[1], t.color[2], t.color[3]) end
+		local fits = not box or bundled == false or x + widths[i] <= box + 0.5
+		fs:SetShown(fits)
+		cut = cut or not fits
+		x = x + widths[i] + track
+	end
+	for i = #chars + 1, #letters do letters[i]:Hide() end
+	t.truncated = cut
+	if not box and t.setWidth then t.setWidth(t, math.max(1, natural)) end
+end
+
+--- A tracked label in style (default "eyebrow": Cinzel 13 capitals) with a
+-- colour role (default "eyebrow"). tracking in em (default Widgets.TRACKING).
+function Widgets.TrackedLabel(parent, style, role, tracking)
+	local t = CreateFrame("Frame", nil, parent)
+	t.style = style or "eyebrow"
+	local spec = Style.FONT_BY_STYLE[t.style]
+	local size = spec and spec.size or 13
+	t.tracking = (tracking or Widgets.TRACKING) * size
+	t.letters, t.text, t.justify = {}, "", "LEFT"
+	t:SetHeight(size + 5)
+	t.setWidth = t.SetWidth
+	function t.SetWidth(self, w)
+		self.boxWidth = (type(w) == "number" and w > 0) and w or nil
+		self.setWidth(self, w)
+		layoutTracked(self)
+	end
+	function t.SetText(self, text)
+		text = text ~= nil and tostring(text) or ""
+		if text == self.text then return end
+		self.text = text
+		layoutTracked(self)
+	end
+	function t.GetText(self) return self.text end
+	function t.SetTextColor(self, r, g, b)
+		self.color = { r, g, b }
+		for _, fs in ipairs(self.letters) do fs:SetTextColor(r, g, b) end
+	end
+	function t.SetJustifyH(self, j)
+		self.justify = j
+		layoutTracked(self)
+	end
+	function t.GetStringWidth(self) return self.textWidth or 0 end
+	t.GetUnboundedStringWidth = t.GetStringWidth
+	function t.GetStringHeight() return size end
+	function t.IsTruncated(self) return self.truncated and true or false end
+	for _, name in ipairs({ "SetJustifyV", "SetWordWrap", "SetMaxLines", "SetNonSpaceWrap" }) do
+		t[name] = function() end
+	end
+	local textSpec = Style.TEXT[role or "eyebrow"]
+	t.textRole = textSpec and textSpec.color or role
+	Style.Register(t, function(self, theme) Style.TextColor(self, Style.Tone(theme, self.textRole)) end)
+	return t
+end
+
 --- Tooltips ------------------------------------------------------------------------
 
 -- Title in the design's bright gold, body lines in white and wrapped. A
@@ -145,12 +253,29 @@ local function paintButton(b, theme)
 	b.edges:Paint(edge, edgeAlpha)
 	if b.textColor then text = b.textColor end
 	Style.TextColor(b.label, text)
+	if b.icon then b.icon:SetColor(b.iconRole and Style.Tone(theme, b.iconRole) or text) end
 end
+
+-- Icon and label sit side by side, centred together (the design's .btn: icon
+-- 16, gap 8; 14 on compact buttons).
+Widgets.BUTTON_ICON = { standard = 16, compact = 14, gap = 8 }
 
 local function placeLabel(b, pressed)
 	local d = pressed and 1 or 0
+	local shift = 0
+	if b.icon then
+		local text = (not b.iconOnly and b.GetText and b:GetText()) or ""
+		local size = b.icon.size
+		local group = size
+		if text ~= "" then
+			shift = size + Widgets.BUTTON_ICON.gap
+			group = shift + Style.TextWidth(text, b.fontStyle)
+		end
+		b.icon:ClearAllPoints()
+		b.icon:SetPoint("LEFT", b, "CENTER", math.floor(-group / 2 + 0.5) + d, -d)
+	end
 	b.label:ClearAllPoints()
-	b.label:SetPoint("LEFT", b.textInset + d, -d)
+	b.label:SetPoint("LEFT", b.textInset + shift + d, -d)
 	b.label:SetPoint("RIGHT", -b.textInset + d, -d)
 end
 
@@ -164,9 +289,24 @@ end
 
 --- Whether text fits a button of width and height (estimated with the
 -- bundled font's real advance widths, Style.TextWidth). Pure.
-function Widgets.LabelFits(text, width, height, variant)
+function Widgets.LabelFits(text, width, height, variant, withIcon)
 	local inset = variant == "choice" and Widgets.BUTTON.insetChoice or Widgets.BUTTON.inset
-	return Style.TextWidth(text, Widgets.ButtonFontStyle(height, variant)) <= width - 2 * inset
+	return Style.TextWidth(text, Widgets.ButtonFontStyle(height, variant)) + (withIcon and
+		(Widgets.ButtonIconSize(height) + ((text or "") ~= "" and Widgets.BUTTON_ICON.gap or 0)) or 0) <= width - 2 * inset
+end
+
+--- The icon size on a button of height. Pure.
+function Widgets.ButtonIconSize(height)
+	return height >= Widgets.BUTTON.standardFrom and Widgets.BUTTON_ICON.standard or Widgets.BUTTON_ICON.compact
+end
+
+--- The width a button needs for text (and an icon), with the design's side
+-- padding (16 standard, 12 compact). Pure.
+function Widgets.ButtonWidth(text, height, withIcon)
+	local pad = height >= Widgets.BUTTON.standardFrom and 16 or 12
+	local w = Style.TextWidth(text or "", Widgets.ButtonFontStyle(height, "default"))
+	if withIcon then w = w + Widgets.ButtonIconSize(height) + ((text or "") ~= "" and Widgets.BUTTON_ICON.gap or 0) end
+	return math.ceil(w + 2 * pad)
 end
 
 --- A styled button. API-compatible with the v0.5 buttons (SetText, GetText,
@@ -199,6 +339,28 @@ function Widgets.Button(parent, text, width, height, variant)
 	function b.SetSelected(self, on) self.selected = on and true or nil; Style.Repaint(self) end
 	function b.SetVariant(self, v) self.variant = v; Style.Repaint(self) end
 	function b.GetFontString(self) return self.label end
+	-- A line icon before the label (Style.ICONS name; nil removes it). Returns
+	-- whether the icon is drawn (false where the client has no line regions,
+	-- so the caller can keep a text stand-in such as "+").
+	local setText = b.SetText
+	function b.SetText(self, t)
+		setText(self, t)
+		if self.icon then placeLabel(self, false) end
+	end
+	function b.SetIcon(self, name, size)
+		if self.icon and self.icon.name ~= name then
+			self.icon:Hide()
+			self.icon = nil
+		end
+		if name and not self.icon then
+			size = size or Widgets.ButtonIconSize(self:GetHeight())
+			self.icon = Style.LineIcon(self, name, size)
+			if self.icon then self.icon.size = size end
+		end
+		placeLabel(self, false)
+		Style.Repaint(self)
+		return self.icon ~= nil
+	end
 
 	-- Hovering a button inside a record highlights that record too.
 	local function rowOf(self)
@@ -230,11 +392,39 @@ Widgets.GLYPHS = { X = "\195\151", x = "\195\151" }
 --- A small square button with a text glyph ("?", "X", "<", ">"): a ghost
 -- button with a visible 1 px edge, as the design's icon button. "X" is
 -- drawn as a large multiplication sign. Size it with Style.CONTROL.icon (36).
+-- Glyphs drawn as the design's line icons where the client has line regions.
+Widgets.GLYPH_ICONS = { X = "close", x = "close", ["+"] = "plus", ["?"] = "guide" }
+
 function Widgets.IconButton(parent, glyph, title, text)
 	local shown = Widgets.GLYPHS[glyph]
 	local b = Widgets.Button(parent, shown or glyph, Style.SIZE.icon, Style.SIZE.icon, "ghost")
 	b.glyph = glyph
-	if shown and Style.UsesBundledFont("glyph") then
+	local iconName = Widgets.GLYPH_ICONS[glyph] or (Style.ICONS[glyph] and glyph)
+	if iconName then
+		-- The icon follows the button's size (18 in the design's 36 px button).
+		local icon = Style.LineIcon(b, iconName, 18)
+		if icon then
+			icon.size = 18
+			b.icon, b.iconOnly = icon, true
+			b.label:Hide()
+			local function fit(self, w)
+				w = w or self:GetWidth()
+				if type(w) == "number" and w > 0 and self.icon and self.icon.SetScale then
+					self.icon:SetScale(math.max(0.5, w / Style.CONTROL.icon))
+				end
+			end
+			hook(b, "OnSizeChanged", fit)
+			local setSize = b.SetSize
+			function b.SetSize(self, w, h)
+				setSize(self, w, h)
+				fit(self, w)
+			end
+			fit(b)
+			placeLabel(b, false)
+			Style.Repaint(b)
+		end
+	end
+	if not b.icon and shown and Style.UsesBundledFont("glyph") then
 		b.label:SetFontObject(Style.fontObjects[Style.FontFor("glyph")])
 	end
 	if title then
@@ -245,22 +435,61 @@ end
 
 --- Segmented control: joined buttons, one selected. items = { { id, label } }.
 -- Returns { buttons, selected, Select(id) }; onSelect(id) on click.
-function Widgets.Segmented(parent, items, width, height, onSelect)
-	local seg = { buttons = {} }
-	local each = math.floor(width / #items)
+-- opts (all optional, v0.10):
+--   fit     size each item to its label (the design's .btn.sm: 12 px padding)
+--           instead of equal widths
+--   framed  draw the design's track: a panel-coloured frame with a 1 px edge
+--           and SEGMENT.pad inside; seg.frame is that frame (anchor it), and
+--           seg.width / seg.height its size
+Widgets.SEGMENT = { pad = 3, gap = 2, itemPad = 12 }
+
+--- Item widths for labels at height (fit: each to its label). Pure.
+function Widgets.SegmentWidths(items, height, fit, each)
+	local out = {}
 	for i, item in ipairs(items) do
-		local b = Widgets.Button(parent, item.label, each - 2, height or Style.SIZE.segment, "segment")
+		out[i] = fit and math.ceil(Style.TextWidth(item.label, Widgets.ButtonFontStyle(height, "segment"))
+			+ 2 * Widgets.SEGMENT.itemPad) or each
+	end
+	return out
+end
+
+function Widgets.Segmented(parent, items, width, height, onSelect, opts)
+	local seg = { buttons = {} }
+	opts = opts or {}
+	height = height or Style.SIZE.segment
+	local G = Widgets.SEGMENT
+	local widths = Widgets.SegmentWidths(items, height, opts.fit, math.floor(width / #items) - 2)
+	local holder = parent
+	if opts.framed then
+		local inner = 0
+		for i, w in ipairs(widths) do inner = inner + w + (i > 1 and G.gap or 0) end
+		seg.width, seg.height = inner + 2 * (G.pad + 1), height + 2 * (G.pad + 1)
+		seg.frame = CreateFrame("Frame", nil, parent)
+		seg.frame:SetSize(seg.width, seg.height)
+		seg.frame.bg = Style.Solid(seg.frame, "BACKGROUND", -2)
+		seg.frame.bg:SetAllPoints(seg.frame)
+		seg.frame.edges = Style.Edge(seg.frame, "BORDER")
+		Style.Register(seg.frame, function(f, theme)
+			Style.Color(f.bg, theme.panel)
+			f.edges:Paint(theme.edge, 1)
+		end)
+		holder = seg.frame
+	end
+	for i, item in ipairs(items) do
+		local b = Widgets.Button(holder, item.label, widths[i], height, "segment")
 		b.segmentId = item.id
 		b:SetScript("OnClick", function() onSelect(item.id) end)
 		seg.buttons[i] = b
 		if i > 1 then
-			b:SetPoint("LEFT", seg.buttons[i - 1], "RIGHT", 2, 0)
+			b:SetPoint("LEFT", seg.buttons[i - 1], "RIGHT", opts.framed and G.gap or 2, 0)
+		elseif opts.framed then
+			b:SetPoint("TOPLEFT", seg.frame, "TOPLEFT", G.pad + 1, -(G.pad + 1))
 		end
 	end
 	-- The design's segmented control sits in a panel-coloured track; it spans
 	-- the buttons exactly, so it never needs more room than the caller gave.
 	local first, last = seg.buttons[1], seg.buttons[#seg.buttons]
-	if first then
+	if first and not opts.framed then
 		seg.track = Style.Solid(parent, "BACKGROUND", -1)
 		seg.track:SetPoint("TOPLEFT", first, "TOPLEFT", 0, 0)
 		seg.track:SetPoint("BOTTOMRIGHT", last, "BOTTOMRIGHT", 0, 0)
@@ -412,14 +641,22 @@ function Widgets.Card(parent)
 		self.plain = on and true or nil
 		Style.Repaint(self)
 	end
+	-- The design's featured card (Main.dc.html: #1A2230 fill, #4A5A78 edge),
+	-- for the entry that matters most; hovered, its edge turns gold.
+	function card.SetFeatured(self, on)
+		self.featured = on and true or nil
+		Style.Repaint(self)
+	end
 	if card.EnableMouse then card:EnableMouse(true) end
 	hook(card, "OnEnter", function(self) self:SetRowHover(true) end)
 	hook(card, "OnLeave", function(self) self:SetRowHover(false) end)
 	Style.Register(card, function(c, theme)
 		local boxed = not c.plain
 		local tones = Style.Tones(theme)
-		Style.Color(c.bg, c.hover and tones.cardHover or theme.surface, boxed and 1 or 0)
-		local edge = c.highlight and theme.accent or (c.hover and tones.selectedEdge or theme.edge)
+		local lifted = c.hover or c.featured
+		Style.Color(c.bg, lifted and tones.cardHover or theme.surface, boxed and 1 or 0)
+		local edge = c.highlight and theme.accent or ((c.hover and c.featured) and theme.border)
+			or (lifted and tones.selectedEdge or theme.edge)
 		c.edges:Paint(edge, boxed and 1 or 0)
 		c.bar:SetShown(boxed and c.highlight and true or false)
 		Style.Color(c.bar, theme.accent)
@@ -805,6 +1042,8 @@ end
 --             visibility palette; "public" is the Total RP 3 page's green)
 Widgets.CHIP_HEIGHT = 24
 Widgets.CHIP_PAD = 10
+Widgets.CHIP_ICON = 13      -- .chip svg 13, gap 6
+Widgets.CHIP_ICON_GAP = 6
 
 --- Text, fill and edge colours of a chip tone on base (a colour). Pure.
 function Widgets.ChipTone(tone, theme, base)
@@ -816,9 +1055,10 @@ function Widgets.ChipTone(tone, theme, base)
 		return color, fill, edge
 	end
 	if tone == "waiting" then
+		-- The design's amber: the colour darkened for the fill and the edge
+		-- (Main.dc.html .amber: #2E2410 fill, #6A5122 edge).
 		local color = Themes.STATUS_COLORS.waiting
-		local fill, edge = Widgets.ChipColors(color, theme, base)
-		return color, fill, edge
+		return color, Style.Scale(color, 0.19), Style.Scale(color, 0.44)
 	end
 	if tone == "danger" then
 		local fill, edge = Widgets.ChipColors(theme.danger, theme, base)
@@ -827,7 +1067,8 @@ function Widgets.ChipTone(tone, theme, base)
 	if tone == "muted" then
 		return Style.Mix(theme.muted, theme.text, 0.3), Style.Mix(base, theme.edge, 0.3), theme.edge
 	end
-	return tones.accentBright, Style.Mix(base, theme.accent, 0.1), theme.border
+	-- Gold (.goldtag): the accent darkened (#2A2213), the ornament line edge.
+	return tones.accentBright, tones.accentWell, theme.border
 end
 
 --- A small status pill ("Defining", "Homeland", "Waiting for your approval").
@@ -849,10 +1090,22 @@ function Widgets.Chip(parent, text, tone, height)
 		chip.edges:SetShown(false)
 		followHeight(chip, chip.pill)
 	end
-	chip.label = chip:CreateFontString(nil, "OVERLAY", Style.FontFor("small"))
+	chip.label = chip:CreateFontString(nil, "OVERLAY", Style.FontFor("chip"))
 	chip.label:SetPoint("CENTER", 0, 0)
 	chip.label:SetWordWrap(false)
 	chip.base = "surface"
+	-- A 13 px line icon before the text (the design's house, star, ...).
+	function chip.SetIcon(self, name)
+		if self.icon and self.icon.name ~= name then
+			self.icon:Hide()
+			self.icon = nil
+		end
+		if name and not self.icon then
+			self.icon = Style.LineIcon(self, name, Widgets.CHIP_ICON, nil, "OVERLAY")
+		end
+		self:SetChip(self.text, self.tone)
+		return self.icon ~= nil
+	end
 	function chip.SetChip(self, t, newTone)
 		self.tone = newTone or self.tone or "accent"
 		self.text = t or ""
@@ -865,16 +1118,23 @@ function Widgets.Chip(parent, text, tone, height)
 		local fs = self.label
 		local w = (fs.GetUnboundedStringWidth and fs:GetUnboundedStringWidth())
 			or (fs.GetStringWidth and fs:GetStringWidth()) or 0
-		if type(w) ~= "number" or w <= 0 then w = Style.TextWidth(self.text, "small") end
+		if type(w) ~= "number" or w <= 0 then w = Style.TextWidth(self.text, "chip") end
 		w = math.ceil(w)
-		local full = w + 2 * Widgets.CHIP_PAD
+		local iconW = self.icon and (Widgets.CHIP_ICON + Widgets.CHIP_ICON_GAP) or 0
+		local full = w + iconW + 2 * Widgets.CHIP_PAD
 		if self.maxWidth and full > self.maxWidth then
 			full = self.maxWidth
-			self.label:SetWidth(full - 2 * Widgets.CHIP_PAD)
+			self.label:SetWidth(full - iconW - 2 * Widgets.CHIP_PAD)
 			self.truncated = true
 		else
 			if self.maxWidth then self.label:SetWidth(w + 1) end
 			self.truncated = nil
+		end
+		self.label:ClearAllPoints()
+		self.label:SetPoint("CENTER", iconW / 2, 0)
+		if self.icon then
+			self.icon:ClearAllPoints()
+			self.icon:SetPoint("RIGHT", self.label, "LEFT", -Widgets.CHIP_ICON_GAP, 0)
 		end
 		self:SetWidth(math.max(full, self:GetHeight()))
 		if self.truncated then
@@ -916,6 +1176,7 @@ function Widgets.Chip(parent, text, tone, height)
 			c.edges:Paint(edge, 1)
 		end
 		Style.TextColor(c.label, color)
+		if c.icon then c.icon:SetColor(color) end
 	end)
 	chip:SetChip(text, tone)
 	return chip
@@ -924,22 +1185,26 @@ end
 --- A panel (the design's card): a surface with a 1 px edge, an optional
 -- eyebrow title (Cinzel, ornament colour) and an inner content area at
 -- panel.inner (pad 14). Used for the right-hand columns and grouped sections.
+-- The title is a tracked eyebrow (Widgets.TrackedLabel). opts.padX sets the
+-- side padding (the design's side panels use 16; default PANEL_PAD).
 Widgets.PANEL_PAD = 14
-function Widgets.Panel(parent, title)
+function Widgets.Panel(parent, title, opts)
 	local panel = CreateFrame("Frame", nil, parent)
 	panel.bg = Style.Solid(panel, "BACKGROUND", -3)
 	panel.bg:SetAllPoints(panel)
 	panel.edges = Style.Edge(panel, "BORDER")
+	local padX = opts and opts.padX or Widgets.PANEL_PAD
+	panel.padX = padX
 	local top = Widgets.PANEL_PAD
 	if title then
-		panel.title = Widgets.Label(panel, "GameFontNormalSmall", false, "eyebrow")
-		panel.title:SetPoint("TOPLEFT", Widgets.PANEL_PAD, -Widgets.PANEL_PAD)
+		panel.title = Widgets.TrackedLabel(panel, "eyebrow", "eyebrow")
+		panel.title:SetPoint("TOPLEFT", padX, -Widgets.PANEL_PAD)
 		panel.title:SetText(title:upper())
 		top = top + 22
 	end
 	panel.inner = CreateFrame("Frame", nil, panel)
-	panel.inner:SetPoint("TOPLEFT", Widgets.PANEL_PAD, -top)
-	panel.inner:SetPoint("BOTTOMRIGHT", -Widgets.PANEL_PAD, Widgets.PANEL_PAD)
+	panel.inner:SetPoint("TOPLEFT", padX, -top)
+	panel.inner:SetPoint("BOTTOMRIGHT", -padX, Widgets.PANEL_PAD)
 	function panel.SetTitle(self, t)
 		if self.title then self.title:SetText((t or ""):upper()) end
 	end
@@ -952,8 +1217,8 @@ end
 
 --- A callout: a panel with a gold edge and a warm dark fill, for the one
 -- thing waiting on the player ("A moment awaits", "Needs your approval").
-function Widgets.Callout(parent, title)
-	local panel = Widgets.Panel(parent, title)
+function Widgets.Callout(parent, title, opts)
+	local panel = Widgets.Panel(parent, title, opts)
 	panel.callout = true
 	panel.glow = Style.Solid(panel, "BACKGROUND", -2)
 	panel.glow:SetAllPoints(panel)
@@ -972,9 +1237,16 @@ function Widgets.DateBlock(parent)
 	Widgets.SetTextRole(block.day, "accentBright")
 	block.day:SetPoint("TOP", 0, 0)
 	block.day:SetJustifyH("CENTER")
-	block.month = Widgets.Label(block, "GameFontNormalSmall", false, "muted")
-	block.month:SetPoint("TOP", block.day, "BOTTOM", 0, -2)
+	-- The month in tracked capitals (Main.dc.html: Cinzel 12, 0.14 em), centred.
+	block.month = Widgets.TrackedLabel(block, "eyebrow", "muted", 0.14)
+	block.month:SetPoint("TOPLEFT", block, "TOPLEFT", 0, -28)
 	block.month:SetJustifyH("CENTER")
+	block.month:SetWidth(56)
+	local setWidth = block.SetWidth
+	function block.SetWidth(self, w)
+		setWidth(self, w)
+		self.month:SetWidth(w)
+	end
 	function block.SetDate(self, timestamp)
 		if type(timestamp) == "number" and timestamp > 0 then
 			self.day:SetText(tostring(tonumber(date("%d", timestamp))))
@@ -997,16 +1269,36 @@ function Widgets.ProgressBar(parent, width, height)
 	bar.fill = Style.Solid(bar, "ARTWORK")
 	bar.fill:SetPoint("TOPLEFT")
 	bar.fill:SetPoint("BOTTOMLEFT")
+	-- Round ends (the design's radius 3) where the client can draw them: the
+	-- track and the fill are pills; the fill is never narrower than its ends.
+	local h = height or 4
+	bar.trackPill = Style.Pill(bar, h)
+	if bar.trackPill then
+		bar.track:Hide()
+		bar.fillFrame = CreateFrame("Frame", nil, bar)
+		bar.fillFrame:SetPoint("TOPLEFT")
+		bar.fillFrame:SetPoint("BOTTOMLEFT")
+		bar.fillFrame:SetWidth(h)
+		bar.fillPill = Style.Pill(bar.fillFrame, h)
+		if not bar.fillPill then bar.fillFrame:Hide() end
+	end
 	function bar.SetValue(self, fraction)
 		fraction = type(fraction) == "number" and math.max(0, math.min(1, fraction)) or 0
 		self.value = fraction
 		local w = self:GetWidth() or 0
 		self.fill:SetWidth(math.max(1, w * fraction))
-		self.fill:SetShown(fraction > 0)
+		self.fill:SetShown(fraction > 0 and not self.fillPill)
+		if self.fillPill then
+			self.fillFrame:SetWidth(math.max(self:GetHeight(), w * fraction))
+			self.fillFrame:SetShown(fraction > 0)
+		end
 	end
 	Style.Register(bar, function(b, theme)
-		Style.Color(b.track, Style.Tones(theme).track)
+		local track = Style.Tones(theme).track
+		Style.Color(b.track, track)
 		Style.Color(b.fill, theme.accent)
+		if b.trackPill then b.trackPill:Paint(track, track) end
+		if b.fillPill then b.fillPill:Paint(theme.accent, theme.accent) end
 	end)
 	bar:SetValue(0)
 	return bar
@@ -1015,11 +1307,24 @@ end
 --- A search box: a one-line input with a placeholder. onChange(text) runs
 -- as the player types (text trimmed; "" when cleared). height defaults to
 -- the v0.6 size; Style.CONTROL.input (36) is the design system's.
+Widgets.SEARCH = { icon = 16, iconLeft = 12, textLeft = 36 }
 function Widgets.SearchBox(parent, width, placeholder, onChange, height)
 	local box = Widgets.EditLine(parent, 60, height)
 	box:SetWidth(width or 200)
-	box.placeholder = Widgets.Label(box, "GameFontHighlightSmall", false, "muted")
-	box.placeholder:SetPoint("LEFT", Widgets.FIELD.textInset, 0)
+	-- The design's magnifier (16 px, 12 from the left; text starts at 36).
+	-- Without line regions the text keeps the plain inset.
+	local inset = Widgets.FIELD.textInset
+	box.icon = Style.LineIcon(box, "search", Widgets.SEARCH.icon, nil, "OVERLAY")
+	if box.icon then
+		box.icon:SetPoint("LEFT", Widgets.SEARCH.iconLeft, 0)
+		inset = Widgets.SEARCH.textLeft
+		box:SetTextInsets(inset, Widgets.FIELD.textInset, 0, 0)
+		Style.Register(box.icon, function(i, theme)
+			i:SetColor(Style.Mix(theme.muted, Style.Tones(theme).selectedEdge, 0.35))
+		end)
+	end
+	box.placeholder = Widgets.Label(box, "placeholder", false, "muted")
+	box.placeholder:SetPoint("LEFT", inset, 0)
 	box.placeholder:SetText(placeholder or "Search")
 	local function update(self)
 		local text = (self:GetText() or ""):match("^%s*(.-)%s*$")
