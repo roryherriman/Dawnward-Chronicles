@@ -587,7 +587,26 @@ Style.ICONS = {
 	home = { stroke = 2, { 3, 11, 12, 4, 21, 11, 21, 20, 20, 21, 15, 21, 15, 15, 9, 15, 9, 21, 4, 21, 3, 20, 3, 11 } },
 	star = { stroke = 2, { 12, 3, 14.7, 8.6, 20.8, 9.5, 16.4, 13.8, 17.4, 19.9, 12, 17, 6.6, 19.9, 7.6, 13.8, 3.2, 9.5,
 		9.3, 8.6, 12, 3 } },
+	-- v0.10.1: the Showcase's turn buttons (the mockup's rotate icons: an
+	-- open circle from the left, round the bottom to the top, back towards
+	-- the arrow head at the upper left). rotateRight is its mirror image.
+	rotateLeft = { stroke = 2, path(arc(12, 12, 9, 180, -90, 18), 5.3, 5.7, 3, 8), { 3, 3, 3, 8, 8, 8 } },
 }
+-- The mirror image of an icon (x -> 24 - x).
+local function mirror(spec)
+	local out = { stroke = spec.stroke }
+	for i, line in ipairs(spec) do
+		local m = {}
+		for j = 1, #line, 2 do m[j], m[j + 1] = 24 - line[j], line[j + 1] end
+		out[i] = m
+	end
+	if spec.circles then
+		out.circles = {}
+		for i, c in ipairs(spec.circles) do out.circles[i] = { 24 - c[1], c[2], c[3] } end
+	end
+	return out
+end
+Style.ICONS.rotateRight = mirror(Style.ICONS.rotateLeft)
 
 --- The polylines of icon name with its circles expanded (24 px box). Pure.
 function Style.IconPaths(name)

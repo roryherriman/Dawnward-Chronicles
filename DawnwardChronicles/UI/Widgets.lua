@@ -259,6 +259,9 @@ local function paintButton(b, theme)
 		text = theme.muted
 		fillAlpha, edgeAlpha = fillAlpha * Widgets.BUTTON.disabledAlpha, edgeAlpha * Widgets.BUTTON.disabledAlpha
 	end
+	-- An edgeless button (v0.10.1: one whose icon art brings its own frame)
+	-- keeps its fills and states but draws no 1 px edge.
+	if b.edgeless then edgeAlpha = 0 end
 	Style.Color(b.bg, fill, fillAlpha)
 	b.edges:Paint(edge, edgeAlpha)
 	if b.textColor then text = b.textColor end
