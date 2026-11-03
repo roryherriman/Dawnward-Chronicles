@@ -79,6 +79,9 @@ PS.AXIS_STEPS = 3
 PS.AXIS_STRONG = 6
 -- Seconds between two Currently suggestions, and how long "Later" waits.
 PS.CURRENTLY_COOLDOWN = 30 * 60
+-- The Automatic mode applies only a fresh suggestion; an older one (held
+-- back for a while) waits for the player instead.
+PS.AUTO_FRESH = 60 * 60
 PS.POSTPONE = 24 * 3600
 -- The major moments a Currently text may mention (verified facts only).
 PS.MOMENT_CATEGORIES = { quest = true, instance = true, reputation = true }
@@ -408,10 +411,8 @@ local function axisCandidates(char)
 				.. "answers.", #steps, label, axisName(axis.id)) }
 			local latest = steps[#steps].reason
 			if latest then why[#why + 1] = "Latest: " .. latest .. "." end
-			if not axisPublic(char, axis.id) then
-				why[#why + 1] = "Your " .. axisName(axis.id) .. " value stays private; accepting shares only this wording."
-			end
 			out[#out + 1] = { key = "glance:axis:" .. axis.id .. ":" .. way, theme = "glance:axis:" .. axis.id,
+				axis = axis.id,
 				tier = tier, title = words[1], template = words[2], why = why, sources = sources,
 				icon = "spell_arcane_mindmastery" }
 		end
@@ -522,6 +523,11 @@ function PS.GenerateGlance(char, now, opts)
 			if offerable(store, cand) then
 				local target = glanceTarget(char, cand, opts)
 				if target then
+					-- Checked only for the one offered (it copies the profile).
+					if cand.axis and not axisPublic(char, cand.axis) then
+						cand.why[#cand.why + 1] = "Your " .. axisName(cand.axis) .. " value stays private; accepting "
+							.. "shares only this wording."
+					end
 					return add(PS.Store(char), { kind = "glance", key = cand.key, theme = cand.theme, tier = cand.tier,
 						title = cand.title, text = PS.Render(cand.template, voice), icon = cand.icon, target = target,
 						why = cand.why, sources = cand.sources }, now)
@@ -775,12 +781,15 @@ end
 
 --- Why the Automatic mode may not replace Dawnward's Currently text now
 -- (from Dawnward's own data), or nil when it may. Pure.
-function PS.AutoBlocked(char, s)
+function PS.AutoBlocked(char, s, now)
 	if ns.RPStatus.CurrentlyMode(char) ~= "automatic" then
 		return "Automatic updates are off"
 	end
 	if s and s.private then
 		return "it names a private goal, so it waits for your approval"
+	end
+	if s and now and now - (s.createdAt or 0) > PS.AUTO_FRESH then
+		return "it is more than an hour old, so it waits for your approval"
 	end
 	local store = char.profileSuggestions or {}
 	local current = char.trp3status and char.trp3status.currently
@@ -797,7 +806,7 @@ end
 function PS.ApplyAutomatic(char, id, now)
 	local s, err = open(char, id)
 	if not s or s.kind ~= "currently" then return nil, err or "not a Currently suggestion" end
-	local blocked = PS.AutoBlocked(char, s)
+	local blocked = PS.AutoBlocked(char, s, now)
 	if blocked then return nil, blocked end
 	local previous = char.trp3status and char.trp3status.currently
 	local clean = ns.RPStatus.Set(char, "currently", s.text, now)
@@ -849,9 +858,9 @@ function PS.Effect(char, s)
 	if s.kind == "currently" then
 		return "Replaces your Currently text. Total RP 3 shows it while Currently is kept in sync."
 	end
-	if s.target.revises then
-		local n = PS.ManagedSlot(char, s.theme) or s.target.n
-		return "Replaces Dawnward's At First Glance entry " .. tostring(n) .. ", which you accepted earlier."
+	local managed = s.target.revises and PS.ManagedSlot(char, s.theme)
+	if managed then
+		return "Replaces Dawnward's At First Glance entry " .. managed .. ", which you accepted earlier."
 	end
 	return "Adds At First Glance entry " .. tostring(freeSlot(char, s.target.n) or s.target.n)
 		.. ". Total RP 3 shows it while At First Glance sync is on."

@@ -12,7 +12,8 @@
 -- The Automatic Currently mode (AfterChange) replaces Dawnward's Currently
 -- text by itself only when all of these hold:
 --   * the player confirmed Automatic for this character
---   * the suggestion was made in that mode, and names no private goal
+--   * the suggestion was made in that mode within the last hour, and names
+--     no private goal
 --   * Dawnward's own Currently is empty, still the text it held when
 --     Automatic was turned on, or Automatic's own last text (never a text
 --     the player wrote since)
@@ -83,7 +84,7 @@ function ProfileActions.AfterChange(ctx, char)
 	if not s or not s.automatic then
 		return nil
 	end
-	local reason = PS.AutoBlocked(char, s) or ProfileActions.CurrentlyGate(ctx)
+	local reason = PS.AutoBlocked(char, s, now) or ProfileActions.CurrentlyGate(ctx)
 	if reason then
 		s.held = reason
 		return nil

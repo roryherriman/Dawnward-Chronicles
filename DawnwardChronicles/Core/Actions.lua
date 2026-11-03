@@ -363,6 +363,9 @@ function Actions.Decide(ctx, reactionId, choice)
 		elseif result.draftError then
 			parts[#parts + 1] = "No journal draft: " .. result.draftError
 		end
+		if result.profile and #result.profile > 0 then
+			parts[#parts + 1] = "Your profile could show something new: it waits for your approval in the Story section."
+		end
 		return result, table.concat(parts, " ")
 	end)
 end

@@ -67,6 +67,13 @@ return function(t, expect)
 			expect.equal(#s.sources.decisions, 3)
 			expect.truthy(s.why[1]:find("3 approved personality changes toward Bold", 1, true), s.why[1])
 			expect.truthy(s.why[2]:find("Testchar stood firm", 1, true))
+			expect.equal(s.why[3], nil, "the whole profile publishes: nothing private to mention")
+			-- A character on the original model, its axis private: the reason says so.
+			local old = world()
+			old.char().publication = {}
+			old.approve("courage", 1, 3)
+			local o = old.waiting("glance")[1]
+			expect.truthy(o.why[3]:find("Your Courage value stays private", 1, true), "said when the value is private")
 			expect.deepEqual(s.target, { n = 1 })
 			expect.deepEqual(char.glance, {}, "a suggestion changes nothing")
 		end)
@@ -513,7 +520,9 @@ return function(t, expect)
 			local g = assert(w.ns.Goals.Add(char, { title = "Secret vow" }, w.now()))
 			local gs = w.waiting("currently")[1]
 			expect.deepEqual(gs.sources.goals, { g.id })
-			expect.truthy(w.PS.AutoBlocked(char, gs):find("private goal", 1, true))
+			expect.truthy(w.PS.AutoBlocked(char, gs, w.now()):find("private goal", 1, true))
+			expect.truthy(w.PS.AutoBlocked(char, s, w.now() + w.PS.AUTO_FRESH + 1):find("more than an hour old", 1, true),
+				"a suggestion held back for long waits for the player")
 			w.deps.store:SetSimulation(true)
 			expect.equal(w.PA.CurrentlyGate(w.ctx), "simulation mode is on")
 			w.deps.store:SetSimulation(false)
