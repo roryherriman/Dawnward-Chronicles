@@ -12,6 +12,27 @@ Every release entry has a **Verified** line naming the highest test level reache
 
 A feature is never called "tested" or "compatible" in this file unless it reached L3 or L4.
 
+## [Unreleased]: 0.10.3-dev (automatic memories, narrative approval, pronouns)
+
+**Verified: L2** (mocked). Prompted by the owner's level 1-6 playthrough. Dawnward remembers what happened; the player decides what it meant.
+
+### Fixed: your own answers waited for approval as "suggested memories"
+- **Cause:** every Story Director answer of some significance became a *suggested* memory (`Decisions.Decide` → `Memories.SuggestFromDecision`), so the player approved their own chosen answer a second time; that is where the backlog came from.
+- **Now:** an answer you give is recorded at once as an **established** memory, in the same words as its journal draft and linked to the decision. Only a defining answer (the most significant moments) also offers a **suggested reflection**, which shows the answer it rests on and waits for you (Accept, Edit, Later, Dismiss). "Nothing worth remembering" creates no memory. Journal drafts and personality changes still wait for your approval as before.
+
+### Fixed: wrong pronouns in generated text
+- **Cause:** Story Director answer phrases contained a literal "their", and several places joined them to the name without substitution ("Kyssarra Dawnward relished the freedom their strength brings.").
+- **Now:** one shared formatter renders every generated sentence (questions, answers, memories, drafts, reasons, recalls, arcs, continuity, profile suggestions) with the Pronouns field: she/her, he/him, they/them, it, mixed sets (the first is used) and complete custom sets; possessive, reflexive and verb agreement included. Without a usable field, the character's name stands in; nothing is guessed. Your own writing and texts already stored are never rewritten.
+
+### Memories: Recorded, Suggested, Established
+- **Recorded:** notable events the game reported (every fifth level, a first death, notable reputation, first visit to a zone or capital, your starting place, instances, guild, the most significant quests) appear in Chronicle > Memories with neutral wording, for example "Kyssarra Dawnward reached level 5 in Elwynn Forest." (the place only when it was recorded). No approval needed, never an emotion, never duplicated after a reload. Routine events stay in the history.
+- **Filters:** All, Established, Suggestions. Recorded cards carry "Verified by the game" and no buttons; every card says what it rests on.
+- **Later** and **Dismiss** for suggestions (`/dawnward memory later|dismiss`).
+- **Profile suggestions** (0.10.2) never treat recorded events or your answer records as development; only approved changes, established memories you accepted and achieved goals count.
+
+### Your existing data
+Additive only (two optional memory fields). Existing suggested memories stay pending, word for word; nothing is approved, reclassified or rewritten; events, decisions, drafts, personality, goals, arcs, people, Total RP 3 settings and the sync ledger are unchanged; no verified records are created twice.
+
 ## [Unreleased]: 0.10.2-dev (dynamic RP profile, playthrough fixes)
 
 **Verified: L2** (mocked). Prompted by the owner's first real playthrough (a Human Paladin, levels 1 to 6, on 0.10.1). Nothing below has been tested in game yet.
