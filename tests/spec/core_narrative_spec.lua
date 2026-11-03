@@ -66,17 +66,22 @@ return function(t, expect)
 	end)
 
 	t:describe("memories and arcs (#12, #19)", function()
-		t:it("a notable answer is suggested as a memory; a routine one is not", function()
+		t:it("a notable answer is kept as an established memory in its own words; a routine one is not", function()
 			local ns, char, fx = setup()
 			local first = answer(ns, char, fx, 1, { optionId = "resolve" })      -- first quest in a zone: notable
 			expect.truthy(first.memory)
-			expect.equal(first.memory.status, "proposed")
+			-- v0.10.3: the player chose this answer, so its faithful record needs no second approval.
+			expect.equal(first.memory.status, "established")
+			expect.equal(first.memory.kind, "answer")
+			expect.equal(first.memory.visibility, "private", "an answer stays private")
+			expect.equal(first.reflection, nil, "a notable (not defining) moment suggests no interpretation")
 			expect.deepEqual(first.memory.tags, { "protecting others" })
 			expect.equal(first.memory.links.decisions[1], first.decision.id)
 			local routine = answer(ns, char, fx, 2, { optionId = "resolve" })    -- same zone: routine
 			expect.equal(routine.memory, nil)
 			local custom = answer(ns, char, fx, 3, { custom = "They lied to the guard." })
-			expect.truthy(custom.memory, "the player's own words are always worth suggesting")
+			expect.truthy(custom.memory, "the player's own words are always worth keeping")
+			expect.equal(custom.memory.text, "They lied to the guard.", "kept exactly as written")
 		end)
 
 		t:it("the same quests with different answers give different arcs", function()

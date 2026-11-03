@@ -194,9 +194,11 @@ end
 function Director.Context(char, record, template)
 	local story = char.story
 	local themes = Director.TemplateThemes(template)
+	-- (v0.10.3) The automatic record of an answer is not recalled as a
+	-- memory: the answer itself is (Director.Echo).
 	local memories = {}
 	for _, m in ipairs(story.memories) do
-		if m.status == "established" then memories[#memories + 1] = m end
+		if m.status == "established" and m.kind ~= "answer" then memories[#memories + 1] = m end
 	end
 	local arcs, goals = {}, {}
 	for _, a in ipairs(story.arcs) do
@@ -497,14 +499,14 @@ function Director.Options(context)
 	if goal then
 		local title = plain(goal.item.title)
 		candidates[#candidates + 1] = { score = goal.score, order = 1, option = { id = "goal:" .. goal.item.id,
-			text = "It mattered to their goal: " .. title .. ".", phrase = "thought of their goal: " .. title,
+			text = "It mattered to {their} goal: " .. title .. ".", phrase = "thought of {their} goal: " .. title,
 			effects = {}, goalId = goal.item.id, contextual = true } }
 	end
 	local arc = context.arcs[1]
 	if arc then
 		local title = plain(arc.item.title)
 		candidates[#candidates + 1] = { score = arc.score, order = 2, option = { id = "arc:" .. arc.item.id,
-			text = "It is part of their story: " .. title .. ".", phrase = "saw it as part of their story: " .. title,
+			text = "It is part of {their} story: " .. title .. ".", phrase = "saw it as part of {their} story: " .. title,
 			effects = {}, arcId = arc.item.id, contextual = true } }
 	end
 	local stance = context.stances and context.stances[1]
@@ -512,11 +514,12 @@ function Director.Options(context)
 		local subject = plain(stance.subject)
 		local option
 		if ns.Identity.Contradicts(stance) then
-			option = { text = "It tested the gap between what they say about " .. subject .. " and what they believe.",
-				phrase = "felt the gap between what they say about " .. subject .. " and what they believe" }
+			option = { text = "It tested the gap between what {they} say{s} about " .. subject .. " and what {they} "
+				.. "believe{s}.", phrase = "felt the gap between what {they} say{s} about " .. subject .. " and what {they} "
+				.. "believe{s}" }
 		else
-			option = { text = "It touched on where they stand on " .. subject .. ".",
-				phrase = "thought about where they stand on " .. subject }
+			option = { text = "It touched on where {they} stand{s} on " .. subject .. ".",
+				phrase = "thought about where {they} stand{s} on " .. subject }
 		end
 		option.id, option.effects, option.stanceId, option.contextual = "stance:" .. stance.id, {}, stance.id, true
 		candidates[#candidates + 1] = { score = 1 + Director.STANCE_BONUS, order = 3, option = option }
@@ -626,8 +629,33 @@ function Director.Echo(char, record, template)
 		end
 	end
 	if not best then return nil end
-	local name = char.fields and char.fields.name and char.fields.name.value or "They"
-	return plain(name .. " " .. best.phrase), sameTemplate == true
+	return plain(Director.AnswerSentence(char, best, true)), sameTemplate == true
+end
+
+--- "<name> <the phrase of the answer>", without the final full stop, for a
+-- decision, with the character's pronouns (Core/Pronouns.lua). A decision
+-- stored before v0.10.3 kept its phrase with a literal "their"; when its
+-- answer is still in the library, that answer's current wording is used
+-- instead (display only: the stored decision is never rewritten).
+-- noName: "They" when the character has no name (the echo's old wording).
+function Director.AnswerSentence(char, decision, noName)
+	local forms = ns.Pronouns.For(char)
+	local phrase = decision.phrase
+	local template = decision.templateId and ns.ReactionLibrary.BY_ID[decision.templateId]
+	if template and decision.optionId then
+		local candidates = { ns.ReactionLibrary.NEUTRAL }
+		for _, option in ipairs(template.options) do candidates[#candidates + 1] = option end
+		for _, option in pairs(ns.ReactionLibrary.FLAVOR[template.category] or {}) do
+			candidates[#candidates + 1] = option
+		end
+		for _, option in ipairs(candidates) do
+			if option.id == decision.optionId and option.phrase then
+				phrase = ns.Pronouns.Render(option.phrase, forms)
+			end
+		end
+	end
+	local name = forms.name or (noName and ns.Pronouns.Render("{They}", forms)) or "Your character"
+	return name .. " " .. (phrase or "answered")
 end
 
 --- How well a template's answers fit this character's established story,
@@ -646,7 +674,7 @@ function Director.Affinity(char, template)
 	local story = char.story
 	local known = {}
 	for _, m in ipairs(story.memories) do
-		if m.status == "established" then
+		if m.status == "established" and m.kind ~= "answer" then
 			for _, tag in ipairs(m.tags or {}) do known[tag] = true end
 		end
 	end

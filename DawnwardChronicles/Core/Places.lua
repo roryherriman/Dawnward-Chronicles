@@ -292,11 +292,13 @@ function Places.IsFirstLocation(story)
 end
 
 --- Whether an established memory is tied to this place: it was suggested
--- from an event there, or (for a whole zone) it names the zone.
+-- from an event there, or (for a whole zone) it names the zone. (v0.10.3)
+-- The automatic record of an answer (kind "answer") does not tie a place:
+-- only a memory the player wrote or accepted does, as before.
 function Places.Linked(story, entry)
 	local placeKey = "place:" .. Places.Key(entry.zone, entry.subzone)
 	for _, m in ipairs(story.memories or {}) do
-		if m.status == "established" then
+		if m.status == "established" and m.kind ~= "answer" then
 			for _, k in ipairs(m.links and m.links.events or {}) do
 				if k == placeKey or (not entry.subzone and k == "zone:" .. entry.zone) then
 					return true

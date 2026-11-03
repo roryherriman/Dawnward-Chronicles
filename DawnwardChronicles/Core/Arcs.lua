@@ -168,7 +168,8 @@ function Arcs.SuggestFromPattern(char, now)
 	local ids = decisionsByTheme[theme]
 	return Arcs.Add(char, {
 		title = "A thread of " .. theme,
-		summary = "Several of your answers share this theme. Is it part of who they are becoming?",
+		summary = ns.Pronouns.Text(char, "Several of your answers share this theme. Is it part of who {they} {are} "
+			.. "becoming?"),
 		kind = "growth", tags = { theme }, links = { decisions = ids },
 	}, "suggested", now)
 end

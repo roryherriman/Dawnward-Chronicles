@@ -14,6 +14,9 @@ return function(t, expect)
 		local ns = Loader.Core()
 		local char = ns.Schema.NewCharacter(1)
 		char.fields.name = { value = name or "Lirael", visibility = "public" }
+		-- v0.10.3: without pronouns the name stands in (Core/Pronouns.lua);
+		-- these stories are about a character who uses they/them.
+		char.fields.pronouns = { value = "they/them", visibility = "public" }
 		return ns, char
 	end
 
@@ -109,10 +112,11 @@ return function(t, expect)
 		for _, i in ipairs(char.story.identity) do allowed[i.subject] = true end
 		for k in pairs(extra or {}) do allowed[k] = true end
 		local forms = {}
-		for _, q in ipairs(view.template.questions) do forms[#forms + 1] = q.text end
+		local voice = ns.Pronouns.For(char)
+		for _, q in ipairs(view.template.questions) do forms[#forms + 1] = ns.Pronouns.Render(q.text, voice) end
 		expect.truthy(authored(view.question, forms, allowed), "question is authored: " .. view.question)
 		local optionTexts = {}
-		for _, o in ipairs(view.template.options) do optionTexts[o.text] = true end
+		for _, o in ipairs(view.template.options) do optionTexts[ns.Reactions.RenderOption(o, voice).text] = true end
 		optionTexts[ns.ReactionLibrary.NEUTRAL.text] = true
 		for _, o in ipairs(view.options) do
 			expect.truthy(optionTexts[o.text] or o.flavor or authored(o.text, CONTEXT_FORMS, allowed),

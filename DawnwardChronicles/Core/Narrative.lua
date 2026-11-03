@@ -111,6 +111,10 @@ local function titleFor(record)
 	return GameEvents.Label(record.category)
 end
 
+--- The title Dawnward gives an event record ("Level 5", a quest's title,
+-- "The journey begins: Northshire Valley"). Pure.
+Narrative.Title = titleFor
+
 --- Builds { title, text } for a decision.
 -- args: { name, record, extra (coalesced count), option?, custom?, changes = { change, ... }, approval }
 function Narrative.Draft(args)

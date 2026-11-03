@@ -251,11 +251,23 @@ end
 
 --- Appends with a cap: the oldest unpinned records that are not established
 -- go first; returns false if nothing may make room.
-function Records.Append(list, record, limit)
-	if #list >= limit then
+-- rules (optional, v0.10.3): { counts = fn(r) (which records the cap
+-- counts; default all), evictable = fn(r) (which may make room; default
+-- not established) }. evictable = false: nothing is ever removed.
+function Records.Append(list, record, limit, rules)
+	local counts = rules and rules.counts
+	local evictable = rules and rules.evictable
+	if evictable == nil then
+		evictable = function(r) return r.status ~= "established" end
+	end
+	local n = 0
+	for _, r in ipairs(list) do
+		if not counts or counts(r) then n = n + 1 end
+	end
+	if n >= limit then
 		local victim
 		for index, r in ipairs(list) do
-			if r.status ~= "established" then victim = index; break end
+			if evictable and (not counts or counts(r)) and evictable(r) then victim = index; break end
 		end
 		if not victim then
 			return false

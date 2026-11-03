@@ -8,8 +8,12 @@ local Util, Records = ns.Util, ns.Records
 local RecordTypes = {}
 ns.RecordTypes = RecordTypes
 
-RecordTypes.LIMITS = { memories = 300, arcs = 40, goals = 60, identity = 60, milestones = 12, turningPoints = 20,
-	reviews = 300, people = 200 }
+-- memories: the player's own memories and suggestions; answerMemories
+-- (v0.10.3): the automatic records of Story Director answers, counted on
+-- their own so they never crowd out a suggestion (Core/Memories.lua). The
+-- stored list holds up to both.
+RecordTypes.LIMITS = { memories = 300, answerMemories = 300, arcs = 40, goals = 60, identity = 60, milestones = 12,
+	turningPoints = 20, reviews = 300, people = 200 }
 
 RecordTypes.ARC_KINDS = { goal = true, conflict = true, conviction = true, growth = true, relationship = true,
 	other = true }
@@ -27,7 +31,16 @@ local function int(v, lo, hi)
 	return nil
 end
 
+-- (v0.10.3, additive) What made a memory, when Dawnward made it:
+--   answer      the faithful record of an answer the player chose in the
+--               Story Director (established: the answer was the approval)
+--   reflection  Dawnward's interpretation of a defining answer (a
+--               suggestion until the player accepts it)
+-- Absent on every memory the player wrote and on all older memories.
+RecordTypes.MEMORY_KINDS = { answer = true, reflection = true }
+
 --- A memory: something the character remembers, linked to what happened.
+-- (v0.10.3, additive) laterAt: when the player chose Later on a suggestion.
 function RecordTypes.CleanMemory(raw)
 	local m = Records.CleanCommon(raw, {})
 	if not m then return nil end
@@ -37,6 +50,10 @@ function RecordTypes.CleanMemory(raw)
 	m.tags = Records.Tags(raw.tags)
 	m.importance = int(raw.importance, 1, 3) or 1
 	m.zone = T(raw.zone, 100)
+	m.kind = RecordTypes.MEMORY_KINDS[raw.kind] and raw.kind or nil
+	-- (v0.10.3, additive) edited: the player reworded an answer's record.
+	m.edited = m.kind == "answer" and raw.edited == true or nil
+	m.laterAt = m.status == "proposed" and raw.laterAt ~= nil and Records.Timestamp(raw.laterAt) or nil
 	return m
 end
 

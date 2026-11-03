@@ -187,7 +187,8 @@ end
 
 -- Narrative record lists: name -> cleaner and limit.
 StorySchema.RECORD_LISTS = {
-	memories = { clean = RecordTypes.CleanMemory, limit = RecordTypes.LIMITS.memories },
+	memories = { clean = RecordTypes.CleanMemory,
+		limit = RecordTypes.LIMITS.memories + RecordTypes.LIMITS.answerMemories },
 	arcs = { clean = RecordTypes.CleanArc, limit = RecordTypes.LIMITS.arcs },
 	goals = { clean = RecordTypes.CleanGoal, limit = RecordTypes.LIMITS.goals },
 	identity = { clean = RecordTypes.CleanIdentity, limit = RecordTypes.LIMITS.identity },

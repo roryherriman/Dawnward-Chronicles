@@ -80,8 +80,8 @@ RULES[#RULES + 1] = function(char)
 				kind = "persona", refs = { identity = i.id },
 				sides = { { list = "identity", id = i.id, part = "persona" },
 					{ list = "identity", id = i.id, part = "conviction" } },
-				message = string.format("About %s, they say \"%s\" in public but believe \"%s\".", i.subject, i.persona,
-					i.conviction) }
+				message = string.format(ns.Pronouns.Text(char, "About %s, {they} say{s} \"%s\" in public but "
+					.. "believe{s} \"%s\"."), i.subject, i.persona, i.conviction) }
 		end
 	end
 	return out
@@ -136,8 +136,8 @@ RULES[#RULES + 1] = function(char)
 						ns.Util.Checksum(i.persona .. "|" .. fact.statement)), kind = "publicfact",
 						refs = { identity = i.id, fact = fact.id },
 						sides = { { list = "identity", id = i.id, part = "persona" }, { list = "facts", id = fact.id } },
-						message = string.format("Both in your profile: about %s, their stance says \"%s\", but a fact "
-							.. "says \"%s\".",
+						message = string.format(ns.Pronouns.Text(char, "Both in your profile: about %s, {their} stance says "
+							.. "\"%s\", but a fact says \"%s\"."),
 							i.subject, i.persona, fact.statement) }
 				end
 			end
@@ -171,7 +171,8 @@ RULES[#RULES + 1] = function(char)
 			-- Verified objective met, still active.
 			out[#out + 1] = { key = "goalmet:" .. g.id, kind = "goal", refs = { goals = g.id },
 				sides = { { list = "goals", id = g.id }, { list = "objective", id = g.id } },
-				message = string.format("Goal \"%s\": the game shows %s. Is the goal achieved for them?",
+				message = string.format(ns.Pronouns.Text(char, "Goal \"%s\": the game shows %s. Is the goal achieved "
+					.. "for {them}?"),
 					g.title, ns.Goals.ObjectiveText(p)) }
 		elseif g.state == "achieved" then
 			-- Achieved, while one of the player's own steps is still open.
@@ -198,11 +199,14 @@ RULES[#RULES + 1] = function(char)
 	return out
 end
 
--- Two established memories with the same title.
+-- Two established memories with the same title. The automatic records of
+-- answers (v0.10.3) are titled after their event, and events repeat
+-- ("Stormwind" at Honored and at Revered, "A fall in Elwynn Forest"), so
+-- they are not compared: only memories the player named.
 RULES[#RULES + 1] = function(char)
 	local out, seen = {}, {}
 	for _, m in ipairs(char.story.memories) do
-		if m.status == "established" and m.title then
+		if m.status == "established" and m.title and m.kind ~= "answer" then
 			local k = lower(m.title)
 			if seen[k] then
 				out[#out + 1] = { key = string.format("duplicate:%d:%d", seen[k], m.id), kind = "duplicate",

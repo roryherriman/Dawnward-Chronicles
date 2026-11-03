@@ -97,14 +97,15 @@ return function(t, expect)
 			expect.truthy(table.concat(view.why, "; "):find("known starting area", 1, true))
 		end)
 
-		t:it("level 1 in open country on the starting map begins at the zone, with neutral pronouns", function()
+		t:it("level 1 in open country on the starting map begins at the zone, naming her without pronouns", function()
 			local ns, char, ctx, clock = setup({ pronouns = false })
 			local made = observe(ns, ctx, clock, 100, { "Elwynn Forest", nil, 1429, nil })
 			expect.equal(#made, 1)
 			expect.equal(made[1].record.category, "zone")
 			expect.equal(made[1].record.meta.visit, "start")
 			expect.equal(present(ns, char, made[1]).question,
-				"Every story begins somewhere. As Kyssarra's journey begins in Elwynn Forest, what occupies their thoughts?")
+				"Every story begins somewhere. As Kyssarra's journey begins in Elwynn Forest, what occupies Kyssarra's "
+				.. "thoughts?", "v0.10.3: no pronouns in the profile, so the name stands in; never a guess")
 		end)
 
 		t:it("Orc, Troll, Night Elf, Tauren, Dwarf and Undead starting areas are recognised", function()
@@ -362,7 +363,7 @@ return function(t, expect)
 			expect.equal(char.story.reactions[1], reaction)
 			expect.equal(made[1].record.status, "recorded")
 			expect.equal(ns.Reactions.Present(char, reaction).question,
-				"Kyssarra has finished \"Kobold Candles\" in Elwynn Forest. How did it sit with them?")
+				"Kyssarra has finished \"Kobold Candles\" in Elwynn Forest. How did it sit with her?")
 		end)
 
 		t:it("place moments can be reduced or switched off; places are still recorded", function()
@@ -452,7 +453,7 @@ return function(t, expect)
 			local made = ns.Actions.ObserveLocation(ctx, where("Westfall", nil, 1436, nil, { level = 12 }))
 			expect.equal(made[1].record.meta.visit, "first")
 			expect.equal(ns.Reactions.Present(char, made[1].reaction).question,
-				"Kyssarra has come to Westfall. What do they make of it?")
+				"Kyssarra has come to Westfall. What does Kyssarra make of it?")
 		end)
 
 		t:it("an older v0.4 build opens schema 5 data read-only instead of dropping place events", function()
