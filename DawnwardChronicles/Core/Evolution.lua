@@ -6,9 +6,11 @@
 --   * With approval "ask" (the default) a change waits until the player
 --     approves it. With "auto" it applies at once, and is still listed so it
 --     can be reversed.
---   * At most DAILY_LIMIT steps per axis per day, so no single evening of
---     play transforms a character. A change that would pass 0 or 20, or the
---     daily limit, waits instead of being clipped.
+--   * There is no daily limit (removed in v0.10.3): every approved change
+--     applies at once, however many the axis had that day. A change that
+--     would pass 0 or 20 waits instead of being clipped.
+--   * One decision proposes at most one change per axis, and a change
+--     applies only once (only a pending change can be applied).
 --   * The player's own value is kept as the axis baseline the first time
 --     Dawnward changes it, so their starting point is never lost. An axis the
 --     player never set starts from the midpoint (10), private.
@@ -23,11 +25,9 @@ local Personality, StorySchema = ns.Personality, ns.StorySchema
 local Evolution = {}
 ns.Evolution = Evolution
 
-Evolution.DAILY_LIMIT = 2
 -- At most this many changes wait for approval; further answers propose
 -- nothing until some are approved or rejected (nothing is silently lost).
 Evolution.MAX_PENDING = 50
-Evolution.DAY = 24 * 3600
 Evolution.MIDPOINT = 10
 
 local function newId(story)
@@ -73,26 +73,11 @@ function Evolution.Describe(change)
 		name, change.delta > 0 and "+" or "", change.delta)
 end
 
--- Steps already applied on an axis in the last day (manual edits excluded).
-local function stepsToday(char, axis, now)
-	local n = 0
-	for _, change in ipairs(char.story.changes) do
-		if change.axis == axis and change.status == "applied" and not change.manual
-			and change.decidedAt and now - change.decidedAt < Evolution.DAY then
-			n = n + math.abs(change.delta)
-		end
-	end
-	return n
-end
-
 --- Applies a pending change. Returns change or nil, reason (it stays pending).
 function Evolution.Apply(char, id, now)
 	local change = Evolution.Find(char, id)
 	if not change or change.status ~= "pending" then
 		return nil, "no pending personality change #" .. tostring(id)
-	end
-	if stepsToday(char, change.axis, now or 0) + math.abs(change.delta) > Evolution.DAILY_LIMIT then
-		return nil, "that axis already changed enough today; it can wait until tomorrow"
 	end
 	local entry = char.personality[change.axis]
 	local from = entry and entry.value or Evolution.MIDPOINT
@@ -127,6 +112,15 @@ function Evolution.Propose(char, axis, delta, reason, decisionId, now)
 		return nil, "you locked this axis against story changes"
 	end
 	local story = char.story
+	-- A decision already proposed a change on this axis: never a second one
+	-- (a repeated decision cannot apply the same change twice).
+	if decisionId then
+		for _, existing in ipairs(story.changes) do
+			if existing.decisionId == decisionId and existing.axis == axis and not existing.manual then
+				return nil, "this decision already proposed a change on this axis"
+			end
+		end
+	end
 	if #Evolution.Pending(char) >= Evolution.MAX_PENDING then
 		return nil, "too many changes are waiting for approval"
 	end

@@ -87,6 +87,19 @@ return function(t, expect)
 			expect.equal(loaded.profileSuggestions, nil)
 		end)
 
+		t:it("her pending personality change stays pending on load and can be approved at once", function()
+			local w = world()
+			local ns = w.ns
+			local loaded = load(ns, Kyssarra.Character(ns))
+			local pending = ns.Evolution.Find(loaded, 31)
+			expect.equal(pending.status, "pending", "loading applies nothing")
+			local value = loaded.personality.discipline and loaded.personality.discipline.value or ns.Evolution.MIDPOINT
+			-- Within the same hour as her last approved change.
+			assert(ns.Evolution.Apply(loaded, 31, Kyssarra.T0 + 1800))
+			expect.equal(loaded.personality.discipline.value, value - 1)
+			expect.equal(ns.Evolution.Find(loaded, 30).status, "applied", "the earlier change is untouched")
+		end)
+
 		t:it("shows no duplicate: events the old suggestions tell are not recorded again", function()
 			local w = world()
 			local ns = w.ns
