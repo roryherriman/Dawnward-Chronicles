@@ -199,6 +199,45 @@ local function diagnose(ctx, deps)
 			STATE_LABEL[check.state] or check.state,
 			#check.reasons > 0 and (" - " .. table.concat(check.reasons, "; ")) or ""))
 	end
+	for _, line in ipairs(TRP3Commands.TraitIconLines(deps)) do
+		out(ctx, "  " .. line)
+	end
+end
+
+--- The icons of each trait Dawnward owns, as Total RP 3 holds them now
+-- (read-only), so a question mark in game can be traced: Dawnward's icon,
+-- TRP3's placeholder (replaced on the next sync) or the player's own.
+function TRP3Commands.TraitIconLines(deps)
+	local entry = deps.ledger.optIn[deps.characterKey]
+	local record = entry and entry.profileId and deps.ledger.profiles[entry.profileId]
+	local owned = record and record.traits and record.traits.owned
+	if not owned or not next(owned) then
+		return { "personality trait icons: Dawnward owns no traits on this profile" }
+	end
+	local section = ns.TRP3Adapter.ReadSection(deps.env, "characteristics")
+	local lines = {}
+	local function describe(current, wanted, written)
+		if current == wanted then
+			return tostring(current) .. " (Dawnward's)"
+		elseif TraitPlan.Replaceable(current, written) then
+			return tostring(current or "none") .. " (replaced on the next sync)"
+		end
+		return tostring(current) .. " (your own, kept)"
+	end
+	for _, axis in ipairs(ns.Schema.PERSONALITY_AXES) do
+		local o = owned[axis.id]
+		if o then
+			local trait
+			for _, t in ipairs(section and section.PS or {}) do
+				if t.ID == nil and t.LT == o.LT and t.RT == o.RT then trait = t end
+			end
+			local li, ri = TraitPlan.Icons(axis.id)
+			lines[#lines + 1] = trait and string.format("trait icons %s: %s %s / %s %s", axis.id, o.LT,
+				describe(trait.LI, li, o.LI), o.RT, describe(trait.RI, ri, o.RI))
+				or string.format("trait icons %s: %s/%s not found in Total RP 3", axis.id, o.LT, o.RT)
+		end
+	end
+	return lines
 end
 
 --- The About page's path from the stored story to Total RP 3, as lines
@@ -1179,7 +1218,7 @@ end
 
 --- Exactly what Dawnward would write, from the PUBLIC projection only (the
 -- same Compose/Desired inputs Sync.Check plans with, including the chosen
--- presentation style). Returns { about = string, traits = { {axis,LT,RT,V2} } }.
+-- presentation style). Returns { about = string, traits = { {axis,LT,RT,V2,LI,RI} } }.
 function TRP3Commands.PublicPreview(char)
 	local public = char and Projection.GetPublic(char) or { facts = {}, personality = {} }
 	public.trp3Style = char and char.story and char.story.prefs.trp3Style or nil
@@ -1188,7 +1227,7 @@ function TRP3Commands.PublicPreview(char)
 	for _, axisId in ipairs({ "courage", "compassion", "discipline", "faith", "honour", "sociability" }) do
 		local d = desired[axisId]
 		if d then
-			traits[#traits + 1] = { axis = axisId, LT = d.LT, RT = d.RT, V2 = d.V2 }
+			traits[#traits + 1] = { axis = axisId, LT = d.LT, RT = d.RT, V2 = d.V2, LI = d.LI, RI = d.RI }
 		end
 	end
 	local fields = {}

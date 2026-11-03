@@ -30,7 +30,8 @@ return function(t, expect)
 			Personality.SetVisibility(c, "courage", "public")
 			Personality.Set(c, "faith", 3)
 			local desired = TraitPlan.Desired(Projection.GetPublic(c))
-			expect.deepEqual(desired, { courage = { LT = "Cautious", RT = "Bold", V2 = TraitPlan.ToTRP3(18) } })
+			expect.deepEqual(desired, { courage = { LT = "Cautious", RT = "Bold", V2 = TraitPlan.ToTRP3(18),
+				LI = "spell_shadow_brainwash", RI = "ability_dualwield" } })
 		end)
 
 		t:it("adds owned traits after existing ones and leaves everything else untouched", function()
