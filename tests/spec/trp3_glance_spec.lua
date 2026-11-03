@@ -266,23 +266,26 @@ return function(t, expect)
 			end
 			local desired = TraitPlan.Desired({ personality = { sociability = { value = 0 }, faith = { value = 20 },
 				honour = { value = 10 } } })
-			expect.deepEqual(desired.sociability, { LT = "Reserved", RT = "Outgoing", V2 = 20 }, "fully Reserved")
-			expect.deepEqual(desired.faith, { LT = "Sceptical", RT = "Devout", V2 = 0 }, "fully Devout")
+			expect.deepEqual(desired.sociability, { LT = "Reserved", RT = "Outgoing", V2 = 20,
+				LI = "ability_rogue_disguise", RI = "achievement_guildperk_everybodysfriend" }, "fully Reserved")
+			expect.deepEqual(desired.faith, { LT = "Sceptical", RT = "Devout", V2 = 0,
+				LI = "ability_hunter_snipershot", RI = "spell_holy_auraoflight" }, "fully Devout")
 			expect.equal(desired.honour.V2, 10, "the middle is TRP3's default (PSYCHO_DEFAULT_VALUE_V2)")
 		end)
 
-		t:it("gives its new traits TRP3's default icons and keeps an icon the player chose", function()
-			-- RegisterCharacteristics.lua psychoAdd("new"): LI = RI = "INV_Misc_QuestionMark".
+		t:it("gives its new traits the axis's own icons and keeps an icon the player chose", function()
+			-- 0.10.1 wrote TRP3's placeholder (RegisterCharacteristics.lua psychoAdd("new"):
+			-- LI = RI = "INV_Misc_QuestionMark"); see trp3_trait_icons_spec.
 			local w = world()
 			w.ns.Personality.Set(w.char(), "courage", 4)
 			w.ns.Personality.SetVisibility(w.char(), "courage", "public")
 			assert(w.Sync.SetOptIn(w.deps, "traits", true))
 			expect.equal(w.run("traits").state, "written")
 			local trait = w.ch().PS[1]
-			expect.deepEqual(trait, { LT = "Cautious", LI = "INV_Misc_QuestionMark", RT = "Bold",
-				RI = "INV_Misc_QuestionMark", V2 = 16 })
+			expect.deepEqual(trait, { LT = "Cautious", LI = "spell_shadow_brainwash", RT = "Bold",
+				RI = "ability_dualwield", V2 = 16 })
 			trait.LI = "spell_holy_auraoflight"
-			expect.equal(w.run("traits").state, "noop", "an icon is never compared")
+			expect.equal(w.run("traits").state, "noop", "the player's icon is theirs")
 			w.ns.Personality.Set(w.char(), "courage", 12)
 			expect.equal(w.run("traits").state, "written")
 			expect.equal(w.ch().PS[1].V2, 8)

@@ -40,7 +40,7 @@ local HELP = {
 	"  biography | biography status   (import a story you already wrote; you approve each piece)",
 	"  sim on | sim off | sim copy confirm | sim reset confirm | sim levelup <level>",
 	"  sim quest <id> [title] | sim death   (test the story loop in simulation data)",
-	"  story | story <#> [<answer #> | write <text> | later | notnow | dismiss] | story settings",
+	"  story | story <#> [<answer #> | write <text> | later | notnow | dismiss] | story settings | story why",
 	"  develop | develop approve|reject|reverse <#>",
 	"  journal approve <#> | journal important <#> [off] | journal search <text> | journal drafts",
 	"  memory | arc | goal | stance | person | continuity   (each lists its own commands)",

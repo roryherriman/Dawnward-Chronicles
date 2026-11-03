@@ -12,6 +12,36 @@ Every release entry has a **Verified** line naming the highest test level reache
 
 A feature is never called "tested" or "compatible" in this file unless it reached L3 or L4.
 
+## [Unreleased]: 0.10.2-dev (dynamic RP profile, playthrough fixes)
+
+**Verified: L2** (mocked). Prompted by the owner's first real playthrough (a Human Paladin, levels 1 to 6, on 0.10.1). Nothing below has been tested in game yet.
+
+### Fixed: red question marks on the Total RP 3 personality traits
+- **Cause:** Dawnward wrote `INV_Misc_QuestionMark`, Total RP 3's placeholder for a brand-new custom trait (`RegisterCharacteristics.lua` 690), at both ends of every trait, and never replaced an icon already in place.
+- **Fix:** twelve distinct, themed icons, one per end of each axis (for example Cautious `spell_shadow_brainwash`, Bold `ability_dualwield`, Compassionate `spell_holy_healingaura`, Devout `spell_holy_auraoflight`), each verified against Total RP 3 3.4.1's own icon lists for older clients; an unknown name falls back to a verified icon, never the question mark.
+- **Your existing traits:** the next sync replaces the placeholder icons in one write (backed up and read back). Values, words, order and ownership are unchanged; an icon you chose yourself in Total RP 3 is kept. `/dawnward trp3 diagnose` lists each trait's icons.
+
+### Fixed: Story moments that never showed a card
+- **Causes:** a moment was marked as announced before its card appeared; a card hidden by combat was never offered again (common while levelling); a newer moment could replace a card still on screen; nothing retried when the pause between cards ended; after combat the oldest moment was offered and nothing said others were waiting.
+- **Now:** a moment counts as announced only once its card is really on screen; a card hidden by combat comes back afterwards (at most twice); one card at a time with "N more waiting in the Story section"; a single timer offers the next card when the pause ends; the card sits above the journal window; `/reload` and login re-offer a moment never shown. Combat, loading, cinematics, death, AFK and dungeons are still respected, and a card you closed is never offered again.
+- **`/dawnward story why`** explains, per waiting moment, why no card appeared. The Story item in the rail shows the waiting count with a tooltip.
+
+### New: your Total RP 3 profile can grow with your story (always with your approval)
+- **At First Glance suggestions:** from approved development only. Examples: three net approved story steps in one direction on one personality axis (a stronger wording at six), an established defining memory, an achieved goal. Never from levels or quests alone. Each suggestion shows what it would add or revise and why (the records behind it), with **Accept**, **Edit**, **Later** and **Dismiss**, in the Story Director and in the At First Glance editor. A suggestion goes into a free entry or revises an earlier accepted Dawnward entry that still reads as accepted; your own entries and Total RP 3 slots are never touched. Dismissed themes are not offered again unless the evidence becomes stronger.
+- **Currently updates** (Settings > Total RP 3 > Status and OOC > Currently updates): **Manual** (the default, and what every existing character keeps), **Suggested** (Dawnward proposes after entering a new zone, a major answered moment or a new goal; you accept, edit, postpone or dismiss) and **Automatic** (only after you confirm; never over text you wrote in Dawnward or Total RP 3, or a conflict; a 30-minute pause; **Undo last automatic update**).
+- **Not done on purpose:** appearance or personality-description wording. Approved records say nothing about appearance, and the approved personality already reaches Total RP 3 as traits; anything more would be invented.
+
+### Saved data
+Additive only. New optional fields on story moments (when a card was tried, shown and closed), `char.profileSuggestions` (absent until the first suggestion), `trp3status.currentlyMode` (absent = Manual), and the icons Dawnward wrote in trait ownership records. Data from 0.10.1 loads unchanged.
+
+### Fixed before merge (independent review)
+- Automatic Currently keeps its promise: it never replaces a Currently you wrote yourself, including one from 0.10.1. Each update then waits as a suggestion ("you wrote your own Currently"); accepting one lets Automatic continue from it, even when it was held.
+- Clearing or writing Currently by hand in Automatic mode is your choice: a waiting suggestion gives way instead of being applied in the same step, and an empty Currently you cleared is not filled in.
+- Backups made without secrets no longer carry suggestions drawn from a secret memory or goal (their titles); restoring such a backup keeps the current ones. Secret memories and goals are never used as evidence, a private one says "check before accepting", and a secret name or pronouns are never used in the wording.
+- An At First Glance suggestion saved from the editor as **Hidden** stays hidden, and the editor names the entry Save will really fill when the entry it revises was changed since.
+- After **Answer** no other card pops up over the journal; after you close a card the next one waits at least two minutes, even for a major moment; the Escape that closes the journal together with a card no longer counts as dismissing that moment (it is offered again later, at most twice).
+- A decision that approves a change automatically reports the profile suggestion it led to; an error in a profile-suggestion step is shown by `/dawnward trp3 diagnose` instead of being silent.
+
 ## [Unreleased]: 0.10.1-dev (Showcase fix, Total RP 3 profile refinement)
 
 **Verified: L2** (mocked). The owner confirmed in game that 0.10.0's About page now receives the whole story; everything below is tested against a mock only.

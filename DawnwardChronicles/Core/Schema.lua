@@ -854,6 +854,9 @@ function Schema.NormalizeCharacter(raw, report)
 	char.axisMeanings = ns.AxisMeanings.Clean(raw.axisMeanings)
 	char.glance = ns.Glance.Clean(raw.glance)
 	char.trp3status = ns.RPStatus.Clean(raw.trp3status)
+	-- Profile suggestions (v0.10.2, Core/ProfileSuggestions.lua): absent
+	-- until the first one, so older saved data loads exactly as before.
+	char.profileSuggestions = ns.ProfileSuggestions.Clean(raw.profileSuggestions)
 	char.sources = normalizeSources(raw.sources, report)
 	char.interpretationKeys = normalizeInterpretationKeys(raw.interpretationKeys, report)
 	char.interpretations = normalizeInterpretations(raw.interpretations, char.interpretationKeys, report)

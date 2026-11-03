@@ -4,6 +4,14 @@
 -- player: "Answer" opens the Story section on that moment.
 -- Keyboard: Escape hides it like the close button (UISpecialFrames, as the
 -- copy window and the setup wizard do); the moment keeps waiting.
+-- Every way it goes away is reported (ReactionCard.OnClosed(id, how): how
+-- is "close", "escape", "journal", "later", "answer", "dismiss", "combat" or
+-- "gone"), so a card combat hid can be offered again and one the player
+-- closed is not (Core/Reactions.lua "Notices"). The Escape that closes the
+-- journal closes the card with it (both are UISpecialFrames): that is
+-- "journal", not a choice about the moment, so it is offered again later. HIGH strata: above the journal window
+-- (MEDIUM), below game dialogs (DIALOG). One card at a time; a line under
+-- the question says how many other moments wait in the Story section.
 --
 -- Look: the Story screen's moment in miniature (docs/design/mockups/
 -- story-director.png), in the same language: the gold frame line, the
@@ -20,20 +28,29 @@ ns.ReactionCard = ReactionCard
 ReactionCard.WIDTH = 420
 ReactionCard.LAYOUT = { pad = 16, top = 14, eyebrowH = 18, chipGap = 6, chipH = Style.CONTROL.chip, gap = 10,
 	buttonH = Style.CONTROL.compact, buttonGap = 16, close = 28,
-	question = { size = 18, spacing = 5, maxLines = 3 }, why = { size = 14, spacing = 4, maxLines = 2, labelGap = 5 } }
+	question = { size = 18, spacing = 5, maxLines = 3 }, why = { size = 14, spacing = 4, maxLines = 2, labelGap = 5 },
+	more = 14 }
 local L = ReactionCard.LAYOUT
 L.questionW = ReactionCard.WIDTH - 2 * L.pad
 -- Chips stop short of the close button's column.
 L.chipsW = L.questionW - L.close + 6
 
---- Card height for a question of lines lines and a "Why now" of whyLines
--- (0 when there is none). Pure.
-function ReactionCard.Height(lines, whyLines)
+--- Card height for a question of lines lines, a "Why now" of whyLines
+-- (0 when there is none) and, when more is true, the "n more waiting" line.
+-- Pure.
+function ReactionCard.Height(lines, whyLines, more)
 	lines = math.max(1, math.min(lines or 1, L.question.maxLines))
 	whyLines = math.max(0, math.min(whyLines or 0, L.why.maxLines))
 	local q = lines * L.question.size + (lines - 1) * L.question.spacing
 	local why = whyLines > 0 and (L.gap + whyLines * L.why.size + (whyLines - 1) * L.why.spacing) or 0
-	return L.top + L.eyebrowH + L.chipGap + L.chipH + L.gap + q + why + L.buttonGap + L.buttonH + L.pad
+	local extra = more and (L.gap + L.more) or 0
+	return L.top + L.eyebrowH + L.chipGap + L.chipH + L.gap + q + why + extra + L.buttonGap + L.buttonH + L.pad
+end
+
+--- The card's "n more waiting" line ("" for none). Pure.
+function ReactionCard.MoreText(n)
+	if type(n) ~= "number" or n < 1 then return "" end
+	return string.format("%d more waiting in the Story section", n)
 end
 ReactionCard.HEIGHT = ReactionCard.Height(2, 1)
 
@@ -50,6 +67,7 @@ function ReactionCard.Chips(char, view)
 end
 
 local card
+local closing -- how the card is being hidden by Dawnward itself (nil: Escape)
 
 local function width(text)
 	return math.ceil(Style.TextWidth(text, "buttonSmall")) + 24
@@ -59,7 +77,7 @@ local function build()
 	card = CreateFrame("Frame", "DawnwardChroniclesReactionCard", UIParent)
 	card:SetSize(ReactionCard.WIDTH, ReactionCard.HEIGHT)
 	card:SetPoint("TOP", 0, -140)
-	card:SetFrameStrata("MEDIUM")
+	card:SetFrameStrata("HIGH")
 	card:SetToplevel(true)
 	card:Hide()
 	if type(UISpecialFrames) == "table" then
@@ -98,7 +116,7 @@ local function build()
 	card.answer:SetPoint("BOTTOMLEFT", L.pad, L.pad)
 	card.answer:SetScript("OnClick", function()
 		local id = card.reactionId
-		card:Hide()
+		ReactionCard.Hide("answer")
 		if not MainWindow.IsShown() then
 			MainWindow.Show()
 		end
@@ -111,26 +129,58 @@ local function build()
 	card.later:SetPoint("LEFT", card.answer, "RIGHT", 8, 0)
 	card.later:SetScript("OnClick", function()
 		Actions.PostponeReaction(ns.ctx, card.reactionId)
-		card:Hide()
+		ReactionCard.Hide("later")
 		MainWindow.Refresh()
 	end)
 	card.dismiss = Widgets.Button(card, "Dismiss", width("Dismiss"), L.buttonH, "danger")
 	card.dismiss:SetPoint("BOTTOMRIGHT", -L.pad, L.pad)
 	card.dismiss:SetScript("OnClick", function()
 		Actions.DismissReaction(ns.ctx, card.reactionId)
-		card:Hide()
+		ReactionCard.Hide("dismiss")
 		MainWindow.Refresh()
 	end)
 	card.close = Widgets.IconButton(card, "X", "Close", "Hide this card. The moment keeps waiting in the Story section.")
 	card.close:SetSize(L.close, L.close)
 	card.close:SetPoint("TOPRIGHT", -10, -10)
-	card.close:SetScript("OnClick", function() card:Hide() end)
+	card.close:SetScript("OnClick", function() ReactionCard.Hide("close") end)
+	-- How many other moments wait (shown only when some do).
+	card.more = Widgets.Label(card, "meta", false, "muted")
+	card.more:SetPoint("BOTTOMLEFT", L.pad, L.pad + L.buttonH + L.buttonGap)
+	card.more:SetWidth(L.questionW)
+	card.more:Hide()
 	card:RegisterEvent("PLAYER_REGEN_DISABLED")
-	card:SetScript("OnEvent", function(self) self:Hide() end)
+	card:SetScript("OnEvent", function() ReactionCard.Hide("combat") end)
+	card:SetScript("OnHide", function(self)
+		-- Hidden with its parent (the interface hidden): still open.
+		if self:IsShown() then return end
+		local how = closing or "escape"
+		closing = nil
+		if how == "escape" and ReactionCard.WithJournal() then
+			how = "journal"
+		end
+		if ReactionCard.OnClosed and self.reactionId then
+			pcall(ReactionCard.OnClosed, self.reactionId, how)
+		end
+	end)
 end
 
---- Shows the card for a reaction on the active character. Returns true if shown.
-function ReactionCard.Show(reactionId)
+-- Height from the last layout, with or without the "more" line.
+local function resize()
+	card:SetHeight(ReactionCard.Height(card.lines or 1, card.whyLines or 0, card.more:IsShown()))
+end
+
+--- Sets the "n more waiting" line on the card on screen.
+function ReactionCard.SetMore(n)
+	if not card then return end
+	local text = ReactionCard.MoreText(n)
+	card.more:SetText(text)
+	card.more:SetShown(text ~= "")
+	resize()
+end
+
+--- Shows the card for a reaction on the active character, with more other
+-- moments waiting. Returns true if shown.
+function ReactionCard.Show(reactionId, more)
 	local ctx = ns.ctx
 	local char = ctx and Actions.Character(ctx)
 	local reaction = char and Reactions.Find(char, reactionId)
@@ -145,6 +195,9 @@ function ReactionCard.Show(reactionId)
 	if Style.Current() ~= theme then
 		Style.Apply(theme)
 	end
+	-- Another moment over a card on screen (SafeTime never does this): the
+	-- first one goes away as replaced, not by the player.
+	ReactionCard.Hide("gone")
 	card.reactionId = reactionId
 	card.question:SetText(view.question)
 	-- The card grows with the question; a longer one is cut at three lines
@@ -207,15 +260,53 @@ function ReactionCard.Show(reactionId)
 		whyLines = math.min(whyLines, L.why.maxLines)
 		if card.why.SetMaxLines then card.why:SetMaxLines(prefix and whyLines or math.max(1, whyLines - 1)) end
 	end
-	card:SetHeight(ReactionCard.Height(lines, whyLines))
+	card.lines, card.whyLines = lines, whyLines
+	ReactionCard.SetMore(more)
 	card:Show()
-	return true
+	if card.Raise then card:Raise() end
+	return card:IsShown() and true or false
 end
 
-function ReactionCard.Hide()
-	if card then
-		card:Hide()
+--- Whether an Escape that hides the card closes the journal too: the
+-- journal is still open (Escape hides every open special frame in one
+-- press) or was hidden in this same frame (GetTime does not move within
+-- one frame).
+function ReactionCard.WithJournal()
+	if MainWindow.IsShown() then
+		return true
 	end
+	local at = MainWindow.HiddenAt and MainWindow.HiddenAt()
+	return at ~= nil and type(GetTime) == "function" and at == GetTime()
+end
+
+--- Hides the card. how (default "gone": not the player's doing, nothing
+-- recorded) says why, for ReactionCard.OnClosed.
+function ReactionCard.Hide(how)
+	if card and card:IsShown() then
+		closing = how or "gone"
+		card:Hide()
+		closing = nil
+	end
+end
+
+--- The moment on screen, or nil.
+function ReactionCard.ShownId()
+	return card and card:IsShown() and card.reactionId or nil
+end
+
+--- After any change: hides a card whose moment was answered, dismissed,
+-- kept for later, set to Not now or expired elsewhere (chat, the Story
+-- section), and keeps its count current.
+function ReactionCard.Validate()
+	if not (card and card:IsShown()) then return end
+	local ctx = ns.ctx
+	local char = ctx and Actions.Character(ctx)
+	local r = char and Reactions.Find(char, card.reactionId)
+	if not r or r.status ~= "pending" or r.closedHow == "notnow" then
+		ReactionCard.Hide("gone")
+		return
+	end
+	ReactionCard.SetMore(#Reactions.List(char, ctx.now()) - 1)
 end
 
 function ReactionCard.Frame()

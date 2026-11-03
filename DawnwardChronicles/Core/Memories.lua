@@ -34,6 +34,9 @@ function Memories.Add(char, values, provenance, now)
 	if not Records.Append(list(char), clean, RecordTypes.LIMITS.memories) then
 		return nil, "the memory list is full of established memories; supersede or remove some first"
 	end
+	if clean.status == "established" then
+		ns.ProfileSuggestions.Generate(char, now, { kind = "memory", memory = clean })
+	end
 	return clean
 end
 
@@ -55,7 +58,12 @@ function Memories.SuggestFromDecision(char, args, now)
 end
 
 function Memories.Find(char, id) return Records.Find(list(char), id) end
-function Memories.Accept(char, id, now) return Records.Accept(list(char), id, now) end
+function Memories.Accept(char, id, now)
+	local m, err = Records.Accept(list(char), id, now)
+	-- v0.10.2: an established defining memory may suggest a profile change.
+	if m then ns.ProfileSuggestions.Generate(char, now, { kind = "memory", memory = m }) end
+	return m, err
+end
 function Memories.Dispute(char, id, now) return Records.Dispute(list(char), id, now) end
 function Memories.Supersede(char, id, by, now) return Records.Supersede(list(char), id, by, now) end
 function Memories.Remove(char, id) return Records.Remove(list(char), id) end

@@ -133,6 +133,8 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
 			SafeTime.Schedule(ns.ctx)
 		end)
 		SafeTime.ShowCard = ns.ReactionCard.Show
+		SafeTime.ShownId, SafeTime.SetMore = ns.ReactionCard.ShownId, ns.ReactionCard.SetMore
+		ns.ReactionCard.OnClosed = function(id, how) SafeTime.Closed(ns.ctx, id, how) end
 		SafeTime.Init(ns.ctx)
 		TRP3Bridge.Attach(ns.ctx)
 		ns.MinimapButton.Init(ns.ctx)

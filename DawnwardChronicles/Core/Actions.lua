@@ -18,6 +18,19 @@ local function fail(err)
 	return nil, "Not changed: " .. tostring(err)
 end
 
+-- The last error a guarded profile-suggestion step raised this session
+-- ({ where, text, at }; never saved), shown by /dawnward trp3 diagnose. The
+-- step is guarded so it never undoes the player's change, but an error is
+-- never silent either.
+Actions.profileError = nil
+
+local function guarded(ctx, where, fn, ...)
+	local ok, err = pcall(fn, ...)
+	if not ok then
+		Actions.profileError = { where = where, text = tostring(err), at = ctx.now() }
+	end
+end
+
 -- Runs change(char) on the active character, creating it first if needed.
 -- If the character was created for this change and the change fails, it is
 -- removed again, so a rejected first edit leaves no empty record behind.
@@ -35,6 +48,11 @@ local function withCharacter(ctx, change)
 	local result, message = change(char)
 	if not result and not existed then
 		ctx.store:Root().characters[ctx.characterKey] = nil
+	end
+	-- v0.10.2: the Automatic Currently mode applies a waiting Currently
+	-- suggestion only after every guard holds (Core/ProfileActions.lua).
+	if result and ns.ProfileActions then
+		guarded(ctx, "Automatic Currently", ns.ProfileActions.AfterChange, ctx, char)
 	end
 	-- A change made in the window may change the published profile, so ask an
 	-- opted-in Total RP 3 sync to catch up, as slash commands already do
@@ -294,6 +312,11 @@ function Actions.ObserveLocation(ctx, data)
 			created[#created + 1] = { record = record, reaction = reaction, outcome = outcome }
 		end
 	end
+	-- v0.10.2: a first visit to a zone may offer a Currently text (only in
+	-- the Suggested or Automatic mode; Core/ProfileActions.lua).
+	if ns.ProfileActions then
+		guarded(ctx, "Currently suggestion for a new zone", ns.ProfileActions.OnLocation, ctx, char, created)
+	end
 	return created
 end
 
@@ -352,6 +375,9 @@ function Actions.Decide(ctx, reactionId, choice)
 			parts[#parts + 1] = "Journal draft #" .. result.entry.id .. " written."
 		elseif result.draftError then
 			parts[#parts + 1] = "No journal draft: " .. result.draftError
+		end
+		if result.profile and #result.profile > 0 then
+			parts[#parts + 1] = "Your profile could show something new: it waits for your approval in the Story section."
 		end
 		return result, table.concat(parts, " ")
 	end)

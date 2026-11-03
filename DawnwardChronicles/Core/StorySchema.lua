@@ -38,6 +38,8 @@ StorySchema.LIMITS = {
 	changes = 300,
 	recentTemplates = 6,
 	asked = 40,       -- (v0.7.x) questions asked, for repetition control (Core/Reactions.lua)
+	interrupts = 2,   -- (0.10.2) times a card hidden by combat is offered again
+	noticeTries = 99, -- (0.10.2) card attempts counted per moment
 	questZones = 300,
 	text = 300,       -- bytes: titles, phrases, reasons
 	custom = 1000,    -- bytes: a custom player response
@@ -57,6 +59,11 @@ StorySchema.EVENT_STATUS = { new = true, queued = true, recorded = true, reacted
 -- player: the player recorded it (a roleplay event, never a game claim).
 StorySchema.CONFIDENCE = { verified = true, partial = true, player = true }
 StorySchema.REACTION_STATUS = { pending = true, postponed = true }
+-- (0.10.2) How a moment was announced, and how its card went away
+-- (Core/Reactions.lua "Notices").
+StorySchema.SHOWN_VIA = { card = true, chat = true }
+StorySchema.CLOSED_HOW = { close = true, escape = true, later = true, notnow = true, answer = true, combat = true,
+	journal = true } -- journal (0.10.2): Escape closed it together with the journal
 StorySchema.CHANGE_STATUS = { pending = true, applied = true, rejected = true, reversed = true }
 StorySchema.FREQUENCY = { off = true, rare = true, normal = true, frequent = true }
 StorySchema.APPROVAL = { ask = true, auto = true }
@@ -194,6 +201,13 @@ local function ts(v)
 	return 0
 end
 
+-- An optional timestamp: kept when valid, otherwise absent.
+local function optTs(v)
+	if v == nil then return nil end
+	local clean = ts(v)
+	return (clean == v) and clean or nil
+end
+
 local function text(v, limit, multiline)
 	local s = Util.CleanText(v, limit or StorySchema.LIMITS.text, multiline)
 	if s == nil or s == "" then
@@ -320,7 +334,20 @@ function StorySchema.CleanReaction(raw)
 		createdPlay = raw.createdPlay ~= nil and ts(raw.createdPlay) or nil,
 		expiresPlay = raw.expiresPlay ~= nil and ts(raw.expiresPlay) or nil,
 		zone = text(raw.zone, 100),
+		-- (0.10.2, additive) notification state; absent on older moments.
+		triedAt = optTs(raw.triedAt),
+		noticeTries = smallInt(raw.noticeTries, 1, StorySchema.LIMITS.noticeTries),
+		shownAt = optTs(raw.shownAt),
+		shownVia = StorySchema.SHOWN_VIA[raw.shownVia] and raw.shownVia or nil,
+		closedAt = optTs(raw.closedAt),
+		closedHow = StorySchema.CLOSED_HOW[raw.closedHow] and raw.closedHow or nil,
 	}
+	if type(raw.interrupts) == "number" and raw.interrupts >= 1 then
+		reaction.interrupts = math.min(math.floor(raw.interrupts), StorySchema.LIMITS.interrupts)
+	end
+	if reaction.shownAt and not reaction.shownVia then
+		reaction.shownVia = "card"
+	end
 	if not reaction.id or not reaction.templateId or #reaction.eventKeys == 0 then
 		return nil
 	end

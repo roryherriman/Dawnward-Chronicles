@@ -173,6 +173,7 @@ end
 
 local sections = {}
 local frame, layout, currentSection, settingsOpen, appliedTheme
+local hiddenAt -- GetTime() when the journal last closed (MainWindow.HiddenAt)
 
 --- def = { id, label, order, heading?, icon?, create(parent) -> section }
 -- section: { frame, Refresh(self, view), ApplyTheme(self, theme), OnHide(self)? }
@@ -421,6 +422,17 @@ local function refreshIdentity(char)
 	frame.identityHover:EnableMouse(cut and true or false)
 end
 
+--- The Story item's tooltip: how many moments wait, and where the card
+-- went. Pure.
+function MainWindow.StoryBadgeText(waiting)
+	if waiting <= 0 then
+		return "Nothing is waiting in your story."
+	end
+	return string.format("%d %s waiting in the Story section. A card appears only at a calm moment, "
+		.. "one at a time; /dawnward story why explains the rest.", waiting,
+		waiting == 1 and "moment is" or "moments are")
+end
+
 local function refreshRail(char)
 	refreshIdentity(char)
 	local waiting = char and ns.Reactions and #ns.Reactions.List(char, ctx().now()) or 0
@@ -428,6 +440,9 @@ local function refreshRail(char)
 		local count = tab.id == "story" and waiting or 0
 		tab.badge:SetText(count > 0 and tostring(count) or "")
 		tab.badgeBg:SetShown(count > 0)
+		if tab.id == "story" then
+			Widgets.Tooltip(tab, "Story", MainWindow.StoryBadgeText(waiting))
+		end
 	end
 	local status = ctx().trp3Status and ctx().trp3Status() or nil
 	local loaded = type(status) == "table" and status.loaded and not status.error
@@ -444,6 +459,8 @@ end
 
 --- Re-reads data and redraws the visible parts. Cheap when hidden.
 function MainWindow.Refresh()
+	-- The reaction card follows answers and dismissals made anywhere.
+	if ns.ReactionCard and ns.ReactionCard.Validate then ns.ReactionCard.Validate() end
 	if not frame or not frame:IsShown() or not ctx() then
 		return
 	end
@@ -917,6 +934,9 @@ local function build()
 	end)
 
 	frame:SetScript("OnHide", function()
+		-- When (GetTime) it last closed: the reaction card tells an Escape
+		-- that closed both apart from one that closed the card alone.
+		hiddenAt = type(GetTime) == "function" and GetTime() or nil
 		for _, def in ipairs(sections) do
 			if def.instance and def.instance.OnHide then
 				def.instance:OnHide()
@@ -963,6 +983,11 @@ end
 
 function MainWindow.IsShown()
 	return frame ~= nil and frame:IsShown()
+end
+
+--- When the journal was last hidden (GetTime), or nil.
+function MainWindow.HiddenAt()
+	return hiddenAt
 end
 
 --- For tests and diagnostics only.

@@ -41,7 +41,9 @@
 --                    restore… behind their confirmations)
 -- A section that needs the player carries a coloured mark in the rail
 -- (amber: waiting for a choice; red: blocked or in conflict), so nothing is
--- hidden behind the section that is not open.
+-- hidden behind the section that is not open. v0.10.2: At First Glance and
+-- Status and OOC also show how many of Dawnward's profile suggestions wait
+-- for the player there ("At First Glance (1)", amber).
 local _, ns = ...
 local Widgets, MainWindow, Commands = ns.Widgets, ns.MainWindow, ns.Commands
 
@@ -250,6 +252,19 @@ local function plural(n, one, many)
 	return n .. " " .. (n == 1 and one or many)
 end
 
+-- The rail sections that hold profile suggestions, and the kind they hold.
+TRP3Page.SUGGESTION_KIND = { glance = "glance", status = "currently" }
+
+--- How many profile suggestions (Core/ProfileSuggestions.lua) of a rail
+-- section wait for the player on the real character. Reads only.
+function TRP3Page.SuggestionCount(id)
+	local kind = TRP3Page.SUGGESTION_KIND[id]
+	local ctx = ns.ctx
+	local char = kind and ctx and ctx.store.real.characters[ctx.characterKey]
+	if not char then return 0 end
+	return ns.ProfileSuggestions.Count(char, ctx.now(), kind)
+end
+
 --- What never reaches Total RP 3, and anything an earlier version kept
 -- back (counts only, never content). Pure apart from reading char.
 function TRP3Page.HiddenText(char)
@@ -425,6 +440,7 @@ TRP3Page.RENDER_STYLE = { h1 = "railName", h2 = "title", h3 = "button", p = "met
 TRP3Page.RENDER_LINE = { h1 = 26, h2 = 22, h3 = 19, p = 17 }
 TRP3Page.RENDER_GAP = 6       -- between items
 TRP3Page.RENDER_ICON = 32     -- a template 2 frame's icon
+TRP3Page.TRAIT_ICON = 16      -- a personality trait's end icons (Total RP 3 shows them too)
 TRP3Page.RENDER_FRAME_PAD = 10
 
 local function newRenderer(parent, width, height)
@@ -791,16 +807,20 @@ function TRP3Page.Build(parent, width, height)
 	page.previewText = paragraph(page.preview, nil, innerW - 20, TRP3Page.PREVIEW_LINES)
 	page.previewText:SetPoint("TOPLEFT", 10, -30)
 	Style.Register(page.previewText, function(fs) Style.TextColor(fs, TRP3Page.AddTextColor()) end)
-	-- Personality: one bar per trait, as Total RP 3 draws them (left word,
-	-- the bar leaning by value, right word).
+	-- Personality: one bar per trait, as Total RP 3 draws them (left icon
+	-- and word, the bar leaning by value, right word and icon).
 	page.traitRows = {}
 	local barW = innerW - 20 - 2 * 150 - 16
+	local ICON = TRP3Page.TRAIT_ICON
 	for i = 1, 6 do
 		local row = CreateFrame("Frame", nil, page.preview)
 		row:SetSize(innerW - 20, 24)
 		row:SetPoint("TOPLEFT", 10, -(30 + (i - 1) * 28))
-		row.left = oneLine(row, "body", 150, "meta")
-		row.left:SetPoint("LEFT", 0, 0)
+		row.leftIcon = row:CreateTexture(nil, "ARTWORK")
+		row.leftIcon:SetSize(ICON, ICON)
+		row.leftIcon:SetPoint("LEFT", 0, 0)
+		row.left = oneLine(row, "body", 150 - ICON - 4, "meta")
+		row.left:SetPoint("LEFT", ICON + 4, 0)
 		row.left:SetJustifyH("RIGHT")
 		row.track = Style.Solid(row, "ARTWORK", 0)
 		row.track:SetPoint("LEFT", 158, 0)
@@ -808,8 +828,11 @@ function TRP3Page.Build(parent, width, height)
 		row.fill = Style.Solid(row, "ARTWORK", 1)
 		row.fill:SetPoint("LEFT", row.track, "LEFT", 0, 0)
 		row.fill:SetHeight(10)
-		row.right = oneLine(row, "body", 150, "meta")
+		row.right = oneLine(row, "body", 150 - ICON - 4, "meta")
 		row.right:SetPoint("LEFT", 158 + barW + 8, 0)
+		row.rightIcon = row:CreateTexture(nil, "ARTWORK")
+		row.rightIcon:SetSize(ICON, ICON)
+		row.rightIcon:SetPoint("LEFT", 158 + barW + 8 + 150 - ICON, 0)
 		row.barWidth = barW
 		Style.Register(row, function(r, theme)
 			Style.Color(r.track, Style.Tones(theme).track)
@@ -1267,6 +1290,11 @@ local function sectionState(page, view, id)
 			.. " kept up to date by Dawnward"
 	elseif id == "glance" then
 		local tone, text = chipOf(view.checks.glance)
+		local waiting = TRP3Page.SuggestionCount("glance")
+		if waiting > 0 and tone ~= "danger" then
+			return "waiting", "At First Glance: " .. text .. " · " .. plural(waiting, "suggestion waits",
+				"suggestions wait") .. " for your approval"
+		end
 		return tone, "At First Glance: " .. text
 	elseif id == "status" then
 		local managed, conflict = 0, false
@@ -1277,6 +1305,10 @@ local function sectionState(page, view, id)
 			end
 		end
 		if conflict then return "danger", "Conflict: see Synchronization > Recovery" end
+		local waiting = TRP3Page.SuggestionCount("status")
+		if waiting > 0 then
+			return "waiting", "A suggested Currently waits for your approval (Currently updates)"
+		end
 		return managed > 0 and "public" or "muted", managed > 0 and (managed .. " kept in sync by Dawnward")
 			or "Total RP 3 keeps these"
 	elseif id == "sync" or id == "connection" or id == "syncstatus" or id == "recovery" then
@@ -1402,6 +1434,8 @@ function TRP3Page.Refresh(page)
 		Style.Color(b.dot, toneColor(tone, theme))
 		b.state = tone
 		Widgets.Tooltip(b, SECTION_LABEL[b.segmentId], text)
+		local waiting = TRP3Page.SuggestionCount(b.segmentId)
+		b.name:SetText(SECTION_LABEL[b.segmentId] .. (waiting > 0 and (" (" .. waiting .. ")") or ""))
 	end
 	-- Personality (and the Biography without its editor) share one view:
 	-- show the open section's view, hide every other one.
@@ -1505,6 +1539,9 @@ function TRP3Page.RefreshFeature(page, view, feature)
 			if t then
 				row.left:SetText(plain(t.LT))
 				row.right:SetText(plain(t.RT))
+				-- The icons Dawnward gives the trait in Total RP 3.
+				row.leftIcon:SetTexture("Interface\\ICONS\\" .. ns.TRP3TraitPlan.SafeIcon(t.LI))
+				row.rightIcon:SetTexture("Interface\\ICONS\\" .. ns.TRP3TraitPlan.SafeIcon(t.RI))
 				-- V2 of 20 leans to the left word (TRP3's own bar).
 				row.fill:SetWidth(math.max(1, math.floor(row.barWidth * t.V2 / 20)))
 			end
