@@ -993,3 +993,28 @@ The automated run (L2, TRP3 3.4.1 fake) imports one long backstory of plain para
 | AB20 | Play 30 minutes normally (quests, a level, zones, a story moment) | No Lua error; no flood of cards; `/dawnward trp3 diagnose` ends with "profile suggestions: no error this session" |
 | AB21 | In Automatic, with a suggestion waiting, press **Clear** on Currently (Status and OOC > Currently) | Currently is empty, as the message says; the waiting suggestion is gone; the next zone's update waits for you instead of filling it |
 | AB22 | With two major moments waiting, press **Answer** on the card | The journal opens on that moment; no second card pops up over it |
+
+### v0.10.3 in-game acceptance (L3): automatic memories, narrative approval, correct pronouns
+
+**Nothing below is passed until the owner has done it in Classic Era 1.15.9 with Total RP 3 3.4.1 and recorded the result.** Automated tests (L2, including `tests/spec/migration_v0103_spec.lua` on a level-6 save built like Kyssarra's) do not show what the client draws.
+
+**Protect the playthrough first (before installing):** the same steps 1-6 as part AB (quit WoW, copy the addon folder and every `DawnwardChronicles*.lua`, `*.lua.bak`, `totalRP3*.lua` and `*.lua.bak` SavedVariables file into a new dated backup subfolder, record their SHA-256, replace only the `DawnwardChronicles` folder, never delete or regenerate SavedVariables). `/dawnward status` shows the new version; `/console scriptErrors 1`.
+
+**How to report a failure:** the item number, a screenshot, any Lua error, and the output of `/dawnward story why` and `/dawnward trp3 log`.
+
+#### Part AC: v0.10.3 acceptance
+
+| # | Steps | Pass when |
+|---|---|---|
+| AC1 | Log in Kyssarra. Chronicle > Memories, filter **Suggestions** | The six suggestions from the playthrough are all there, still **Suggested · needs your call**, in exactly their old words (including "their"); none was accepted for you. Approved, edited and disputed memories are unchanged |
+| AC2 | Filter **All**, then **Established** | All shows memories and **Recorded** cards together, newest first; Established shows only established memories; no event appears twice (an event with a memory shows on that memory's card as "Recorded: …") |
+| AC3 | Gain a level that is not a multiple of 5, turn in a few ordinary quests | No new suggestion appears in Memories; the level is in the journal history as before |
+| AC4 | Reach a level that is a multiple of 5 (or another notable milestone: a first death, a dungeon's first entry, a new standing) | A **Recorded** card appears at once: "Kyssarra Dawnward reached level N in <zone>." (the zone only if it was recorded), chip "Verified by the game", nothing to approve |
+| AC5 | Answer that level's Story Director question with a listed answer | The question and answers say **her**/**she** (never "their" for her); Memories gains an **Established** card marked "Your answer" in her pronouns ("… her strength …") without asking; the journal draft is still a draft; the personality change still waits for approval |
+| AC6 | Answer a defining moment (level 10, 20, … or a first death) | Besides the established answer, one **Suggested** card "Reflecting on …" whose line reads "From your answer: …" |
+| AC7 | On that suggestion: **Later**; then **Accept**; on an old one: **Edit** (save your words); on another: **Dismiss** | Later keeps it as "Suggested · later" at the end of Suggestions; Accept makes it Established; Edit keeps your words; Dismiss asks first and removes it. None of it changes Total RP 3 |
+| AC8 | Answer a moment with "Nothing worth remembering", and another in your own words | No memory for the first; the second is kept exactly as you typed it |
+| AC9 | `/reload`, then log out and back in | Same Memories (the count per filter unchanged), no duplicate Recorded card, Later still later |
+| AC10 | `/dawnward trp3 log` and Total RP 3's profile (About, At First Glance, Currently, traits) | Nothing new written because of memories; ownership, Currently mode and sync settings unchanged |
+| AC11 | Change the UI scale; open Read on a long memory | Filters, search and count do not overlap; Read shows the whole text |
+| AC12 | Play 30 minutes normally | No Lua error; no backlog of suggestions from routine play |

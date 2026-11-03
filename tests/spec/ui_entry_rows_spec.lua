@@ -66,7 +66,7 @@ return function(t, expect)
 			end
 		end)
 
-		t:it("marks a suggestion as needing a decision, with Accept first and Remove on the right", function()
+		t:it("marks a suggestion as needing a decision, with Accept first and Dismiss on the right", function()
 			local _, env, ns, section = start()
 			ns.Memories.Add(env.DawnwardChroniclesDB.characters[CHAR], { text = "Suggested" }, "suggested", 1)
 			ns.MainWindow.Refresh()
@@ -75,12 +75,15 @@ return function(t, expect)
 			expect.equal(row.chip.label:GetText(), "Suggested · needs your call")
 			expect.equal(row.actions[1]:GetText(), "Accept")
 			expect.equal(row.actions[1].variant, "primary")
-			local remove
+			-- v0.10.3: a suggested memory is accepted, edited, put off (Later) or dismissed.
+			local remove, later
 			for _, b in ipairs(row.actions) do
-				if b:IsShown() and b:GetText() == "Remove" then remove = b end
+				if b:IsShown() and b:GetText() == "Dismiss" then remove = b end
+				if b:IsShown() and b:GetText() == "Later" then later = b end
 			end
+			expect.truthy(later, "Later is offered")
 			local L = ns.ChronicleView.LAYOUT
-			expect.equal(remove.__points[1][2] + remove:GetWidth(), L.cardWidth - L.cardPad, "Remove sits at the right")
+			expect.equal(remove.__points[1][2] + remove:GetWidth(), L.cardWidth - L.cardPad, "Dismiss sits at the right")
 			expect.equal(remove.variant, "danger")
 		end)
 

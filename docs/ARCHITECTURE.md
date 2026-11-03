@@ -320,6 +320,27 @@ The Director (`Core/Director.lua`) is the one place that reads the character's s
 
 **Saved data (additive, schema stays 5):** `story.pacing.asked` and `story.prefs.repeatDays`, both cleaned on load (a missing list starts empty, so an upgrade neither asks nor suppresses anything it would not have before).
 
+## Records and interpretations (v0.10.3)
+
+Dawnward remembers what happened; the player decides what it meant. The Memories screen (Chronicle > Memories, filters All / Established / Suggestions) shows three things, kept apart:
+
+| Kind | Where it lives | Approval |
+|---|---|---|
+| **Recorded**: verified gameplay events the game reported | `story.events` (`Core/GameEvents.lua`, keyed and de-duplicated by `story.eventKeys`). Shown by `Memories.Recorded` when notable (`Memories.RECORDED_MIN`: every 5th level, a first death, a standing change of note, a dungeon's first entry, a guild, a first location, a defining quest); routine ones stay in the journal history and Story. Worded by `Memories.RecordedText` from verified fields only ("Kyssarra Dawnward reached level 5 in Elwynn Forest."; the zone only when recorded); no feeling, belief, motivation or outcome. Never copied into `story.memories`, so a reload or an import cannot duplicate it; an event a memory links is shown on that memory's card instead ("Recorded: …") | None |
+| **Established**: canon | `story.memories`, status `established`: the player's own memories, accepted suggestions, and (new) `kind = "answer"`, the faithful record of an answer the player chose in the Story Director ("<name> <the answer's phrase>." in the profile's pronouns, or the player's own words exactly). The answer was the approval, so no second confirmation; private; linked to the decision, the event and the journal draft, in the draft's own words. One per decision | The answer itself |
+| **Suggested**: Dawnward's interpretations | `story.memories`, status `proposed`: `kind = "reflection"` (the authored meaning of a *defining* answer, significance 3, linked to the answer it rests on and shown with it: "From your answer: …"), and every suggestion made before v0.10.3. Accept, Edit, **Later** (`laterAt`: still a suggestion, listed last) or Dismiss | The player |
+
+Rules:
+
+- No emotion is assumed because an event happened: routine levels and quests make no memory and no suggestion; an answer at significance 2 makes only its established record; a reflection needs a defining answer. "Nothing worth remembering" makes nothing.
+- The answer record is not new evidence of its own: it does not tie a place for location weight (`Places.Linked`), is not recalled as a Director memory or counted in Affinity (the decision's theme and echo already are), and is not a candidate for an At First Glance suggestion (`ProfileSuggestions` counts applied changes, the player's own or accepted defining memories and achieved goals only; never Recorded events or unaccepted suggestions).
+- Journal drafts, personality changes and publication are unchanged: a draft stays a draft and a change stays pending until the player approves it; nothing here is public or reaches Total RP 3.
+- When the event list is full (`StorySchema.LIMITS.events`), a routine event makes room first, so notable Recorded events last longer; keys always outlive records.
+
+**Pronouns.** `Core/Pronouns.lua` is the one formatter for generated text: `{they} {them} {their} {theirs} {themselves}` and verb tokens `{are} {were} {have} {do} {s} {es}`, capitalised at a sentence start. Forms come only from the Pronouns field (she, he, they, it, a mixed "she/they", or a complete five-form custom set); otherwise the name stands in ("Kyssarra's"), never a guess from race, class or name. `Reactions.Present` renders questions and answers (the library keeps its tokens; the chosen phrase is stored rendered), so drafts, answer records, development reasons, arc turning points and echoes follow. An echo of a decision stored before v0.10.3 re-renders the library answer it names (`Director.AnswerSentence`); stored texts are never rewritten. Profile suggestions use the same parser through `ProfileSuggestions.Voice`.
+
+**Saved data (additive, schema stays 5):** a memory may hold `kind` (`answer` | `reflection`) and `laterAt` (a proposed one only), both cleaned on load (`RecordTypes.CleanMemory`). Older memories load unchanged; old suggestions stay suggestions.
+
 ## Continuity review (#42)
 
 `Core/Continuity.lua` runs cheap, deterministic rules over the player's own records and verified game data. It never guesses what a text means and never rewrites a record.

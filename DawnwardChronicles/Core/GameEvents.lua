@@ -300,15 +300,20 @@ function GameEvents.Find(char, key)
 	return nil
 end
 
--- Drops the oldest record that no reaction is waiting on.
+-- Drops the oldest record that no reaction is waiting on: (v0.10.3) a
+-- routine one first, so the notable events shown as Recorded on the
+-- Memories screen (Core/Memories.lua) outlast routine quests. The key stays
+-- in story.eventKeys, so a dropped event is never recorded again.
 local function makeRoom(story)
 	if #story.events < StorySchema.LIMITS.events then
 		return
 	end
-	for index, record in ipairs(story.events) do
-		if record.status ~= "queued" then
-			table.remove(story.events, index)
-			return
+	for _, routine in ipairs({ true, false }) do
+		for index, record in ipairs(story.events) do
+			if record.status ~= "queued" and (not routine or (record.significance or 1) <= 1) then
+				table.remove(story.events, index)
+				return
+			end
 		end
 	end
 	table.remove(story.events, 1)

@@ -60,7 +60,7 @@ Commands.Register("memory", function(ctx, rest)
 			local m = list[i]
 			out(ctx, line(m, (m.title and (m.title .. ": ") or "") .. (m.text or "")))
 		end
-		out(ctx, "memory add <text> | accept|dispute|remove <#> | supersede <#> <by #>")
+		out(ctx, "memory add <text> | accept|later|dismiss|dispute|remove <#> | supersede <#> <by #>")
 		return
 	elseif sub == "add" then
 		run(ctx, function(c, now) return Memories.Add(c, { text = args }, "player", now) end,
@@ -70,12 +70,16 @@ Commands.Register("memory", function(ctx, rest)
 	local idWord, tail = Util.NextWord(args)
 	local n = id(idWord)
 	if not n then
-		out(ctx, "Usage: /dawnward memory list | add <text> | accept|dispute|remove|supersede <#>")
+		out(ctx, "Usage: /dawnward memory list | add <text> | accept|later|dismiss|dispute|remove|supersede <#>")
 		return
 	end
 	if sub == "supersede" then
 		local by = id((Util.NextWord(tail)))
 		run(ctx, function(c, now) return Memories.Supersede(c, n, by, now) end, "Memory #" .. n .. " is superseded.")
+	elseif sub == "later" then
+		run(ctx, function(c, now) return Memories.Later(c, n, now) end, "Suggestion #" .. n .. " waits for later.")
+	elseif sub == "dismiss" then
+		run(ctx, function(c) return Memories.Dismiss(c, n) end, "Suggestion #" .. n .. " dismissed.")
 	elseif not common(ctx, Memories, "Memory", sub, n, tail) then
 		out(ctx, "Unknown memory command '" .. sub .. "'.")
 	end

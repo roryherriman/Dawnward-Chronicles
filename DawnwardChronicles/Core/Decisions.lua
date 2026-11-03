@@ -7,7 +7,9 @@
 --      a custom answer proposes none, the player adjusts by hand if they wish
 --   3. writes a private journal draft (Core/Narrative.lua), unless drafts
 --      are switched off
---   4. removes the reaction from the queue
+--   4. keeps a notable answer as an established memory, in the same words
+--      (Core/Memories.lua), and suggests a reflection for a defining one
+--   5. removes the reaction from the queue
 local _, ns = ...
 local StorySchema, Reactions, Evolution, Narrative, Journal =
 	ns.StorySchema, ns.Reactions, ns.Evolution, ns.Narrative, ns.Journal
@@ -41,7 +43,8 @@ local function sortedEffects(effects)
 end
 
 --- choice: { optionId = string } or { custom = string }.
--- Returns result { decision, changes, entry, draftError, memory, arc, profile
+-- Returns result { decision, changes, entry, draftError, memory (the answer's
+-- established record), reflection (a suggested interpretation), arc, profile
 -- (the profile suggestions it made, also through an approved change) } or nil, reason.
 function Decisions.Decide(char, reactionId, choice, now)
 	local reaction = Reactions.Find(char, reactionId)
@@ -104,8 +107,12 @@ function Decisions.Decide(char, reactionId, choice, now)
 	if option and option.contextual then
 		ns.Director.Apply(char, option, decision, now)
 	end
-	-- Suggestions only: proposed and private until the player accepts them.
-	result.memory = ns.Memories.SuggestFromDecision(char, { significance = reaction.significance, record = view.record,
+	-- v0.10.3: the answer itself is kept as an established, private memory
+	-- in the same words as the draft (the player chose it: no second
+	-- confirmation); only a reflection that adds Dawnward's interpretation,
+	-- for a defining moment, waits for the player as a suggestion.
+	result.memory, result.reflection = ns.Memories.FromDecision(char, { significance = reaction.significance,
+		record = view.record,
 		title = result.entry and result.entry.title or (view.record and ns.GameEvents.Label(view.record.category)),
 		custom = custom, option = option, name = view.name, eventKeys = reaction.eventKeys, decisionId = decision.id,
 		journalId = decision.journalId }, now)

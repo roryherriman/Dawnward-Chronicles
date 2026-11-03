@@ -58,6 +58,7 @@ Older saved data still carries a visibility on each record. It is kept for compa
 
 - **Story records** (events, reactions, decisions, personality changes, memories, arcs, goals, stances and people) are kept in the character's private `story` table. None of it is ever part of the public projection, a share export or Total RP 3. The exceptions are below.
 - **Suggestions and drafts are private.** Anything Dawnward suggests starts *proposed* and private. A record must be *established* by you before it can be public. A story draft must be approved before it can be public.
+- **Recorded events and your answers (v0.10.3).** Milestones the game reports are shown on the Memories screen as *Recorded*, straight from the private event records; they are never copied, published or sent to Total RP 3. The memory Dawnward keeps of an answer you chose in Story is established (you chose it) but private, like the answer itself, and like every memory it is never part of the public projection, a share export or Total RP 3. An interpretation Dawnward suggests from it stays a private suggestion until you accept it.
 - **What can leave Dawnward, and only if you make it public:**
   - an approved journal entry you mark as a defining moment (its title, in Total RP 3);
   - an established stance's public side;

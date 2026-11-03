@@ -84,6 +84,9 @@ ChronicleView.LAYOUT = {
 	inset = 0, width = 772, height = 588,
 	tabHeight = 40, tabGap = 4, tabPad = 3, tabTextPad = 12,
 	toolbarTop = 54, toolbarHeight = 36, searchWidth = 240, newWidth = 148,
+	-- (v0.10.3) Memories: a shorter search, then the All / Established /
+	-- Suggestions filter, before the count at the right.
+	memorySearchWidth = 200, filterGap = 10,
 	gridTop = 102, cols = 2, colGap = 12, rowGap = 12, barGap = 6, barWidth = 6, pool = 8,
 	cardWidth = 374, cardPad = 16, padY = 14, gap = 8, dateWidth = 96,
 	chipRow = 24, chipGap = 6, chips = 4,
@@ -367,6 +370,8 @@ end
 
 local IMPORTANCE_CHIPS = { { "Ordinary", "muted" }, { "Notable", "muted" }, { "Defining", "accent" } }
 local PROVENANCE = { player = "Your words", observed = "From an event", suggested = "Suggested by Dawnward" }
+-- (v0.10.3) A memory Dawnward kept of an answer the player chose.
+local MEMORY_KIND = { answer = "Your answer" }
 local STATUS = { established = "Established", proposed = "Suggested", disputed = "Disputed",
 	superseded = "Superseded" }
 local STATE = { active = "Active", paused = "Paused", concluded = "Concluded", abandoned = "Abandoned",
@@ -395,7 +400,15 @@ function ChronicleView.CardContent(listId, r, char, now)
 		return ChronicleView.ReviewContent(r, now)
 	end
 	c.date = ChronicleView.ShortDate(r.at, now)
-	if r.status == "proposed" then
+	if r.recorded then
+		-- v0.10.3: a verified gameplay event, recorded automatically.
+		c.chip, c.title, c.text = { "Recorded", "muted" }, r.title, r.text
+		c.chips[1] = { "Verified by the game", "muted" }
+		return c
+	end
+	if r.status == "proposed" and r.laterAt then
+		c.chip, c.highlight = { "Suggested · later", "waiting" }, "waiting"
+	elseif r.status == "proposed" then
 		c.chip, c.highlight = { "Suggested · needs your call", "waiting" }, "waiting"
 	elseif r.status == "disputed" then
 		c.chip, c.highlight = { "Disputed · needs your call", "danger" }, "danger"
@@ -406,6 +419,8 @@ function ChronicleView.CardContent(listId, r, char, now)
 	if listId == "memories" then
 		c.chip = c.chip or IMPORTANCE_CHIPS[r.importance or 1] or IMPORTANCE_CHIPS[1]
 		c.title, c.text = r.title, r.text
+		-- What it rests on: the answer a reflection interprets, or the event.
+		c.meta = char and ns.Memories.Basis(char, r) or nil
 		if r.zone then add(r.zone) end
 	elseif listId == "arcs" then
 		c.chip = c.chip or { STATE[r.state] or r.state, r.state == "active" and "accent" or "muted" }
@@ -448,7 +463,7 @@ function ChronicleView.CardContent(listId, r, char, now)
 		if not r.relation then c.meta = "No relation noted yet" end
 	end
 	if r.status ~= "proposed" and r.status ~= "disputed" then
-		add(PROVENANCE[r.provenance] or r.provenance)
+		add(listId == "memories" and MEMORY_KIND[r.kind] or PROVENANCE[r.provenance] or r.provenance)
 		if r.status == "established" then add(STATUS.established) end
 	end
 	return c
@@ -536,6 +551,41 @@ function ChronicleView.ReviewItems(char, mode, key, findings)
 	return findings or ns.Continuity.Findings(char)
 end
 
+ChronicleView.MEMORY_FILTERS = { { id = "all", label = "All" }, { id = "established", label = "Established" },
+	{ id = "suggested", label = "Suggestions" } }
+
+--- The Memories tab's items for a filter (v0.10.3), newest first:
+--   all          every memory, and the verified events recorded
+--                automatically (Core/Memories.lua: notable ones only; the
+--                rest stay in the history); a suggestion put off with Later
+--                comes after the rest
+--   established  established memories only
+--   suggested    suggestions waiting for the player (Memories.Suggestions)
+-- A recorded event is { recorded = true, key, at, event, title, text }. Pure.
+function ChronicleView.MemoryItems(char, filter)
+	if filter == "suggested" then return ns.Memories.Suggestions(char) end
+	local out = {}
+	local list = char.story.memories
+	for i = #list, 1, -1 do
+		local m = list[i]
+		if filter ~= "established" or m.status == "established" then out[#out + 1] = m end
+	end
+	if filter == "established" then return out end
+	for _, e in ipairs(ns.Memories.Recorded(char)) do
+		out[#out + 1] = { recorded = true, key = e.key, at = e.at, event = e,
+			title = ns.Memories.RecordedTitle(e), text = ns.Memories.RecordedText(char, e) }
+	end
+	local order = {}
+	for i, item in ipairs(out) do order[item] = i end
+	table.sort(out, function(a, b)
+		local la, lb = a.laterAt ~= nil, b.laterAt ~= nil
+		if la ~= lb then return lb end
+		if (a.at or 0) ~= (b.at or 0) then return (a.at or 0) > (b.at or 0) end
+		return order[a] < order[b]
+	end)
+	return out
+end
+
 --- Whether a record (or finding) matches a search, ignoring case. A
 -- person's feelings are not searched (they are not shown on the card). Pure.
 function ChronicleView.Matches(listId, r, query)
@@ -558,8 +608,14 @@ function ChronicleView.Matches(listId, r, query)
 end
 
 ChronicleView.EMPTY = {
-	memories = { "No memories yet", "Write one with New memory. Dawnward also suggests memories from the moments "
-		.. "you answer in Story; a suggestion waits here until you accept, edit or remove it." },
+	memories = { "No memories yet", "Write one with New memory. Milestones the game reports are recorded here, and "
+		.. "the notable answers you give in Story are kept in your words. Dawnward suggests what a moment meant "
+		.. "only for a defining one; a suggestion waits here until you decide." },
+	-- (v0.10.3) The Memories filters.
+	memoriesEstablished = { "Nothing established yet", "Memories you write, answers you give in Story and "
+		.. "suggestions you accept are established." },
+	memoriesSuggested = { "Nothing to decide", "No suggestions are waiting. Dawnward suggests what a moment meant "
+		.. "only when a defining answer supports it." },
 	arcs = { "No arcs yet", "An arc is a thread of your character's story: a conflict, a conviction, a "
 		.. "relationship. Start one with New arc; you decide when it turns, pauses or ends." },
 	goals = { "No goals yet", "Add what your character wants with New goal. A target level, or a standing with a "
@@ -812,10 +868,12 @@ end
 
 -- Button labels of the record actions; every other label is an answer.
 ChronicleView.ACTION_LABELS = { accept = "Accept", edit = "Edit", dispute = "Dispute", turn = "Turn",
-	steps = "Steps", read = "Read", remove = "Remove", explain = "Explain...", undo = "Undo answer" }
+	steps = "Steps", read = "Read", remove = "Remove", explain = "Explain...", undo = "Undo answer",
+	later = "Later", dismiss = "Dismiss" }
 -- Remove is destructive, Accept the one primary action, Edit and the
 -- answers the usual ones (filled, with an edge); the rest are quiet.
-ChronicleView.ACTION_VARIANTS = { accept = "primary", edit = "default", remove = "danger", explain = "default",
+ChronicleView.ACTION_VARIANTS = { accept = "primary", edit = "default", remove = "danger", dismiss = "danger",
+	explain = "default",
 	undo = "default", growth = "default", unreliable = "default", secret = "default", correction = "default",
 	ignore = "default" }
 ChronicleView.CUT_HELP = "The game shortened this text to fit. Click to read the whole record."
@@ -847,15 +905,23 @@ function ChronicleView.Actions(tabId, item, opts)
 		if opts.read then add("read") end
 		return left
 	end
+	if item.recorded then
+		-- A recorded event is the game's record: nothing to approve or edit.
+		if opts.read then add("read") end
+		return left
+	end
 	local m = ns[tabSpec(tabId).module] or {}
 	if (item.status == "proposed" or item.status == "disputed") and m.Accept then add("accept") end
 	add("edit")
+	-- (v0.10.3) A suggested memory can wait (Later) or be dismissed.
+	if tabId == "memories" and item.status == "proposed" and not item.laterAt then add("later") end
 	if item.status == "established" and m.Dispute then add("dispute") end
 	if tabId == "arcs" then add("turn")
 	elseif tabId == "goals" then add("steps")
 	end
 	if opts.read then add("read") end
 	local right = (item.provenance == "player" or item.status == "proposed") and { "remove", A.remove } or nil
+	if tabId == "memories" and item.status == "proposed" then right = { "dismiss", A.dismiss } end
 	return left, right
 end
 
@@ -884,6 +950,7 @@ end
 -- The identity of an item across refreshes (records by id, Review items by
 -- their finding and part).
 local function itemKey(item)
+	if item.recorded then return "event:" .. tostring(item.key) end
 	if item.id then return "id:" .. tostring(item.id) end
 	return tostring(item.reviewKind or "finding") .. ":" .. tostring(item.key) .. ":" .. tostring(item.letter or "")
 end
@@ -1084,6 +1151,16 @@ local function create(parent)
 	section.count:SetWidth(L.width - L.newWidth - L.searchWidth - 2 * 10)
 	section.count:SetPoint("RIGHT", f, "TOPRIGHT", -L.inset, -(L.toolbarTop + L.toolbarHeight / 2))
 	section.toolbar = { section.new, section.search, section.count }
+	-- (v0.10.3) Memories: All / Established / Suggestions, sized to the words.
+	section.memoryFilter = "all"
+	section.filter = Widgets.Segmented(f, ChronicleView.MEMORY_FILTERS, 0, Style.CONTROL.segment, function(id)
+		if id ~= section.memoryFilter then
+			section.memoryFilter, section.offset, section.detailKey = id, 0, nil
+			MainWindow.Refresh()
+		end
+	end, { fit = true })
+	section.filter.buttons[1]:SetPoint("TOPLEFT", L.inset + L.newWidth + 10 + L.memorySearchWidth + L.filterGap,
+		-(L.toolbarTop + (L.toolbarHeight - Style.CONTROL.segment) / 2))
 
 	-- Empty state: what the tab holds and how to fill it (v0.10.1: the shared
 	-- empty-state card, as the Journal's: icon, title, centred text and the
@@ -1260,6 +1337,14 @@ local function create(parent)
 			return function()
 				Widgets.Confirm("Remove this record?", "Remove", function()
 					act(function(char) return m.Remove(char, r.id) end)
+				end)
+			end
+		elseif id == "later" then
+			return function() act(function(char, now) return m.Later(char, r.id, now) end) end
+		elseif id == "dismiss" then
+			return function()
+				Widgets.Confirm("Dismiss this suggestion?", "Dismiss", function()
+					act(function(char) return m.Dismiss(char, r.id) end)
 				end)
 			end
 		end
@@ -1543,6 +1628,9 @@ local function create(parent)
 			return findings
 		end
 		if tabId == "places" then return ns.Places.List(char) end
+		if tabId == "memories" then
+			return ChronicleView.MemoryItems(char, shown and self.memoryFilter or "all")
+		end
 		local list = char.story[tabId] or {}
 		for i = #list, 1, -1 do items[#items + 1] = list[i] end
 		return items
@@ -1578,6 +1666,11 @@ local function create(parent)
 		end
 		if self.places then self.places.frame:SetShown(places) end
 		for _, region in ipairs(self.toolbar) do region:SetShown(not places) end
+		local memories = self.tab == "memories"
+		for _, b in ipairs(self.filter.buttons) do b:SetShown(memories) end
+		if self.filter.track then self.filter.track:SetShown(memories) end
+		self.filter:Select(self.memoryFilter)
+		self.search:SetWidth(memories and L.memorySearchWidth or L.searchWidth)
 		if places then
 			self.detailKey = nil
 			self.detail:Hide()
@@ -1632,6 +1725,11 @@ local function create(parent)
 		-- Empty state.
 		local empty = ChronicleView.EMPTY[self.tab]
 		if review and self.reviewMode == "answered" then empty = ChronicleView.EMPTY.answered end
+		if self.tab == "memories" and self.memoryFilter == "established" then
+			empty = ChronicleView.EMPTY.memoriesEstablished
+		elseif self.tab == "memories" and self.memoryFilter == "suggested" then
+			empty = ChronicleView.EMPTY.memoriesSuggested
+		end
 		self.emptyPanel:SetShown(#items == 0)
 		self.empty:SetShown(#items == 0)
 		if #all > 0 and #items == 0 then
