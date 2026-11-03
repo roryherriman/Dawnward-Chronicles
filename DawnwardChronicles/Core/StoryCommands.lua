@@ -68,7 +68,7 @@ local function listAll(ctx, char)
 		for _, r in ipairs(list) do
 			out(ctx, reactionLine(char, r))
 		end
-		out(ctx, "Open one: /dawnward story <#>")
+		out(ctx, "Open one: /dawnward story <#>. No card? /dawnward story why")
 	end
 	local pending = char and #Evolution.Pending(char) or 0
 	if pending > 0 then
@@ -86,6 +86,10 @@ Commands.Register("story", function(ctx, rest)
 		return
 	elseif word == "settings" then
 		settings(ctx, char)
+		return
+	elseif word == "why" then
+		-- Why a moment had no card (Core/StoryDiagnostics.lua).
+		for _, line in ipairs(ns.StoryDiagnostics.WhyLines(ctx)) do out(ctx, line) end
 		return
 	elseif word == "set" then
 		local name, value = Util.NextWord(tail)
@@ -123,7 +127,7 @@ Commands.Register("story", function(ctx, rest)
 	end
 	local id = tonumber(word)
 	if not Util.IsPositiveInteger(id) then
-		out(ctx, "Usage: /dawnward story | story <#> | story settings | story events | story decisions")
+		out(ctx, "Usage: /dawnward story | story <#> | story settings | story events | story decisions | story why")
 		return
 	end
 	local reaction = char and Reactions.Find(char, id)

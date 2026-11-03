@@ -232,6 +232,125 @@ function StoryDiagnostics.EncounterLines(ctx)
 	return lines
 end
 
+--- Why no card ------------------------------------------------------------------
+-- /dawnward story why (any build) and dev story status: for each waiting
+-- moment, whether its card was shown and how it went away, or why none has
+-- appeared yet (not a safe moment now, the pause between cards, one card at
+-- a time, a setting). Read-only; plain words.
+StoryDiagnostics.UNSAFE = {
+	combat = "in combat", dead = "dead or a ghost", cinematic = "a cinematic is playing",
+	loading = "a loading screen", away = "away (AFK)", instance = "in a dungeon or raid",
+	readonly = "Dawnward's saved data is read-only this session", simulation = "simulation mode is on",
+}
+StoryDiagnostics.CLOSED = {
+	close = "you closed it", escape = "you closed it with Escape", later = "you chose Later",
+	notnow = "you chose Not now", answer = "you opened it in the Story section",
+	combat = "combat hid it more than once, so it waits here",
+}
+
+-- "12 min ago" / "in 33 min" from real dates (Core stays clock-free).
+local function ago(t, now)
+	if type(t) ~= "number" or t <= 0 then return "earlier" end
+	return duration(math.max(0, now - t)) .. " ago"
+end
+
+local function unsafeText(codes)
+	local words = {}
+	for _, code in ipairs(codes) do words[#words + 1] = StoryDiagnostics.UNSAFE[code] or code end
+	return table.concat(words, ", ")
+end
+
+-- What happened to a moment that will not be offered again (or nil).
+local function settledText(r, onScreen, now)
+	if r.status == "postponed" then
+		return "kept for later: it waits here without a card"
+	end
+	if onScreen == r.id then
+		return string.format("on screen now (shown %s)", ago(r.shownAt, now))
+	end
+	if r.shownAt then
+		local shown = r.shownVia == "chat" and string.format("announced in chat %s", ago(r.shownAt, now))
+			or string.format("shown as a card %s", ago(r.shownAt, now))
+		local how = r.closedHow and StoryDiagnostics.CLOSED[r.closedHow]
+		if r.notifiedAt == nil and r.closedHow == "combat" then
+			return shown .. "; combat hid it, so it is offered again after the fight"
+		end
+		return shown .. (how and ("; " .. how) or "") .. ", so it is not shown again"
+	end
+	if r.notifiedAt then
+		if r.closedHow == "notnow" then
+			return "you chose Not now: no more reminders"
+		end
+		return "announced by an earlier version: no more reminders"
+	end
+	return nil
+end
+
+--- Lines explaining, for each waiting moment, why no card appeared.
+function StoryDiagnostics.WhyLines(ctx)
+	local lines = {}
+	local function add(text) lines[#lines + 1] = text end
+	local char = ctx.store.real.characters[ctx.characterKey]
+	if not char then
+		add("This character has no Dawnward record yet, so no moments are waiting.")
+		return lines
+	end
+	local now = ctx.now()
+	local list = Reactions.List(char, now)
+	local prefs = char.story.prefs
+	add(string.format("Story moments: %d %s waiting in the Story section.", #list,
+		#list == 1 and "moment" or "moments"))
+	if #list == 0 then
+		return lines
+	end
+	if prefs.frequency == "off" then
+		add("Story prompts are off (/dawnward story set frequency normal), so no card appears; "
+			.. "the moments stay in the Story section.")
+	elseif not prefs.card then
+		add("The card is switched off (/dawnward story set card on): a moment is announced with one chat line.")
+	end
+	local SafeTime = ns.SafeTime
+	local blockers = SafeTime and SafeTime.Blockers(ctx) or {}
+	local onScreen = SafeTime and SafeTime.CardShownId() or nil
+	local order = Reactions.NoticeOrder(char, now)
+	local first = order[1]
+	local untilAt = Reactions.NoticeUntil(char, now)
+	for _, r in ipairs(list) do
+		local view = Reactions.Present(char, r)
+		local label = string.format("#%d %s", r.id, Commands.Preview(view and view.question or "(unavailable)"))
+		local why = settledText(r, onScreen, now)
+		if not why then
+			if prefs.frequency == "off" then
+				why = "prompts are off"
+			elseif r == first then
+				local skip = r.significance >= 3 or (r.closedHow == "combat" and r.shownAt)
+				if #blockers > 0 then
+					why = "next to be shown; not a safe moment now: " .. unsafeText(blockers)
+				elseif onScreen then
+					why = "next to be shown when the card on screen closes (one card at a time)"
+				elseif untilAt and not skip then
+					why = string.format("next to be shown after the pause between cards: until about %s from now "
+						.. "(frequency %s)", duration(untilAt - now), prefs.frequency)
+				else
+					why = "next to be shown at the next calm moment"
+				end
+			else
+				why = string.format("waits after the %s moment #%d (one card at a time)",
+					first.significance > r.significance and "more important" or "newer", first.id)
+			end
+			if r.noticeTries then
+				why = why .. string.format("; the card failed to appear %d time%s", r.noticeTries,
+					r.noticeTries == 1 and "" or "s")
+			end
+		end
+		add(string.format("  %s - %s.", label, why))
+	end
+	if SafeTime and SafeTime.lastError then
+		add("Last card problem this session: " .. SafeTime.lastError .. ".")
+	end
+	return lines
+end
+
 --- Lines for /dawnward dev story status.
 function StoryDiagnostics.StatusLines(ctx)
 	local now = ctx.now()
@@ -285,6 +404,8 @@ function StoryDiagnostics.StatusLines(ctx)
 	end
 	for _, line in ipairs(StoryDiagnostics.RepeatLines(char, play, subject, label)) do add(line) end
 	add(string.format("Waiting moments: %d.", #Reactions.List(char, now, play)))
+	add("Why no card:")
+	for _, line in ipairs(StoryDiagnostics.WhyLines(ctx)) do add("  " .. line) end
 	for _, line in ipairs(StoryDiagnostics.EncounterLines(ctx)) do add(line) end
 	local last = ctx.lastLocation
 	if not last then
