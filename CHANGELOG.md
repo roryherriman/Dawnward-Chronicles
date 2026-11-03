@@ -34,6 +34,14 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 ### Saved data
 Additive only. New optional fields on story moments (when a card was tried, shown and closed), `char.profileSuggestions` (absent until the first suggestion), `trp3status.currentlyMode` (absent = Manual), and the icons Dawnward wrote in trait ownership records. Data from 0.10.1 loads unchanged.
 
+### Fixed before merge (independent review)
+- Automatic Currently keeps its promise: it never replaces a Currently you wrote yourself, including one from 0.10.1. Each update then waits as a suggestion ("you wrote your own Currently"); accepting one lets Automatic continue from it, even when it was held.
+- Clearing or writing Currently by hand in Automatic mode is your choice: a waiting suggestion gives way instead of being applied in the same step, and an empty Currently you cleared is not filled in.
+- Backups made without secrets no longer carry suggestions drawn from a secret memory or goal (their titles); restoring such a backup keeps the current ones. Secret memories and goals are never used as evidence, a private one says "check before accepting", and a secret name or pronouns are never used in the wording.
+- An At First Glance suggestion saved from the editor as **Hidden** stays hidden, and the editor names the entry Save will really fill when the entry it revises was changed since.
+- After **Answer** no other card pops up over the journal; after you close a card the next one waits at least two minutes, even for a major moment; the Escape that closes the journal together with a card no longer counts as dismissing that moment (it is offered again later, at most twice).
+- A decision that approves a change automatically reports the profile suggestion it led to; an error in a profile-suggestion step is shown by `/dawnward trp3 diagnose` instead of being silent.
+
 ## [Unreleased]: 0.10.1-dev (Showcase fix, Total RP 3 profile refinement)
 
 **Verified: L2** (mocked). The owner confirmed in game that 0.10.0's About page now receives the whole story; everything below is tested against a mock only.

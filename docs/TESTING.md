@@ -977,9 +977,9 @@ The automated run (L2, TRP3 3.4.1 fake) imports one long backstory of plain para
 | AB4 | In Total RP 3's editor, change one end icon of a Dawnward trait and save; then change that axis in Dawnward | The value updates and your icon stays ("your own, kept" in diagnose) |
 | AB5 | Turn in a quest and start a fight within a few seconds of the card appearing | The card hides in combat and comes back after the fight (at most twice) |
 | AB6 | Turn in two or three quests while in combat | After the fight exactly one card (the newest) with "N more waiting in the Story section" |
-| AB7 | Close a card with X and another with Escape; `/dawnward story why` | Both say they were shown and closed; neither comes back |
+| AB7 | With the journal closed, close a card with X and another with Escape; `/dawnward story why` | Both say they were shown and closed; neither comes back. After a close the next card waits at least two minutes, even for a major moment (`/dawnward story why` says "a little after the card you closed") |
 | AB8 | With a moment waiting in the pause between cards: `/dawnward story why` | It names the pause and when it ends; a card appears when the pause ends without anything else happening |
-| AB9 | Open the journal, then trigger a moment | The card appears above the journal window |
+| AB9 | Open the journal, then trigger a moment; then press Escape once | The card appears above the journal window; Escape closes both, and `/dawnward story why` says Escape closed it together with the journal: the card comes back at a later calm moment |
 | AB10 | `/reload` with a never-shown moment waiting, out of combat | About 20 seconds after login one card appears |
 | AB11 | Hover the Story item in the journal rail | The badge count matches `/dawnward story`; the tooltip names it |
 | AB12 | Enter a dungeon, go AFK, die, watch a cinematic | No card during any of them; it comes after leaving, returning, reviving or the cinematic ending |
@@ -987,7 +987,9 @@ The automated run (L2, TRP3 3.4.1 fake) imports one long backstory of plain para
 | AB14 | Accept it (glance sync on) | The entry appears in a free Total RP 3 slot; slots you filled yourself are untouched |
 | AB15 | On another suggestion: Edit (change the words, Save), Later, Dismiss | Edit publishes your words; Later brings it back after a day; Dismiss does not offer it again at the same strength |
 | AB16 | Currently updates: switch to **Suggested**, enter a new zone | A suggested Currently appears with Accept / Edit / Later / Dismiss; Total RP 3's Currently changes only after Accept |
-| AB17 | Switch to **Automatic** (it asks first); enter a new zone; then **Undo last automatic update** | Total RP 3's Currently updates; Undo restores the previous text |
+| AB17 | Switch to **Automatic** (it asks first) while Currently holds text you wrote (for example from 0.10.1); enter a new zone. Accept the waiting suggestion; enter another zone; then **Undo last automatic update** | The first update only waits ("you wrote your own Currently"), Total RP 3 unchanged; after Accept, the next zone updates Total RP 3's Currently by itself; Undo restores the accepted text |
 | AB18 | Type your own Currently in Total RP 3, then enter another zone | Total RP 3 is not overwritten; Dawnward shows the suggestion waiting for you |
 | AB19 | Simulation on (development builds): try Accept and a mode change | Both are refused |
-| AB20 | Play 30 minutes normally (quests, a level, zones, a story moment) | No Lua error; no flood of cards |
+| AB20 | Play 30 minutes normally (quests, a level, zones, a story moment) | No Lua error; no flood of cards; `/dawnward trp3 diagnose` ends with "profile suggestions: no error this session" |
+| AB21 | In Automatic, with a suggestion waiting, press **Clear** on Currently (Status and OOC > Currently) | Currently is empty, as the message says; the waiting suggestion is gone; the next zone's update waits for you instead of filling it |
+| AB22 | With two major moments waiting, press **Answer** on the card | The journal opens on that moment; no second card pops up over it |
