@@ -30,6 +30,14 @@
 -- Reactions wait until the player answers, postpones or dismisses them, or
 -- until they expire. Asking happens elsewhere (Platform/SafeTime decides
 -- when); this module never interrupts anything.
+--
+-- Notification state (0.10.2, additive; see "Notices" at the end): createdAt
+-- (generated), noticeTries/triedAt (card attempts that did not appear),
+-- shownAt/shownVia (the card, or the chat line when the card is off, was
+-- actually displayed), closedAt/closedHow (how the card went away) and
+-- interrupts (times combat hid it before the player acted). notifiedAt keeps
+-- its 0.10.1 meaning: set, the moment is never announced again. Answering
+-- removes the moment; the decision keeps the time.
 local _, ns = ...
 local StorySchema, ReactionLibrary, GameEvents, Places = ns.StorySchema, ns.ReactionLibrary, ns.GameEvents, ns.Places
 
@@ -239,7 +247,8 @@ end
 -- A waiting, unannounced location moment in the same zone, from moments ago.
 local function recentLocation(char, record, now)
 	for index, r in ipairs(char.story.reactions) do
-		if Reactions.LOCATION[r.category] and r.status == "pending" and r.notifiedAt == nil and r.zone == record.zone
+		if Reactions.LOCATION[r.category] and r.status == "pending" and r.notifiedAt == nil and r.shownAt == nil
+			and r.zone == record.zone
 			and (now or 0) - r.createdAt <= Reactions.LOCATION_WINDOW then
 			return r, index
 		end
@@ -553,6 +562,7 @@ function Reactions.Postpone(char, id)
 	end
 	r.status = "postponed"
 	r.notifiedAt = r.notifiedAt or r.createdAt
+	r.closedHow = r.closedHow or "later"
 	return r
 end
 
@@ -563,6 +573,7 @@ function Reactions.Ignore(char, id, now)
 		return nil, "no waiting reaction #" .. tostring(id)
 	end
 	r.notifiedAt = now or 0
+	r.closedAt, r.closedHow = now or 0, "notnow"
 	return r
 end
 
@@ -589,29 +600,111 @@ function Reactions.Resolve(char, id)
 	return r
 end
 
---- The reaction to announce now, if any: pending, never announced, and the
--- notice cooldown has passed (a major event may be announced at once).
-function Reactions.NextNotice(char, now)
-	local prefs, pacing = char.story.prefs, char.story.pacing
-	if prefs.frequency == "off" then
-		return nil
+--- Notices -------------------------------------------------------------------
+-- A moment is announced once: when its card (or, with the card switched
+-- off, its chat line) was actually displayed. Until then it stays eligible:
+-- a card that could not appear is tried again at the next calm moment, and
+-- a card that combat hid before the player did anything is offered again
+-- after the fight (at most MAX_INTERRUPTS times). A card the player closed
+-- (Close, Escape, Later, Not now, Answer) is never offered again; the moment
+-- keeps waiting in the Story section.
+-- Pacing: one card at a time; between two cards the notice cooldown of the
+-- player's frequency (real time, about not interrupting a play session),
+-- which a major moment and a card resumed after combat skip.
+Reactions.MAX_INTERRUPTS = StorySchema.LIMITS.interrupts
+Reactions.CLOSED = StorySchema.CLOSED_HOW
+
+-- Resumed after combat: the player was looking at it when the fight began.
+local function resumed(r)
+	return r.closedHow == "combat" and r.shownAt ~= nil
+end
+
+--- Moments that may still be announced, in the order they would be: a card
+-- combat interrupted first, then the most significant, then the newest (the
+-- one the player just lived through). Ignores the notice cooldown.
+function Reactions.NoticeOrder(char, now)
+	local out = {}
+	if char.story.prefs.frequency == "off" then
+		return out
 	end
-	local cooldown = Reactions.COOLDOWN[prefs.frequency]
 	for _, r in ipairs(Reactions.List(char, now)) do
 		if r.status == "pending" and r.notifiedAt == nil then
-			if r.significance >= 3 or pacing.lastNoticeAt == 0 or now - pacing.lastNoticeAt >= cooldown then
-				return r
-			end
+			out[#out + 1] = r
 		end
+	end
+	table.sort(out, function(a, b)
+		local ra, rb = resumed(a), resumed(b)
+		if ra ~= rb then return ra end
+		if a.significance ~= b.significance then return a.significance > b.significance end
+		if a.createdAt ~= b.createdAt then return a.createdAt > b.createdAt end
+		return a.id > b.id
+	end)
+	return out
+end
+
+--- When the notice cooldown ends (a real date), or nil when it is not running.
+function Reactions.NoticeUntil(char, now)
+	local prefs, pacing = char.story.prefs, char.story.pacing
+	local cooldown = Reactions.COOLDOWN[prefs.frequency]
+	if not cooldown or pacing.lastNoticeAt == 0 or pacing.lastNoticeAt > (now or 0) then
+		return nil
+	end
+	local untilAt = pacing.lastNoticeAt + cooldown
+	return untilAt > (now or 0) and untilAt or nil
+end
+
+--- The reaction to announce now, if any: the first of NoticeOrder that the
+-- notice cooldown lets through (a major moment, or one resumed after combat,
+-- at once). Otherwise nil plus { cooldownUntil } when moments are only
+-- waiting for the cooldown to end.
+function Reactions.NextNotice(char, now)
+	local order = Reactions.NoticeOrder(char, now)
+	local untilAt = Reactions.NoticeUntil(char, now)
+	for _, r in ipairs(order) do
+		if not untilAt or r.significance >= 3 or resumed(r) then
+			return r
+		end
+	end
+	if #order > 0 and untilAt then
+		return nil, { cooldownUntil = untilAt }
 	end
 	return nil
 end
 
-function Reactions.MarkNotified(char, id, now)
+--- The card (via "card") or the chat line (via "chat") was displayed.
+function Reactions.MarkNotified(char, id, now, via)
 	local r = Reactions.Find(char, id)
 	if r then
 		r.notifiedAt = now or 0
+		r.shownAt, r.shownVia = now or 0, via or "card"
+		r.closedAt, r.closedHow = nil, nil
 		char.story.pacing.lastNoticeAt = now or 0
+	end
+	return r
+end
+
+--- A card that did not appear. Returns the reaction (noticeTries counted).
+function Reactions.NoticeFailed(char, id, now)
+	local r = Reactions.Find(char, id)
+	if r then
+		r.noticeTries = math.min((r.noticeTries or 0) + 1, StorySchema.LIMITS.noticeTries)
+		r.triedAt = now or 0
+	end
+	return r
+end
+
+--- The card went away: how is one of Reactions.CLOSED. Combat (before the
+-- player did anything) makes the moment eligible again, a bounded number of
+-- times; every other way is the player's choice and final.
+function Reactions.NoticeClosed(char, id, how, now)
+	local r = Reactions.Find(char, id)
+	if not r or not Reactions.CLOSED[how] then
+		return nil
+	end
+	r.closedAt, r.closedHow = now or 0, how
+	if how == "combat" and (r.interrupts or 0) < Reactions.MAX_INTERRUPTS and r.status == "pending" then
+		r.interrupts = (r.interrupts or 0) + 1
+		r.notifiedAt = nil
 	end
 	return r
 end
