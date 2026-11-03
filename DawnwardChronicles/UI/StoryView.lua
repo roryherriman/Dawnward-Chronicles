@@ -12,6 +12,11 @@
 --   also waiting the other waiting moments, selectable; Reflect
 --   growth       personality changes waiting for approval (with why), and
 --                recently applied ones, which can be reversed
+--   profile      v0.10.2: "Your profile could show this", the newest profile
+--                suggestion an answer or approval led to (Core/
+--                ProfileSuggestions.lua): what it says, why, what changes in
+--                Total RP 3, and Accept / Edit / Later / Dismiss. Edit opens
+--                the suggestion in Settings > Total RP 3's own editor.
 --
 -- Every button calls the same Actions as /dawnward story and develop.
 -- Nothing here changes the character without a click: answers only propose
@@ -42,7 +47,10 @@ StoryView.MAX_WHY_ROWS = 3 -- Why now, remembers, Last time
 -- waiting row goes first (the pager still reaches it), then the second
 -- applied change, then the second waiting change (both still listed by
 -- /dawnward develop).
-StoryView.SIDE_STEPS = { { 2, 2, 2 }, { 1, 2, 2 }, { 1, 2, 1 }, { 1, 1, 1 }, { 1, 1, 0 } }
+StoryView.SIDE_STEPS = { { 2, 2, 2 }, { 1, 2, 2 }, { 1, 2, 1 }, { 1, 1, 1 }, { 1, 1, 0 }, { 0, 1, 0 }, { 0, 0, 0 } }
+-- The profile suggestion panel: the text and the reason are cut to these
+-- lines (the whole of both is in the panel's tooltip).
+StoryView.PROFILE_LINES = { text = 2, why = 1, effect = 2 }
 
 -- Layout (UI units), from docs/design/mockups/source/Story.dc.html. The
 -- moment card flows top to bottom (chips, question, "Why now", answers, own
@@ -71,6 +79,9 @@ local L = {
 	reason = { size = 13, spacing = 4, maxLines = 2 }, changeLabel = 15, changeGap = 6, changeButtonsGap = 10,
 	appliedH = 34, smallButton = Style.CONTROL.compact, reverseH = Style.CONTROL.chip, reflectH = Style.CONTROL.chip,
 	note = { size = 13, spacing = 4 },
+	-- The profile suggestion panel (v0.10.2): small (13) lines, 4 apart; two
+	-- rows of two chip-high buttons.
+	profile = { size = 13, spacing = 4, gap = 4, title = 15, buttonH = Style.CONTROL.chip, buttonsGap = 8 },
 }
 -- Two spacings: the mockup's ("comfortable"), and a tighter one used only
 -- when a moment holds more than the comfortable card has room for.
@@ -783,6 +794,43 @@ local function create(parent)
 	section.growthNote = spacing(Widgets.Label(growth, "small", true, "muted"), L.note.spacing)
 	section.growthNote:SetWidth(L.sideInner)
 
+	--- Your profile could show this (v0.10.2) ------------------------------------------
+	local profile = Widgets.Callout(f, "Your profile could show this")
+	section.profilePanel = profile
+	profile:SetWidth(L.sideW)
+	profile:Hide()
+	section.profileKind = Widgets.Label(profile, "small", false, "muted")
+	section.profileKind:SetWidth(L.sideInner)
+	section.profileTitle = Widgets.Label(profile, "button", false)
+	Widgets.SetTextRole(section.profileTitle, "accentBright")
+	section.profileTitle:SetWidth(L.sideInner)
+	section.profileText = spacing(Widgets.Label(profile, "small", true, "body"), L.profile.spacing)
+	section.profileText:SetWidth(L.sideInner)
+	section.profileWhy = spacing(Widgets.Label(profile, "small", true, "muted"), L.profile.spacing)
+	section.profileWhy:SetWidth(L.sideInner)
+	section.profileEffect = spacing(Widgets.Label(profile, "small", true, "muted"), L.profile.spacing)
+	section.profileEffect:SetWidth(L.sideInner)
+	local function profileAct(fn)
+		if section.profileId then act(fn, section.profileId) end
+	end
+	local halfSide = (L.sideInner - 6) / 2
+	local PB = L.profile.buttonH
+	section.profileAccept = Widgets.Button(profile, "Accept", halfSide, PB, "primary")
+	section.profileAccept:SetScript("OnClick", function() profileAct(ns.ProfileActions.Accept) end)
+	Widgets.Tooltip(section.profileAccept, "Accept", "Saves it in Dawnward as offered. Total RP 3 follows on the next "
+		.. "sync, only while that part is kept in sync. You can edit or remove it afterwards.")
+	section.profileEdit = Widgets.Button(profile, "Edit", halfSide, PB, "ghost")
+	section.profileEdit:SetScript("OnClick", function() StoryView.EditSuggestion(section.profileId) end)
+	Widgets.Tooltip(section.profileEdit, "Edit", "Opens it in Settings > Total RP 3: change it, then Save to accept it "
+		.. "in your own words.")
+	section.profileLater = Widgets.Button(profile, "Later", halfSide, PB, "ghost")
+	section.profileLater:SetScript("OnClick", function() profileAct(ns.ProfileActions.Postpone) end)
+	Widgets.Tooltip(section.profileLater, "Later", "Shows it again tomorrow. Nothing changes.")
+	section.profileDismiss = Widgets.Button(profile, "Dismiss", halfSide, PB, "danger")
+	section.profileDismiss:SetScript("OnClick", function() profileAct(ns.ProfileActions.Dismiss) end)
+	Widgets.Tooltip(section.profileDismiss, "Dismiss", "Not offered again unless your character develops much further. "
+		.. "Nothing changes.")
+
 	local reactionWidgets = { section.prev, section.position, section.next, section.question, section.questionHit,
 		section.why, section.customLabel, section.customArea.frame, section.save, section.later, section.notNow,
 		section.dismiss }
@@ -1071,12 +1119,65 @@ local function create(parent)
 		return height
 	end
 
+	-- Your profile could show this: the newest waiting profile suggestion.
+	-- Returns the panel's height (0 when nothing waits).
+	local function refreshProfile(char, now)
+		local s = char and ns.ProfileSuggestions.Waiting(char, now)[1] or nil
+		section.profileId = s and s.id or nil
+		profile:SetShown(s ~= nil)
+		if not s then return 0 end
+		local P, pad = L.profile, Widgets.PANEL_PAD
+		local y = -L.panelTitle
+		local glance = s.kind == "glance"
+		section.profileKind:SetText(glance and "At First Glance, for Total RP 3" or "Currently, for Total RP 3")
+		at(section.profileKind, profile, pad, y)
+		y = y - P.size - P.gap
+		section.profileTitle:SetShown(glance)
+		if glance then
+			section.profileTitle:SetText(safe(s.title or ""))
+			at(section.profileTitle, profile, pad, y)
+			y = y - P.title - P.gap
+		end
+		local function block(fs, text, limit)
+			local lines = math.min(measure(fs, text, "small", P.size, P.spacing, L.sideInner), limit)
+			maxLines(fs, lines)
+			at(fs, profile, pad, y)
+			y = y - StoryView.TextHeight(lines, P.size, P.spacing) - P.gap
+		end
+		block(section.profileText, safe(s.text), StoryView.PROFILE_LINES.text)
+		block(section.profileWhy, "Why: " .. safe(s.why[1] or ""), StoryView.PROFILE_LINES.why)
+		block(section.profileEffect, safe(ns.ProfileSuggestions.Effect(char, s)) .. " Nothing changes until you "
+			.. "accept.", StoryView.PROFILE_LINES.effect)
+		y = y - P.buttonsGap + P.gap
+		at(section.profileAccept, profile, pad, y)
+		at(section.profileEdit, profile, pad + section.profileAccept:GetWidth() + 6, y)
+		y = y - P.buttonH - 6
+		at(section.profileLater, profile, pad, y)
+		at(section.profileDismiss, profile, pad + section.profileLater:GetWidth() + 6, y)
+		y = y - P.buttonH
+		local details = { safe(s.text) }
+		for _, why in ipairs(s.why) do details[#details + 1] = "Why: " .. safe(why) end
+		details[#details + 1] = "In Total RP 3: " .. safe(ns.ProfileSuggestions.Effect(char, s))
+		if s.held then details[#details + 1] = "Waiting for you: " .. safe(s.held) .. "." end
+		details[#details + 1] = "Nothing reaches Total RP 3 until you accept it."
+		Widgets.Tooltip(profile, glance and (s.title or "At First Glance") or "Currently", table.concat(details, "\n"))
+		local height = -y + pad
+		profile:SetHeight(height)
+		return height
+	end
+
 	local function refreshSide(char, list, now)
+		local profileH = refreshProfile(char, now)
+		local room = L.contentH - (profileH > 0 and (profileH + L.panelGap) or 0)
+		local waitH, growthH
 		for _, step in ipairs(StoryView.SIDE_STEPS) do
-			local waitH = refreshWaiting(char, list, now, math.min(step[1], StoryView.MAX_WAITING))
-			local growthH = refreshGrowth(char, -(waitH + L.panelGap), step[2], step[3])
+			waitH = refreshWaiting(char, list, now, math.min(step[1], StoryView.MAX_WAITING))
+			growthH = refreshGrowth(char, -(waitH + L.panelGap), step[2], step[3])
 			section.sideStep = step
-			if waitH + L.panelGap + growthH <= L.contentH then return end
+			if waitH + L.panelGap + growthH <= room then break end
+		end
+		if profileH > 0 then
+			at(profile, f, L.cardW + L.gap, -(waitH + L.panelGap + growthH + L.panelGap))
 		end
 	end
 
@@ -1129,6 +1230,35 @@ local function create(parent)
 
 	StoryView.section = section
 	return section
+end
+
+--- Edit: opens a profile suggestion in Settings > Total RP 3's own editor
+-- (At First Glance, or Status and OOC's Currently), where Save accepts it in
+-- the player's words. Nothing is saved here.
+function StoryView.EditSuggestion(id)
+	local ctx = ns.ctx
+	if not id or not ctx then return end
+	if ctx.store:IsSimulation() then
+		MainWindow.SetStatus(ns.ProfileActions.SIMULATION_REFUSAL)
+		return
+	end
+	local char = ctx.store.real.characters[ctx.characterKey]
+	local s = char and ns.ProfileSuggestions.Find(char, id)
+	if not s then return end
+	if not (ns.SettingsPanel and ns.SettingsPanel.OpenPage("trp3")) then return end
+	local page = ns.SettingsPanel.panel and ns.SettingsPanel.panel.trp3Page
+	if not page then return end
+	ns.TRP3Page.Open(page, s.kind == "glance" and "glance" or "status")
+	if not page.view then
+		MainWindow.SetStatus("Total RP 3 is not available, so its editor cannot open. Accept the suggestion as "
+			.. "offered, or keep it for later.")
+		return
+	end
+	if s.kind == "glance" then
+		ns.TRP3MiscSections.EditGlanceSuggestion(page, s)
+	else
+		ns.TRP3MiscSections.EditCurrentlySuggestion(page, s)
+	end
 end
 
 MainWindow.RegisterSection({ id = "story", label = "Story", order = 3, heading = "A moment for your story",

@@ -3,10 +3,10 @@
 -- (Core/ProfileSuggestions.lua, Core/ProfileActions.lua), against the TRP3
 -- 3.4.1 fake (mocked; not in-game evidence). Total RP 3 shapes follow the
 -- 3.4.1 source: At First Glance slots player.misc.PE["1".."5"] = { IC, AC,
--- TI, TX } (Modules/Register/Characters/RegisterMisc.lua applyPeekSlot,
--- displayPeek and getMiscExchangeData: for i=1,5), Currently
--- player.character.CU through Player:SetCurrentlyText (Core/Player.lua
--- 413-436, 457-459).
+-- TI, TX } (Modules/Register/Characters/RegisterMisc.lua 332-357
+-- applyPeekSlot; five slots: for i=1,5 at 254 and 457), Currently
+-- player.character.CU through CurrentUser:SetCurrentlyText (Core/Player.lua
+-- 419-436 UpdateProfileField, 446-448).
 local Loader = require("support.loader")
 local Fake = require("fakes.trp3_341")
 
@@ -323,6 +323,24 @@ return function(t, expect)
 			w.deps.store.real.characters[KEY] = loaded
 			w.approve("faith", 1, 1)
 			for _, s in ipairs(w.waiting()) do expect.falsy(s.key:find("faith", 1, true)) end
+		end)
+
+		t:it("a personal backup keeps them (dismissals too); a shared export never carries them", function()
+			local w = world()
+			local T = w.ns.Transfer
+			w.approve("courage", 1, 3)
+			local s = w.waiting("glance")[1]
+			assert(w.PA.Dismiss(w.ctx, s.id))
+			local char = w.char()
+			local decoded = assert(T.Decode(assert(T.Export(char, T.KIND_BACKUP))))
+			expect.equal(decoded.character.profileSuggestions.keys["glance:axis:courage:up"].status, "dismissed")
+			local older = w.ns.Util.DeepCopy(decoded.character)
+			older.profileSuggestions = nil
+			local merged = T.MergeForImport(char, older, true, w.now(), true, true)
+			expect.equal(merged.profileSuggestions.keys["glance:axis:courage:up"].status, "dismissed",
+				"an older backup keeps the current ones")
+			local shared = assert(T.Decode(assert(T.Export(char, T.KIND_SHARE))))
+			expect.equal(shared.character.profileSuggestions, nil)
 		end)
 
 		t:it("keeps at most a bounded number, dropping old settled ones first", function()
