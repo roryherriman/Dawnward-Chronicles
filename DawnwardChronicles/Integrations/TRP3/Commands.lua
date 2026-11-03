@@ -202,6 +202,18 @@ local function diagnose(ctx, deps)
 	for _, line in ipairs(TRP3Commands.TraitIconLines(deps)) do
 		out(ctx, "  " .. line)
 	end
+	out(ctx, "  " .. TRP3Commands.ProfileErrorLine())
+end
+
+--- One line: the last error a profile-suggestion step raised this session
+-- (Actions.profileError), or that there was none.
+function TRP3Commands.ProfileErrorLine()
+	local e = ns.Actions.profileError
+	if not e then
+		return "profile suggestions: no error this session"
+	end
+	return "profile suggestions: last error this session (" .. e.where .. "): "
+		.. ns.Util.CleanText(e.text, 200, false)
 end
 
 --- The icons of each trait Dawnward owns, as Total RP 3 holds them now
@@ -1089,6 +1101,11 @@ function TRP3Commands.SetStatus(ctx, id, value)
 	end
 	return ns.Actions.WithCharacter(ctx, function(char)
 		local ok, err
+		-- v0.10.2: a Currently set or cleared here is the player's own, so the
+		-- Automatic mode never replaces it (Core/ProfileSuggestions.lua).
+		if id == "currently" and (value == nil or ns.RPStatus.Check(id, value) ~= nil) then
+			ns.ProfileSuggestions.PlayerSetCurrently(char, value, ctx.now())
+		end
 		if value == nil then
 			ok, err = ns.RPStatus.Clear(char, id, ctx.now())
 		else
@@ -1166,6 +1183,10 @@ function TRP3Commands.ImportStatus(ctx, id)
 		if feature == "style" then
 			done, why = ns.RPStatus.SetStyle(char, m.key, value, ctx.now())
 		else
+			-- An imported Currently is the player's own text (as in SetStatus).
+			if id == "currently" and ns.RPStatus.Check(id, value) ~= nil then
+				ns.ProfileSuggestions.PlayerSetCurrently(char, value, ctx.now())
+			end
 			done, why = ns.RPStatus.Set(char, id, value, ctx.now())
 		end
 		if done == nil then return ns.Actions.Fail(why) end

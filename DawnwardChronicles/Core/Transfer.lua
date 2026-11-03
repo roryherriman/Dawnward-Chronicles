@@ -87,6 +87,95 @@ function Transfer.StoryForBackup(char, includeSecrets)
 	return story
 end
 
+-- Story records kept secret, by list: { memories = { [id] = true }, goals = ... }.
+local function secretRecordIds(char)
+	local ids = { memories = {}, goals = {} }
+	for name, set in pairs(ids) do
+		for _, r in ipairs(char and char.story and char.story[name] or {}) do
+			if r.visibility == SECRET then set[r.id] = true end
+		end
+	end
+	return ids
+end
+
+-- Whether a profile suggestion (or an accepted entry's theme) points at a
+-- secret record: its text and reasons can quote that record's title.
+local THEME_LIST = { memory = "memories", goal = "goals" }
+local function namesSecret(s, ids)
+	for name, set in pairs(ids) do
+		for _, id in ipairs(s.sources and s.sources[name] or {}) do
+			if set[id] then return true end
+		end
+	end
+	local word, id = tostring(s.theme or ""):match("^glance:(%a+):(%d+)$")
+	local set = word and ids[THEME_LIST[word] or ""]
+	return set ~= nil and set[tonumber(id)] == true
+end
+
+--- Profile suggestions as they go into a personal backup (v0.10.2). Without
+-- secrets, every suggestion drawn from a secret memory or goal is left out,
+-- with the accepted entries and recent texts that repeat it; the keys and
+-- nextId stay, so a restore never offers a settled one again.
+-- MergeForImport carries the current ones back (Transfer.CarrySecretSuggestions).
+function Transfer.SuggestionsForBackup(char, includeSecrets)
+	local ps = Util.DeepCopy(char.profileSuggestions)
+	if includeSecrets or type(ps) ~= "table" then
+		return ps
+	end
+	local ids = secretRecordIds(char)
+	local kept, dropped = {}, {}
+	for _, s in ipairs(ps.list or {}) do
+		local into = namesSecret(s, ids) and dropped or kept
+		into[#into + 1] = s
+	end
+	ps.list = kept
+	local function repeats(t)
+		if type(t) ~= "string" or t == "" then return false end
+		for _, s in ipairs(dropped) do
+			if s.text == t or (s.result and s.result.text == t) then return true end
+		end
+		return false
+	end
+	for key, m in pairs(ps.managed or {}) do
+		if namesSecret({ theme = m.theme or key }, ids) or repeats(m.text) then ps.managed[key] = nil end
+	end
+	local texts = {}
+	for _, t in ipairs(ps.texts or {}) do
+		if not repeats(t) then texts[#texts + 1] = t end
+	end
+	ps.texts = texts
+	if ps.lastAuto and (repeats(ps.lastAuto.text) or repeats(ps.lastAuto.previous)) then ps.lastAuto = nil end
+	if repeats(ps.autoFrom) then ps.autoFrom = nil end
+	return ps
+end
+
+--- Puts back, into a restore from a backup made without secrets, the
+-- current character's profile suggestions drawn from its secret records
+-- (left out of that backup by SuggestionsForBackup). In place.
+function Transfer.CarrySecretSuggestions(result, current)
+	local mine = current and current.profileSuggestions
+	if type(mine) ~= "table" then
+		return
+	end
+	local ids = secretRecordIds(current)
+	local ps = ns.ProfileSuggestions.Store(result)
+	local used = {}
+	for _, s in ipairs(ps.list) do used[s.id] = true end
+	for _, s in ipairs(mine.list or {}) do
+		if namesSecret(s, ids) and not used[s.id] then
+			ps.list[#ps.list + 1] = Util.DeepCopy(s)
+			if s.id >= ps.nextId then ps.nextId = s.id + 1 end
+		end
+	end
+	table.sort(ps.list, function(a, b) return a.id < b.id end)
+	for key, m in pairs(mine.managed or {}) do
+		if ps.managed[key] == nil and namesSecret({ theme = m.theme or key }, ids) then
+			ps.managed[key] = Util.DeepCopy(m)
+		end
+	end
+	ns.ProfileSuggestions.Prune(ps)
+end
+
 --- opts: { addonVersion = string, characterKey = string (backups record it
 -- as the owner) }. A backup includes everything. includeSecrets = false or
 -- includeBiography = false (never passed by Dawnward itself since v0.10)
@@ -125,8 +214,9 @@ function Transfer.Export(char, kind, opts)
 		-- The status and look set for Total RP 3 (v0.10.1): backups only.
 		data.trp3status = Util.DeepCopy(char.trp3status or {})
 		-- Profile suggestions (v0.10.2) with what was accepted or dismissed,
-		-- so a restore never offers a dismissed one again: backups only.
-		data.profileSuggestions = Util.DeepCopy(char.profileSuggestions)
+		-- so a restore never offers a dismissed one again: backups only
+		-- (without secrets, none drawn from a secret record).
+		data.profileSuggestions = Transfer.SuggestionsForBackup(char, includesSecrets)
 		-- With no stored story there is nothing to carry: such a backup then
 		-- keeps whatever story is stored when it is restored.
 		includesBiography = opts.includeBiography ~= false and char.sources ~= nil
@@ -309,6 +399,8 @@ function Transfer.MergeForImport(current, imported, includesSecrets, now, includ
 		-- And one from before profile suggestions (v0.10.2).
 		if result.profileSuggestions == nil and current.profileSuggestions ~= nil then
 			result.profileSuggestions = Util.DeepCopy(current.profileSuggestions)
+		elseif not includesSecrets then
+			Transfer.CarrySecretSuggestions(result, current)
 		end
 		-- The publication model never goes backwards on a restore: once the
 		-- whole profile publishes (Publication.IsComplete), a restore keeps it

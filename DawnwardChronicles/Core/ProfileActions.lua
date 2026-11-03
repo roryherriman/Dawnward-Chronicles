@@ -14,9 +14,11 @@
 --   * the player confirmed Automatic for this character
 --   * the suggestion was made in that mode within the last hour, and names
 --     no private goal
---   * Dawnward's own Currently is empty, still the text it held when
---     Automatic was turned on, or Automatic's own last text (never a text
---     the player wrote since)
+--   * Dawnward's own Currently is the text Automatic may replace (autoFrom:
+--     empty or Dawnward-made when Automatic was confirmed, a suggestion the
+--     player accepted since, what Undo brought back) or Automatic's own last
+--     text; never a text the player wrote, set or cleared by hand
+--     (ProfileSuggestions.PlayerSetCurrently)
 --   * not in simulation mode, Total RP 3 is connected and bound to this
 --     character, Dawnward keeps Currently in sync, there is no conflict,
 --     and Total RP 3 shows nothing or exactly what Dawnward last wrote

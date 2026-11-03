@@ -58,9 +58,9 @@ M.MODE_HELP = {
 }
 M.AUTOMATIC_WARNING = "Let Dawnward update your Currently by itself?\n\nAfter a meaningful moment (a first visit to a "
 	.. "zone, a major moment you answered, a new goal) Dawnward replaces its own Currently text with one built only "
-	.. "from verified facts. It never replaces a Currently you wrote yourself, writes to Total RP 3 only while "
-	.. "Currently is kept in sync without a conflict, and takes a backup first. You can undo the last update at any "
-	.. "time."
+	.. "from verified facts. It never replaces a Currently you wrote yourself (that update waits for your approval), "
+	.. "writes to Total RP 3 only while Currently is kept in sync without a conflict, and takes a backup first. You "
+	.. "can undo the last update at any time."
 M.SUGGESTION_NOTE = "Nothing reaches Total RP 3 until you accept it."
 M.SYNC_CHOICES = { { id = "dawnward", label = "Sync on" }, { id = "trp3", label = "Off" } }
 M.MANAGE_CHOICES = { { id = "dawnward", label = "Dawnward" }, { id = "trp3", label = "TRP3" } }
@@ -510,17 +510,12 @@ function M.GlanceSuggestion()
 	return char and ns.ProfileSuggestions.Waiting(char, now(), "glance")[1] or nil
 end
 
--- The Dawnward entry a glance suggestion would fill or revise.
+-- The Dawnward entry a glance suggestion would fill or revise: where
+-- Accept saves it (ProfileSuggestions.AcceptSlot; a revision of an entry
+-- the player edited since becomes a new entry), or nil when all five are
+-- in use.
 local function suggestionSlot(char, s)
-	if s.target.revises then
-		return ns.ProfileSuggestions.ManagedSlot(char, s.theme) or s.target.n
-	end
-	local entries = char.glance or {}
-	if s.target.n and not entries[s.target.n] then return s.target.n end
-	for n = 1, ns.Glance.SLOTS do
-		if not entries[n] then return n end
-	end
-	return s.target.n
+	return (ns.ProfileSuggestions.AcceptSlot(char, s))
 end
 M.SuggestionSlot = suggestionSlot
 
@@ -529,7 +524,12 @@ M.SuggestionSlot = suggestionSlot
 function M.EditGlanceSuggestion(page, s)
 	local char = H().realChar()
 	if not char then return end
-	local n = suggestionSlot(char, s) or page.glanceSel
+	local n = suggestionSlot(char, s)
+	if not n then
+		MainWindow.SetStatus("All five At First Glance entries in Dawnward are in use; remove one before accepting "
+			.. "this suggestion.")
+		return
+	end
 	local e = char.glance and char.glance[n]
 	page.glanceSel = n
 	page.glanceFromSuggestion = s.id

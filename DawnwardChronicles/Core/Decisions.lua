@@ -41,7 +41,8 @@ local function sortedEffects(effects)
 end
 
 --- choice: { optionId = string } or { custom = string }.
--- Returns result { decision, changes, entry, draftError } or nil, reason.
+-- Returns result { decision, changes, entry, draftError, memory, arc, profile
+-- (the profile suggestions it made, also through an approved change) } or nil, reason.
 function Decisions.Decide(char, reactionId, choice, now)
 	local reaction = Reactions.Find(char, reactionId)
 	if not reaction then
@@ -70,6 +71,9 @@ function Decisions.Decide(char, reactionId, choice, now)
 		phrase = option and option.phrase or nil, theme = option and option.theme or nil, at = now or 0, effects = {},
 	}
 	local changes = {}
+	-- Profile suggestions made from here on (an automatically approved
+	-- change can suggest an At First Glance entry) are reported in result.profile.
+	local firstSuggestion = char.profileSuggestions and char.profileSuggestions.nextId or 1
 	if option then
 		for _, e in ipairs(sortedEffects(option.effects)) do
 			decision.effects[e.axis] = e.delta
@@ -109,8 +113,14 @@ function Decisions.Decide(char, reactionId, choice, now)
 	Reactions.Resolve(char, reactionId)
 	-- v0.10.2: approved development may suggest a profile change (only a
 	-- suggestion; Core/ProfileSuggestions.lua).
-	result.profile = ns.ProfileSuggestions.Generate(char, now, { kind = "decision", decision = decision,
+	ns.ProfileSuggestions.Generate(char, now, { kind = "decision", decision = decision,
 		reaction = reaction, record = view.record })
+	result.profile = {}
+	for _, s in ipairs(char.profileSuggestions and char.profileSuggestions.list or {}) do
+		if s.id >= firstSuggestion and ns.ProfileSuggestions.OPEN[s.status] then
+			result.profile[#result.profile + 1] = s
+		end
+	end
 	return result
 end
 

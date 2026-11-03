@@ -449,19 +449,28 @@ return function(t, expect)
 	end)
 
 	t:describe("Automatic Currently: only while Dawnward owns it without a conflict, and always recoverable", function()
-		local function setup()
+		local function enter(w, name)
+			local record = w.ns.GameEvents.Record(w.char(), "zone", { zone = name, visit = "first" }, w.now())
+			return w.PA.OnLocation(w.ctx, w.char(), { { record = record } })
+		end
+
+		-- Currently synced to Total RP 3, then Automatic confirmed. By default
+		-- the text is Dawnward's (a suggestion accepted in the Suggested mode);
+		-- own: a text the player wrote, as 0.10.1 left it.
+		local function setup(own)
 			local w = world()
 			local char = w.char()
-			assert(w.ns.TRP3Commands.SetStatus(w.ctx, "currently", "Resting in Goldshire."))
+			if own then
+				assert(w.ns.TRP3Commands.SetStatus(w.ctx, "currently", own))
+			else
+				assert(w.PA.SetCurrentlyMode(w.ctx, "suggested"))
+				assert(w.PA.Accept(w.ctx, enter(w, "Elwynn Forest").id))
+				w.later(w.PS.CURRENTLY_COOLDOWN + 1)
+			end
 			assert(w.Sync.SetPolicy(w.deps, "currently", "dawnward"))
 			expect.equal(w.Sync.RunFeature(w.deps, "status").state, "written")
 			assert(w.PA.SetCurrentlyMode(w.ctx, "automatic", true))
 			return w, char
-		end
-
-		local function enter(w, name)
-			local record = w.ns.GameEvents.Record(w.char(), "zone", { zone = name, visit = "first" }, w.now())
-			return w.PA.OnLocation(w.ctx, w.char(), { { record = record } })
 		end
 
 		t:it("updates Dawnward's Currently by itself; the guarded sync publishes it; Undo restores it", function()
@@ -473,10 +482,10 @@ return function(t, expect)
 			expect.equal(w.ch().CU, "In Westfall.")
 			local ok, message = w.PA.UndoAutomatic(w.ctx)
 			expect.truthy(ok, message)
-			expect.equal(char.trp3status.currently, "Resting in Goldshire.")
+			expect.equal(char.trp3status.currently, "In Elwynn Forest.")
 			expect.equal(s.status, "undone")
 			w.Sync.RunFeature(w.deps, "status")
-			expect.equal(w.ch().CU, "Resting in Goldshire.")
+			expect.equal(w.ch().CU, "In Elwynn Forest.")
 			expect.falsy(w.PA.UndoAutomatic(w.ctx), "nothing left to undo")
 			-- The backup taken before the automatic write is there too.
 			local sections = {}
@@ -490,13 +499,41 @@ return function(t, expect)
 			local s = enter(w, "Westfall")
 			expect.equal(s.status, "pending")
 			expect.truthy(s.held:find("Total RP 3 shows a Currently text you wrote", 1, true), s.held)
-			expect.equal(char.trp3status.currently, "Resting in Goldshire.")
+			expect.equal(char.trp3status.currently, "In Elwynn Forest.")
 			expect.equal(w.Sync.RunFeature(w.deps, "status").state, "conflict")
 			expect.equal(w.ch().CU, "Typed in Total RP 3", "never overwritten")
 			w.later(w.PS.CURRENTLY_COOLDOWN + 1)
 			local s2 = enter(w, "Duskwood")
 			expect.truthy(s2.held:find("conflict", 1, true), s2.held)
 			expect.equal(w.ch().CU, "Typed in Total RP 3")
+		end)
+
+		t:it("never replaces a Currently the player wrote before turning Automatic on (0.10.1); accepting one "
+			.. "lets it continue", function()
+			-- Review finding 2 (failing first: Automatic replaced the text the
+			-- confirmation promised it never replaces) and finding 6 (a held
+			-- suggestion accepted by hand left Automatic held for good).
+			local w, char = setup("Resting in Goldshire.")
+			expect.equal(char.profileSuggestions.autoFrom, nil, "the player's text is not Automatic's to replace")
+			local s = enter(w, "Westfall")
+			expect.equal(s.status, "pending")
+			expect.truthy(s.held:find("you wrote your own Currently", 1, true), s.held)
+			expect.equal(char.trp3status.currently, "Resting in Goldshire.")
+			w.Sync.RunFeature(w.deps, "status")
+			expect.equal(w.ch().CU, "Resting in Goldshire.", "never overwritten in Total RP 3")
+			w.later(w.PS.CURRENTLY_COOLDOWN + 1)
+			local s2 = enter(w, "Redridge Mountains")
+			expect.equal(s2.status, "pending", "every update waits while the text is the player's")
+			expect.equal(s.status, "superseded")
+			-- The player accepts one: Automatic continues from there.
+			assert(w.PA.Accept(w.ctx, s2.id))
+			expect.equal(char.trp3status.currently, "In Redridge Mountains.")
+			expect.equal(char.profileSuggestions.autoFrom, "In Redridge Mountains.")
+			w.Sync.RunFeature(w.deps, "status")
+			w.later(w.PS.CURRENTLY_COOLDOWN + 1)
+			local s3 = enter(w, "Duskwood")
+			expect.equal(s3.status, "auto", s3.held)
+			expect.equal(char.trp3status.currently, "In Duskwood.")
 		end)
 
 		t:it("never replaces a Currently the player wrote in Dawnward after turning Automatic on", function()
@@ -507,6 +544,46 @@ return function(t, expect)
 			expect.equal(s.status, "pending")
 			expect.truthy(s.held:find("you wrote your own Currently", 1, true), s.held)
 			expect.equal(char.trp3status.currently, "On watch tonight.")
+		end)
+
+		t:it("a Currently the player clears is theirs: a held suggestion is never applied in the same step",
+			function()
+			-- Review finding 1 (failing first: Clear applied the held text while
+			-- the message said "cleared").
+			local w, char = setup()
+			assert(w.ns.TRP3Commands.SetStatus(w.ctx, "currently", "On watch tonight."))
+			w.Sync.RunFeature(w.deps, "status")
+			local s = enter(w, "Westfall")
+			expect.equal(s.status, "pending")
+			local ok, message = w.ns.TRP3Commands.SetStatus(w.ctx, "currently", nil)
+			expect.truthy(ok, message)
+			expect.truthy(message:find("cleared", 1, true), message)
+			expect.equal(char.trp3status.currently, "", "cleared, as the message says")
+			expect.equal(s.status, "superseded", "the waiting suggestion gives way, as after Undo")
+			w.later(w.PS.CURRENTLY_COOLDOWN + 1)
+			local s2 = enter(w, "Duskwood")
+			expect.equal(s2.status, "pending", "an empty Currently the player cleared is theirs too")
+			expect.equal(char.trp3status.currently, "")
+			-- Saving the same text again is not a new choice.
+			local before = char.profileSuggestions.autoFrom
+			assert(w.ns.TRP3Commands.SetStatus(w.ctx, "currently", nil))
+			expect.equal(s2.status, "pending")
+			expect.equal(char.profileSuggestions.autoFrom, before)
+		end)
+
+		t:it("an empty Currently when Automatic is confirmed, or one Undo brought back, may be replaced",
+			function()
+			local w = world()
+			local char = w.char()
+			assert(w.Sync.SetPolicy(w.deps, "currently", "dawnward"))
+			assert(w.PA.SetCurrentlyMode(w.ctx, "automatic", true))
+			expect.equal(char.profileSuggestions.autoFrom, "")
+			local s = enter(w, "Westfall")
+			expect.equal(s.status, "auto", s.held)
+			assert(w.PA.UndoAutomatic(w.ctx))
+			expect.equal(char.trp3status.currently, "")
+			w.later(w.PS.CURRENTLY_COOLDOWN + 1)
+			expect.equal(enter(w, "Duskwood").status, "auto")
 		end)
 
 		t:it("does nothing when Currently is not kept in sync, in simulation, or for a private goal", function()
@@ -527,6 +604,136 @@ return function(t, expect)
 			expect.equal(w.PA.CurrentlyGate(w.ctx), "simulation mode is on")
 			w.deps.store:SetSimulation(false)
 			expect.equal(#w.fake.setterLog, 0, "Total RP 3 never touched")
+		end)
+	end)
+
+	t:describe("independent review: privacy, the editor's choices and the decision result", function()
+		t:it("a secret memory or goal is never evidence; a private one says so in the reasons", function()
+			-- Review finding 7 (failing first: a secret record's title was quoted).
+			local w = world()
+			local ns = w.ns
+			local char = w.char()
+			assert(ns.Memories.Add(char, { title = "The night I killed my brother", text = "x", importance = 3,
+				visibility = "secret" }, "player", w.now()))
+			local g = assert(ns.Goals.Add(char, { title = "Find my sister", visibility = "secret" }, w.now()))
+			assert(ns.Goals.SetState(char, g.id, "achieved", w.now()))
+			expect.equal(#w.waiting("glance"), 0, "nothing quotes a secret record")
+			local p = assert(ns.Goals.Add(char, { title = "Earn the Libram", visibility = "private" }, w.now()))
+			assert(ns.Goals.SetState(char, p.id, "achieved", w.now()))
+			local s = w.waiting("glance")[1]
+			expect.equal(s.key, "glance:goal:" .. p.id)
+			expect.truthy(s.private)
+			expect.truthy(s.why[2] and s.why[2]:find("private goal; check before accepting", 1, true), s.why[2])
+			local m = assert(ns.Memories.Add(char, { title = "Northshire", importance = 3, visibility = "private" },
+				"player", w.now()))
+			assert(w.PA.Dismiss(w.ctx, s.id))
+			ns.ProfileSuggestions.Generate(char, w.now(), { kind = "memory", memory = m })
+			local ms = w.waiting("glance")[1]
+			expect.equal(ms.key, "glance:memory:" .. m.id)
+			expect.truthy(ms.why[2]:find("private memory; check before accepting", 1, true), ms.why[2])
+			-- A secret active goal is never named in a Currently text either.
+			assert(w.PA.SetCurrentlyMode(w.ctx, "suggested"))
+			assert(ns.Goals.Add(char, { title = "Kill the traitor", visibility = "secret" }, w.now()))
+			local record = ns.GameEvents.Record(char, "zone", { zone = "Westfall", visit = "first" }, w.now())
+			local c = w.PA.OnLocation(w.ctx, char, { { record = record } })
+			expect.equal(c.text, "In Westfall.")
+		end)
+
+		t:it("a secret name or pronouns are never used: the wording stays neutral", function()
+			local w = world()
+			local char = w.char()
+			char.fields.name = { value = "Kyssarra", visibility = "secret" }
+			char.fields.pronouns = { value = "she/her", visibility = "secret" }
+			w.approve("compassion", 1, 3)
+			expect.equal(w.waiting("glance")[1].text, "They have grown gentler with those in need.")
+			char.fields.name.visibility = "private"
+			expect.equal(w.PS.Voice(char).S, "Kyssarra", "a private name is the player's to accept or edit")
+		end)
+
+		t:it("Accept keeps the editor's Hidden choice", function()
+			-- Review finding 4 (failing first: saved as shown).
+			local w = world()
+			w.approve("discipline", 1, 3)
+			local s = w.waiting("glance")[1]
+			assert(w.PA.Accept(w.ctx, s.id, { title = "Mine", text = "My words", active = false }))
+			expect.equal(w.char().glance[1].active, false)
+			w.approve("faith", 1, 3)
+			assert(w.PA.Accept(w.ctx, w.waiting("glance")[1].id))
+			expect.equal(w.char().glance[2].active, true, "as offered: shown")
+		end)
+
+		t:it("a backup without secrets carries no suggestion drawn from a secret record; a restore keeps them",
+			function()
+			-- Review finding 3 (failing first: the title travelled in the
+			-- suggestion's text, reasons and accepted entry).
+			local w = world()
+			local ns, T = w.ns, w.ns.Transfer
+			local char = w.char()
+			local m = assert(ns.Memories.Add(char, { title = "The night I killed my brother", text = "x", importance = 3,
+				visibility = "private" }, "player", w.now()))
+			local s = w.waiting("glance")[1]
+			expect.equal(s.key, "glance:memory:" .. m.id)
+			assert(w.PA.Accept(w.ctx, s.id))
+			char.glance = {} -- the player removed the entry later
+			m.visibility = "secret" -- and then kept the memory secret
+			w.approve("courage", 1, 3)
+			local kept = w.waiting("glance")[1]
+			local function holds(x)
+				if type(x) == "string" then return x:find("killed my brother", 1, true) ~= nil end
+				if type(x) == "table" then
+					for k, v in pairs(x) do if holds(k) or holds(v) then return true end end
+				end
+				return false
+			end
+			expect.truthy(holds(char.profileSuggestions))
+			local text = assert(T.Export(char, T.KIND_BACKUP, { includeSecrets = false }))
+			expect.falsy(text:find("killed my brother", 1, true), "never in a backup without secrets")
+			local decoded = assert(T.Decode(text))
+			local ps = decoded.character.profileSuggestions
+			expect.falsy(holds(ps))
+			expect.equal(ps.keys["glance:memory:" .. m.id].status, "accepted", "settled keys stay")
+			expect.equal(ps.nextId, char.profileSuggestions.nextId)
+			expect.equal(ns.ProfileSuggestions.Find(decoded.character, kept.id).key, kept.key, "others stay")
+			expect.truthy(assert(T.Export(char, T.KIND_BACKUP)):find("killed my brother", 1, true),
+				"a full backup keeps everything")
+			local merged = T.MergeForImport(char, decoded.character, false, w.now(), true, true)
+			expect.equal(ns.ProfileSuggestions.Find(merged, s.id).status, "accepted", "carried back on restore")
+			expect.truthy(merged.profileSuggestions.managed["glance:memory:" .. m.id])
+		end)
+
+		t:it("Decide reports a suggestion made by a change it approved automatically", function()
+			-- Review finding (b) (failing first: result.profile was empty).
+			local w = world()
+			local ns = w.ns
+			local char = w.char()
+			local record = assert(ns.GameEvents.Record(char, "quest", { questId = 77, title = "The Defias Brotherhood",
+				zone = "Westfall", level = 20 }, w.now()))
+			local reaction = assert(ns.Reactions.Consider(char, record, w.now()))
+			local view = assert(ns.Reactions.Present(char, reaction, w.now()))
+			local axis, delta = next(view.options[1].effects)
+			w.approve(axis, delta, 2)
+			expect.equal(#w.waiting("glance"), 0)
+			char.story.prefs.approval = "auto"
+			w.later(DAY)
+			local result = assert(ns.Decisions.Decide(char, reaction.id, { optionId = view.options[1].id }, w.now()))
+			expect.equal(result.changes[1].status, "applied")
+			local s = w.waiting("glance")[1]
+			expect.truthy(s, "the third approved step suggests an entry")
+			expect.equal(result.profile[1], s)
+		end)
+
+		t:it("an error in a guarded profile step is recorded for /dawnward trp3 diagnose", function()
+			-- Review finding (a) (failing first: the pcall swallowed it).
+			local w = world()
+			local ns = w.ns
+			expect.equal(ns.TRP3Commands.ProfileErrorLine(), "profile suggestions: no error this session")
+			local original = ns.ProfileActions.AfterChange
+			ns.ProfileActions.AfterChange = function() error("boom") end
+			local ok = ns.Actions.WithCharacter(w.ctx, function() return true, "done" end)
+			ns.ProfileActions.AfterChange = original
+			expect.truthy(ok, "the player's change still stands")
+			local line = ns.TRP3Commands.ProfileErrorLine()
+			expect.truthy(line:find("Automatic Currently", 1, true) and line:find("boom", 1, true), line)
 		end)
 	end)
 

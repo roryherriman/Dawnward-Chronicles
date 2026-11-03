@@ -204,6 +204,37 @@ return function(t, expect)
 		end)
 	end)
 
+	t:describe("Settings > Total RP 3: At First Glance revisions and Hidden (independent review)", function()
+		t:it("Edit on a revision of an entry the player changed since names the entry Save fills; Hidden is kept",
+			function()
+			-- Review findings 4 (Accept saved the entry shown although the editor
+			-- said Hidden) and (c) (the status line named the player's entry).
+			local _, env, ns, _, page = trp3Start()
+			local char = seedCourage(ns, env, 3)
+			local PS = ns.ProfileSuggestions
+			assert(ns.ProfileActions.Accept(ns.ctx, PS.Waiting(char, ns.ctx.now(), "glance")[1].id))
+			for i = 4, 6 do
+				local c = assert(ns.Evolution.Propose(char, "courage", 1, "Kyssarra stood firm", 100 + i, i * DAY))
+				assert(ns.Evolution.Apply(char, c.id, i * DAY))
+			end
+			local s = PS.Waiting(char, ns.ctx.now(), "glance")[1]
+			expect.deepEqual(s.target, { n = 1, revises = true })
+			-- The player rewrites entry 1 while the revision waits.
+			assert(ns.Glance.Save(char, 1, { title = "Growing resolve", text = "My own words now." }, ns.ctx.now()))
+			expect.truthy(PS.Effect(char, s):find("Adds At First Glance entry 2", 1, true), PS.Effect(char, s))
+			ns.TRP3Page.Open(page, "glance")
+			expect.equal(page.glanceRows[2].state:GetText(), "Dawnward suggests one")
+			click(page.glanceSuggest.buttons.edit)
+			expect.truthy(status(ns):find("in the editor for entry 2", 1, true), status(ns))
+			expect.equal(page.glanceSel, 2)
+			choose(page.glanceShown, "hidden")
+			click(page.glanceSave)
+			expect.equal(char.glance[1].text, "My own words now.", "the player's entry is untouched")
+			expect.equal(char.glance[2].title, "Steady resolve")
+			expect.equal(char.glance[2].active, false, "Hidden, as chosen in the editor")
+		end)
+	end)
+
 	t:describe("Settings > Total RP 3: Currently updates (L2)", function()
 		t:it("Manual by default; Suggested offers a text; Automatic only after confirming", function()
 			local mock, env, ns, fake, page = trp3Start()
@@ -257,18 +288,34 @@ return function(t, expect)
 			mock.RunTimers()
 			expect.equal(fake.profile.player.character.CU, "Resting in Goldshire.")
 			assert(ns.ProfileActions.SetCurrentlyMode(ns.ctx, "automatic", true))
+			-- The player's own text (as 0.10.1 left it) is never replaced: the
+			-- update waits for them, as the confirmation promises.
 			ns.Actions.ObserveLocation(ns.ctx, { zone = "Westfall" })
-			expect.equal(char.trp3status.currently, "In Westfall.")
-			mock.RunTimers()
-			expect.equal(fake.profile.player.character.CU, "In Westfall.")
-			ns.TRP3Page.Open(page, "status")
-			click(page.statusNav.buttons[3])
-			expect.truthy(page.undoAuto:IsEnabled())
-			expect.truthy(page.autoLine:GetText():find("In Westfall.", 1, true))
-			click(page.undoAuto)
 			expect.equal(char.trp3status.currently, "Resting in Goldshire.")
 			mock.RunTimers()
 			expect.equal(fake.profile.player.character.CU, "Resting in Goldshire.")
+			ns.TRP3Page.Open(page, "status")
+			click(page.statusNav.buttons[3])
+			expect.equal(page.currentlySuggest.text:GetText(), "In Westfall.")
+			expect.truthy(page.currentlySuggest.effect:GetText():find("Waiting for you", 1, true),
+				page.currentlySuggest.effect:GetText())
+			-- Accepted by hand, Automatic continues from it.
+			click(page.currentlySuggest.buttons.accept)
+			expect.equal(char.trp3status.currently, "In Westfall.")
+			mock.RunTimers()
+			expect.equal(fake.profile.player.character.CU, "In Westfall.")
+			char.profileSuggestions.lastCurrentlyAt = 0
+			ns.Actions.ObserveLocation(ns.ctx, { zone = "Redridge Mountains" })
+			expect.equal(char.trp3status.currently, "In Redridge Mountains.")
+			mock.RunTimers()
+			expect.equal(fake.profile.player.character.CU, "In Redridge Mountains.")
+			ns.MainWindow.Refresh()
+			expect.truthy(page.undoAuto:IsEnabled())
+			expect.truthy(page.autoLine:GetText():find("In Redridge Mountains.", 1, true))
+			click(page.undoAuto)
+			expect.equal(char.trp3status.currently, "In Westfall.")
+			mock.RunTimers()
+			expect.equal(fake.profile.player.character.CU, "In Westfall.")
 			expect.falsy(page.undoAuto:IsEnabled())
 			-- A Currently typed in Total RP 3 is never overwritten.
 			fake.env.AddOn_TotalRP3.Player.GetCurrentUser():SetCurrentlyText("Typed in Total RP 3")

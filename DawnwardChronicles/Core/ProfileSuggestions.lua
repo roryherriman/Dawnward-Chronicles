@@ -46,6 +46,12 @@
 --     managed = { [key] = { title, text, theme } }, texts = { recent
 --     Currently texts }, lastCurrentlyAt, autoFrom, lastAuto = { previous,
 --     text, at, id } }
+-- autoFrom: the Currently text the Automatic mode may replace ("" for an
+--   empty one): an empty or Dawnward-made text (PS.DawnwardMade) when
+--   Automatic is confirmed, the text of a suggestion the player accepts in
+--   that mode, or what Undo brought back. Nil (a text the player wrote, or a
+--   Currently the player set or cleared by hand since) holds every automatic
+--   update for the player's approval.
 -- suggestion = { id, kind, key, theme, tier, status, title?, text, icon?,
 --   target = { n?, revises? }, why = { line }, sources = { decisions,
 --   changes, memories, goals = { id }, events = { key } }, createdAt,
@@ -291,8 +297,12 @@ end
 -- neutral words. plural: the verbs agree with "they".
 function PS.Voice(char)
 	local fields = char and char.fields or {}
-	local name = fields.name and fields.name.value
-	local pronouns = fields.pronouns and fields.pronouns.value
+	-- A name or pronouns the player keeps secret never reach a suggestion.
+	local function shown(field)
+		return field and field.visibility ~= ns.Privacy.SECRET and field.value or nil
+	end
+	local name = shown(fields.name)
+	local pronouns = shown(fields.pronouns)
 	local first = type(pronouns) == "string" and pronouns:lower():match("^%s*(%a+)") or nil
 	local v = { o = "them", p = "their" }
 	if first == "she" or first == "her" then
@@ -420,17 +430,25 @@ local function axisCandidates(char)
 	return out
 end
 
+-- A record kept secret (the legacy visibility) is never evidence: its
+-- title would be quoted. One that is not public says so in the reasons.
+local function quotable(record)
+	return record.visibility ~= ns.Privacy.SECRET
+end
+
 local function memoryCandidates(char)
 	local out = {}
 	for _, m in ipairs(char.story and char.story.memories or {}) do
-		if m.status == "established" and m.importance == 3 and m.title then
+		if m.status == "established" and m.importance == 3 and m.title and quotable(m) then
 			local title = Util.CleanText(m.title, 80, false)
+			local private = m.visibility ~= ns.Privacy.PUBLIC or nil
 			out[#out + 1] = { key = "glance:memory:" .. m.id, theme = "glance:memory:" .. m.id, tier = 1,
 				title = "A memory that stays", template = "{S} {carries} the memory of \"" .. title .. "\".",
 				why = { "An established memory you marked as defining: \"" .. title .. "\".",
-					"Memories stay private in Dawnward; accepting shares only this wording." },
+					private and "This names a private memory; check before accepting. Accepting shares only this "
+						.. "wording." or "Accepting shares only this wording." },
 				sources = { memories = { m.id }, decisions = m.links and m.links.decisions or nil },
-				icon = "inv_misc_book_09" }
+				icon = "inv_misc_book_09", private = private }
 		end
 	end
 	return out
@@ -439,12 +457,14 @@ end
 local function goalCandidates(char)
 	local out = {}
 	for _, g in ipairs(char.story and char.story.goals or {}) do
-		if g.status == "established" and g.state == "achieved" and g.title then
+		if g.status == "established" and g.state == "achieved" and g.title and quotable(g) then
 			local title = Util.CleanText(g.title, 80, false)
+			local private = g.visibility ~= ns.Privacy.PUBLIC or nil
+			local why = { "You marked your goal \"" .. title .. "\" as achieved." }
+			if private then why[2] = "This names a private goal; check before accepting." end
 			out[#out + 1] = { key = "glance:goal:" .. g.id, theme = "glance:goal:" .. g.id, tier = 1,
 				title = "An aim fulfilled", template = "{S} {has} seen an aim through: " .. title .. ".",
-				why = { "You marked your goal \"" .. title .. "\" as achieved." },
-				sources = { goals = { g.id } }, icon = "inv_misc_note_06" }
+				why = why, sources = { goals = { g.id } }, icon = "inv_misc_note_06", private = private }
 		end
 	end
 	return out
@@ -480,6 +500,18 @@ local function freeSlot(char, preferred)
 		if not entries[n] then return n end
 	end
 	return nil
+end
+
+--- Where accepting a glance suggestion saves it now: the Dawnward entry it
+-- revises (n, the managed key), else a free entry (its offered one first,
+-- unless it was a revision), else nil (all five are in use). Shared by
+-- PS.Accept, PS.Effect and the editor, so each names the same entry.
+function PS.AcceptSlot(char, s)
+	if s.target.revises then
+		local n, key = PS.ManagedSlot(char, s.theme)
+		if n then return n, key end
+	end
+	return freeSlot(char, s.target.n and not s.target.revises and s.target.n or nil)
 end
 
 -- Where a glance candidate would go: the Dawnward entry it revises, a free
@@ -530,7 +562,7 @@ function PS.GenerateGlance(char, now, opts)
 					end
 					return add(PS.Store(char), { kind = "glance", key = cand.key, theme = cand.theme, tier = cand.tier,
 						title = cand.title, text = PS.Render(cand.template, voice), icon = cand.icon, target = target,
-						why = cand.why, sources = cand.sources }, now)
+						why = cand.why, sources = cand.sources, private = cand.private }, now)
 				end
 			end
 		end
@@ -581,7 +613,10 @@ function PS.CurrentlyCandidate(char, trigger)
 		sources.events = { r.key }
 	elseif trigger.kind == "goal" then
 		goal = trigger.goal
-		if not goal or goal.status ~= "established" or goal.state ~= "active" or not goal.title then return nil end
+		if not goal or goal.status ~= "established" or goal.state ~= "active" or not goal.title
+			or not quotable(goal) then
+			return nil
+		end
 		zone, key = lastZone(char), "currently:goal:" .. goal.id
 		why[#why + 1] = "You set a new goal: \"" .. goal.title .. "\"."
 		sources.goals = { goal.id }
@@ -600,8 +635,12 @@ function PS.CurrentlyCandidate(char, trigger)
 		return nil
 	end
 	if not goal then
-		local active = ns.Goals and char.story and ns.Goals.Active(char) or {}
-		goal = active[1]
+		for _, g in ipairs(ns.Goals and char.story and ns.Goals.Active(char) or {}) do
+			if quotable(g) then
+				goal = g
+				break
+			end
+		end
 		if goal then sources.goals = { goal.id } end
 	end
 	local parts = {}
@@ -705,19 +744,14 @@ function PS.Accept(char, id, now, values)
 		if not ns.Glance.CleanEntry({ title = title, text = body }) then
 			return nil, "write a title or a text"
 		end
-		local n, oldKey
-		if s.target.revises then
-			n, oldKey = PS.ManagedSlot(char, s.theme)
-		end
-		if not n then
-			n = freeSlot(char, s.target.n and not s.target.revises and s.target.n or nil)
-		end
+		local n, oldKey = PS.AcceptSlot(char, s)
 		if not n then
 			return nil, "all five At First Glance entries in Dawnward are in use; remove one first"
 		end
 		local existing = char.glance and char.glance[n]
+		-- Shown unless the player chose Hidden in the editor (values.active).
 		local entry, why = ns.Glance.Save(char, n, { title = title, text = body,
-			icon = values.icon or (existing and existing.icon) or s.icon, active = true }, now)
+			icon = values.icon or (existing and existing.icon) or s.icon, active = values.active ~= false }, now)
 		if type(entry) ~= "table" then return nil, why or "write a title or a text" end
 		if oldKey then store.managed[oldKey] = nil end
 		store.managed[s.key] = { title = entry.title, text = entry.text, theme = s.theme, edited = edited or nil }
@@ -729,6 +763,9 @@ function PS.Accept(char, id, now, values)
 		local clean, why = ns.RPStatus.Set(char, "currently", body, now)
 		if not clean then return nil, why end
 		s.result = { text = clean }
+		-- In the Automatic mode an accepted text is one Automatic may follow
+		-- (otherwise a held suggestion would hold every later one too).
+		if ns.RPStatus.CurrentlyMode(char) == "automatic" then store.autoFrom = clean end
 	end
 	s.status, s.decidedAt, s.laterUntil = edited and "edited" or "accepted", now or 0, nil
 	store.keys[s.key] = { status = "accepted", tier = s.tier, at = now or 0 }
@@ -755,17 +792,38 @@ end
 
 --- Currently mode ------------------------------------------------------------------------
 
+--- Whether a Currently text was made by Dawnward: empty, Automatic's own
+-- last text, or the unchanged text of a suggestion the player accepted (or
+-- Automatic applied). A text the player wrote, or reworded, is theirs. Pure.
+function PS.DawnwardMade(char, current)
+	current = current or ""
+	if current == "" then return true end
+	local store = char.profileSuggestions
+	if not store then return false end
+	if store.lastAuto and current == store.lastAuto.text then return true end
+	for _, s in ipairs(store.list or {}) do
+		if s.kind == "currently" and (s.status == "accepted" or s.status == "auto") and s.result
+			and s.result.text == current then
+			return true
+		end
+	end
+	return false
+end
+
 --- Sets the Currently mode (RPStatus.SetCurrentlyMode). Turning Automatic
--- on remembers Dawnward's Currently text at that moment: Automatic replaces
--- only that text, an empty one, or its own last text, never one the player
--- wrote afterwards. Manual takes back any Currently suggestion still waiting.
+-- on remembers Dawnward's Currently text at that moment, but only when it
+-- is empty or Dawnward-made (PS.DawnwardMade): Automatic never replaces a
+-- text the player wrote (such as one from before 0.10.2); each update then
+-- waits as a suggestion, and accepting one lets Automatic continue. Manual
+-- takes back any Currently suggestion still waiting.
 function PS.SetCurrentlyMode(char, mode, now, confirmed)
 	local before = ns.RPStatus.CurrentlyMode(char)
 	local ok, err = ns.RPStatus.SetCurrentlyMode(char, mode, now, confirmed)
 	if not ok then return nil, err end
 	if mode == "automatic" and before ~= "automatic" then
 		local store = PS.Store(char)
-		store.autoFrom = char.trp3status.currently or ""
+		local current = char.trp3status.currently or ""
+		store.autoFrom = PS.DawnwardMade(char, current) and current or nil
 	elseif mode ~= "automatic" and char.profileSuggestions then
 		char.profileSuggestions.autoFrom = nil
 	end
@@ -791,13 +849,35 @@ function PS.AutoBlocked(char, s, now)
 	if s and now and now - (s.createdAt or 0) > PS.AUTO_FRESH then
 		return "it is more than an hour old, so it waits for your approval"
 	end
+	-- Only the text Automatic may replace (autoFrom; "" for an empty one) or
+	-- its own last text. A Currently the player wrote, set or cleared is
+	-- theirs, even an empty one.
 	local store = char.profileSuggestions or {}
-	local current = char.trp3status and char.trp3status.currently
-	if current == nil or current == "" or current == store.autoFrom
+	local current = char.trp3status and char.trp3status.currently or ""
+	if (store.autoFrom ~= nil and current == store.autoFrom)
 		or (store.lastAuto and current == store.lastAuto.text) then
 		return nil
 	end
-	return "you wrote your own Currently since, so Dawnward does not replace it"
+	return "you wrote your own Currently, so Dawnward does not replace it"
+end
+
+--- The player set or cleared Currently by hand (Settings > Total RP 3, the
+-- chat command, an import from Total RP 3): the text is theirs. Automatic
+-- no longer replaces it, and a Currently suggestion still waiting gives way
+-- (as after Undo), so it is never applied in the same step. Saving the same
+-- text again changes nothing.
+function PS.PlayerSetCurrently(char, value, now)
+	local store = char and char.profileSuggestions
+	if not store then return end
+	local current = char.trp3status and char.trp3status.currently or ""
+	local new = value == nil and "" or (ns.RPStatus.CleanText(value) or "")
+	if new == current then return end
+	store.autoFrom = nil
+	for _, s in ipairs(store.list or {}) do
+		if s.kind == "currently" and PS.OPEN[s.status] then
+			s.status, s.decidedAt = "superseded", now or 0
+		end
+	end
 end
 
 --- Applies a waiting Currently suggestion by itself (Automatic mode; the
@@ -847,7 +927,8 @@ function PS.UndoAutomatic(char, now)
 		end
 	end
 	store.lastAuto = nil
-	if store.autoFrom ~= nil then store.autoFrom = previous end
+	-- What Undo brought back was Automatic's to replace (empty or Dawnward-made).
+	if ns.RPStatus.CurrentlyMode(char) == "automatic" then store.autoFrom = previous end
 	return previous
 end
 
@@ -858,12 +939,13 @@ function PS.Effect(char, s)
 	if s.kind == "currently" then
 		return "Replaces your Currently text. Total RP 3 shows it while Currently is kept in sync."
 	end
-	local managed = s.target.revises and PS.ManagedSlot(char, s.theme)
+	local n, managed = PS.AcceptSlot(char, s)
 	if managed then
-		return "Replaces Dawnward's At First Glance entry " .. managed .. ", which you accepted earlier."
+		return "Replaces Dawnward's At First Glance entry " .. n .. ", which you accepted earlier."
+	elseif not n then
+		return "All five At First Glance entries in Dawnward are in use; remove one before accepting."
 	end
-	return "Adds At First Glance entry " .. tostring(freeSlot(char, s.target.n) or s.target.n)
-		.. ". Total RP 3 shows it while At First Glance sync is on."
+	return "Adds At First Glance entry " .. n .. ". Total RP 3 shows it while At First Glance sync is on."
 end
 
 --- A short label for a suggestion's kind ("At First Glance", "Currently").
