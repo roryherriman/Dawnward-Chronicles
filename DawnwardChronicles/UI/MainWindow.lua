@@ -173,6 +173,7 @@ end
 
 local sections = {}
 local frame, layout, currentSection, settingsOpen, appliedTheme
+local hiddenAt -- GetTime() when the journal last closed (MainWindow.HiddenAt)
 
 --- def = { id, label, order, heading?, icon?, create(parent) -> section }
 -- section: { frame, Refresh(self, view), ApplyTheme(self, theme), OnHide(self)? }
@@ -933,6 +934,9 @@ local function build()
 	end)
 
 	frame:SetScript("OnHide", function()
+		-- When (GetTime) it last closed: the reaction card tells an Escape
+		-- that closed both apart from one that closed the card alone.
+		hiddenAt = type(GetTime) == "function" and GetTime() or nil
 		for _, def in ipairs(sections) do
 			if def.instance and def.instance.OnHide then
 				def.instance:OnHide()
@@ -979,6 +983,11 @@ end
 
 function MainWindow.IsShown()
 	return frame ~= nil and frame:IsShown()
+end
+
+--- When the journal was last hidden (GetTime), or nil.
+function MainWindow.HiddenAt()
+	return hiddenAt
 end
 
 --- For tests and diagnostics only.

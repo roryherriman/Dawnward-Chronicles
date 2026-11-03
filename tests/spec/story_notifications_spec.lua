@@ -225,7 +225,13 @@ return function(t, expect)
 			click(card(ns).close)
 			expect.equal(a.closedHow, "close")
 			mock.RunTimers()
-			expect.equal(card(ns).reactionId, b.id, "a major moment follows at once")
+			expect.equal(card(ns), nil, "not seconds after a close, even for a major moment")
+			expect.equal(#mock.timers, 1, "one timer for the end of the pause")
+			local wait = mock.timers[1].seconds
+			expect.truthy(wait > ns.SafeTime.CLOSE_GAP - 10 and wait <= ns.SafeTime.CLOSE_GAP + 5, wait)
+			mock.clock = mock.clock + ns.SafeTime.CLOSE_GAP
+			mock.RunTimers()
+			expect.equal(card(ns).reactionId, b.id, "the major moment follows after the pause")
 		end)
 
 		t:it("a moment held back by the notice cooldown is retried when the cooldown ends (one timer, no polling)",
@@ -234,6 +240,8 @@ return function(t, expect)
 			local a = moment(ns, story)
 			mock.RunTimers()
 			click(card(ns).close)
+			local gap = ns.SafeTime.CLOSE_GAP
+			mock.clock = mock.clock + gap
 			local b = moment(ns, story)
 			mock.RunTimers()
 			expect.equal(card(ns), nil, "cooldown")
@@ -241,7 +249,7 @@ return function(t, expect)
 			expect.equal(#mock.timers, 1, "one retry timer")
 			local wait = mock.timers[1].seconds
 			local cooldown = ns.Reactions.COOLDOWN.normal
-			expect.truthy(wait > cooldown - 30 and wait <= cooldown + 5, "at the end of the cooldown: " .. wait)
+			expect.truthy(wait > cooldown - gap - 30 and wait <= cooldown - gap + 5, "at the end of the cooldown: " .. wait)
 			-- More calm-moment events do not add timers.
 			mock.Fire("PLAYER_REGEN_ENABLED")
 			mock.RunTimers()
@@ -302,6 +310,65 @@ return function(t, expect)
 			mock.Slash("story " .. r2.id .. " notnow")
 			expect.equal(card(ns), nil, "Not now in chat closes the card too")
 			expect.equal(r2.closedHow, "notnow")
+		end)
+
+		t:it("after Answer no other card pops up over the journal; the next one waits for a calm-moment trigger",
+			function()
+			-- Independent review finding 5 (failing first: a waiting major
+			-- moment appeared ~4 s after Answer, above the journal).
+			local mock, _, ns, story = start()
+			local a = moment(ns, story, 3)
+			local b = moment(ns, story, 3)
+			mock.RunTimers()
+			local first = card(ns).reactionId
+			click(card(ns).answer)
+			expect.truthy(ns.MainWindow.IsShown())
+			expect.equal(story.reactions[1].closedHow == "answer" or story.reactions[2].closedHow == "answer", true)
+			for _ = 1, 3 do mock.RunTimers() end
+			expect.equal(card(ns), nil, "nothing over the journal the player is reading")
+			local other = first == a.id and b or a
+			expect.equal(other.notifiedAt, nil, "still waiting to be announced")
+			-- A later calm moment (a zone change) offers it, above the journal.
+			mock.Fire("ZONE_CHANGED_NEW_AREA")
+			mock.RunTimers()
+			expect.equal(card(ns).reactionId, other.id)
+			expect.equal(card(ns):GetFrameStrata(), "HIGH")
+		end)
+
+		t:it("the Escape that closes the journal with the card is not a choice: the moment is offered again", function()
+			local mock, _, ns, story = start()
+			ns.MainWindow.Show()
+			local r = moment(ns, story)
+			mock.RunTimers()
+			local frame = card(ns)
+			expect.truthy(frame)
+			-- Escape hides every open special frame in one press (journal first
+			-- or card first, within the same frame).
+			ns.MainWindow.GetFrame():Hide()
+			frame:Hide()
+			expect.equal(r.closedHow, "journal")
+			expect.equal(r.notifiedAt, nil, "not marked as seen for good")
+			expect.truthy(mock.Slash("story why"):find("Escape closed it together with the journal", 1, true))
+			mock.clock = mock.clock + ns.SafeTime.CLOSE_GAP + ns.Reactions.COOLDOWN.normal
+			mock.Play(5)
+			mock.Fire("PLAYER_REGEN_ENABLED")
+			mock.RunTimers()
+			expect.equal(card(ns).reactionId, r.id, "offered again at a later calm moment")
+			-- Card first, journal still open: the same.
+			ns.MainWindow.Show()
+			card(ns):Hide()
+			expect.equal(r.closedHow, "journal")
+			ns.MainWindow.GetFrame():Hide()
+			-- Escape on the card alone (the journal closed earlier) stays final.
+			mock.Play(5)
+			mock.clock = mock.clock + ns.SafeTime.CLOSE_GAP + ns.Reactions.COOLDOWN.normal
+			mock.Fire("PLAYER_REGEN_ENABLED")
+			mock.RunTimers()
+			expect.equal(card(ns).reactionId, r.id, "offered again (at most twice)")
+			mock.Play(5)
+			card(ns):Hide()
+			expect.equal(r.closedHow, "escape")
+			expect.truthy(r.notifiedAt, "a deliberate Escape is final")
 		end)
 
 		t:it("stays above the open journal window", function()
@@ -424,6 +491,9 @@ return function(t, expect)
 			expect.truthy(text:find("#" .. b.id .. ".-after the newer moment"), text)
 			expect.truthy(text:find("one card at a time", 1, true), text)
 			mock.inCombat = false
+			text = mock.Slash("story why")
+			expect.truthy(text:find("#" .. c.id .. ".-a little after the card you closed"), text)
+			mock.clock = mock.clock + ns.SafeTime.CLOSE_GAP
 			text = mock.Slash("story why")
 			expect.truthy(text:find("#" .. c.id .. ".-pause between cards: until"), text)
 			mock.Slash("story set card off")

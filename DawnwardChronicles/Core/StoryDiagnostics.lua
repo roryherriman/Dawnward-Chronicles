@@ -246,6 +246,7 @@ StoryDiagnostics.CLOSED = {
 	close = "you closed it", escape = "you closed it with Escape", later = "you chose Later",
 	notnow = "you chose Not now", answer = "you opened it in the Story section",
 	combat = "combat hid it more than once, so it waits here",
+	journal = "Escape closed it with the journal more than once, so it waits here",
 }
 
 -- "12 min ago" / "in 33 min" from real dates (Core stays clock-free).
@@ -274,6 +275,8 @@ local function settledText(r, onScreen, now)
 		local how = r.closedHow and StoryDiagnostics.CLOSED[r.closedHow]
 		if r.notifiedAt == nil and r.closedHow == "combat" then
 			return shown .. "; combat hid it, so it is offered again after the fight"
+		elseif r.notifiedAt == nil and r.closedHow == "journal" then
+			return shown .. "; Escape closed it together with the journal, so it is offered again"
 		end
 		return shown .. (how and ("; " .. how) or "") .. ", so it is not shown again"
 	end
@@ -328,6 +331,9 @@ function StoryDiagnostics.WhyLines(ctx)
 					why = "next to be shown; not a safe moment now: " .. unsafeText(blockers)
 				elseif onScreen then
 					why = "next to be shown when the card on screen closes (one card at a time)"
+				elseif SafeTime.QuietUntil and SafeTime.QuietUntil(now) then
+					why = string.format("next to be shown a little after the card you closed: in about %s",
+						duration(SafeTime.QuietUntil(now) - now))
 				elseif untilAt and not skip then
 					why = string.format("next to be shown after the pause between cards: until about %s from now "
 						.. "(frequency %s)", duration(untilAt - now), prefs.frequency)

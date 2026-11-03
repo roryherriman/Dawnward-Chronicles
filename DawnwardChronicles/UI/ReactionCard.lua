@@ -5,9 +5,11 @@
 -- Keyboard: Escape hides it like the close button (UISpecialFrames, as the
 -- copy window and the setup wizard do); the moment keeps waiting.
 -- Every way it goes away is reported (ReactionCard.OnClosed(id, how): how
--- is "close", "escape", "later", "answer", "dismiss", "combat" or "gone"),
--- so a card combat hid can be offered again and one the player closed is
--- not (Core/Reactions.lua "Notices"). HIGH strata: above the journal window
+-- is "close", "escape", "journal", "later", "answer", "dismiss", "combat" or
+-- "gone"), so a card combat hid can be offered again and one the player
+-- closed is not (Core/Reactions.lua "Notices"). The Escape that closes the
+-- journal closes the card with it (both are UISpecialFrames): that is
+-- "journal", not a choice about the moment, so it is offered again later. HIGH strata: above the journal window
 -- (MEDIUM), below game dialogs (DIALOG). One card at a time; a line under
 -- the question says how many other moments wait in the Story section.
 --
@@ -153,6 +155,9 @@ local function build()
 		if self:IsShown() then return end
 		local how = closing or "escape"
 		closing = nil
+		if how == "escape" and ReactionCard.WithJournal() then
+			how = "journal"
+		end
 		if ReactionCard.OnClosed and self.reactionId then
 			pcall(ReactionCard.OnClosed, self.reactionId, how)
 		end
@@ -260,6 +265,18 @@ function ReactionCard.Show(reactionId, more)
 	card:Show()
 	if card.Raise then card:Raise() end
 	return card:IsShown() and true or false
+end
+
+--- Whether an Escape that hides the card closes the journal too: the
+-- journal is still open (Escape hides every open special frame in one
+-- press) or was hidden in this same frame (GetTime does not move within
+-- one frame).
+function ReactionCard.WithJournal()
+	if MainWindow.IsShown() then
+		return true
+	end
+	local at = MainWindow.HiddenAt and MainWindow.HiddenAt()
+	return at ~= nil and type(GetTime) == "function" and at == GetTime()
 end
 
 --- Hides the card. how (default "gone": not the player's doing, nothing

@@ -22,6 +22,10 @@ ns.SafeTime = SafeTime
 
 SafeTime.DELAY = 4            -- seconds after a trigger before checking
 SafeTime.LOGIN_DELAY = 20     -- after login, let the world settle first
+-- After the player closed a card (Close, Escape, Later, Dismiss, Not now),
+-- the next one waits at least this long, even for a major moment: a closed
+-- card is never followed by another one seconds later.
+SafeTime.CLOSE_GAP = 120
 
 local function call(fn, ...)
 	if type(fn) ~= "function" then return nil end
@@ -64,6 +68,7 @@ end
 SafeTime.MAX_TRIES = 3        -- card attempts before the chat line stands in
 
 local retryAt -- when the one pending cooldown retry fires (a real date), or nil
+local quietUntil -- no card before this real date (CLOSE_GAP after a close), or nil
 SafeTime.lastError = nil      -- why the last card attempt failed (session only)
 
 -- The moment on screen, if the card is showing one.
@@ -125,6 +130,13 @@ function SafeTime.Run(ctx)
 		if SafeTime.SetMore then pcall(SafeTime.SetMore, others(char, now)) end
 		return nil
 	end
+	-- The pause after the player closed a card (one timer for its end).
+	if quietUntil and now < quietUntil then
+		if #Reactions.NoticeOrder(char, now) > 0 then
+			retryAfterCooldown(ctx, quietUntil, now)
+		end
+		return nil
+	end
 	local reaction, info = Reactions.NextNotice(char, now)
 	if not reaction then
 		if info and info.cooldownUntil then
@@ -164,18 +176,39 @@ function SafeTime.Check(ctx)
 	return SafeTime.Run(ctx)
 end
 
---- The card went away (UI/ReactionCard: how is "close", "escape", "later",
--- "answer", "combat", ...). Records it on the moment; when the player
--- closed it, the next waiting moment may follow (pacing permitting).
+-- How a card went away that schedules nothing: Answer opened the journal
+-- on it (another card would pop up over the player's reading), Dawnward
+-- replaced or withdrew it ("gone"), or combat hid it (leaving combat is a
+-- trigger of its own).
+SafeTime.NO_FOLLOW = { answer = true, gone = true, combat = true }
+
+--- The card went away (UI/ReactionCard: how is "close", "escape", "journal",
+-- "later", "dismiss", "answer", "combat" or "gone"). Records it on the
+-- moment. After the player closed it, the next waiting moment follows no
+-- sooner than CLOSE_GAP (pacing permitting); after Answer, or when Dawnward
+-- withdrew it, nothing is scheduled: the next calm-moment trigger offers it.
 function SafeTime.Closed(ctx, id, how)
 	local char = realCharacter(ctx)
 	if not char or ctx.store.realReadOnly or ctx.store:IsSimulation() then
 		return
 	end
-	Reactions.NoticeClosed(char, id, how, ctx.now())
-	if how ~= "combat" then
-		SafeTime.Schedule(ctx)
+	local now = ctx.now()
+	Reactions.NoticeClosed(char, id, how, now)
+	if SafeTime.NO_FOLLOW[how] then
+		return
 	end
+	quietUntil = now + SafeTime.CLOSE_GAP
+	if #Reactions.NoticeOrder(char, now) > 0 then
+		retryAfterCooldown(ctx, quietUntil, now)
+	end
+end
+
+--- The end of the pause after a closed card (a real date), or nil.
+function SafeTime.QuietUntil(now)
+	if quietUntil and (now == nil or quietUntil > now) then
+		return quietUntil
+	end
+	return nil
 end
 
 function SafeTime.Schedule(ctx, delay)

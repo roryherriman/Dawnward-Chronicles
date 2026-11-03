@@ -62,7 +62,8 @@ StorySchema.REACTION_STATUS = { pending = true, postponed = true }
 -- (0.10.2) How a moment was announced, and how its card went away
 -- (Core/Reactions.lua "Notices").
 StorySchema.SHOWN_VIA = { card = true, chat = true }
-StorySchema.CLOSED_HOW = { close = true, escape = true, later = true, notnow = true, answer = true, combat = true }
+StorySchema.CLOSED_HOW = { close = true, escape = true, later = true, notnow = true, answer = true, combat = true,
+	journal = true } -- journal (0.10.2): Escape closed it together with the journal
 StorySchema.CHANGE_STATUS = { pending = true, applied = true, rejected = true, reversed = true }
 StorySchema.FREQUENCY = { off = true, rare = true, normal = true, frequent = true }
 StorySchema.APPROVAL = { ask = true, auto = true }

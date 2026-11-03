@@ -694,15 +694,17 @@ function Reactions.NoticeFailed(char, id, now)
 end
 
 --- The card went away: how is one of Reactions.CLOSED. Combat (before the
--- player did anything) makes the moment eligible again, a bounded number of
--- times; every other way is the player's choice and final.
+-- player did anything) and the Escape that closed the journal with it
+-- ("journal") make the moment eligible again, a bounded number of times;
+-- every other way is the player's choice and final.
 function Reactions.NoticeClosed(char, id, how, now)
 	local r = Reactions.Find(char, id)
 	if not r or not Reactions.CLOSED[how] then
 		return nil
 	end
 	r.closedAt, r.closedHow = now or 0, how
-	if how == "combat" and (r.interrupts or 0) < Reactions.MAX_INTERRUPTS and r.status == "pending" then
+	if (how == "combat" or how == "journal") and (r.interrupts or 0) < Reactions.MAX_INTERRUPTS
+		and r.status == "pending" then
 		r.interrupts = (r.interrupts or 0) + 1
 		r.notifiedAt = nil
 	end
