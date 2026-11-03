@@ -952,3 +952,42 @@ The automated run (L2, TRP3 3.4.1 fake) imports one long backstory of plain para
 | AA16 | Synchronization > Recovery: Roll back… the newest backup (preview first), then Exact restore… an older one | Each asks first; your own text returns; Dawnward's part is rebuilt or restored as described |
 | AA17 | Screenshot every Dawnward screen and compare with `docs/design/mockups/` | The owner judges each screen; differences recorded against `docs/design/UI_DESIGN_V10.md` and `docs/design/audit/v10.1-refinements.md` |
 | AA18 | Play normally for 30 minutes with Dawnward open at times (quests, a level, zone changes, a story moment) | No Lua error appears |
+
+### v0.10.2 in-game acceptance (L3): dynamic RP profile and playthrough fixes
+
+**Nothing below is passed until the owner has done it in Classic Era 1.15.9 with Total RP 3 3.4.1 and recorded the result.** Automated tests (L2) do not show what the client draws.
+
+**Protect the playthrough first (before installing):**
+1. Quit WoW completely (not just to the character screen).
+2. Copy the whole installed `Interface\AddOns\DawnwardChronicles` folder into your Dawnward backup folder, in a new dated subfolder.
+3. Copy `WTF\Account\<account>\SavedVariables\DawnwardChronicles*.lua`, `DawnwardChronicles*.lua.bak`, `totalRP3*.lua` and `totalRP3*.lua.bak` into the same dated subfolder. Also copy the per-character `WTF\Account\<account>\<realm>\<character>\SavedVariables\` files if Dawnward or Total RP 3 has any there.
+4. Check the copies exist and record their SHA-256 (PowerShell: `Get-FileHash <file>`).
+5. Replace only the `DawnwardChronicles` addon folder with the one from the zip; leave every other addon and file alone. Never delete or regenerate SavedVariables.
+6. Start WoW yourself; `/dawnward status` shows **0.10.2-dev**; `/console scriptErrors 1`.
+
+**How to report a failure:** the item number, a screenshot, any Lua error, and the output of `/dawnward trp3 diagnose`, `/dawnward trp3 log` and (for story items) `/dawnward story why`.
+
+#### Part AB: v0.10.2 acceptance
+
+| # | Steps | Pass when |
+|---|---|---|
+| AB1 | Log in Kyssarra. Look at the journal, Character page, Story and Chronicle; Settings > Total RP 3 > Status and OOC > Currently updates | Every record from the playthrough is there and unchanged; Currently updates shows **Manual**; nothing new appears in Total RP 3 by itself except the trait icons (AB2) |
+| AB2 | Before syncing, `/dawnward trp3 diagnose`: read the trait icon lines. Then `/dawnward trp3 sync` and `/dawnward trp3 log` | Diagnose lists each trait's icons as `INV_Misc_QuestionMark (replaced on the next sync)`; the log shows one characteristics write with "icons <axis>" |
+| AB3 | Total RP 3 > your profile > Characteristics > Personality | All six Dawnward traits show a different icon at each end, **no red question marks**; values, words and order unchanged; your own and preset traits untouched. Diagnose now shows each icon as Dawnward's; a second sync writes nothing |
+| AB4 | In Total RP 3's editor, change one end icon of a Dawnward trait and save; then change that axis in Dawnward | The value updates and your icon stays ("your own, kept" in diagnose) |
+| AB5 | Turn in a quest and start a fight within a few seconds of the card appearing | The card hides in combat and comes back after the fight (at most twice) |
+| AB6 | Turn in two or three quests while in combat | After the fight exactly one card (the newest) with "N more waiting in the Story section" |
+| AB7 | Close a card with X and another with Escape; `/dawnward story why` | Both say they were shown and closed; neither comes back |
+| AB8 | With a moment waiting in the pause between cards: `/dawnward story why` | It names the pause and when it ends; a card appears when the pause ends without anything else happening |
+| AB9 | Open the journal, then trigger a moment | The card appears above the journal window |
+| AB10 | `/reload` with a never-shown moment waiting, out of combat | About 20 seconds after login one card appears |
+| AB11 | Hover the Story item in the journal rail | The badge count matches `/dawnward story`; the tooltip names it |
+| AB12 | Enter a dungeon, go AFK, die, watch a cinematic | No card during any of them; it comes after leaving, returning, reviving or the cinematic ending |
+| AB13 | Approve personality changes until one axis has three net story steps in one direction | Story shows "Your profile could show this" with the reasons; Total RP 3's At First Glance is unchanged until you act |
+| AB14 | Accept it (glance sync on) | The entry appears in a free Total RP 3 slot; slots you filled yourself are untouched |
+| AB15 | On another suggestion: Edit (change the words, Save), Later, Dismiss | Edit publishes your words; Later brings it back after a day; Dismiss does not offer it again at the same strength |
+| AB16 | Currently updates: switch to **Suggested**, enter a new zone | A suggested Currently appears with Accept / Edit / Later / Dismiss; Total RP 3's Currently changes only after Accept |
+| AB17 | Switch to **Automatic** (it asks first); enter a new zone; then **Undo last automatic update** | Total RP 3's Currently updates; Undo restores the previous text |
+| AB18 | Type your own Currently in Total RP 3, then enter another zone | Total RP 3 is not overwritten; Dawnward shows the suggestion waiting for you |
+| AB19 | Simulation on (development builds): try Accept and a mode change | Both are refused |
+| AB20 | Play 30 minutes normally (quests, a level, zones, a story moment) | No Lua error; no flood of cards |
