@@ -14,6 +14,7 @@ Loader.ROOT = "DawnwardChronicles/"
 Loader.CORE = {
 	"Core/Util.lua",
 	"Core/Privacy.lua",
+	"Core/Pronouns.lua",
 	"Core/Themes.lua",
 	"Core/Records.lua",
 	"Core/RecordTypes.lua",

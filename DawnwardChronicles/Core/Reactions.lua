@@ -424,23 +424,14 @@ local function characterName(char)
 	return name or "Your character"
 end
 
--- Possessive and object pronouns from the profile's Pronouns field, only
--- when it clearly starts with she, he or they; anything else is neutral.
-local PRONOUNS = {
-	she = { their = "her", them = "her" },
-	he = { their = "his", them = "him" },
-	they = { their = "their", them = "them" },
-}
-
+--- The character's pronouns for generated text (Core/Pronouns.lua): the
+-- profile's Pronouns field when it can be read safely, else the name.
 function Reactions.Pronouns(char)
-	local field = char.fields and char.fields.pronouns and char.fields.pronouns.value
-	local first = type(field) == "string" and field:lower():match("^%s*(%a+)") or nil
-	return PRONOUNS[first] or PRONOUNS.they
+	return ns.Pronouns.For(char)
 end
 
 local function tokensFor(char, record)
-	local pronouns = Reactions.Pronouns(char)
-	local tokens = { name = characterName(char), their = pronouns.their, them = pronouns.them }
+	local tokens = { name = characterName(char) }
 	if record then
 		tokens.title = record.meta and record.meta.title
 		tokens.zone = record.zone
@@ -496,10 +487,13 @@ function Reactions.Present(char, reaction)
 	end
 	local record = GameEvents.Find(char, reaction.eventKeys[1])
 	local tokens = tokensFor(char, record)
+	-- v0.10.3: authored text names the character with the profile's
+	-- pronouns (Core/Pronouns.lua), before the event's own tokens are filled.
+	local forms = ns.Pronouns.For(char)
 	local question
 	for _, variant in ipairs(template.questions) do
 		if hasAll(tokens, variant.needs) then
-			question = fill(variant.text, tokens)
+			question = fill(ns.Pronouns.Render(variant.text, forms), tokens)
 			break
 		end
 	end
@@ -519,6 +513,11 @@ function Reactions.Present(char, reaction)
 		options[#options + 1] = option
 	end
 	options[#options + 1] = ReactionLibrary.NEUTRAL
+	-- Each answer as this character reads it: a copy, so the library keeps
+	-- its tokens. The chosen phrase is stored as rendered here.
+	for i, option in ipairs(options) do
+		options[i] = Reactions.RenderOption(option, forms)
+	end
 	local extra = #reaction.eventKeys - 1
 	local contextLine
 	if extra > 0 then
@@ -530,6 +529,17 @@ function Reactions.Present(char, reaction)
 		options = options, record = record, name = tokens.name,
 		recall = ns.Director.Recall(context), why = context.why, echo = context.echo,
 	}
+end
+
+--- A copy of an answer with its text, phrase and meaning rendered for
+-- forms (Core/Pronouns.lua). Pure.
+function Reactions.RenderOption(option, forms)
+	local out = {}
+	for k, v in pairs(option) do out[k] = v end
+	out.text = ns.Pronouns.Render(option.text, forms)
+	out.phrase = ns.Pronouns.Render(option.phrase, forms)
+	out.meaning = ns.Pronouns.Render(option.meaning, forms)
+	return out
 end
 
 function Reactions.FindOption(presentation, optionId)

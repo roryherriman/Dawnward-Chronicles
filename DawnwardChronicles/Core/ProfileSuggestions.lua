@@ -292,29 +292,19 @@ end
 
 --- Wording ------------------------------------------------------------------------
 
--- Subject, object and possessive words from the character's Pronouns field
--- ("she/her", "he/him", "they/them"); with none, the character's name and
--- neutral words. plural: the verbs agree with "they".
+-- Subject, object and possessive words from the character's Pronouns field,
+-- read by the shared formatter (Core/Pronouns.lua: "she/her", "he/him",
+-- "they/them", "it/its" or a complete custom set); with none readable, the
+-- character's name and neutral words. plural: the verbs agree with "they".
 function PS.Voice(char)
-	local fields = char and char.fields or {}
 	-- A name or pronouns the player keeps secret never reach a suggestion.
-	local function shown(field)
-		return field and field.visibility ~= ns.Privacy.SECRET and field.value or nil
-	end
-	local name = shown(fields.name)
-	local pronouns = shown(fields.pronouns)
-	local first = type(pronouns) == "string" and pronouns:lower():match("^%s*(%a+)") or nil
-	local v = { o = "them", p = "their" }
-	if first == "she" or first == "her" then
-		v.o, v.p, v.subject = "her", "her", "She"
-	elseif first == "he" or first == "him" then
-		v.o, v.p, v.subject = "him", "his", "He"
-	end
-	if type(name) == "string" and name ~= "" then
-		v.S = Util.CleanText(name, 40, false)
+	local forms = ns.Pronouns.For(char, { public = true, neutral = true })
+	local v = { o = forms.them, p = forms.their }
+	if forms.name then
+		v.S = Util.CleanText(forms.name, 40, false)
 	else
-		v.S = v.subject or "They"
-		v.plural = v.subject == nil
+		v.S = ns.Pronouns.Render("{They}", forms)
+		v.plural = forms.plural
 	end
 	return v
 end
@@ -439,7 +429,10 @@ end
 local function memoryCandidates(char)
 	local out = {}
 	for _, m in ipairs(char.story and char.story.memories or {}) do
-		if m.status == "established" and m.importance == 3 and m.title and quotable(m) then
+		-- v0.10.3: the automatic record of an answer is not a memory the
+		-- player made defining (the answer's own changes count instead), and a
+		-- suggestion counts only once the player accepts it.
+		if m.status == "established" and m.importance == 3 and m.title and quotable(m) and m.kind ~= "answer" then
 			local title = Util.CleanText(m.title, 80, false)
 			local private = m.visibility ~= ns.Privacy.PUBLIC or nil
 			out[#out + 1] = { key = "glance:memory:" .. m.id, theme = "glance:memory:" .. m.id, tier = 1,
