@@ -18,7 +18,7 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 
 ### Fixed: your own answers waited for approval as "suggested memories"
 - **Cause:** every Story Director answer of some significance became a *suggested* memory (`Decisions.Decide` → `Memories.SuggestFromDecision`), so the player approved their own chosen answer a second time; that is where the backlog came from.
-- **Now:** an answer you give is recorded at once as an **established** memory, in the same words as its journal draft and linked to the decision. Only a defining answer (the most significant moments) also offers a **suggested reflection**, which shows the answer it rests on and waits for you (Accept, Edit, Later, Dismiss). "Nothing worth remembering" creates no memory. Journal drafts and personality changes still wait for your approval as before.
+- **Now:** an answer you give is recorded at once as an **established** memory, in the words you chose (the question, then `Kyssarra Dawnward answered: "…"`), linked to the decision. Only a defining answer (the most significant moments) also offers a **suggested reflection**, which shows the answer it rests on and waits for you (Accept, Edit, Later, Dismiss). "Nothing worth remembering" creates no memory. Journal drafts and personality changes still wait for your approval as before.
 
 ### Fixed: wrong pronouns in generated text
 - **Cause:** Story Director answer phrases contained a literal "their", and several places joined them to the name without substitution ("Kyssarra Dawnward relished the freedom their strength brings.").
@@ -30,8 +30,17 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 - **Later** and **Dismiss** for suggestions (`/dawnward memory later|dismiss`).
 - **Profile suggestions** (0.10.2) never treat recorded events or your answer records as development; only approved changes, established memories you accepted and achieved goals count.
 
+### Fixed before merge (independent review)
+- A full memory list never loses a suggestion to an automatic memory: your answers have room of their own (300, besides the 300 for your memories and suggestions), and no suggestion, disputed or established memory is ever removed to keep an answer or offer a reflection. When there is no room, the decision is still saved and the Story Director tells you the answer was not kept in Memories.
+- An answer's memory now repeats exactly what you chose (the question and your answer as shown), instead of a retelling that could add a feeling you did not choose ("was glad to have done it alone", "felt the weight…", "remained wary…"). Journal drafts still retell it, and stay drafts.
+- Answer memories that share an event's title (Stormwind at Honored and Revered, two falls in one zone) are no longer reported as duplicate memories in Review.
+- Rewording an answer's memory keeps it an answer (marked edited), so it never becomes "a memory you marked as defining" for At First Glance.
+- A disputed suggestion no longer hides the event it was about: the event shows as Recorded again.
+- A reflection is titled after the moment it reflects on ("Level 10"); an accepted one reads `carries the memory of "Level 10"` in At First Glance, older "Reflecting on …" titles included (their stored title is unchanged).
+- Pronouns: "Her/She", "Him/He" and a note after a comma or dash ("she/her, ask me", "he/him - any") are understood. Without readable pronouns the whole name stands in (never its first word, "Sir"), and the reflexive is "themselves".
+
 ### Your existing data
-Additive only (two optional memory fields). Existing suggested memories stay pending, word for word; nothing is approved, reclassified or rewritten; events, decisions, drafts, personality, goals, arcs, people, Total RP 3 settings and the sync ledger are unchanged; no verified records are created twice.
+Additive only (three optional memory fields). Existing suggested memories stay pending, word for word; nothing is approved, reclassified or rewritten; events, decisions, drafts, personality, goals, arcs, people, Total RP 3 settings and the sync ledger are unchanged; no verified records are created twice.
 
 ## [Unreleased]: 0.10.2-dev (dynamic RP profile, playthrough fixes)
 

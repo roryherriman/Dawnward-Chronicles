@@ -35,6 +35,30 @@ local function list(char)
 	return char.story.memories
 end
 
+-- Room in the memory list (fixed before merge, independent review): a
+-- full list never loses what the player has not yet seen or decided.
+--   answers      the automatic records of answers have room of their own
+--                (RecordTypes.LIMITS.answerMemories), so they never take a
+--                suggestion's place. When it is full nothing is removed:
+--                the answer is not kept as a memory (it is still saved with
+--                its decision) and the player is told.
+--   reflections  Dawnward's own suggestions never make room either: no
+--                suggestion, disputed or established memory is removed for
+--                one; when the list is full none is offered.
+--   others       the player's own memories (and older suggestions) keep the
+--                earlier rule: the oldest record that is not established
+--                (never an answer) makes room.
+local function isAnswer(r) return r.kind == "answer" end
+local function notAnswer(r) return r.kind ~= "answer" end
+local ROOM = {
+	answer = { counts = isAnswer, evictable = false, limit = "answerMemories",
+		full = "there is no room for more answers in Memories (" },
+	reflection = { counts = notAnswer, evictable = false, limit = "memories",
+		full = "the memory list is full and nothing is removed to make room for a reflection (" },
+}
+local OTHER_ROOM = { counts = notAnswer, limit = "memories",
+	full = "the memory list is full of established memories; supersede or remove some first (" }
+
 --- values: { title, text, tags, importance, zone, links, visibility, kind }.
 function Memories.Add(char, values, provenance, now)
 	provenance = provenance or "player"
@@ -50,8 +74,10 @@ function Memories.Add(char, values, provenance, now)
 	m.links = Records.CleanLinks(values.links)
 	m.kind = values.kind
 	local clean = RecordTypes.CleanMemory(m)
-	if not Records.Append(list(char), clean, RecordTypes.LIMITS.memories) then
-		return nil, "the memory list is full of established memories; supersede or remove some first"
+	local room = ROOM[clean.kind] or OTHER_ROOM
+	local limit = RecordTypes.LIMITS[room.limit]
+	if not Records.Append(list(char), clean, limit, room) then
+		return nil, room.full .. limit .. ")"
 	end
 	-- An answer's record is not new development of its own: the decision
 	-- itself is offered to the profile suggestions (Core/Decisions.lua).
@@ -75,24 +101,30 @@ local function forDecision(char, decisionId, kind)
 end
 Memories.ForDecision = forDecision
 
---- The faithful sentence for an answer: "<name> <the phrase they chose>."
--- (the phrase already in the character's pronouns, Core/Reactions.lua), or
--- the player's own words as written. Nil for "nothing worth remembering".
+--- The faithful record of an answer: the question as it was asked, then
+-- '<name> answered: "<the answer they chose>"' in the words shown (already
+-- in the character's pronouns, Core/Reactions.lua), or the player's own
+-- words as written. Never the option's phrase: that retells the answer for
+-- drafts and can add a feeling the player did not choose. Nil for
+-- "nothing worth remembering".
 function Memories.AnswerText(args)
 	if args.custom then return args.custom end
 	local option = args.option
-	if not option or not option.phrase or option.phrase == ns.ReactionLibrary.NEUTRAL.phrase then
+	if not option or not option.text or option.text == ns.ReactionLibrary.NEUTRAL.text then
 		return nil
 	end
-	return (args.name or "Your character") .. " " .. option.phrase .. "."
+	local said = string.format("%s answered: \"%s\"", args.name or "Your character", option.text)
+	return args.question and (args.question .. " " .. said) or said
 end
 
 --- After a decision: keeps the answer as an established memory (the
 -- player's own choice, worded faithfully, nothing added), and for a
 -- defining moment suggests a reflection on it (Dawnward's interpretation,
 -- proposed until the player accepts it). Idempotent per decision.
--- args: { significance, record, title, custom, option, name, eventKeys,
--- decisionId, journalId }. Returns answer, reflection (either may be nil).
+-- args: { significance, record, title, question, custom, option, name,
+-- eventKeys, decisionId, journalId }. Returns answer, reflection (either may
+-- be nil), then answerError and reflectionError: why one could not be kept
+-- (no room in the list, see ROOM above).
 function Memories.FromDecision(char, args, now)
 	local significance = args.significance or 1
 	if significance < Memories.SUGGEST_SIGNIFICANCE and not args.custom then
@@ -103,9 +135,9 @@ function Memories.FromDecision(char, args, now)
 	local record = args.record
 	local links = { events = args.eventKeys, decisions = { args.decisionId }, journal = { args.journalId } }
 	local tags = args.option and args.option.theme and { args.option.theme } or {}
-	local answer = forDecision(char, args.decisionId, "answer")
+	local answer, answerError, reflectionError = forDecision(char, args.decisionId, "answer"), nil, nil
 	if not answer then
-		answer = Memories.Add(char, { title = args.title, text = text, tags = tags, importance = significance,
+		answer, answerError = Memories.Add(char, { title = args.title, text = text, tags = tags, importance = significance,
 			zone = record and record.zone, links = links, kind = "answer", visibility = ns.Privacy.PRIVATE },
 			"player", now)
 	end
@@ -115,14 +147,16 @@ function Memories.FromDecision(char, args, now)
 		reflection = forDecision(char, args.decisionId, "reflection")
 		if not reflection then
 			links.memories = { answer.id }
-			reflection = Memories.Add(char, {
-				title = args.title and ("Reflecting on " .. args.title) or "A reflection", text = meaning,
+			-- Titled as the moment it reflects on ("Level 10"), so an accepted
+			-- reflection reads naturally wherever its title is quoted.
+			reflection, reflectionError = Memories.Add(char, {
+				title = args.title or "A reflection", text = meaning,
 				tags = tags, importance = significance, zone = record and record.zone, links = links,
 				kind = "reflection",
 			}, "suggested", now)
 		end
 	end
-	return answer, reflection
+	return answer, reflection, answerError, reflectionError
 end
 
 function Memories.Find(char, id) return Records.Find(list(char), id) end
@@ -148,8 +182,9 @@ function Memories.Edit(char, id, values, now)
 	m.title, m.text = title, text
 	if values.tags then m.tags = Records.Tags(values.tags) end
 	m.provenance = "player"
-	-- Rewritten by the player: no longer Dawnward's record of an answer.
-	if m.kind == "answer" then m.kind = nil end
+	-- A reworded answer stays an answer (never profile evidence or Director
+	-- context, like any answer), marked as edited by the player.
+	if m.kind == "answer" then m.edited = true end
 	m.updatedAt = now or 0
 	return m
 end
@@ -255,11 +290,12 @@ function Memories.RecordedTitle(e)
 	return ns.Narrative.Title(e)
 end
 
--- Event keys a memory (not superseded) already tells the story of.
+-- Event keys a memory (not superseded or disputed) already tells the story
+-- of. A disputed interpretation does not hide the event it was about.
 local function linkedEvents(char)
 	local keys = {}
 	for _, m in ipairs(list(char)) do
-		if m.status ~= "superseded" then
+		if m.status ~= "superseded" and m.status ~= "disputed" then
 			for _, k in ipairs(m.links.events) do keys[k] = true end
 		end
 	end

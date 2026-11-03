@@ -199,11 +199,14 @@ RULES[#RULES + 1] = function(char)
 	return out
 end
 
--- Two established memories with the same title.
+-- Two established memories with the same title. The automatic records of
+-- answers (v0.10.3) are titled after their event, and events repeat
+-- ("Stormwind" at Honored and at Revered, "A fall in Elwynn Forest"), so
+-- they are not compared: only memories the player named.
 RULES[#RULES + 1] = function(char)
 	local out, seen = {}, {}
 	for _, m in ipairs(char.story.memories) do
-		if m.status == "established" and m.title then
+		if m.status == "established" and m.title and m.kind ~= "answer" then
 			local k = lower(m.title)
 			if seen[k] then
 				out[#out + 1] = { key = string.format("duplicate:%d:%d", seen[k], m.id), kind = "duplicate",

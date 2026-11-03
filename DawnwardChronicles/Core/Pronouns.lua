@@ -12,9 +12,11 @@
 -- Forms come only from the profile's Pronouns field, never from race,
 -- class, name or the player: "She/Her", "she/her/hers", "he/him",
 -- "they/them", "it/its", a mixed "she/they" (the first set), or a complete
--- custom set of five ("xe/xem/xyr/xyrs/xemself"). Anything else, or no
--- field at all, falls back to the character's name ("Kyssarra's
--- strength"), or "your character" without a name; never to a guess.
+-- custom set of five ("xe/xem/xyr/xyrs/xemself"); object first
+-- ("Her/She") too, and a note after a bracket, comma or dash is ignored.
+-- Anything else, or no field at all, falls back to the character's whole
+-- name ("Kyssarra Dawnward's strength", reflexive "themselves"), or "your
+-- character" without a name; never to a guess.
 --
 -- Only newly generated text is rendered: the player's own words and texts
 -- already stored are never rewritten.
@@ -47,10 +49,19 @@ MEMBERS.themself = { they = true }
 local VERBS = { are = { "are", "is" }, were = { "were", "was" }, have = { "have", "has" }, ["do"] = { "do", "does" },
 	s = { "", "s" }, es = { "", "es" } }
 
+-- An em or en dash (UTF-8) starts a note too.
+local DASHES = { "\226\128\147", "\226\128\148" }
+
 local function words(value)
 	local out = {}
-	-- Anything after a bracket is a note, not a pronoun ("she/her (Kyss)").
-	local text = value:lower():match("^([^%(%[]*)") or ""
+	-- Anything after a bracket, a comma or a dash is a note, not a pronoun
+	-- ("she/her (Kyss)", "she/her, ask me", "he/him - any").
+	local text = value:lower()
+	for _, dash in ipairs(DASHES) do
+		local at = text:find(dash, 1, true)
+		if at then text = text:sub(1, at - 1) end
+	end
+	text = text:match("^([^%(%[,%-]*)") or ""
 	for w in text:gmatch("%a+") do
 		out[#out + 1] = w
 		if #out > 8 then return nil end
@@ -66,6 +77,15 @@ function Pronouns.Parse(value)
 	local w = words(value)
 	if not w or #w == 0 then return nil end
 	local set = Pronouns.SETS[w[1]]
+	-- Object first ("Her/She", "him/he"): a word that belongs to one set only.
+	if not set and MEMBERS[w[1]] then
+		local only
+		for id in pairs(MEMBERS[w[1]]) do
+			if only then only = nil; break end
+			only = id
+		end
+		set = only and Pronouns.SETS[only]
+	end
 	if set then
 		-- Every other word must be a pronoun too: "she/her/hers", "she/they".
 		for i = 2, #w do
@@ -111,9 +131,11 @@ function Pronouns.For(char, opts)
 		out.name = name
 		return out
 	end
-	-- No readable pronouns: the name (its first word) stands in for them.
-	local short = name and name:match("^(%S+)") or "your character"
-	return { they = short, them = short, their = short .. "'s", theirs = short .. "'s", themselves = short,
+	-- No readable pronouns: the whole name stands in for them (never its
+	-- first word: "Sir Marcus Vale" is not "Sir"), and the reflexive is the
+	-- neutral "themselves" (a name cannot be one).
+	local who = name or "your character"
+	return { they = who, them = who, their = who .. "'s", theirs = who .. "'s", themselves = "themselves",
 		name = name, named = true }
 end
 

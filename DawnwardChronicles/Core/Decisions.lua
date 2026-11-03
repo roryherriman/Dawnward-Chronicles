@@ -108,14 +108,16 @@ function Decisions.Decide(char, reactionId, choice, now)
 		ns.Director.Apply(char, option, decision, now)
 	end
 	-- v0.10.3: the answer itself is kept as an established, private memory
-	-- in the same words as the draft (the player chose it: no second
-	-- confirmation); only a reflection that adds Dawnward's interpretation,
-	-- for a defining moment, waits for the player as a suggestion.
-	result.memory, result.reflection = ns.Memories.FromDecision(char, { significance = reaction.significance,
-		record = view.record,
+	-- in the words the player chose (the question and the answer as shown:
+	-- no second confirmation, nothing added); only a reflection that adds
+	-- Dawnward's interpretation, for a defining moment, waits for the player
+	-- as a suggestion. When the list has no room, the errors say why (the
+	-- decision above is saved either way).
+	result.memory, result.reflection, result.memoryError, result.reflectionError = ns.Memories.FromDecision(char, {
+		significance = reaction.significance, record = view.record,
 		title = result.entry and result.entry.title or (view.record and ns.GameEvents.Label(view.record.category)),
-		custom = custom, option = option, name = view.name, eventKeys = reaction.eventKeys, decisionId = decision.id,
-		journalId = decision.journalId }, now)
+		question = view.question, custom = custom, option = option, name = view.name, eventKeys = reaction.eventKeys,
+		decisionId = decision.id, journalId = decision.journalId }, now)
 	result.arc = ns.Arcs.SuggestFromPattern(char, now)
 	Reactions.Resolve(char, reactionId)
 	-- v0.10.2: approved development may suggest a profile change (only a

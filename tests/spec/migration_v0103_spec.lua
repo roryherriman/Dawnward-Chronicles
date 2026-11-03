@@ -119,7 +119,8 @@ return function(t, expect)
 			expect.equal(view.question, "Kyssarra Dawnward has grown stronger (level 10). What does that strength mean "
 				.. "to her?")
 			local result = assert(ns.Decisions.Decide(loaded, reaction.id, { optionId = "protect" }, w.now()))
-			expect.equal(result.memory.text, "Kyssarra Dawnward felt her new strength as a responsibility to others.")
+			expect.equal(result.memory.text, view.question .. " Kyssarra Dawnward answered: \"A responsibility to those "
+				.. "weaker than her.\"")
 			expect.equal(result.memory.status, "established")
 			expect.equal(result.reflection.text, "Others may come to rely on her.")
 			expect.equal(result.reflection.status, "proposed")

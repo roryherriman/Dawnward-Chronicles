@@ -127,7 +127,8 @@ return function(t, expect)
 			expect.equal(m.provenance, "player")
 			expect.equal(m.visibility, "private", "an answer is never published by itself")
 			expect.equal(m.title, "Level 5")
-			expect.equal(m.text, "Kyssarra Dawnward relished the freedom her strength brings.")
+			expect.equal(m.text, "Kyssarra Dawnward has grown stronger (level 5). What does that strength mean to her? "
+				.. "Kyssarra Dawnward answered: \"Freedom: fewer people can tell her what to do.\"")
 			expect.deepEqual(m.links.decisions, { result.decision.id })
 			expect.deepEqual(m.links.events, { record.key })
 			expect.deepEqual(m.links.journal, { result.entry.id })
@@ -138,8 +139,8 @@ return function(t, expect)
 			-- One entry for the level: the answer, showing the recorded fact it rests on.
 			expect.deepEqual(ns.Memories.Recorded(char), {})
 			expect.equal(ns.Memories.Basis(char, m), "Recorded: Kyssarra Dawnward reached level 5 in Elwynn Forest.")
-			-- The same sentence in the draft: no conflicting wording.
-			expect.truthy(result.entry.text:find(m.text, 1, true))
+			-- The answer in the player's chosen words; the draft is still only a draft.
+			expect.truthy(m.text:find("\"Freedom: fewer people can tell her what to do.\"", 1, true))
 		end)
 
 		t:it("keeps the player's own words exactly, and nothing for 'nothing worth remembering'", function()
@@ -159,7 +160,7 @@ return function(t, expect)
 			local ns, char = setup()
 			local _, reaction = ask(ns, char, "levelup", { level = 5, zone = "Elwynn Forest" }, NOW)
 			local result = assert(ns.Decisions.Decide(char, reaction.id, { optionId = "freedom" }, NOW + 1))
-			local args = { significance = 2, title = "Level 5", option = { phrase = "x", meaning = "y" },
+			local args = { significance = 2, title = "Level 5", option = { text = "x", phrase = "x", meaning = "y" },
 				name = "Kyssarra Dawnward", decisionId = result.decision.id, eventKeys = { "levelup:5" } }
 			local again = ns.Memories.FromDecision(char, args, NOW + 2)
 			expect.equal(again, result.memory, "the same record, not a second one")
@@ -190,11 +191,12 @@ return function(t, expect)
 			expect.equal(r.provenance, "suggested")
 			expect.equal(r.visibility, "private")
 			expect.equal(r.kind, "reflection")
-			expect.equal(r.title, "Reflecting on Level 10")
+			expect.equal(r.title, "Level 10")
 			expect.equal(r.text, "Strength has a cost she feels.")
 			expect.deepEqual(r.links.memories, { result.memory.id })
 			expect.equal(ns.Memories.Basis(char, r),
-				"From your answer: Kyssarra Dawnward felt it as a weight she never asked for.")
+				"From your answer: Kyssarra Dawnward has grown stronger (level 10). What does that strength mean to her? "
+					.. "Kyssarra Dawnward answered: \"A weight she never asked for.\"")
 			local _, err = ns.Memories.SetVisibility(char, r.id, "public", NOW)
 			expect.truthy(err, "never public before it is accepted")
 			expect.falsy(ns.Projection.GetPublic(char).memories, "nothing of it reaches the profile")
@@ -274,6 +276,170 @@ return function(t, expect)
 			local s = ns.ProfileSuggestions.Waiting(char, NOW + 3, "glance")[1]
 			expect.truthy(s, "the player accepted it: approved development")
 			expect.deepEqual(s.sources.memories, { result.reflection.id })
+		end)
+	end)
+
+	-- Independent review of v0.10.3 (fixed before merge). Each failed first.
+	t:describe("fixed before merge (independent review)", function()
+		local function fill(ns, char, n, provenance, kind)
+			for i = 1, n do
+				assert(ns.Memories.Add(char, { title = (kind or provenance) .. " " .. i, text = "x", kind = kind },
+					provenance, NOW - 1000 + i))
+			end
+		end
+
+		local function ids(char, status)
+			local out = {}
+			for _, m in ipairs(char.story.memories) do
+				if m.status == status then out[#out + 1] = m.id end
+			end
+			return out
+		end
+
+		t:it("an automatic answer never evicts a suggestion or a disputed memory when the list is full", function()
+			local ns, char = setup()
+			local limit = ns.RecordTypes.LIMITS.memories
+			fill(ns, char, limit, "suggested")
+			assert(ns.Memories.Dispute(char, char.story.memories[2].id, NOW))
+			local proposed, disputed = ids(char, "proposed"), ids(char, "disputed")
+			local _, reaction = ask(ns, char, "levelup", { level = 5, zone = "Elwynn Forest" }, NOW)
+			local result = assert(ns.Decisions.Decide(char, reaction.id, { optionId = "freedom" }, NOW + 1))
+			expect.truthy(result.memory, "answers have room of their own")
+			expect.equal(result.memory.kind, "answer")
+			expect.deepEqual(ids(char, "proposed"), proposed, "every suggestion is still there")
+			expect.deepEqual(ids(char, "disputed"), disputed, "the disputed memory is still there")
+			-- A reflection (Dawnward's own suggestion) makes no room either.
+			local _, defining = ask(ns, char, "levelup", { level = 10, zone = "Westfall" }, NOW + 10)
+			local again = assert(ns.Decisions.Decide(char, defining.id, { optionId = "burden" }, NOW + 11))
+			expect.truthy(again.memory)
+			expect.equal(again.reflection, nil)
+			expect.truthy(again.reflectionError, "the reflection could not be suggested, and says why")
+			expect.deepEqual(ids(char, "proposed"), proposed, "still every suggestion")
+			-- Reloading keeps everything (the saved limit covers both).
+			local reloaded = ns.Schema.NormalizeCharacter(ns.Util.DeepCopy(char))
+			expect.equal(#reloaded.story.memories, #char.story.memories)
+		end)
+
+		t:it("when answers fill their own room, the answer fails visibly and nothing is deleted", function()
+			local ns = Loader.WithTRP3()
+			local store = ns.Store.new(ns.Schema.NewDatabase(), ns.Schema.NewDatabase())
+			local clock = NOW
+			local ctx = { store = store, characterKey = "Kyssarra-Realm",
+				now = function() clock = clock + 1; return clock end }
+			assert(ns.Actions.SetField(ctx, "name", "Kyssarra Dawnward"))
+			local char = ns.Actions.Character(ctx)
+			fill(ns, char, ns.RecordTypes.LIMITS.answerMemories, "player", "answer")
+			fill(ns, char, 3, "suggested")
+			local before = ns.Util.DeepCopy(char.story.memories)
+			local _, reaction = ask(ns, char, "levelup", { level = 5, zone = "Elwynn Forest" }, NOW)
+			local result, message = ns.Actions.Decide(ctx, reaction.id, { optionId = "freedom" })
+			expect.truthy(result, message)
+			expect.equal(result.memory, nil)
+			expect.truthy(result.memoryError)
+			expect.truthy(message:find("not kept in Memories", 1, true), message)
+			expect.truthy(message:find("saved with the decision", 1, true), message)
+			expect.deepEqual(char.story.memories, before, "no memory was removed or changed")
+			expect.equal(char.story.decisions[#char.story.decisions].optionId, "freedom", "the answer itself is saved")
+		end)
+
+		t:it("an established answer says only what the player chose: no added feeling", function()
+			local ns, char = setup()
+			local forms = ns.Pronouns.For(char)
+			local L = ns.ReactionLibrary
+			local options = {}
+			for _, template in ipairs(L.TEMPLATES) do
+				for _, o in ipairs(template.options) do options[#options + 1] = o end
+				for _, o in pairs(L.FLAVOR[template.category] or {}) do options[#options + 1] = o end
+			end
+			expect.truthy(#options > 40)
+			for _, raw in ipairs(options) do
+				local o = ns.Reactions.RenderOption(raw, forms)
+				local text = ns.Memories.AnswerText({ option = o, name = "Kyssarra Dawnward" })
+				expect.equal(text, "Kyssarra Dawnward answered: \"" .. o.text .. "\"", raw.id)
+			end
+			local alone
+			for _, o in ipairs(L.BY_ID["quest.company"].options) do if o.id == "alone" then alone = o end end
+			local text = ns.Memories.AnswerText({ option = ns.Reactions.RenderOption(alone, forms),
+				name = "Kyssarra Dawnward", question = "Who was on Kyssarra Dawnward's mind after \"Q\"?" })
+			expect.equal(text, "Who was on Kyssarra Dawnward's mind after \"Q\"? Kyssarra Dawnward answered: "
+				.. "\"No one. She prefers to work alone.\"")
+			expect.falsy(text:find("glad", 1, true))
+			-- A Director stance answer: "tested", as chosen, not "felt".
+			local stance = ns.Reactions.RenderOption({ id = "stance", text = "It tested the gap between what {they} "
+				.. "say{s} about Stormwind and what {they} believe{s}.", phrase = "felt the gap", contextual = true }, forms)
+			local said = ns.Memories.AnswerText({ option = stance, name = "Kyssarra Dawnward" })
+			expect.truthy(said:find("It tested the gap between what she says about Stormwind", 1, true), said)
+			expect.falsy(said:find("felt", 1, true))
+			expect.equal(ns.Memories.AnswerText({ option = ns.Reactions.RenderOption(L.NEUTRAL, forms) }), nil)
+			expect.equal(ns.Memories.AnswerText({ custom = "My own words.", option = alone }), "My own words.")
+		end)
+
+		t:it("answer memories that share an event title are not reported as duplicates", function()
+			local ns, char = setup()
+			fill(ns, char, 2, "player", "answer")
+			char.story.memories[1].title, char.story.memories[2].title = "Stormwind", "Stormwind"
+			assert(ns.Memories.Add(char, { title = "A fall in Elwynn Forest", text = "a", kind = "answer" }, "player", NOW))
+			assert(ns.Memories.Add(char, { title = "A fall in Elwynn Forest", text = "b", kind = "answer" }, "player", NOW))
+			for _, f in ipairs(ns.Continuity.Findings(char)) do
+				expect.truthy(f.kind ~= "duplicate", f.message)
+			end
+			-- The player's own memories are still checked.
+			assert(ns.Memories.Add(char, { title = "Stormwind", text = "mine" }, "player", NOW + 1))
+			assert(ns.Memories.Add(char, { title = "Stormwind", text = "mine too" }, "player", NOW + 2))
+			local dup = 0
+			for _, f in ipairs(ns.Continuity.Findings(char)) do
+				if f.kind == "duplicate" then dup = dup + 1 end
+			end
+			expect.equal(dup, 1)
+		end)
+
+		t:it("an edited answer stays an answer (edited), never defining evidence, across a reload", function()
+			local ns, char = setup()
+			local _, reaction = ask(ns, char, "levelup", { level = 10, zone = "Westfall" }, NOW)
+			local result = assert(ns.Decisions.Decide(char, reaction.id, { optionId = "burden" }, NOW + 1))
+			local m = result.memory
+			expect.equal(m.importance, 3)
+			assert(ns.Memories.Edit(char, m.id, { text = "A weight she never asked for, typo fixed." }, NOW + 2))
+			expect.equal(m.kind, "answer")
+			expect.equal(m.edited, true)
+			ns.ProfileSuggestions.Generate(char, NOW + 3, { kind = "memory", memory = m })
+			expect.equal(#ns.ProfileSuggestions.Waiting(char, NOW + 3, "glance"), 0, "not a memory she marked defining")
+			local reloaded = ns.Schema.NormalizeCharacter(ns.Util.DeepCopy(char))
+			local again = ns.Memories.Find(reloaded, m.id)
+			expect.equal(again.kind, "answer")
+			expect.equal(again.edited, true)
+			local plain = assert(ns.Memories.Add(char, { title = "Mine", text = "x" }, "player", NOW + 4))
+			assert(ns.Memories.Edit(char, plain.id, { text = "y" }, NOW + 5))
+			expect.equal(plain.edited, nil, "only an answer needs the mark")
+		end)
+
+		t:it("a disputed suggestion does not hide the event it was linked to", function()
+			local ns, char = setup()
+			local e = assert(ns.GameEvents.Record(char, "levelup", { level = 5, zone = "Elwynn Forest" }, NOW))
+			local m = assert(ns.Memories.Add(char, { title = "Level 5", text = "An interpretation.",
+				links = { events = { e.key } } }, "suggested", NOW + 1))
+			expect.deepEqual(ns.Memories.Recorded(char), {}, "a suggestion tells it while it waits")
+			assert(ns.Memories.Dispute(char, m.id, NOW + 2))
+			expect.deepEqual(ns.Memories.Recorded(char), { e }, "disputed: the event shows as Recorded again")
+		end)
+
+		t:it("an accepted reflection reads as the moment it remembers in At First Glance", function()
+			local ns, char = setup()
+			local _, reaction = ask(ns, char, "levelup", { level = 10, zone = "Westfall" }, NOW)
+			local result = assert(ns.Decisions.Decide(char, reaction.id, { optionId = "burden" }, NOW + 1))
+			assert(ns.Memories.Accept(char, result.reflection.id, NOW + 2))
+			local s = assert(ns.ProfileSuggestions.Waiting(char, NOW + 2, "glance")[1])
+			local text = s.text
+			expect.equal(text, "Kyssarra Dawnward carries the memory of \"Level 10\".")
+			-- A reflection stored with the older title reads the same, its data untouched.
+			local ns2, other = setup()
+			local old = assert(ns2.Memories.Add(other, { title = "Reflecting on The Deadmines", text = "y",
+				importance = 3, kind = "reflection" }, "suggested", NOW + 3))
+			assert(ns2.Memories.Accept(other, old.id, NOW + 4))
+			local found = assert(ns2.ProfileSuggestions.Waiting(other, NOW + 4, "glance")[1])
+			expect.deepEqual(found.sources.memories, { old.id })
+			expect.equal(found.text, "Kyssarra Dawnward carries the memory of \"The Deadmines\".")
+			expect.equal(old.title, "Reflecting on The Deadmines")
 		end)
 	end)
 end

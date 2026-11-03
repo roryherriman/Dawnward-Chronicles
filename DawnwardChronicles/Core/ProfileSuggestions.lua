@@ -434,6 +434,12 @@ local function memoryCandidates(char)
 		-- suggestion counts only once the player accepts it.
 		if m.status == "established" and m.importance == 3 and m.title and quotable(m) and m.kind ~= "answer" then
 			local title = Util.CleanText(m.title, 80, false)
+			-- A reflection is quoted as the moment it remembers: those made
+			-- before the fix were titled "Reflecting on <moment>" (the stored
+			-- title is left as it is).
+			if m.kind == "reflection" then
+				title = title:match("^Reflecting on (.+)$") or title
+			end
 			local private = m.visibility ~= ns.Privacy.PUBLIC or nil
 			out[#out + 1] = { key = "glance:memory:" .. m.id, theme = "glance:memory:" .. m.id, tier = 1,
 				title = "A memory that stays", template = "{S} {carries} the memory of \"" .. title .. "\".",

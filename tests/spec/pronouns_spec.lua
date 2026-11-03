@@ -29,12 +29,35 @@ return function(t, expect)
 			local P = Loader.Core().Pronouns
 			local xe = P.Parse("xe/xem/xyr/xyrs/xemself")
 			expect.deepEqual(xe, { they = "xe", them = "xem", their = "xyr", theirs = "xyrs", themselves = "xemself" })
-			for _, unsafe in ipairs({ "xe/xem", "xe/xem/xyr", "any", "any/all", "her/she", "she/xe", "", "   ",
+			for _, unsafe in ipairs({ "xe/xem", "xe/xem/xyr", "any", "any/all", "she/xe", "", "   ",
 				"ask me", "xe/xem/xyr/xyrs/xem", "she/her/xyr/xyrs/xemself" }) do
 				expect.equal(P.Parse(unsafe), nil, "unsupported: " .. unsafe)
 			end
 			expect.equal(P.Parse(nil), nil)
 			expect.equal(P.Parse(42), nil)
+		end)
+
+		-- Independent review (v0.10.3): "Her/She", "Him/He" and a note after a
+		-- comma or dash fell back to the name, though the old reader knew them.
+		t:it("reads object-first forms and ignores a note after a comma or dash", function()
+			local P = Loader.Core().Pronouns
+			for value, subject in pairs({ ["Her/She"] = "she", ["her/she/hers"] = "she", ["Him/He"] = "he",
+				["him/he/his"] = "he", ["Them/They"] = "they", ["she/her, ask me"] = "she", ["he/him - any"] = "he",
+				["He/Him - Elf"] = "he", ["they/them, please"] = "they", ["she/her \226\128\148 Kyss"] = "she" }) do
+				local set = P.Parse(value)
+				expect.truthy(set, value)
+				expect.equal(set.they, subject, value)
+				expect.equal(set.them, P.SETS[subject].them, value)
+				expect.equal(set.their, P.SETS[subject].their, value)
+			end
+			for _, unsafe in ipairs({ "her/xe", "him/she/zir", ", she/her", "- he/him", "ask me, she/her", "any, all",
+				"xe/xem - ask" }) do
+				expect.equal(P.Parse(unsafe), nil, "still unsupported: " .. unsafe)
+			end
+			local ns = Loader.WithTRP3()
+			local voice = ns.ProfileSuggestions.Voice(char(ns, nil, "Her/She"))
+			expect.equal(ns.ProfileSuggestions.Render("{S} {has} grown, in {p} way, and it suits {o}.", voice),
+				"She has grown, in her way, and it suits her.")
 		end)
 
 		t:it("never guesses from race, class or name", function()
@@ -43,7 +66,7 @@ return function(t, expect)
 			c.fields.race = { value = "Human", visibility = "public" }
 			local forms = ns.Pronouns.For(c)
 			expect.falsy(forms.known)
-			expect.equal(forms.their, "Kyssarra's", "the name stands in, never a guessed pronoun")
+			expect.equal(forms.their, "Kyssarra Dawnward's", "the name stands in, never a guessed pronoun")
 		end)
 	end)
 
@@ -100,13 +123,33 @@ return function(t, expect)
 			local ns = Loader.Core()
 			local named = char(ns, "Kyssarra Dawnward")
 			expect.equal(ns.Pronouns.Text(named, "Kyssarra Dawnward continued {their} training. {They} {are} ready."),
-				"Kyssarra Dawnward continued Kyssarra's training. Kyssarra is ready.")
+				"Kyssarra Dawnward continued Kyssarra Dawnward's training. Kyssarra Dawnward is ready.")
 			local odd = char(ns, "Kyssarra Dawnward", "any/all")
-			expect.equal(ns.Pronouns.Text(odd, "It mattered to {them}."), "It mattered to Kyssarra.")
+			expect.equal(ns.Pronouns.Text(odd, "It mattered to {them}."), "It mattered to Kyssarra Dawnward.")
 			local nobody = char(ns, nil, nil)
 			expect.equal(ns.Pronouns.Text(nobody, "{They} keep{s} {their} word. It is {theirs}."),
 				"Your character keeps your character's word. It is your character's.")
 			expect.equal(ns.Pronouns.Name(nobody), "Your character")
+		end)
+
+		-- Independent review (v0.10.3): the fallback took the name's first
+		-- word ("Sir keeps Sir's own counsel") and repeated it as the reflexive.
+		t:it("without readable pronouns, uses the whole name and a neutral reflexive, never a guess", function()
+			local ns = Loader.Core()
+			local sir = char(ns, "Sir Marcus Vale")
+			sir.fields.race = { value = "Human", visibility = "public" }
+			sir.fields.class = { value = "Paladin", visibility = "public" }
+			expect.equal(ns.Pronouns.Text(sir, "{They} keep{s} {their} own counsel."),
+				"Sir Marcus Vale keeps Sir Marcus Vale's own counsel.")
+			expect.equal(ns.Pronouns.Text(sir, "It was {theirs}; {they} lost {themselves} in it."),
+				"It was Sir Marcus Vale's; Sir Marcus Vale lost themselves in it.")
+			expect.equal(ns.Pronouns.Text(char(ns, "The Ashen Wanderer"), "{They} {have} lost {themselves}."),
+				"The Ashen Wanderer has lost themselves.")
+			expect.equal(ns.Pronouns.Text(char(ns, nil, nil), "{They} {have} lost {themselves}."),
+				"Your character has lost themselves.")
+			local forms = ns.Pronouns.For(sir)
+			expect.falsy(forms.known)
+			expect.equal(forms.they, "Sir Marcus Vale")
 		end)
 
 		t:it("leaves other tokens and the player's own braces alone", function()
@@ -151,7 +194,9 @@ return function(t, expect)
 			expect.equal(result.decision.phrase, "relished the freedom her strength brings")
 			expect.truthy(result.entry.text:find("Kyssarra Dawnward relished the freedom her strength brings.", 1, true),
 				result.entry.text)
-			expect.equal(result.memory.text, "Kyssarra Dawnward relished the freedom her strength brings.")
+			expect.equal(result.memory.text, view.question
+				.. " Kyssarra Dawnward answered: \"Freedom: fewer people can tell her "
+				.. "what to do.\"")
 			expect.equal(result.changes[1].reason, "Kyssarra Dawnward relished the freedom her strength brings")
 			for _, text in ipairs({ view.question, result.entry.text, result.memory.text, result.changes[1].reason }) do
 				expect.falsy(text:find("%f[%a]their%f[%A]") or text:find("%f[%a]them%f[%A]"), text)

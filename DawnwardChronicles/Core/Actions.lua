@@ -378,9 +378,14 @@ function Actions.Decide(ctx, reactionId, choice)
 		end
 		if result.memory then
 			parts[#parts + 1] = "Kept in Memories as your answer."
+		elseif result.memoryError then
+			parts[#parts + 1] = "Your answer was not kept in Memories: " .. result.memoryError
+				.. ". It is saved with the decision."
 		end
 		if result.reflection then
 			parts[#parts + 1] = "A reflection on it waits for you in Memories."
+		elseif result.reflectionError then
+			parts[#parts + 1] = "No reflection was suggested: " .. result.reflectionError .. "."
 		end
 		if result.profile and #result.profile > 0 then
 			parts[#parts + 1] = "Your profile could show something new: it waits for your approval in the Story section."
