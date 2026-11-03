@@ -30,7 +30,7 @@ return function(t, expect)
 		function w.char() return assert(store:EnsureCharacter(KEY, 1)) end
 		function w.later(seconds) clock = clock + seconds end
 		function w.now() return clock end
-		-- n approved story steps on an axis (a day apart: the daily limit).
+		-- n approved story steps on an axis, a day apart.
 		function w.approve(axis, delta, n)
 			local char = w.char()
 			for _ = 1, n do

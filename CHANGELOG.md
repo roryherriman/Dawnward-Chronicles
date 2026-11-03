@@ -30,6 +30,12 @@ A feature is never called "tested" or "compatible" in this file unless it reache
 - **Later** and **Dismiss** for suggestions (`/dawnward memory later|dismiss`).
 - **Profile suggestions** (0.10.2) never treat recorded events or your answer records as development; only approved changes, established memories you accepted and achieved goals count.
 
+### Personality development: no daily limit
+- **Removed:** the rolling 24-hour limit of two approved steps per axis (`Evolution.DAILY_LIMIT`) and its message "that axis already changed enough today; it can wait until tomorrow". Every change you approve now applies at once, however many that axis had today.
+- **Unchanged:** changes still come only from your Story Director answers and still wait for your approval (unless you chose automatic approval); each axis stays within 0-20 (a change that would pass it waits); locked axes are never proposed a change; reversal, the history and Total RP 3 synchronisation work as before.
+- **Existing changes:** a change the old limit held back is still pending and can be approved straight away. Loading this version applies nothing by itself.
+- **Duplicates:** one decision proposes at most one change per axis, an answered moment cannot be answered again, and a change applies only once.
+
 ### Fixed before merge (independent review)
 - A full memory list never loses a suggestion to an automatic memory: your answers have room of their own (300, besides the 300 for your memories and suggestions), and no suggestion, disputed or established memory is ever removed to keep an answer or offer a reflection. When there is no room, the decision is still saved and the Story Director tells you the answer was not kept in Memories.
 - An answer's memory now repeats exactly what you chose (the question and your answer as shown), instead of a retelling that could add a feeling you did not choose ("was glad to have done it alone", "felt the weight…", "remained wary…"). Journal drafts still retell it, and stay drafts.

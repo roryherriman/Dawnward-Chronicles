@@ -262,24 +262,87 @@ return function(t, expect)
 			expect.equal(char.story.baselines.discipline, 10)
 		end)
 
-		t:it("limits change per day and never passes 0 or 20", function()
+		t:it("applies every approved change at once (no daily limit) and never passes 0 or 20", function()
+			local ns, char, fx = setup()
+			char.story.prefs.frequency = "frequent"
+			expect.equal(ns.Evolution.DAILY_LIMIT, nil, "the daily limit is gone")
+			local start = char.personality.compassion.value
+			local ids = {}
+			for i = 1, 5 do
+				local r = decide(ns, char, fx, i, "resolve", i * 10)
+				ids[i] = r.changes[1].id
+			end
+			for i = 1, 5 do
+				assert(ns.Evolution.Apply(char, ids[i], 100 + i), "consecutive approvals within one minute all apply")
+				expect.equal(ns.Evolution.Find(char, ids[i]).status, "applied")
+			end
+			expect.equal(char.personality.compassion.value, start + 5)
+			-- Each change applies once only.
+			local _, again = ns.Evolution.Apply(char, ids[1], 200)
+			expect.truthy(again:find("no pending"))
+			expect.equal(char.personality.compassion.value, start + 5)
+			-- Reversal still works on any of them.
+			assert(ns.Evolution.Reverse(char, ids[5], 201))
+			expect.equal(char.personality.compassion.value, start + 4)
+			-- The 0-20 range still holds: a change that would pass 20 waits.
+			char.personality.compassion.value = 20
+			local r = decide(ns, char, fx, 9, "resolve", 300)
+			local _, limit = ns.Evolution.Apply(char, r.changes[1].id, 301)
+			expect.truthy(limit:find("limit"))
+			expect.equal(char.personality.compassion.value, 20)
+			expect.equal(ns.Evolution.Find(char, r.changes[1].id).status, "pending", "it waits, it is not lost")
+		end)
+
+		t:it("a change held back by the old daily limit can be approved at once, and migration applies nothing", function()
 			local ns, char, fx = setup()
 			char.story.prefs.frequency = "frequent"
 			local ids = {}
 			for i = 1, 3 do
-				local r = decide(ns, char, fx, i, "resolve", i * 1000)
-				ids[i] = r.changes[1].id
+				ids[i] = decide(ns, char, fx, i, "resolve", i * 10).changes[1].id
 			end
-			assert(ns.Evolution.Apply(char, ids[1], 5000))
-			assert(ns.Evolution.Apply(char, ids[2], 5001))
-			local _, err = ns.Evolution.Apply(char, ids[3], 5002)
-			expect.truthy(err:find("enough today"))
-			expect.equal(ns.Evolution.Find(char, ids[3]).status, "pending", "it waits, it is not lost")
-			assert(ns.Evolution.Apply(char, ids[3], 5002 + ns.Evolution.DAY))
-			char.personality.compassion.value = 20
-			local r = decide(ns, char, fx, 9, "resolve", 200000)
-			local _, limit = ns.Evolution.Apply(char, r.changes[1].id, 200001)
-			expect.truthy(limit:find("limit"))
+			-- As an older version left it: two applied today, the third pending.
+			assert(ns.Evolution.Apply(char, ids[1], 50))
+			assert(ns.Evolution.Apply(char, ids[2], 51))
+			local value = char.personality.compassion.value
+			local saved = ns.Util.DeepCopy(char)
+			local reloaded = ns.Schema.NormalizeDatabase({ characters = { ["K-R"] = saved } })
+			local migrated = reloaded.characters["K-R"]
+			local pending = ns.Evolution.Find(migrated, ids[3])
+			expect.equal(pending.status, "pending", "loading never applies a waiting change")
+			expect.equal(migrated.personality.compassion.value, value)
+			assert(ns.Evolution.Apply(migrated, ids[3], 52), "approved immediately, the same day")
+			expect.equal(migrated.personality.compassion.value, value + 1)
+		end)
+
+		t:it("a decision proposes one change per axis; repeating it cannot apply it twice", function()
+			local ns, char, fx = setup()
+			local reaction = ns.Reactions.Consider(char, quest(ns, char, fx, 1, 10, { zone = "Zone1" }), 10, 10)
+			local r = assert(ns.Decisions.Decide(char, reaction.id, { optionId = "resolve" }, 10))
+			local first = r.changes[1]
+			local again, why = ns.Evolution.Propose(char, first.axis, first.delta, "again", first.decisionId, 11)
+			expect.equal(again, nil)
+			expect.truthy(why:find("already"))
+			local twice, decideAgain = ns.Decisions.Decide(char, reaction.id, { optionId = "resolve" }, 12)
+			expect.equal(twice, nil, "an answered moment cannot be answered again")
+			expect.truthy(decideAgain)
+			local count = 0
+			for _, c in ipairs(char.story.changes) do
+				if c.decisionId == first.decisionId and c.axis == first.axis then count = count + 1 end
+			end
+			expect.equal(count, 1)
+		end)
+
+		t:it("gameplay events alone never change personality", function()
+			local ns, char, fx = setup()
+			local before = ns.Util.DeepCopy(char.personality)
+			local changes = #char.story.changes
+			for i = 1, 5 do
+				ns.Reactions.Consider(char, quest(ns, char, fx, i, i * 10, { zone = "Zone" .. i }), i * 10, i * 10)
+			end
+			expect.equal(#char.story.changes, changes, "no change is proposed without an answer")
+			for axis, entry in pairs(before) do
+				expect.equal(char.personality[axis].value, entry.value)
+			end
 		end)
 
 		t:it("auto approval applies at once and stays reversible; reject leaves values alone", function()
