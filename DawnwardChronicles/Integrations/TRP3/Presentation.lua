@@ -142,7 +142,7 @@ Presentation.ICONS = {
 	spell_arcane_mindmastery = "TraitSection (only candidate)",
 	inv_scroll_02 = "TargetNotes (older-client candidate)",
 	inv_misc_grouplooking = "ProfileDefault (only candidate)",
-	inv_misc_questionmark = "Default; the 1.15.9 UI's own QuestInfo icon; TraitPlan's trait icon",
+	inv_misc_questionmark = "Default; the 1.15.9 UI's own QuestInfo icon; TRP3's placeholder for a new trait (TraitPlan.PLACEHOLDER, replaced since 0.10.2)",
 }
 
 -- Frame backgrounds Dawnward may give a frame it adds (an index into
