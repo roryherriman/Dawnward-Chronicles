@@ -219,6 +219,14 @@ local function normalizeAbout(raw)
 	return { block = raw.block, template = template, at = timestamp(raw.at) }
 end
 
+-- A trait icon name as TRP3 stores it (letters, digits, "_" and "-"), or nil.
+local function traitIcon(v)
+	if type(v) == "string" and v ~= "" and #v <= 128 and v:match("^[%w_%-]+$") then
+		return v
+	end
+	return nil
+end
+
 local function normalizeTrait(raw)
 	if type(raw) ~= "table" or type(raw.LT) ~= "string" or type(raw.RT) ~= "string" then
 		return nil
@@ -227,7 +235,10 @@ local function normalizeTrait(raw)
 	if type(v) ~= "number" or v ~= math.floor(v) or v < 0 or v > 20 then
 		return nil
 	end
-	return { LT = raw.LT, RT = raw.RT, V2 = v }
+	-- LI / RI (0.10.2, additive): the icon Dawnward last wrote at each end,
+	-- so an icon the player picks later in Total RP 3 is recognised as
+	-- theirs. Older records have none; an unusable name is dropped.
+	return { LT = raw.LT, RT = raw.RT, V2 = v, LI = traitIcon(raw.LI), RI = traitIcon(raw.RI) }
 end
 
 local function normalizeTraits(raw)

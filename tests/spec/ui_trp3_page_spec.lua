@@ -328,6 +328,13 @@ local function legacySpec(t, expect)
 			expect.truthy(page.previewText:GetText():find(" 5 / 15 ", 1, true), page.previewText:GetText())
 			expect.truthy(page.traitRows[1]:IsShown(), "drawn as Total RP 3's trait bar")
 			expect.equal(page.traitRows[1].fill:GetWidth(), math.floor(page.traitRows[1].barWidth * 5 / 20))
+			-- With the icons Dawnward gives the trait in Total RP 3 (never the question mark).
+			for _, side in ipairs({ "leftIcon", "rightIcon" }) do
+				local texture = page.traitRows[1][side].__texture
+				local name = texture and texture:match("^Interface\\ICONS\\(.+)$")
+				expect.truthy(name and ns.TRP3TraitPlan.VERIFIED[name], tostring(texture))
+				expect.truthy(name ~= ns.TRP3TraitPlan.FALLBACK_ICON, "the axis's own icon")
+			end
 		end)
 
 		t:it("v0.10 layout: strip, section rail and card fill the settings page without overlapping", function()
@@ -449,6 +456,9 @@ local function legacySpec(t, expect)
 			expect.truthy(30 + 6 * 28 <= page.preview:GetHeight())
 			local row = page.traitRows[1]
 			expect.truthy(158 + row.barWidth + 8 + row.right:GetWidth() <= row:GetWidth(), "words and bar fit")
+			expect.truthy(row.left:GetWidth() + P.TRAIT_ICON + 4 <= 158, "the left icon and word fit before the bar")
+			expect.truthy(158 + row.barWidth + 8 + row.right:GetWidth() + P.TRAIT_ICON <= row:GetWidth(),
+				"the right word and icon fit")
 			-- The explanations fit their two lines.
 			for _, text in ipairs({ P.EXPLAIN.about, P.EXPLAIN.traits, P.MAPPINGS_EXPLAIN, P.APPEARANCE_EXPLAIN,
 				P.CONNECTION_EXPLAIN, P.STATUS_EXPLAIN, P.RECOVERY_EXPLAIN }) do
