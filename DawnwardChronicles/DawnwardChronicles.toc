@@ -21,6 +21,7 @@ Core\Onboarding.lua
 Core\AxisMeanings.lua
 Core\Glance.lua
 Core\RPStatus.lua
+Core\ProfileSuggestions.lua
 Core\StorySchema.lua
 Core\Schema.lua
 Core\Migrations.lua
@@ -52,6 +53,7 @@ Core\Serializer.lua
 Core\Transfer.lua
 Core\Store.lua
 Core\Actions.lua
+Core\ProfileActions.lua
 Core\Commands.lua
 Core\StoryCommands.lua
 Core\NarrativeCommands.lua

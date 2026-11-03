@@ -36,6 +36,11 @@ local function withCharacter(ctx, change)
 	if not result and not existed then
 		ctx.store:Root().characters[ctx.characterKey] = nil
 	end
+	-- v0.10.2: the Automatic Currently mode applies a waiting Currently
+	-- suggestion only after every guard holds (Core/ProfileActions.lua).
+	if result and ns.ProfileActions then
+		pcall(ns.ProfileActions.AfterChange, ctx, char)
+	end
 	-- A change made in the window may change the published profile, so ask an
 	-- opted-in Total RP 3 sync to catch up, as slash commands already do
 	-- (debounced; nothing happens unless sync was turned on).
@@ -294,6 +299,11 @@ function Actions.ObserveLocation(ctx, data)
 			created[#created + 1] = { record = record, reaction = reaction, outcome = outcome }
 		end
 	end
+	-- v0.10.2: a first visit to a zone may offer a Currently text (only in
+	-- the Suggested or Automatic mode; Core/ProfileActions.lua).
+	if ns.ProfileActions then
+		pcall(ns.ProfileActions.OnLocation, ctx, char, created)
+	end
 	return created
 end
 
@@ -352,6 +362,9 @@ function Actions.Decide(ctx, reactionId, choice)
 			parts[#parts + 1] = "Journal draft #" .. result.entry.id .. " written."
 		elseif result.draftError then
 			parts[#parts + 1] = "No journal draft: " .. result.draftError
+		end
+		if result.profile and #result.profile > 0 then
+			parts[#parts + 1] = "Your profile could show something new: it waits for your approval in the Story section."
 		end
 		return result, table.concat(parts, " ")
 	end)

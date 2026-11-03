@@ -12,6 +12,13 @@
 --                    player lets Dawnward manage one; Open in Total RP 3)
 --   Profile look     the profile icon and class colour editors above the
 --                    Profile section's rows
+-- v0.10.2: Dawnward's profile suggestions (Core/ProfileSuggestions.lua).
+-- A waiting At First Glance suggestion takes the preview's place (what it
+-- says, why, what changes, Accept / Edit / Later / Dismiss); Status and OOC
+-- has a third view, Currently updates (the Manual / Suggested / Automatic
+-- mode, the waiting Currently suggestion, and Undo last automatic update).
+-- Edit puts a suggestion in the editor; Save then accepts it in the
+-- player's own words.
 -- Every value is the player's own: nothing here is inferred or saved
 -- without the player's Save (Suggest only fills the editor). Saving changes
 -- Dawnward's copy through the normal Actions path (TRP3Commands.SetStatus,
@@ -37,7 +44,24 @@ M.PICKER_COLUMNS = 7
 M.PICKER_CELL = 36
 M.PICKER_GAP = 6
 
-M.STATUS_VIEWS = { { id = "text", label = "Currently and OOC" }, { id = "style", label = "Status and style" } }
+M.STATUS_VIEWS = { { id = "text", label = "Currently and OOC" }, { id = "style", label = "Status and style" },
+	{ id = "updates", label = "Currently updates" } }
+M.MODE_CHOICES = { { id = "manual", label = "Manual" }, { id = "suggested", label = "Suggested" },
+	{ id = "automatic", label = "Automatic" } }
+M.MODE_HELP = {
+	manual = "You write Currently yourself. Dawnward suggests nothing. To let Dawnward help, choose Suggested "
+		.. "(recommended).",
+	suggested = "After a meaningful moment (a first visit to a zone, a major moment you answered, a new goal) "
+		.. "Dawnward offers a Currently text built only from verified facts. Nothing changes until you accept it.",
+	automatic = "Dawnward updates its own Currently text by itself after a meaningful moment, only while Currently "
+		.. "is kept in sync with no conflict, and never over a text you wrote. Undo the last update below.",
+}
+M.AUTOMATIC_WARNING = "Let Dawnward update your Currently by itself?\n\nAfter a meaningful moment (a first visit to a "
+	.. "zone, a major moment you answered, a new goal) Dawnward replaces its own Currently text with one built only "
+	.. "from verified facts. It never replaces a Currently you wrote yourself, writes to Total RP 3 only while "
+	.. "Currently is kept in sync without a conflict, and takes a backup first. You can undo the last update at any "
+	.. "time."
+M.SUGGESTION_NOTE = "Nothing reaches Total RP 3 until you accept it."
 M.SYNC_CHOICES = { { id = "dawnward", label = "Sync on" }, { id = "trp3", label = "Off" } }
 M.MANAGE_CHOICES = { { id = "dawnward", label = "Dawnward" }, { id = "trp3", label = "TRP3" } }
 
@@ -66,6 +90,7 @@ local function eyebrow(parent, text)
 end
 
 local function ctx() return ns.ctx end
+local function now() return ns.ctx and ns.ctx.now() or 0 end
 
 local function charValues()
 	return ns.RPStatus.Get(H().realChar())
@@ -253,6 +278,7 @@ function M.BuildGlance(page, P, innerW)
 		row.n = n
 		row:SetScript("OnClick", function(self)
 			page.glanceSel = self.n
+			page.glanceFromSuggestion = nil
 			page.glanceTitle.loaded, page.glanceText.loaded, page.glanceIconEdit.loaded = nil, nil, nil
 			MainWindow.Refresh()
 		end)
@@ -352,7 +378,16 @@ function M.BuildGlance(page, P, innerW)
 		local n = page.glanceSel
 		local values = { title = page.glanceTitle:GetText(), text = page.glanceText:GetText(),
 			icon = page.glanceIconEdit:GetText(), active = page.glanceShownChoice ~= "hidden" }
+		local fromSuggestion = page.glanceFromSuggestion
 		H().act(function()
+			if fromSuggestion then
+				-- Save after Edit accepts the suggestion in the player's words.
+				page.glanceFromSuggestion = nil
+				page.glanceTitle.loaded, page.glanceText.loaded, page.glanceIconEdit.loaded = nil, nil, nil
+				values.icon = values.icon ~= "" and values.icon or nil
+				local _, message = ns.ProfileActions.Accept(ctx(), fromSuggestion, values)
+				return message
+			end
 			local _, message = ns.TRP3Commands.SaveGlance(ctx(), n, values)
 			return message
 		end)
@@ -384,6 +419,149 @@ function M.BuildGlance(page, P, innerW)
 		math.max(1, math.floor((page.glancePreview:GetHeight() - 34) / ns.TRP3Page.LINE)), "small")
 	page.glancePreviewText:SetPoint("TOPLEFT", 44, -28)
 	page.glancePreviewHover = H().hoverOver(page.glancePreview, page.glancePreview)
+	M.BuildGlanceSuggestion(page, v, x, previewTop, RW)
+end
+
+--- Profile suggestions (v0.10.2) ---------------------------------------------------
+
+-- Accept / Edit / Later / Dismiss under a suggestion. onEdit(s) puts it in
+-- an editor. Returns the four buttons (each with its x offset) and width.
+function M.SuggestionButtons(parent, getId, onEdit)
+	local B = Style.CONTROL.chipSmall + 2
+	local out = {}
+	local specs = { { "accept", "Accept", 74, "primary" }, { "edit", "Edit", 60, "ghost" },
+		{ "later", "Later", 64, "ghost" }, { "dismiss", "Dismiss", 76, "danger" } }
+	local x = 0
+	for _, spec in ipairs(specs) do
+		local b = Widgets.Button(parent, spec[2], spec[3], B, spec[4])
+		b.x = x
+		x = x + spec[3] + 6
+		out[spec[1]] = b
+	end
+	out.width = x - 6
+	local function run(fn)
+		local id = getId()
+		if id then
+			H().act(function()
+				local _, message = fn(ctx(), id)
+				return message
+			end)
+		end
+	end
+	out.accept:SetScript("OnClick", function() run(ns.ProfileActions.Accept) end)
+	out.later:SetScript("OnClick", function() run(ns.ProfileActions.Postpone) end)
+	out.dismiss:SetScript("OnClick", function() run(ns.ProfileActions.Dismiss) end)
+	out.edit:SetScript("OnClick", function()
+		local id = getId()
+		local s = id and H().realChar() and ns.ProfileSuggestions.Find(H().realChar(), id)
+		if s then onEdit(s) end
+	end)
+	Widgets.Tooltip(out.accept, "Accept", "Saves it in Dawnward as offered. Total RP 3 follows on the next sync, and "
+		.. "only while that part is kept in sync.")
+	Widgets.Tooltip(out.edit, "Edit", "Puts it in the editor: change it, then Save to accept it in your own words.")
+	Widgets.Tooltip(out.later, "Later", "Shows it again tomorrow. Nothing changes.")
+	Widgets.Tooltip(out.dismiss, "Dismiss", "Not offered again unless your character develops much further. Nothing "
+		.. "changes.")
+	return out
+end
+
+-- The tooltip text of a suggestion: the full text, why, what changes.
+function M.SuggestionDetails(char, s)
+	local lines = { H().plain(s.text) }
+	for _, why in ipairs(s.why or {}) do lines[#lines + 1] = "Why: " .. H().plain(why) end
+	lines[#lines + 1] = "In Total RP 3: " .. ns.ProfileSuggestions.Effect(char, s)
+	if s.held then lines[#lines + 1] = "Waiting for you: " .. H().plain(s.held) .. "." end
+	lines[#lines + 1] = M.SUGGESTION_NOTE
+	return table.concat(lines, "\n")
+end
+
+local function placeButtons(buttons, h)
+	for _, b in pairs(buttons) do
+		if type(b) == "table" then b:SetPoint("TOPLEFT", 8 + b.x, -(h - 8 - b:GetHeight())) end
+	end
+end
+
+function M.BuildGlanceSuggestion(page, v, x, top, w)
+	local h = page.mainHeight - top - 14
+	local box = H().box(v, "add")
+	box:SetPoint("TOPLEFT", x, -top)
+	box:SetSize(w, h)
+	box:Hide()
+	page.glanceSuggest = box
+	box.head = eyebrow(box, "DAWNWARD SUGGESTS")
+	box.head:SetPoint("TOPLEFT", 8, -8)
+	box.title = H().oneLine(box, "body", w - 16, "body")
+	box.title:SetPoint("TOPLEFT", 8, -24)
+	box.text = H().oneLine(box, "navText", w - 16, "small")
+	box.text:SetPoint("TOPLEFT", 8, -42)
+	box.why = H().oneLine(box, "muted", w - 16, "small")
+	box.why:SetPoint("TOPLEFT", 8, -58)
+	box.hover = CreateFrame("Frame", nil, box)
+	box.hover:SetPoint("TOPLEFT", 0, 0)
+	box.hover:SetSize(w, 74)
+	box.buttons = M.SuggestionButtons(box, function() return box.id end,
+		function(s) M.EditGlanceSuggestion(page, s) end)
+	placeButtons(box.buttons, h)
+end
+
+--- The waiting At First Glance suggestion for the real character, or nil.
+function M.GlanceSuggestion()
+	local char = H().realChar()
+	return char and ns.ProfileSuggestions.Waiting(char, now(), "glance")[1] or nil
+end
+
+-- The Dawnward entry a glance suggestion would fill or revise.
+local function suggestionSlot(char, s)
+	if s.target.revises then
+		return ns.ProfileSuggestions.ManagedSlot(char, s.theme) or s.target.n
+	end
+	local entries = char.glance or {}
+	if s.target.n and not entries[s.target.n] then return s.target.n end
+	for n = 1, ns.Glance.SLOTS do
+		if not entries[n] then return n end
+	end
+	return s.target.n
+end
+M.SuggestionSlot = suggestionSlot
+
+--- Edit: the suggestion goes into the entry's editor; Save accepts it in
+-- the player's words (nothing is saved before).
+function M.EditGlanceSuggestion(page, s)
+	local char = H().realChar()
+	if not char then return end
+	local n = suggestionSlot(char, s) or page.glanceSel
+	local e = char.glance and char.glance[n]
+	page.glanceSel = n
+	page.glanceFromSuggestion = s.id
+	-- The saved values count as loaded, so a refresh keeps the suggestion's text.
+	page.glanceTitle.loaded, page.glanceText.loaded = e and e.title or "", e and e.text or ""
+	page.glanceIconEdit.loaded = e and e.icon or ""
+	page.glanceTitle:SetText(s.title or "")
+	page.glanceText:SetText(s.text or "")
+	page.glanceIconEdit:SetText(s.icon or "")
+	page.glanceShownChoice, page.glanceShownFor = "shown", n
+	MainWindow.SetStatus("The suggestion is in the editor for entry " .. n .. ". Change it as you like, then Save to "
+		.. "accept it in your own words. Nothing is saved before.")
+	MainWindow.Refresh()
+end
+
+-- Shows a waiting glance suggestion in the preview's place.
+local function refreshGlanceSuggestion(page, char)
+	local s = M.GlanceSuggestion()
+	if page.glanceFromSuggestion and not (s and s.id == page.glanceFromSuggestion) then
+		page.glanceFromSuggestion = nil
+	end
+	local show = s ~= nil and page.glanceFromSuggestion == nil
+	local box = page.glanceSuggest
+	box:SetShown(show)
+	page.glancePreview:SetShown(not show)
+	box.id = show and s.id or nil
+	if not show then return s end
+	box.title:SetText(H().plain(s.title or "At First Glance"))
+	box.text:SetText(H().plain(s.text))
+	box.why:SetText("Why: " .. H().excerpt(s.why[1] or "", 120))
+	Widgets.Tooltip(box.hover, "Dawnward suggests: " .. (s.title or "At First Glance"), M.SuggestionDetails(char, s))
+	return s
 end
 
 -- Where each of Dawnward's entries is in Total RP 3: { [n] = slotKey }, and
@@ -410,14 +588,24 @@ function M.RefreshGlance(page, view)
 	page.chip:SetChip(chip[1], chip[2])
 	page.explain:SetText(M.GLANCE_EXPLAIN)
 	local where, own = M.GlanceSlots(view)
+	local suggestion = char and refreshGlanceSuggestion(page, char)
+	if not char then
+		page.glanceSuggest:Hide()
+		page.glancePreview:Show()
+	end
+	local suggestedSlot = suggestion and suggestionSlot(char, suggestion)
 	for n, row in ipairs(page.glanceRows) do
 		local e = entries[n]
 		row:SetSelected(page.glanceSel == n)
 		row.icon:SetTexture(iconPath(e and e.icon))
 		row.icon:SetShown(e ~= nil)
 		row.title:SetText(e and plain(e.title or excerpt(e.text, 30)) or ("Entry " .. n .. " · empty"))
-		row.state:SetText(e and ((e.active and "Shown" or "Hidden") .. (where[n] and (" · Total RP 3 slot " .. where[n])
-			or "")) or "Write one here")
+		local state = e and ((e.active and "Shown" or "Hidden") .. (where[n] and (" · Total RP 3 slot " .. where[n])
+			or "")) or "Write one here"
+		if suggestedSlot == n then
+			state = e and "Dawnward suggests a revision" or "Dawnward suggests one"
+		end
+		row.state:SetText(state)
 	end
 	local on = view.bound and view.policies.glance == "dawnward"
 	page.glanceSync:Select(on and "dawnward" or "off")
@@ -464,7 +652,7 @@ function M.BuildStatus(page, P, innerW)
 	v:Hide()
 	page.views.status = v
 	page.statusView = "text"
-	page.statusNav = Widgets.Segmented(page.card, M.STATUS_VIEWS, 2 * 150, Style.CONTROL.segment, function(id)
+	page.statusNav = Widgets.Segmented(page.card, M.STATUS_VIEWS, 3 * 150, Style.CONTROL.segment, function(id)
 		page.statusView = id
 		MainWindow.Refresh()
 	end)
@@ -516,7 +704,15 @@ function M.BuildStatus(page, P, innerW)
 		b.save:SetPoint("TOPLEFT", P, -buttonsTop)
 		b.save:SetScript("OnClick", function()
 			local text = b.edit:GetText() or ""
+			local fromSuggestion = id == "currently" and page.currentlyFromSuggestion or nil
+			if id == "currently" then page.currentlyFromSuggestion = nil end
 			H().act(function()
+				if fromSuggestion and text ~= "" then
+					-- Save after Edit accepts the suggestion in the player's words.
+					b.edit.loaded = nil
+					local _, message = ns.ProfileActions.Accept(ctx(), fromSuggestion, { text = text })
+					return message
+				end
 				local _, message = ns.TRP3Commands.SetStatus(ctx(), id, text ~= "" and text or nil)
 				return message
 			end)
@@ -524,6 +720,7 @@ function M.BuildStatus(page, P, innerW)
 		b.clear = Widgets.Button(tv, "Clear", 80, C, "ghost")
 		b.clear:SetPoint("TOPLEFT", P + 88, -buttonsTop)
 		b.clear:SetScript("OnClick", function()
+			if id == "currently" then page.currentlyFromSuggestion = nil end
 			b.edit:SetText("")
 			H().act(function()
 				local _, message = ns.TRP3Commands.SetStatus(ctx(), id, nil)
@@ -613,6 +810,131 @@ function M.BuildStatus(page, P, innerW)
 		end
 		page.styleRows[i] = r
 	end
+
+	-- Currently updates (v0.10.2).
+	local uv = CreateFrame("Frame", nil, v)
+	uv:SetAllPoints(v)
+	uv:Hide()
+	page.statusSub.updates = uv
+	M.BuildUpdates(page, uv, P, innerW)
+end
+
+--- Currently updates: the mode, the waiting suggestion, and Undo.
+M.UPDATES_BOX = 150
+function M.BuildUpdates(page, uv, P, innerW)
+	local HEAD = ns.TRP3Page.HEAD_HEIGHT
+	local head = eyebrow(uv, "HOW CURRENTLY IS KEPT UP TO DATE")
+	head:SetPoint("TOPLEFT", P, -HEAD)
+	page.modeSeg = Widgets.Segmented(uv, M.MODE_CHOICES, 3 * 120, Style.CONTROL.segment, function(mode)
+		local char = H().realChar()
+		if ns.RPStatus.CurrentlyMode(char) == mode then return end
+		if mode == "automatic" then
+			MainWindow.Refresh() -- the selector shows the saved mode until confirmed
+			Widgets.Confirm(M.AUTOMATIC_WARNING, "Turn on", function()
+				H().act(function()
+					local _, message = ns.ProfileActions.SetCurrentlyMode(ctx(), "automatic", true)
+					return message
+				end)
+			end)
+			return
+		end
+		H().act(function()
+			local _, message = ns.ProfileActions.SetCurrentlyMode(ctx(), mode)
+			return message
+		end)
+	end)
+	page.modeSeg.buttons[1]:SetPoint("TOPLEFT", uv, "TOPLEFT", P, -(HEAD + 20))
+	for _, b in ipairs(page.modeSeg.buttons) do
+		Widgets.Tooltip(b, b:GetText(), M.MODE_HELP[b.segmentId])
+	end
+	page.modeText = H().paragraph(uv, "muted", innerW, 2, "small")
+	page.modeText:SetPoint("TOPLEFT", P, -(HEAD + 20 + Style.CONTROL.segment + 8))
+	local waitTop = HEAD + 100
+	local waitHead = eyebrow(uv, "WAITING FOR YOUR APPROVAL")
+	waitHead:SetPoint("TOPLEFT", P, -waitTop)
+	local boxH = M.UPDATES_BOX
+	local box = H().box(uv, "add")
+	box:SetPoint("TOPLEFT", P, -(waitTop + 18))
+	box:SetSize(innerW, boxH)
+	page.currentlySuggest = box
+	box.text = H().paragraph(box, "navText", innerW - 16, 2, "body")
+	box.text:SetPoint("TOPLEFT", 8, -8)
+	box.why = H().paragraph(box, "muted", innerW - 16, 2, "small")
+	box.why:SetPoint("TOPLEFT", 8, -50)
+	box.effect = H().oneLine(box, "muted", innerW - 16, "small")
+	box.effect:SetPoint("TOPLEFT", 8, -88)
+	box.hover = CreateFrame("Frame", nil, box)
+	box.hover:SetPoint("TOPLEFT", 0, 0)
+	box.hover:SetSize(innerW, 104)
+	box.buttons = M.SuggestionButtons(box, function() return box.id end,
+		function(s) M.EditCurrentlySuggestion(page, s) end)
+	placeButtons(box.buttons, boxH)
+	box.empty = H().paragraph(box, "muted", innerW - 16, 3, "small")
+	box.empty:SetPoint("TOPLEFT", 8, -8)
+	local undoTop = waitTop + 18 + boxH + 12
+	page.undoAuto = Widgets.Button(uv, "Undo last automatic update", 210, Style.CONTROL.compact, "ghost")
+	page.undoAuto:SetPoint("TOPLEFT", uv, "TOPLEFT", P + innerW - 210, -undoTop)
+	page.undoAuto:SetScript("OnClick", function()
+		H().act(function()
+			local _, message = ns.ProfileActions.UndoAutomatic(ctx())
+			return message
+		end)
+	end)
+	Widgets.Tooltip(page.undoAuto, "Undo last automatic update", "Brings back the Currently text you had before "
+		.. "Dawnward's last automatic update. Total RP 3 follows on the next sync.")
+	page.autoLine = H().oneLine(uv, "muted", innerW - 220, "small")
+	page.autoLine:SetPoint("TOPLEFT", P, -(undoTop + 8))
+	page.autoLineHover = H().hoverOver(uv, page.autoLine)
+end
+
+--- Edit: the suggestion goes into the Currently editor; Save accepts it in
+-- the player's words (nothing is saved before).
+function M.EditCurrentlySuggestion(page, s)
+	local values = charValues()
+	local b = page.statusText.currently
+	page.statusView = "text"
+	page.currentlyFromSuggestion = s.id
+	b.edit.loaded = values.currently or ""
+	b.edit:SetText(s.text or "")
+	MainWindow.SetStatus("The suggestion is in the Currently editor. Change it as you like, then Save to accept it "
+		.. "in your own words. Nothing is saved before.")
+	MainWindow.Refresh()
+end
+
+function M.RefreshUpdates(page)
+	local char = H().realChar()
+	local mode = ns.RPStatus.CurrentlyMode(char)
+	page.modeSeg:Select(mode)
+	page.modeText:SetText(M.MODE_HELP[mode])
+	local box = page.currentlySuggest
+	local s = char and ns.ProfileSuggestions.Waiting(char, now(), "currently")[1] or nil
+	box.id = s and s.id or nil
+	for _, w in ipairs({ box.text, box.why, box.effect }) do w:SetShown(s ~= nil) end
+	for _, b in pairs(box.buttons) do
+		if type(b) == "table" then b:SetShown(s ~= nil) end
+	end
+	box.empty:SetShown(s == nil)
+	if s then
+		box.text:SetText(H().plain(s.text))
+		local why = {}
+		for _, line in ipairs(s.why) do why[#why + 1] = H().plain(line) end
+		box.why:SetText("Why: " .. table.concat(why, " "))
+		box.effect:SetText(s.held and ("Waiting for you: " .. H().plain(s.held) .. ".")
+			or ("In Total RP 3: " .. ns.ProfileSuggestions.Effect(char, s)))
+		Widgets.Tooltip(box.hover, "Suggested Currently", M.SuggestionDetails(char, s))
+	else
+		box.empty:SetText(mode == "manual" and "Nothing is waiting. In Manual mode Dawnward suggests no Currently text."
+			or "Nothing is waiting. Dawnward offers a text after a first visit to a zone, a major moment you answer in "
+				.. "the Story Director, or a new goal; never after routine quests or levels.")
+		Widgets.Tooltip(box.hover, nil)
+	end
+	local store = char and char.profileSuggestions
+	local last = store and store.lastAuto
+	page.undoAuto:SetEnabled(last ~= nil)
+	page.autoLine:SetText(last and ("Last automatic update: \"" .. H().excerpt(last.text, 60) .. "\"")
+		or "No automatic update to undo.")
+	Widgets.Tooltip(page.autoLineHover, "Last automatic update", last and (H().plain(last.text) .. "\n\nBefore: "
+		.. (last.previous and last.previous ~= "" and H().plain(last.previous) or "(empty)")) or nil)
 end
 
 --- Shows or hides the Status and OOC switch (it replaces the explanation).
@@ -678,6 +1000,8 @@ function M.RefreshStatus(page, view)
 	page.statusNav:Select(page.statusView)
 	page.statusSub.text:SetShown(page.statusView == "text")
 	page.statusSub.style:SetShown(page.statusView == "style")
+	page.statusSub.updates:SetShown(page.statusView == "updates")
+	M.RefreshUpdates(page)
 	local managed, conflicts = 0, 0
 	for _, row in pairs(rows) do
 		if row.feature ~= "look" then

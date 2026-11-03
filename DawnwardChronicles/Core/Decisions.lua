@@ -107,6 +107,10 @@ function Decisions.Decide(char, reactionId, choice, now)
 		journalId = decision.journalId }, now)
 	result.arc = ns.Arcs.SuggestFromPattern(char, now)
 	Reactions.Resolve(char, reactionId)
+	-- v0.10.2: approved development may suggest a profile change (only a
+	-- suggestion; Core/ProfileSuggestions.lua).
+	result.profile = ns.ProfileSuggestions.Generate(char, now, { kind = "decision", decision = decision,
+		reaction = reaction, record = view.record })
 	return result
 end
 

@@ -124,6 +124,9 @@ function Transfer.Export(char, kind, opts)
 		data.glance = Util.DeepCopy(char.glance or {})
 		-- The status and look set for Total RP 3 (v0.10.1): backups only.
 		data.trp3status = Util.DeepCopy(char.trp3status or {})
+		-- Profile suggestions (v0.10.2) with what was accepted or dismissed,
+		-- so a restore never offers a dismissed one again: backups only.
+		data.profileSuggestions = Util.DeepCopy(char.profileSuggestions)
 		-- With no stored story there is nothing to carry: such a backup then
 		-- keeps whatever story is stored when it is restored.
 		includesBiography = opts.includeBiography ~= false and char.sources ~= nil
@@ -302,6 +305,10 @@ function Transfer.MergeForImport(current, imported, includesSecrets, now, includ
 		end
 		if not holds(result.trp3status) and holds(current.trp3status) then
 			result.trp3status = Util.DeepCopy(current.trp3status)
+		end
+		-- And one from before profile suggestions (v0.10.2).
+		if result.profileSuggestions == nil and current.profileSuggestions ~= nil then
+			result.profileSuggestions = Util.DeepCopy(current.profileSuggestions)
 		end
 		-- The publication model never goes backwards on a restore: once the
 		-- whole profile publishes (Publication.IsComplete), a restore keeps it

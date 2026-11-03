@@ -41,7 +41,9 @@
 --                    restore… behind their confirmations)
 -- A section that needs the player carries a coloured mark in the rail
 -- (amber: waiting for a choice; red: blocked or in conflict), so nothing is
--- hidden behind the section that is not open.
+-- hidden behind the section that is not open. v0.10.2: At First Glance and
+-- Status and OOC also show how many of Dawnward's profile suggestions wait
+-- for the player there ("At First Glance (1)", amber).
 local _, ns = ...
 local Widgets, MainWindow, Commands = ns.Widgets, ns.MainWindow, ns.Commands
 
@@ -248,6 +250,19 @@ end
 
 local function plural(n, one, many)
 	return n .. " " .. (n == 1 and one or many)
+end
+
+-- The rail sections that hold profile suggestions, and the kind they hold.
+TRP3Page.SUGGESTION_KIND = { glance = "glance", status = "currently" }
+
+--- How many profile suggestions (Core/ProfileSuggestions.lua) of a rail
+-- section wait for the player on the real character. Reads only.
+function TRP3Page.SuggestionCount(id)
+	local kind = TRP3Page.SUGGESTION_KIND[id]
+	local ctx = ns.ctx
+	local char = kind and ctx and ctx.store.real.characters[ctx.characterKey]
+	if not char then return 0 end
+	return ns.ProfileSuggestions.Count(char, ctx.now(), kind)
 end
 
 --- What never reaches Total RP 3, and anything an earlier version kept
@@ -1275,6 +1290,11 @@ local function sectionState(page, view, id)
 			.. " kept up to date by Dawnward"
 	elseif id == "glance" then
 		local tone, text = chipOf(view.checks.glance)
+		local waiting = TRP3Page.SuggestionCount("glance")
+		if waiting > 0 and tone ~= "danger" then
+			return "waiting", "At First Glance: " .. text .. " · " .. plural(waiting, "suggestion waits",
+				"suggestions wait") .. " for your approval"
+		end
 		return tone, "At First Glance: " .. text
 	elseif id == "status" then
 		local managed, conflict = 0, false
@@ -1285,6 +1305,10 @@ local function sectionState(page, view, id)
 			end
 		end
 		if conflict then return "danger", "Conflict: see Synchronization > Recovery" end
+		local waiting = TRP3Page.SuggestionCount("status")
+		if waiting > 0 then
+			return "waiting", "A suggested Currently waits for your approval (Currently updates)"
+		end
 		return managed > 0 and "public" or "muted", managed > 0 and (managed .. " kept in sync by Dawnward")
 			or "Total RP 3 keeps these"
 	elseif id == "sync" or id == "connection" or id == "syncstatus" or id == "recovery" then
@@ -1410,6 +1434,8 @@ function TRP3Page.Refresh(page)
 		Style.Color(b.dot, toneColor(tone, theme))
 		b.state = tone
 		Widgets.Tooltip(b, SECTION_LABEL[b.segmentId], text)
+		local waiting = TRP3Page.SuggestionCount(b.segmentId)
+		b.name:SetText(SECTION_LABEL[b.segmentId] .. (waiting > 0 and (" (" .. waiting .. ")") or ""))
 	end
 	-- Personality (and the Biography without its editor) share one view:
 	-- show the open section's view, hide every other one.

@@ -109,6 +109,9 @@ function Evolution.Apply(char, id, now)
 		return nil, err
 	end
 	change.from, change.to, change.status, change.decidedAt = from, to, "applied", now or 0
+	-- v0.10.2: enough approved steps one way may suggest an At First Glance
+	-- entry (only a suggestion; Core/ProfileSuggestions.lua).
+	ns.ProfileSuggestions.Generate(char, now, { kind = "change", change = change })
 	return change
 end
 
