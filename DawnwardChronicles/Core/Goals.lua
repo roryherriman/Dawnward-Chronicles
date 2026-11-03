@@ -32,6 +32,9 @@ function Goals.Add(char, values, now)
 	if not Records.Append(list(char), clean, RecordTypes.LIMITS.goals) then
 		return nil, "there are too many goals; resolve some first"
 	end
+	-- v0.10.2: a new goal may suggest a Currently text (Suggested and
+	-- Automatic modes only; Core/ProfileSuggestions.lua).
+	ns.ProfileSuggestions.Generate(char, now, { kind = "goal", goal = clean })
 	return clean
 end
 
@@ -46,6 +49,8 @@ function Goals.SetState(char, id, state, now)
 		return nil, "a goal can be active, paused, abandoned, achieved or unresolved"
 	end
 	g.state, g.updatedAt = state, now or 0
+	-- v0.10.2: an achieved goal may suggest an At First Glance entry.
+	if state == "achieved" then ns.ProfileSuggestions.Generate(char, now, { kind = "goal-state", goal = g }) end
 	return g
 end
 

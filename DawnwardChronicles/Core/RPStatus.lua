@@ -4,14 +4,18 @@
 -- player hands to Dawnward) the six roleplay style preferences.
 --
 -- Everything here is written by the player, in Dawnward, for Total RP 3.
--- Nothing is ever inferred or filled in automatically: Suggest only drafts a
--- Currently text for the editor, and only when the player asks; it is saved
--- only by the player's own Save. Total RP 3 receives a value only while the
+-- Nothing is ever inferred: Suggest only drafts a Currently text for the
+-- editor, and only when the player asks; it is saved only by the player's
+-- own Save. v0.10.2: in the Suggested and Automatic Currently modes (below)
+-- Dawnward offers a Currently text built only from verified facts
+-- (Core/ProfileSuggestions.lua); Automatic saves it by itself only after the
+-- player confirmed that mode. Total RP 3 receives a value only while the
 -- player lets Dawnward keep it in sync (Integrations/TRP3/StatusPlan.lua,
 -- StylePlan.lua), and never over a value the player wrote in Total RP 3.
 --
 -- Stored per character as char.trp3status = { currently?, ooc?, rpStatus?,
--- walkup?, icon?, classColor?, style = { [styleKey] = value } }. A text set
+-- walkup?, icon?, classColor?, style = { [styleKey] = value },
+-- currentlyMode? (v0.10.2: "suggested" or "automatic"; absent = Manual) }. A text set
 -- to "" means "cleared in Dawnward" (Total RP 3's copy is emptied on the
 -- next sync, if Dawnward wrote it); nil means "never set" (nothing is sent).
 --
@@ -43,6 +47,7 @@ RPStatus.LIMITS = { text = 1000, icon = 64 }
 RPStatus.TOOLTIP_CHARS = 140
 
 RPStatus.IN_CHARACTER, RPStatus.OUT_OF_CHARACTER = 1, 2
+RPStatus.CURRENTLY_MODES = { manual = true, suggested = true, automatic = true }
 RPStatus.WALKUP_NO, RPStatus.WALKUP_YES = 1, 2
 
 -- Each value the player can set: its kind and, for a choice, its options
@@ -159,6 +164,10 @@ function RPStatus.Clean(raw)
 			if RPStatus.OptionLabel(s.options, v) then out.style[s.key] = v end
 		end
 	end
+	-- v0.10.2: how Currently is kept up to date (absent: Manual).
+	if RPStatus.CURRENTLY_MODES[raw.currentlyMode] and raw.currentlyMode ~= "manual" then
+		out.currentlyMode = raw.currentlyMode
+	end
 	return out
 end
 
@@ -212,11 +221,42 @@ function RPStatus.SetStyle(char, key, value, now)
 end
 
 --- The player's values (a copy; never nil): { currently, ooc, rpStatus,
--- walkup, icon, classColor, style = { [key] = value } }.
+-- walkup, icon, classColor, style = { [key] = value } }. The Currently mode
+-- is a setting, not a value for Total RP 3, and is left out.
 function RPStatus.Get(char)
-	return Util.DeepCopy(RPStatus.Clean(char and char.trp3status))
+	local out = RPStatus.Clean(char and char.trp3status)
+	out.currentlyMode = nil
+	return Util.DeepCopy(out)
 end
 RPStatus.Published = RPStatus.Get
+
+--- How Currently is kept up to date (v0.10.2, Core/ProfileSuggestions.lua):
+--   manual     the player writes it; Dawnward never proposes one (the
+--              default, and what every existing character keeps)
+--   suggested  after a meaningful, verified moment Dawnward offers a text;
+--              nothing changes until the player accepts it
+--   automatic  the offered text replaces Dawnward's Currently by itself,
+--              only after the player confirmed this mode, only while
+--              Dawnward owns Currently in Total RP 3 without a conflict,
+--              and every such change can be undone
+function RPStatus.CurrentlyMode(char)
+	local mode = char and char.trp3status and char.trp3status.currentlyMode
+	return RPStatus.CURRENTLY_MODES[mode] and mode or "manual"
+end
+
+--- Sets the Currently mode. "automatic" needs confirmed == true (the
+-- player's explicit confirmation). Returns the mode, or nil plus a reason.
+function RPStatus.SetCurrentlyMode(char, mode, now, confirmed)
+	if not RPStatus.CURRENTLY_MODES[mode] then
+		return nil, "choose Manual, Suggested or Automatic"
+	end
+	if mode == "automatic" and confirmed ~= true then
+		return nil, "automatic updates need your confirmation first"
+	end
+	store(char).currentlyMode = mode ~= "manual" and mode or nil
+	touch(char, now)
+	return mode
+end
 
 --- A draft Currently text from what Dawnward already knows: the zone the
 -- player is in and their established active goal. Only ever put in the
