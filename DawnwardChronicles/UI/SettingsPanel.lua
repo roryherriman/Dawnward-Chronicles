@@ -486,7 +486,7 @@ local function create(parent)
 			and "Simulation mode is ON: changes go to separate test data. Your real journal is untouched."
 			or "Simulation mode is OFF: you are using your real journal. Turn it on to try things safely.")
 		self.simToggle:SetText(simulation and "Turn off" or "Turn on")
-		self.version:SetText("Dawnward Chronicles " .. tostring(view.ctx.version or "")
+		self.version:SetText("Dawnward Chronicles " .. tostring(view.ctx.displayVersion or view.ctx.version or "")
 			.. " · Total RP 3 is optional; see Settings > Total RP 3.")
 		local lines = ns.StoryImport.StatusLines(view.char)
 		self.storyState:SetText(table.concat(lines, " "))

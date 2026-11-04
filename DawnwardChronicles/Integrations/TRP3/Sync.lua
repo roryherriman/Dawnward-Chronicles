@@ -52,10 +52,13 @@ end
 -- facts, stances and moments is no longer published. A record any earlier
 -- version wrote (v0.8 block, v0.9/v0.10 slots and frames) is replaced in
 -- place by AboutDoc.Plan, so the upgrade is one ordinary write.
+-- extra.aboutIcons and extra.sameIcon: the Total RP 3 version's icon
+-- allowlist and icon equivalence (Sync.Check; nil: 3.4.1's).
 local function planAbout(section, record, public, extra)
 	extra = extra or {}
 	return AboutDoc.Plan(section, record, AboutDoc.Build(public), { template = LAYOUT_TEMPLATE[public.trp3Layout],
-		style = public.trp3Style, accent = public.trp3Accent, adopt = extra.adopt })
+		style = public.trp3Style, accent = public.trp3Accent, adopt = extra.adopt, icons = extra.aboutIcons,
+		sameIcon = extra.sameIcon })
 end
 Sync.PlanAbout = planAbout
 
@@ -71,8 +74,9 @@ Sync.FEATURES = {
 	traits = {
 		section = "characteristics",
 		label = "personality traits",
-		plan = function(section, record, public)
-			return TraitPlan.Plan(section, record, TraitPlan.Desired(public))
+		plan = function(section, record, public, extra)
+			local opts = extra and extra.traitOptions
+			return TraitPlan.Plan(section, record, TraitPlan.Desired(public, opts), nil, opts)
 		end,
 		planned = "characteristics",
 	},
@@ -99,8 +103,9 @@ Sync.FEATURES = {
 	glance = {
 		section = "misc",
 		label = "At First Glance",
-		plan = function(section, record, public)
-			return GlancePlan.Plan(section, record, GlancePlan.Desired(public))
+		plan = function(section, record, public, extra)
+			local opts = extra and extra.glanceOptions
+			return GlancePlan.Plan(section, record, GlancePlan.Desired(public, opts), opts)
 		end,
 		planned = "misc",
 	},
@@ -319,14 +324,25 @@ end
 
 -- The ownership policies a fields plan uses: the entry's, or every field
 -- "dawnward" when planning a release (remove everything Dawnward owns).
-local function fieldPolicies(entry)
+-- readOnly ({ [id] = reason }, VersionProfiles readOnlyRows): rows this
+-- Total RP 3 version must not be written through; they plan as "off" (left
+-- exactly as they are, Dawnward's earlier record kept).
+local function fieldPolicies(entry, readOnly)
 	local out = {}
 	for _, plan in pairs(ROW_FEATURES) do
 		for _, m in ipairs(plan.MAPPINGS) do
 			out[m.id] = Ledger.Policy(entry, m.id)
+			if readOnly and readOnly[m.id] and out[m.id] == "dawnward" then
+				out[m.id] = "off"
+			end
 		end
 	end
 	return out
+end
+
+-- The version profile of the Total RP 3 a run sees (the probe's, else read).
+local function versionOf(deps, probe)
+	return (probe and probe.versionProfile) or VersionProfiles.ForEnv(deps.env)
 end
 
 --- Works out what a run would do, without writing anything.
@@ -371,7 +387,8 @@ function Sync.Check(deps, feature, publicOverride, fieldScope)
 		return result
 	end
 	result.section = Util.DeepCopy(section)
-	local policies = fieldPolicies(entry)
+	local vp = versionOf(deps, probe)
+	local policies = fieldPolicies(entry, vp.readOnlyRows)
 	if fieldScope then
 		for id in pairs(policies) do
 			if not fieldScope[id] then policies[id] = "off" end
@@ -383,10 +400,23 @@ function Sync.Check(deps, feature, publicOverride, fieldScope)
 	local plan = spec.plan(section, record[feature], public,
 		{ policies = policies, paused = record.fieldConflicts, adopt = adopt,
 			defaults = FieldPlan.GameDefaults(deps.env), names = MiscPlan.PresetNames(deps.env),
-			icons = MiscPlan.PresetIcons(deps.env) })
+			icons = MiscPlan.PresetIcons(deps.env), traitOptions = TraitPlan.Options(vp.adapters),
+			glanceOptions = GlancePlan.Options(vp.adapters, deps.env), aboutIcons = Presentation.IconSet(vp.adapters),
+			sameIcon = VersionProfiles.IconEquivalence(deps.env, vp.adapters) })
 	result.plan = plan
 	result.adopt = adopt
 	result.notes = {}
+	-- Rows the player handed to Dawnward that this Total RP 3 version keeps
+	-- read-only (VersionProfiles readOnlyRows): said, never written.
+	local rowPlan = ROW_FEATURES[feature]
+	if rowPlan then
+		for _, m in ipairs(rowPlan.MAPPINGS) do
+			local why = vp.readOnlyRows[m.id]
+			if why and Ledger.Policy(entry, m.id) == "dawnward" and (not fieldScope or fieldScope[m.id]) then
+				result.notes[#result.notes + 1] = why
+			end
+		end
+	end
 	if ROW_FEATURES[feature] then
 		for _, row in ipairs(plan.rows) do
 			if row.state == "conflict" then
@@ -1120,10 +1150,12 @@ function Sync.RollbackPreview(deps, backupId)
 		end
 	end
 	local preview = { backup = backup, items = items, ownPossible = true }
+	local vp = versionOf(deps, probe)
+	local sameIcon = VersionProfiles.IconEquivalence(deps.env, vp.adapters)
 	-- "Your own text only" needs Dawnward's old part to be separable.
-	local function separable(plan, owner)
+	local function separable(plan, owner, opts)
 		if preview.ownPossible and owner then
-			local ok, why = plan.WithoutOwned(data, owner)
+			local ok, why = plan.WithoutOwned(data, owner, opts)
 			if not ok then
 				preview.ownPossible, preview.ownReason = false, why
 			end
@@ -1132,11 +1164,11 @@ function Sync.RollbackPreview(deps, backupId)
 	if backup.section == "character" then
 		separable(StatusPlan.STATUS, owners.status)
 	elseif backup.section == "misc" then
-		separable(GlancePlan, owners.glance)
+		separable(GlancePlan, owners.glance, GlancePlan.Options(vp.adapters, deps.env))
 		separable(StylePlan, owners.style)
 	elseif backup.section == "about" then
 		if owners.about then
-			local ok, why = AboutDoc.Strip(data, owners.about)
+			local ok, why = AboutDoc.Strip(data, owners.about, sameIcon)
 			if not ok then
 				preview.ownPossible, preview.ownReason = false, why
 			end
@@ -1215,15 +1247,18 @@ local function ownOnly(deps, inputs)
 	local data = Util.DeepCopy(inputs.data)
 	local newOwners, conflicts = {}, nil
 	if backup.section == "about" then
+		local vp = versionOf(deps, inputs.probe)
+		local sameIcon = VersionProfiles.IconEquivalence(deps.env, vp.adapters)
 		if owners.about then
-			local stripped, why = AboutDoc.Strip(data, owners.about)
+			local stripped, why = AboutDoc.Strip(data, owners.about, sameIcon)
 			if not stripped then
 				return nil, "Dawnward's part of that backup cannot be separated (" .. tostring(why) .. ")"
 			end
 			data = stripped
 		end
 		if featureOn(entry, "about") then
-			local plan = planAbout(data, nil, public)
+			local plan = planAbout(data, nil, public, { aboutIcons = Presentation.IconSet(vp.adapters),
+				sameIcon = sameIcon })
 			if plan.action ~= "conflict" and plan.action ~= "unsupported" then
 				data, newOwners.about = plan.about, plan.record
 			end
@@ -1243,7 +1278,8 @@ local function ownOnly(deps, inputs)
 			data = stripped
 		end
 		if featureOn(entry, feature) then
-			local p = plan.Plan(data, nil, plan.Desired(public), fieldPolicies(entry), {})
+			local p = plan.Plan(data, nil, plan.Desired(public),
+				fieldPolicies(entry, versionOf(deps, inputs.probe).readOnlyRows), {})
 			data, newOwners[feature] = p[sectionKey], p.record
 			for id, reason in pairs(p.conflicts) do
 				conflicts = conflicts or {}
@@ -1258,8 +1294,9 @@ local function ownOnly(deps, inputs)
 		return data, newOwners, conflicts
 	end
 	if backup.section == "misc" then
+		local glanceOptions = GlancePlan.Options(versionOf(deps, inputs.probe).adapters, deps.env)
 		if owners.glance then
-			local stripped, why = GlancePlan.WithoutOwned(data, owners.glance)
+			local stripped, why = GlancePlan.WithoutOwned(data, owners.glance, glanceOptions)
 			if not stripped then
 				return nil, "Dawnward's At First Glance entries in that backup cannot be separated (" .. why .. ")"
 			end
@@ -1268,7 +1305,7 @@ local function ownOnly(deps, inputs)
 		local ok, why = rows("style", "misc")
 		if not ok then return nil, why end
 		if featureOn(entry, "glance") then
-			local plan = GlancePlan.Plan(data, nil, GlancePlan.Desired(public))
+			local plan = GlancePlan.Plan(data, nil, GlancePlan.Desired(public, glanceOptions), glanceOptions)
 			if plan.action == "write" or plan.action == "noop" then
 				data, newOwners.glance = plan.misc, plan.record
 			end
@@ -1297,20 +1334,22 @@ local function ownOnly(deps, inputs)
 		data = stripped
 	end
 	if featureOn(entry, "traits") then
-		local plan = TraitPlan.Plan(data, nil, TraitPlan.Desired(public))
+		local opts = TraitPlan.Options(versionOf(deps, inputs.probe).adapters)
+		local plan = TraitPlan.Plan(data, nil, TraitPlan.Desired(public, opts), nil, opts)
 		if plan.action ~= "conflict" then
 			data, newOwners.traits = plan.characteristics, plan.record
 		end
 	end
 	if featureOn(entry, "fields") then
 		local desired, unwritable = FieldPlan.Desired(public)
-		local plan = FieldPlan.Plan(data, nil, desired, fieldPolicies(entry), {}, unwritable,
-			{ defaults = FieldPlan.GameDefaults(deps.env) })
+		local plan = FieldPlan.Plan(data, nil, desired, fieldPolicies(entry, versionOf(deps, inputs.probe).readOnlyRows),
+			{}, unwritable, { defaults = FieldPlan.GameDefaults(deps.env) })
 		data, newOwners.fields, conflicts = plan.characteristics, plan.record, plan.conflicts
 	end
 	if featureOn(entry, "misc") then
 		local desired, unwritable = MiscPlan.Desired(public)
-		local plan = MiscPlan.Plan(data, nil, desired, fieldPolicies(entry), {}, unwritable,
+		local plan = MiscPlan.Plan(data, nil, desired, fieldPolicies(entry, versionOf(deps, inputs.probe).readOnlyRows),
+			{}, unwritable,
 			{ names = MiscPlan.PresetNames(deps.env), icons = MiscPlan.PresetIcons(deps.env) })
 		data, newOwners.misc = plan.characteristics, plan.record
 		for id, reason in pairs(plan.conflicts) do

@@ -252,6 +252,13 @@ function M.RefreshLook(page, view)
 			tonumber(color:sub(5, 6), 16) / 255
 	end
 	Style.Color(strip.swatch, { r, g, b })
+	-- A Total RP 3 version that keeps the profile icon read-only
+	-- (VersionProfiles readOnlyRows): the icon stays Dawnward's own.
+	local readOnly = ns.TRP3Page.ReadOnlyReason(view, "icon")
+	strip.iconReadOnly = readOnly
+	Widgets.Tooltip(strip.iconEdit, "Profile icon", readOnly
+		and ("Kept in Dawnward only. Read-only on this Total RP 3 version: " .. readOnly .. ".")
+		or "The icon Total RP 3 shows for you (a game icon name).")
 end
 
 --- At First Glance ------------------------------------------------------------------

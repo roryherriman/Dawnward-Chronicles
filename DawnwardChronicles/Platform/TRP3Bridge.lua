@@ -35,7 +35,9 @@ local function schedule(delay)
 	generation = generation + 1
 	local mine = generation
 	pending = true
-	C_Timer.After(delay, function()
+	-- Without a client timer nothing is written: the request stays pending
+	-- and /dawnward trp3 reports it (Platform/Compat.lua names the gap).
+	ns.Compat.After(delay, function()
 		if mine == generation then
 			Bridge.Flush()
 		end
@@ -61,7 +63,8 @@ local function deps(ctx)
 		store = ctx.store,
 		characterKey = ctx.characterKey,
 		now = ctx.now,
-		inCombat = function() return InCombatLockdown() and true or false end,
+		-- Unknown combat state counts as combat: a write waits rather than risk it.
+		inCombat = function() return ns.Compat.InCombat(true) end,
 	}
 end
 

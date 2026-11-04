@@ -11,7 +11,7 @@
 -- the player wrote, as the mockup.
 --
 -- Client APIs (checked against the Classic Era 1.15.9.70576 UI source,
--- /home/user/gethe/wow-ui-source):
+-- github.com/Gethe/wow-ui-source, branch classic_era):
 --   SetPortraitTexture(texture, "player")   the game's round portrait, as on
 --                                           unit frames
 --   CreateFrame("PlayerModel")              the character model frame Blizzard's
@@ -83,10 +83,16 @@ Showcase.MODE_LABELS = {
 Showcase.FALLBACK_NOTE = "If the model can't be shown (for example while the character is still loading), "
 	.. "your portrait takes its place."
 
+-- Errors and missing functions read as nil, and so do secret values (WoW
+-- Forever, Platform/Compat.lua): one must never be compared or shown.
 local function call(fn, ...)
 	if type(fn) ~= "function" then return nil end
 	local ok, a, b, c = pcall(fn, ...)
-	if ok then return a, b, c end
+	if ok then
+		local plain = ns.Compat and ns.Compat.Plain
+		if plain then return plain(a), plain(b), plain(c) end
+		return a, b, c
+	end
 	return nil
 end
 

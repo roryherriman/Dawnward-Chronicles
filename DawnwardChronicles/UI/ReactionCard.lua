@@ -185,7 +185,7 @@ function ReactionCard.Show(reactionId, more)
 	local char = ctx and Actions.Character(ctx)
 	local reaction = char and Reactions.Find(char, reactionId)
 	local view = reaction and Reactions.Present(char, reaction)
-	if not view or InCombatLockdown() then
+	if not view or ns.Compat.InCombat(true) then
 		return false
 	end
 	if not card then

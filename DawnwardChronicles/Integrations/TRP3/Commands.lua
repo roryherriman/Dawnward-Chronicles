@@ -11,7 +11,7 @@ local TRP3Commands = {}
 ns.TRP3Commands = TRP3Commands
 
 local HELP = {
-	"Total RP 3 sync (EXPERIMENTAL, off by default; Total RP 3 3.4.1 only):",
+	"Total RP 3 sync (EXPERIMENTAL, off by default; audited Total RP 3 versions only: see trp3 diagnose):",
 	"  trp3 preview | trp3 profile (everything you would publish) | trp3 sync | trp3 paste | trp3 backups | trp3 log",
 	"  trp3 enable about|traits|glance confirm | trp3 disable about|traits|glance",
 	"  trp3 fields (each mapping, who manages it, and what Total RP 3 holds vs your Dawnward value)",
@@ -158,6 +158,16 @@ local function flag(v)
 	return v and "yes" or "no"
 end
 
+-- The Total RP 3 versions Dawnward writes to, for messages ("3.4.1").
+local function supportedVersions()
+	local list = {}
+	for version, known in pairs(ns.TRP3VersionProfiles.KNOWN) do
+		if known.tiers and known.tiers.experimentalWrite then list[#list + 1] = version end
+	end
+	table.sort(list)
+	return table.concat(list, ", ")
+end
+
 --- Read-only report of every guard input, so an in-game "waiting" or
 -- "blocked" can be traced to the exact check. Writes nothing.
 local function diagnose(ctx, deps)
@@ -166,6 +176,9 @@ local function diagnose(ctx, deps)
 	out(ctx, "Total RP 3 sync diagnostics (read-only, nothing is written):")
 	out(ctx, string.format("  Total RP 3: %s, version %s, writes allowed: %s", status.loaded and "loaded"
 		or "not loaded", tostring(status.version), flag(probe.experimental.allowed)))
+	for _, line in ipairs(TRP3Commands.VersionLines(probe)) do
+		out(ctx, "  " .. line)
+	end
 	if probe.profile then
 		out(ctx, string.format("  profile: '%s' (%s), default: %s", tostring(probe.profile.name),
 			tostring(probe.profile.id), flag(probe.profile.isDefault)))
@@ -198,11 +211,37 @@ local function diagnose(ctx, deps)
 			flag(Sync.FeatureOn(entry, feature)), tostring(entry and entry.profileId),
 			STATE_LABEL[check.state] or check.state,
 			#check.reasons > 0 and (" - " .. table.concat(check.reasons, "; ")) or ""))
+		for _, note in ipairs(check.notes or {}) do
+			out(ctx, "    read-only: " .. note)
+		end
 	end
 	for _, line in ipairs(TRP3Commands.TraitIconLines(deps)) do
 		out(ctx, "  " .. line)
 	end
 	out(ctx, "  " .. TRP3Commands.ProfileErrorLine())
+end
+
+--- What Dawnward knows about the installed Total RP 3 version, as lines
+-- (read only): the audit label, whether writes are possible at all, and
+-- each row this version keeps read-only. An unknown version says plainly
+-- that nothing is written.
+function TRP3Commands.VersionLines(probe)
+	local vp = probe and probe.versionProfile
+	if not vp then
+		return {}
+	end
+	local lines = { "version profile: " .. tostring(vp.label) }
+	if not (vp.tiers and vp.tiers.experimentalWrite) then
+		lines[#lines + 1] = "this Total RP 3 version is read-only for Dawnward: nothing is written to it (status and "
+			.. "the copy-and-paste text only). Versions Dawnward writes to: " .. supportedVersions()
+	end
+	local ids = {}
+	for id in pairs(vp.readOnlyRows or {}) do ids[#ids + 1] = id end
+	table.sort(ids)
+	for _, id in ipairs(ids) do
+		lines[#lines + 1] = "read-only on this version: " .. id .. " - " .. vp.readOnlyRows[id]
+	end
+	return lines
 end
 
 --- One line: the last error a profile-suggestion step raised this session
@@ -227,11 +266,12 @@ function TRP3Commands.TraitIconLines(deps)
 		return { "personality trait icons: Dawnward owns no traits on this profile" }
 	end
 	local section = ns.TRP3Adapter.ReadSection(deps.env, "characteristics")
+	local opts = TraitPlan.Options(ns.TRP3VersionProfiles.Adapters(deps.env))
 	local lines = {}
 	local function describe(current, wanted, written)
 		if current == wanted then
 			return tostring(current) .. " (Dawnward's)"
-		elseif TraitPlan.Replaceable(current, written) then
+		elseif TraitPlan.Replaceable(current, written, opts.placeholders) then
 			return tostring(current or "none") .. " (replaced on the next sync)"
 		end
 		return tostring(current) .. " (your own, kept)"
@@ -243,7 +283,7 @@ function TRP3Commands.TraitIconLines(deps)
 			for _, t in ipairs(section and section.PS or {}) do
 				if t.ID == nil and t.LT == o.LT and t.RT == o.RT then trait = t end
 			end
-			local li, ri = TraitPlan.Icons(axis.id)
+			local li, ri = TraitPlan.Icons(axis.id, opts.icons)
 			lines[#lines + 1] = trait and string.format("trait icons %s: %s %s / %s %s", axis.id, o.LT,
 				describe(trait.LI, li, o.LI), o.RT, describe(trait.RI, ri, o.RI))
 				or string.format("trait icons %s: %s/%s not found in Total RP 3", axis.id, o.LT, o.RT)
@@ -674,16 +714,6 @@ local function linkedBy(deps, profileId)
 	end
 	table.sort(keys)
 	return keys[1]
-end
-
--- The Total RP 3 versions Dawnward writes to, for messages ("3.4.1").
-local function supportedVersions()
-	local list = {}
-	for version, known in pairs(ns.TRP3VersionProfiles.KNOWN) do
-		if known.tiers and known.tiers.experimentalWrite then list[#list + 1] = version end
-	end
-	table.sort(list)
-	return table.concat(list, ", ")
 end
 
 --- Read-only connection view. opts.name: the character's name, suggested

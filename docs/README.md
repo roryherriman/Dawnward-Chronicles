@@ -5,6 +5,7 @@
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Layers, modules, saved data, migrations and limits |
 | [COMPATIBILITY.md](COMPATIBILITY.md) | Clients, every game API used and how it was verified, known limits |
 | [TESTING.md](TESTING.md) | Test levels, running the suite, and the in-game checklists (v0.1–v0.4) |
+| [FOREVER_LAUNCH_GATE.md](FOREVER_LAUNCH_GATE.md) | The WoW Forever launch gate (issue #24): acceptance matrix, fuzz and adversarial evidence, findings |
 | [TRP3_INTEGRATION.md](TRP3_INTEGRATION.md) | How Dawnward works alongside Total RP 3: the experimental sync, its guards, and TRP3 markup |
 | [PRIVACY.md](PRIVACY.md) | Public, private and secret, and what may ever leave Dawnward |
 | [VISION.md](VISION.md) | Where the project is going |

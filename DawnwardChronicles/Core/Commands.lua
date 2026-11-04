@@ -202,10 +202,21 @@ handlers.fields = function(ctx)
 end
 
 handlers.status = function(ctx)
-	out(ctx, "Dawnward Chronicles " .. tostring(ctx.version) .. " - using " .. modeLabel(ctx))
+	out(ctx, "Dawnward Chronicles " .. tostring(ctx.displayVersion or ctx.version) .. " - using " .. modeLabel(ctx))
+	if ctx.displayVersion and ctx.displayVersion ~= ctx.version then
+		out(ctx, "Package version: " .. tostring(ctx.version))
+	end
 	if ctx.client then
 		out(ctx, string.format("Client: %s (interface %s)%s", ctx.client.label, tostring(ctx.client.interface),
 			ctx.client.verified and "" or " - not yet verified for this addon"))
+		if ctx.client.target then
+			out(ctx, string.format("Package: built for %s%s", tostring(ctx.client.target),
+				ctx.client.targetMismatch and " - this does NOT match the running client" or ""))
+		end
+	end
+	local missing = type(ctx.compatSummary) == "function" and ctx.compatSummary() or nil
+	if missing then
+		out(ctx, missing)
 	end
 	local reason = ctx.store:ReadOnlyReason()
 	if reason then

@@ -50,6 +50,12 @@ function Methods:HookScript(script, fn)
 	end
 end
 function Methods:RegisterEvent(event)
+	-- A Forever mock knows only the documented events; the modern client
+	-- raises an error for an unknown one, so this does too.
+	local events = self.__mock.knownEvents
+	if events and not events[event] then
+		error("Attempt to register unknown event \"" .. tostring(event) .. "\"", 2)
+	end
 	self.__events[event] = true
 	self.__mock.eventFrames[self] = true
 end
@@ -219,10 +225,14 @@ end
 -- tools/gen_client_api.py), so a call the client would reject as "attempt to
 -- call a nil value" fails here too (v0.10.1: SetColor on a Texture).
 local CLIENT_API = require("support.client_api")
+-- WoW Forever 1.60.1 (70755, game type camelot), from the forever branch
+-- (tools/gen_client_api.py --forever). Used by frames of a Forever mock.
+local FOREVER_API = require("support.client_api_forever")
 
 local FrameMT = {
 	__index = function(self, key)
-		local strict = CLIENT_API[rawget(self, "__kind")]
+		local api = rawget(self, "__mock").clientApi or CLIENT_API
+		local strict = api[rawget(self, "__kind")]
 		if strict and type(key) == "string" and key:match("^%u") and not strict[key] then
 			return nil
 		end
@@ -239,7 +249,143 @@ local FrameMT = {
 	end,
 }
 
---- opts: { interface = number, project = number, savedVariables = table, extra = table }
+-- WoW Forever mode (opts.client = "forever"): the mock exposes only what the
+-- Forever 1.60.1 (70755) UI source shows. Evidence: Gethe/wow-ui-source
+-- branch forever (docs/COMPATIBILITY.md, "WoW Forever API compatibility").
+--
+-- Global functions must be documented (client_api_forever._globals), or be
+-- one of these engine globals that are not in the generated documentation
+-- but that Blizzard code loaded for the camelot game type calls, or Lua and
+-- FrameXML values. Anything else in the environment is an error, so the
+-- Forever mock cannot drift into exposing a Classic-only API.
+Mock.FOREVER_ENGINE_GLOBALS = {
+	CreateFrame = "called by camelot-loaded FrameXML throughout",
+	CreateFont = "Blizzard_SharedXML/FontableFrameMixin.lua:120",
+	InCombatLockdown = "Blizzard_UnitPopupShared/UnitPopupSharedButtonMixins.lua:375",
+	GetQuestID = "Blizzard_UIPanels_Game/Mainline/QuestInfo.lua:40",
+	GetTitleText = "Blizzard_UIPanels_Game/Mainline/QuestFrame.lua:212",
+	GetGuildInfo = "Blizzard_FrameXML/Mainline/AlertFrameSystems.lua:355",
+	StaticPopup_Show = "Blizzard_StaticPopup (FrameXML Lua)",
+	date = "Lua global (Blizzard_SharedXML/TimeUtil.lua:47)",
+	time = "Lua global (Blizzard_FriendsFrame/Mainline/FriendsListUtil.lua:277)",
+	tinsert = "Lua global alias",
+	type = "Lua global (the mock reports a secret value's hidden type, as the client does)",
+}
+-- Classic Era globals that the forever branch neither documents nor calls
+-- from camelot-loaded code: removed from a Forever mock. GetQuestLogIndexByID
+-- is only a fallback in Mainline/TutorialFrame.lua:25 behind
+-- C_QuestLog.GetLogIndexForQuestID, so it is treated as absent (unknown).
+Mock.FOREVER_REMOVED = { "GetQuestLogIndexByID", "GetQuestLogTitle", "GetNumFactions", "GetFactionInfo",
+	"GetAddOnMetadata", "IsAddOnLoaded" }
+
+-- Secret values (12.x engine, FrameScriptDocumentation.lua issecretvalue):
+-- mock.Secret(v) wraps v so that comparing it as text, concatenating or
+-- printing it fails, as addon code touching a secret would in game.
+local SecretMT = {
+	__concat = function() error("attempt to concatenate a secret value", 2) end,
+	__tostring = function() error("attempt to convert a secret value to a string", 2) end,
+	__index = function() error("attempt to index a secret value", 2) end,
+	__lt = function() error("attempt to compare a secret value", 2) end,
+	__le = function() error("attempt to compare a secret value", 2) end,
+}
+
+function Mock.MakeForever(mock, env, opts)
+	mock.client = "forever"
+	mock.clientApi = FOREVER_API
+	mock.knownEvents = FOREVER_API._events
+	mock.secrets = setmetatable({}, { __mode = "k" })
+	-- Secrets handed out, in order, and whether issecretvalue saw each: a
+	-- secret the addon used without asking first shows up in
+	-- mock.UncheckedSecrets() (a boolean test of a secret cannot raise an
+	-- error in plain Lua, so this is how the tests catch one).
+	mock.secretList, mock.secretChecked = {}, setmetatable({}, { __mode = "k" })
+	local rawType = type
+	function mock.Secret(v)
+		local s = setmetatable({}, SecretMT)
+		mock.secrets[s] = v == nil and true or v
+		mock.secretList[#mock.secretList + 1] = s
+		return s
+	end
+	function mock.UncheckedSecrets()
+		local n = 0
+		for _, s in ipairs(mock.secretList) do
+			if not mock.secretChecked[s] then n = n + 1 end
+		end
+		return n
+	end
+	-- In the client type() of a secret is the type of the value it hides;
+	-- only comparing, concatenating or indexing it fails.
+	env.type = function(v)
+		local hidden = mock.secrets[v]
+		if hidden ~= nil then
+			return hidden == true and "boolean" or rawType(hidden)
+		end
+		return rawType(v)
+	end
+	env.WOW_PROJECT_MAINLINE = 1
+	env.WOW_PROJECT_CLASSIC = 2
+	env.WOW_PROJECT_CAMELOT = 18
+	env.WOW_PROJECT_ID = opts.project or 18
+	env.GetBuildInfo = function()
+		return "1.60.1", "70755", "Nov 3 2026", opts.interface or 16001, "1.60.1", "Release"
+	end
+	env.issecretvalue = function(v)
+		if mock.secrets[v] ~= nil then
+			mock.secretChecked[v] = true
+			return true
+		end
+		return false
+	end
+	for _, name in ipairs(Mock.FOREVER_REMOVED) do
+		env[name] = nil
+	end
+	-- Retail-style replacements (QuestLogDocumentation.lua, ReputationInfoDocumentation.lua).
+	env.C_QuestLog = {
+		GetLogIndexForQuestID = function(id) return mock.quest and mock.quest.id == id and 3 or nil end,
+		GetInfo = function(index)
+			if index == 3 and mock.quest then
+				return { title = mock.quest.title, questLogIndex = 3, questID = mock.quest.id,
+					level = mock.quest.level, difficultyLevel = mock.quest.level, isHeader = false }
+			end
+		end,
+		GetTitleForQuestID = function(id) return mock.questTitles and mock.questTitles[id] end,
+	}
+	env.C_Reputation = {
+		GetNumFactions = function() return #(mock.factions or {}) end,
+		GetFactionDataByIndex = function(i)
+			local f = (mock.factions or {})[i]
+			if f then
+				return { factionID = f.id, name = f.name, description = "", reaction = f.standing,
+					isHeader = f.header and true or false, isHeaderWithRep = f.hasRep and true or false,
+					isCollapsed = false, isChild = false, isWatched = false, isAccountWide = false }
+			end
+		end,
+	}
+	Mock.CheckForever(env)
+end
+
+--- Errors when a Forever environment exposes a function or namespace
+-- function the Forever source does not show.
+function Mock.CheckForever(env)
+	local docs = FOREVER_API._globals
+	for name, value in pairs(env) do
+		if type(value) == "function" and not docs[name] and not Mock.FOREVER_ENGINE_GLOBALS[name] then
+			error("Forever mock exposes " .. name .. ", which the Forever 1.60.1 source does not show", 2)
+		end
+		local space = FOREVER_API._namespaces[name]
+		if type(value) == "table" and name:match("^C_") then
+			assert(space, "Forever mock exposes namespace " .. name .. " without generated evidence")
+			for fn, impl in pairs(value) do
+				if type(impl) == "function" and not space[fn] then
+					error("Forever mock exposes " .. name .. "." .. fn .. ", which the Forever source does not document", 2)
+				end
+			end
+		end
+	end
+end
+
+--- opts: { interface = number, project = number, savedVariables = table, extra = table,
+--          client = "forever" (WoW Forever 1.60.1 mode), target = "classic"|"forever" (TOC X-Dawnward-Target) }
 function Mock.new(opts)
 	opts = opts or {}
 	-- clock: what time() returns (real dates); mono: what GetTime() returns.
@@ -345,14 +491,31 @@ function Mock.new(opts)
 		},
 		C_AddOns = {
 			GetAddOnMetadata = function(name, field)
+				if name == "DawnwardChronicles" and opts.metadata and opts.metadata[field] ~= nil then
+					return opts.metadata[field]
+				end
 				if name == "DawnwardChronicles" and field == "Version" then
-					return opts.version or "0.10.3-dev"
+					return opts.version or "0.10.4-dev"
+				end
+				-- The package target a packaged TOC may declare (tools/package.py).
+				if name == "DawnwardChronicles" and field == "X-Dawnward-Target" then
+					return opts.target
 				end
 				return nil
 			end,
 			IsAddOnLoaded = function() return false end,
 		},
+		-- C_Map (MapDocumentation.lua, both clients): nothing known unless a
+		-- test sets mock.mapId, mock.maps[id] or mock.areas[id].
+		C_Map = {
+			GetBestMapForUnit = function() return mock.mapId end,
+			GetMapInfo = function(id) return mock.maps and mock.maps[id] end,
+			GetAreaInfo = function(id) return mock.areas and mock.areas[id] end,
+		},
 	}
+	if opts.client == "forever" then
+		Mock.MakeForever(mock, env, opts)
+	end
 	for k, v in pairs(opts.savedVariables or {}) do
 		env[k] = v
 	end

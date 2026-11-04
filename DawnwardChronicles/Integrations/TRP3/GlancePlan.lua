@@ -23,6 +23,13 @@
 -- its own number. An owned slot that was edited, moved or cleared in TRP3
 -- is a conflict and nothing is written. An entry whose title and text a
 -- slot already shows is not added again (never duplicated).
+--
+-- Total RP 3 3.5.x (VersionProfiles adapters.iconStorage = "id"): its
+-- Apply stores the icon as TRP3_IconUtil.SerializeIcon(ic) (3.5.4
+-- RegisterMisc.lua 346), a stringified file ID for any icon it can
+-- resolve. A slot whose icon is the file ID of the name Dawnward wrote
+-- (opts.sameIcon, VersionProfiles.IconEquivalence: TRP3's own read-only
+-- resolver) still holds Dawnward's entry; any other icon is the player's.
 local _, ns = ...
 local Util = ns.Util
 
@@ -31,13 +38,81 @@ ns.TRP3GlancePlan = GlancePlan
 
 GlancePlan.SLOTS = 5
 
+-- Total RP 3 3.5.x (VersionProfiles adapters.interfaceIcons = "trp354"):
+-- the presets of Dawnward's icon picker (Glance.ICON_CHOICES) that Total
+-- RP 3 3.5.4 lists as the ONLY candidate of an interface icon
+-- (Resources/InterfaceIcons.lua, GetFirstValidIcon 10-27, which reports a
+-- missing one as an error), so every client 3.5.4 loads on (Mainline and
+-- Forever) must have them, plus its built-in default (6-7: name
+-- inv_misc_questionmark, ID 134400). On 3.5.x any other preset is written
+-- as Glance.DEFAULT_ICON until a live Forever check promotes it; an icon
+-- name the player typed that is not one of the presets is their own
+-- choice and is written as typed (TRP3 3.5.4 keeps an icon it cannot
+-- resolve and shows its default instead: Core/IconUtil.lua 39-77). Static
+-- evidence, 3.5.4 line numbers.
+GlancePlan.VERIFIED_354 = {
+	inv_misc_questionmark = "DEFAULT InterfaceIcons.lua:6-7 (134400)",
+	inv_misc_book_09 = "ONLY InterfaceIcons.lua:48 DirectorySection",
+	inv_misc_book_12 = "ONLY InterfaceIcons.lua:49 HistorySection",
+	inv_misc_note_06 = "ONLY InterfaceIcons.lua:50 MiscInfoSection",
+	inv_misc_grouplooking = "ONLY InterfaceIcons.lua:38,91 ProfileDefault, ModeNormal",
+	spell_arcane_mindmastery = "ONLY InterfaceIcons.lua:52 TraitSection",
+	spell_nature_sleep = "ONLY InterfaceIcons.lua:92 ModeAFK",
+	spell_holy_silence = "ONLY InterfaceIcons.lua:84,179 ToolbarLanguage, MiscInfoVoiceReference",
+	spell_nature_swiftness = "ONLY InterfaceIcons.lua:69 TargetOpenMount",
+	inv_misc_coin_02 = "ONLY InterfaceIcons.lua:201 TraitSelfish",
+	ability_rogue_disguise = "ONLY InterfaceIcons.lua:104,192 RelationNone, TraitDeceitful",
+	ability_dualwield = "ONLY InterfaceIcons.lua:105 RelationUnfriendly",
+	inv_valentinescandy = "ONLY InterfaceIcons.lua:102 RelationLove",
+	inv_jewelry_ring_14 = "ONLY InterfaceIcons.lua:175 MiscInfoPiercings",
+	inv_misc_gift_02 = "ONLY InterfaceIcons.lua:185 TraitAltruistic",
+	inv_rosebouquet01 = "ONLY InterfaceIcons.lua:193 TraitForgiving",
+	spell_holy_holyguidance = "ONLY InterfaceIcons.lua:203 TraitSuperstitious",
+	ability_hunter_snipershot = "ONLY InterfaceIcons.lua:206 TraitVindictive",
+	inv_misc_cape_18 = "ONLY InterfaceIcons.lua:80 ToolbarCloakOn",
+	inv_helmet_13 = "ONLY InterfaceIcons.lua:82 ToolbarHelmetOn",
+}
+
+-- Allowlists by VersionProfiles adapters.interfaceIcons (nil: every preset,
+-- as 3.4.1).
+GlancePlan.ICON_SETS = { trp354 = GlancePlan.VERIFIED_354 }
+
+--- Options for a Total RP 3 version: { icons = allowlist or nil, sameIcon
+-- = VersionProfiles.IconEquivalence or nil }. Both nil for 3.4.1 (and any
+-- version without adapters): exactly 3.4.1's behaviour. Reads env only
+-- through IconEquivalence (read only).
+function GlancePlan.Options(adapters, env)
+	return {
+		icons = adapters and GlancePlan.ICON_SETS[adapters.interfaceIcons] or nil,
+		sameIcon = ns.TRP3VersionProfiles.IconEquivalence(env, adapters),
+	}
+end
+
+-- The icon Dawnward writes for an entry: as chosen, unless an allowlist
+-- applies and the icon is one of Dawnward's own presets it does not prove.
+local function safeIcon(icon, icons)
+	if not icons or type(icon) ~= "string" or icons[icon:lower()] then
+		return icon
+	end
+	local lower = icon:lower()
+	for _, choice in ipairs(ns.Glance.ICON_CHOICES) do
+		if choice == lower then
+			return ns.Glance.DEFAULT_ICON
+		end
+	end
+	return icon
+end
+
 --- Desired slots from a public projection: public.glance, a list of
 -- { n, TI, TX, IC, AC } (Core/Glance.lua Published, put there by
--- Sync.PublicOf). Copies; never reads anything else.
-function GlancePlan.Desired(public)
+-- Sync.PublicOf). Copies; never reads anything else. opts: from
+-- GlancePlan.Options (nil: 3.4.1's).
+function GlancePlan.Desired(public, opts)
+	local icons = opts and opts.icons
 	local out = {}
 	for _, entry in ipairs(public and public.glance or {}) do
-		out[#out + 1] = { n = entry.n, TI = entry.TI, TX = entry.TX, IC = entry.IC, AC = entry.AC == true }
+		out[#out + 1] = { n = entry.n, TI = entry.TI, TX = entry.TX, IC = safeIcon(entry.IC, icons),
+			AC = entry.AC == true }
 	end
 	return out
 end
@@ -53,9 +128,12 @@ local function slotOf(d)
 	return { TI = d.TI, TX = d.TX, IC = d.IC, AC = d.AC }
 end
 
--- Whether a live slot holds exactly what Dawnward recorded.
-local function holds(live, owned)
-	return type(live) == "table" and live.TI == owned.TI and live.TX == owned.TX and live.IC == owned.IC
+-- Whether a live slot holds exactly what Dawnward recorded. sameIcon
+-- (GlancePlan.Options; nil: exact, as 3.4.1) also accepts the icon as
+-- Total RP 3 3.5.x re-stores it.
+local function holds(live, owned, sameIcon)
+	return type(live) == "table" and live.TI == owned.TI and live.TX == owned.TX
+		and (live.IC == owned.IC or (sameIcon ~= nil and sameIcon(live.IC, owned.IC) == true))
 		and live.AC == owned.AC
 end
 
@@ -73,11 +151,13 @@ end
 --- Plans the owned-slot update.
 -- misc: a COPY of TRP3's misc section (modified in place).
 -- record: ledger { slots = { [slotKey] = { n, TI, TX, IC, AC } } } or nil.
--- desired: from GlancePlan.Desired.
+-- desired: from GlancePlan.Desired. opts: from GlancePlan.Options (nil:
+-- 3.4.1's).
 -- Returns { action = "noop" | "write" | "conflict" | "unsupported", misc,
 -- record, changes, reason }. "unsupported": nothing to write because no
 -- slot is free for an entry (not stored as a conflict).
-function GlancePlan.Plan(misc, record, desired)
+function GlancePlan.Plan(misc, record, desired, opts)
+	local sameIcon = opts and opts.sameIcon
 	local live = type(misc.PE) == "table" and misc.PE or {}
 	local owned = record and record.slots or {}
 	local keys = slotKeys()
@@ -87,7 +167,7 @@ function GlancePlan.Plan(misc, record, desired)
 	local conflicts = {}
 	for _, key in ipairs(keys) do
 		local o = owned[key]
-		if o and not holds(live[key], o) then
+		if o and not holds(live[key], o, sameIcon) then
 			conflicts[#conflicts + 1] = describe(o) .. " in slot " .. key
 				.. (isFree(live[key]) and " was removed in Total RP 3" or " was changed in Total RP 3")
 		end
@@ -106,7 +186,7 @@ function GlancePlan.Plan(misc, record, desired)
 		if o then
 			local d = wanted[o.n]
 			if d then
-				if not holds(live[key], slotOf(d)) then
+				if not holds(live[key], slotOf(d), sameIcon) then
 					live[key] = slotOf(d)
 					changes[#changes + 1] = "updated " .. d.n
 				end
@@ -161,11 +241,12 @@ end
 
 --- Copy of misc without Dawnward's owned slots. Returns the copy, or nil
 -- plus a reason when an owned slot no longer holds Dawnward's content.
-function GlancePlan.WithoutOwned(misc, record)
+-- opts: from GlancePlan.Options (nil: exact, as 3.4.1).
+function GlancePlan.WithoutOwned(misc, record, opts)
 	local copy = Util.DeepCopy(misc)
 	local live = type(copy.PE) == "table" and copy.PE or {}
 	for key, o in pairs(record and record.slots or {}) do
-		if not holds(live[key], o) then
+		if not holds(live[key], o, opts and opts.sameIcon) then
 			return nil, describe(o) .. " no longer holds Dawnward's entry"
 		end
 		live[key] = nil

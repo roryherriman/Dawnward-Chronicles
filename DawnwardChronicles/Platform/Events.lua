@@ -9,13 +9,10 @@ local Actions = ns.Actions
 local Events = {}
 ns.Events = Events
 
---- Current zone and subzone names (nil when the client has none).
+--- Current zone and subzone names (nil when the client has none, the
+-- function is missing or fails, or the reply is not text: Platform/Compat.lua).
 function Events.Location()
-	local zone = GetRealZoneText and GetRealZoneText() or nil
-	local subzone = GetSubZoneText and GetSubZoneText() or nil
-	if zone == "" then zone = nil end
-	if subzone == "" then subzone = nil end
-	return zone, subzone
+	return ns.Compat.ZoneText()
 end
 
 Events.HANDLERS = {

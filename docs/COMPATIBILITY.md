@@ -24,7 +24,7 @@ Not every row below rests on the same kind of check:
 | Client | Interface | Role | Highest level reached |
 |---|---|---|---|
 | WoW Classic Era 1.15.9 | The TOC says `11509`. The number from `GetBuildInfo()` has not been reported yet. | Primary development client | **L3**: the v0.2 acceptance checklist passed all mandatory items; v0.4 and the origins/places features were partly checked in game on 2026-10-26 (owner-reported, see below) |
-| WoW Forever 1.60.1 | Believed to be 16001. **Unverified.** | Final deployment target | — (shown as "provisional", no client-specific features) |
+| WoW Forever 1.60.1 (70755) | Believed to be 16001. **Unverified.** Project ID 18 (`WOW_PROJECT_CAMELOT`) from the forever UI source | Final deployment target | **L2** mocked only (see [WoW Forever API compatibility](#wow-forever-api-compatibility-1601-build-70755)); shown as "provisional". No runtime pass: Pending Live Forever Verification |
 
 ### L3 results: v0.2 acceptance, Classic Era 1.15.9, 2026-10-25
 
@@ -116,6 +116,79 @@ The owner tested the build of PR #9, PR #43 and PR #47 on a Human character in E
 - localised clients;
 - WoW Forever.
 
+## WoW Forever API compatibility (1.60.1, build 70755)
+
+**Pinned sources.** Forever: `Gethe/wow-ui-source` branch `forever`, commit `17ed2c3` "1.60.1 (70755)" (2026-11-03), game type `camelot`. Classic Era: branch `classic_era`, 1.15.9 (70576) generated API documentation, and the 1.15.9 (70003) FrameXML tree. Forever is a modern, Mainline-based client: its add-ons load by `AllowLoadGameType` rules, and `camelot` belongs to the `mainline` family (for example `Blizzard_UIPanels_Game.toc:44` loads `[Family]\CharacterFrame.lua [AllowLoadGameType mainline] [ExcludeLoadGameType camelot]`).
+
+**Evidence levels** (as used below):
+- **Static**: the forever-branch source shows it, either in `Blizzard_APIDocumentationGenerated` or in Blizzard Lua/XML that the TOC rules load for `camelot`. The file is named.
+- **L2 mocked / automated**: `tests/spec/forever_client_spec.lua` runs the whole addon against a Forever mock that exposes only what the source shows (see below).
+- **Pending Live Forever Verification**: needs the game. **No row below has been run in a Forever client.**
+
+**How Dawnward behaves.** Shared code detects features at run time; it never branches on the client ID for an API. `Platform/Compat.lua` uses the Classic Era function when the client has it (so Classic Era behaves exactly as before) and the Forever replacement otherwise. A client with neither gets nothing for that feature: it is skipped, never a Lua error, and named once at login and in `/dawnward status` ("Client APIs not available, so these are skipped: …").
+
+### Inventory (every client API Dawnward uses)
+
+Method: every global read by `Platform/` and `UI/` (luacheck), every `C_*` call, every event registered, every widget method called, the templates, textures, widget types and TOC fields, checked against both trees by script (`Name =`/`LiteralName =` in the generated docs, and definitions and calls in files the TOC rules load for `camelot` or for Classic Era).
+
+| Class | Count | Members |
+|---|---|---|
+| Present in both, same shape | 44 globals, 7 namespace functions, 30 events, 105 widget methods, 5 widget types, 1 template, 4 more font objects named as strings | below |
+| Missing on Forever, replaced | 4 | `GetQuestLogTitle`, `GetNumFactions`, `GetFactionInfo`, `C_QuestLog.GetQuestInfo` |
+| Missing on Forever, already only a fallback | 2 | global `GetAddOnMetadata`, global `IsAddOnLoaded` (`C_AddOns` is used first on both clients) |
+| Forever-only replacements now used | 6 | `C_QuestLog.GetLogIndexForQuestID`, `C_QuestLog.GetInfo`, `C_QuestLog.GetTitleForQuestID`, `C_Reputation.GetNumFactions`, `C_Reputation.GetFactionDataByIndex`, `issecretvalue` |
+| Unknown (no Forever evidence either way) | 1 API + 3 textures | `GetQuestLogIndexByID`; icons `INV_Misc_Book_09`, `INV_Misc_Map_01`, `INV_Misc_Gear_01` |
+| Not used by Dawnward | — | CVars, `Settings`/`InterfaceOptions` panels, `UIDropDownMenu`/`Menu`, `LoadAddOn`, `SetBackdrop`, combat log, secure templates |
+
+### Matrix: APIs that differ, or that Dawnward now handles differently
+
+| API | Classic Era 1.15.9 | Forever 1.60.1 (70755) | Evidence (Forever) | Dawnward behaviour |
+|---|---|---|---|---|
+| `WOW_PROJECT_ID` | 2 (`WOW_PROJECT_CLASSIC`) | 18 (`WOW_PROJECT_CAMELOT`) | Static: `Blizzard_ProjectConstants/Camelot/ProjectConstants.lua` | `Platform/Detect.lua` recognises Forever by project 18 **or** interface 16001, labelled "provisional support", `verified = false`. L2. Pending Live Forever Verification |
+| `GetBuildInfo()` 4th return | 11509 | believed 16001 | Not in the source (derived from the 1.60.1 version string; TRP3 3.5.4's TOC declares it) | Pending Live Forever Verification: `/dump select(4, GetBuildInfo())` |
+| TOC `## X-Dawnward-Target` | — | — | Dawnward's own field (packaging) | `Detect.Target` reads it with `C_AddOns.GetAddOnMetadata`; a target that does not match the client prints one warning at login and a line in `/dawnward status`. Loading continues. L2 |
+| `GetQuestLogIndexByID` + `GetQuestLogTitle` (2nd return = level) | present | `GetQuestLogTitle`: absent (no doc, no camelot-loaded caller). `GetQuestLogIndexByID`: unknown (only a fallback behind `C_QuestLog.GetLogIndexForQuestID` in `Blizzard_FrameXML/Mainline/TutorialFrame.lua:25`) | Static | `Compat.QuestLevel`: the Classic pair when both exist, else `C_QuestLog.GetLogIndexForQuestID` + `C_QuestLog.GetInfo(index).level` (`QuestLogDocumentation.lua`, `QuestInfo.level`). Neither: the quest is recorded without a level. L2 |
+| `C_QuestLog.GetQuestInfo(questID)` | present | absent | Static (`QuestLogDocumentation.lua` has `GetTitleForQuestID`, not `GetQuestInfo`) | `Compat.QuestTitle`: `GetQuestInfo`, else `C_QuestLog.GetTitleForQuestID` (nilable). L2 |
+| `GetNumFactions` + `GetFactionInfo(i)` | present | absent | Static: Forever's own reputation panel (`Blizzard_UIPanels_Game/Camelot/ReputationFrame.lua:165-166`) uses `C_Reputation` | `Compat.ReadFactions`: the Classic pair, else `C_Reputation.GetNumFactions` + `GetFactionDataByIndex` (`.reaction` 1–8 as standing, `.isHeader`, `.isHeaderWithRep`, `.factionID`; `ReputationInfoDocumentation.lua`). Neither: an empty reading, which changes no snapshot and records nothing. L2 |
+| `issecretvalue(v)` and secret returns | absent | present (`FrameScriptDocumentation.lua`); `UnitName` is `SecretWhenUnitNameIdentityRestricted`, `UnitClass`/`UnitRace` `SecretWhenUnitIdentityRestricted`, `UnitIsAFK` `SecretInChatMessagingLockdown` (`UnitDocumentation.lua`) | Static | `Compat.Plain`: a secret value reads as nil, so it is never compared, concatenated or saved. On Classic Era it returns the value unchanged. L2 (mock secrets). Whether "player" queries are ever secret: Pending Live Forever Verification |
+| global `GetAddOnMetadata`, `IsAddOnLoaded` | absent from docs (fallback only) | absent | Static (`AddOnsDocumentation.lua` documents `C_AddOns` only) | Already `C_AddOns` first (`Compat.AddOnMetadata`, `Integrations/TRP3/Status.lua`). L2 |
+| `InCombatLockdown` | present (engine) | present (engine; e.g. `Blizzard_UnitPopupShared/UnitPopupSharedButtonMixins.lua:375`) | Static | `Compat.InCombat(ifUnknown)`. Story cards and Total RP 3 writes treat an unknown combat state as combat; the setup launcher does not. L2 |
+| `C_Timer.After` | present | present (`UITimerDocumentation.lua`) | Static | `Compat.After` returns false when missing: story checks run at the next calm event, TRP3 writes stay pending. L2 |
+| `C_Map.GetBestMapForUnit`, `GetMapInfo`, `GetAreaInfo` | present | present, same signatures (`MapDocumentation.lua`) | Static | Missing functions, errors, non-table or wrongly typed replies read as "unknown". L2 |
+| Classic Era uiMap and AreaTable IDs (`Core/Places.lua`, `Core/Atlas.lua`) | source-checked for 1.15.9.70576 | **not checked** | none | Never applied on Forever: `Places.Data("forever")` is nil, so no area resolves, nothing is classified and nothing counts as a starting area. Places are still logged by zone and subzone name with the uiMap ID. `/dawnward atlas` says the Classic data is evidence only. L2. Pending Live Forever Verification (`/dawnward atlas export`) |
+
+### Present in both, same shape (Static for Forever)
+
+- **Events (30), payloads identical in both generated docs:** `ADDON_LOADED`, `PLAYER_LOGIN`, `PLAYER_LOGOUT`, `PLAYER_ENTERING_WORLD`, `PLAYER_LEVEL_UP`, `QUEST_COMPLETE`, `QUEST_TURNED_IN`, `PLAYER_DEAD`, `PLAYER_ALIVE`, `PLAYER_UNGHOST`, `PLAYER_REGEN_ENABLED`, `PLAYER_REGEN_DISABLED`, `PLAYER_UPDATE_RESTING`, `PLAYER_FLAGS_CHANGED`, `PLAYER_GUILD_UPDATE`, `UPDATE_FACTION`, `ZONE_CHANGED`, `ZONE_CHANGED_INDOORS`, `ZONE_CHANGED_NEW_AREA`, `CINEMATIC_START`, `CINEMATIC_STOP`, `LOADING_SCREEN_ENABLED`, `LOADING_SCREEN_DISABLED`, `ENCOUNTER_START`, `ENCOUNTER_END`, `BOSS_KILL`, `UNIT_MODEL_CHANGED`, `UNIT_PORTRAIT_UPDATE`, `UI_SCALE_CHANGED`, `DISPLAY_SIZE_CHANGED`. The modern client rejects unknown events with an error; the Forever mock does too.
+- **Documented global functions, same signature:** `GetInstanceInfo`, `IsInInstance`, `GetRealZoneText`, `GetSubZoneText`, `UnitClass`, `UnitName`, `UnitFactionGroup`, `UnitIsAFK`, `GetNormalizedRealmName`, `GetRealmName`, `InCinematic`, `GetCursorPosition`, `SetPortraitTexture`, `IsInGuild`, `GetLocale`; also documented on Forever: `UnitRace`, `UnitLevel`, `UnitIsDeadOrGhost`, `GetTime`, `IsShiftKeyDown`, `GetBuildInfo`.
+- **Namespace functions, same signature:** `C_AddOns.GetAddOnMetadata`, `C_AddOns.IsAddOnLoaded`, `C_Map.GetBestMapForUnit`, `C_Map.GetMapInfo`, `C_Map.GetAreaInfo`, `C_Timer.After`, `C_Timer.NewTicker`.
+- **Engine globals not in the generated docs, called by camelot-loaded Blizzard code:** `CreateFrame`, `CreateFont` (`Blizzard_SharedXML/FontableFrameMixin.lua:120`), `InCombatLockdown`, `GetQuestID` (`Blizzard_UIPanels_Game/Mainline/QuestInfo.lua:40`), `GetTitleText` (`Mainline/QuestFrame.lua:212`), `GetGuildInfo` (`Blizzard_FrameXML/Mainline/AlertFrameSystems.lua:355`), `date`, `time`, `tinsert`, `SlashCmdList`.
+- **FrameXML values:** `UIParent`, `DEFAULT_CHAT_FRAME`, `GameTooltip` (`SetOwner`, `SetText`, `AddLine`, `Show`, `Hide`: `Blizzard_UIPanels_Game/Camelot/CharacterFrame.lua:350`), `Minimap` (`Blizzard_Minimap` loads `[Game]\Minimap.lua` for camelot), `UISpecialFrames`, `RAID_CLASS_COLORS`, `WOW_PROJECT_CLASSIC`, fonts `ChatFontNormal`, `GameFontNormal`, `GameFontNormalLarge`, `GameFontHighlight`, `GameFontHighlightSmall`.
+- **Template:** `UIPanelScrollFrameTemplate` (`Blizzard_SharedXML/SecureScrollTemplates.xml:44`), with the same `ScrollBar`, `ScrollUpButton`, `ScrollDownButton` and `ThumbTexture` parent keys Dawnward restyles.
+- **Widget types:** `Frame`, `Button`, `EditBox`, `ScrollFrame`, `PlayerModel` (used by `Blizzard_FrameXML/TalkingHeadUI.xml`); model methods `SetUnit`, `CanSetUnit`, `SetRotation`, `SetPortraitZoom` (`FrameAPICharacterModelBaseDocumentation.lua`), `ClearModel`, `GetModelFileID` (`SimpleModelAPIDocumentation.lua`).
+- **Widget methods:** all 103 frame and region methods Dawnward calls are documented in both trees' `Simple*API` docs. The Forever mock's regions accept only Forever's documented methods (`tests/support/client_api_forever.lua`).
+- **Textures:** `Interface\Minimap\MiniMap-TrackingBorder`, `UI-Minimap-ZoomButton-Highlight`, `Interface\Buttons\UI-CheckBox-Check`, `UI-RotationLeft/Right-Button-Up`, `Interface\ChatFrame\UI-ChatIM-SizeGrabber-Up`, `ButtonHilight-Square` are all referenced by Forever's own UI. Icons are game data, not UI source: a missing one shows a blank square, never an error.
+
+### The Forever mock (L2)
+
+`python tools/gen_client_api.py --forever <forever tree>` writes `tests/support/client_api_forever.lua`: Forever's region methods, its documented global functions, the functions of `C_AddOns`, `C_Map`, `C_QuestLog`, `C_Reputation` and `C_Timer`, and every documented event. `Boot.Start({ client = "forever" })` builds a mock with project 18, interface 16001, retail-style `C_QuestLog`/`C_Reputation`, `issecretvalue` and secret values (`mock.Secret`), without the Classic quest-log and faction globals. `Mock.CheckForever` fails the test run if the mock ever exposes a function the Forever source does not show (other than the listed engine globals). `tests/spec/forever_client_spec.lua` (21 tests) covers: load and login, the whole UI walk, level-up, quest, reputation and zone recording, `/reload`, duplicate and repeated startup events, nil and malformed replies, secret values, missing APIs, combat lockdown, the package-target warning, and Classic Era taking its old route.
+
+### Pending Live Forever Verification
+
+Each item needs a Forever client; none is claimed.
+
+1. `select(4, GetBuildInfo())` is 16001 and `WOW_PROJECT_ID` is 18.
+2. Dawnward loads with no Lua errors, and `/dawnward status` shows "WoW Forever (provisional support)" and no "Client APIs not available" line.
+3. `C_QuestLog.GetInfo(index).level` gives the quest's level at `QUEST_COMPLETE`, and `GetQuestID`/`GetTitleText` work on Forever's reward panel.
+4. `C_Reputation.GetFactionDataByIndex(i).reaction` uses the same 1–8 standings as Classic Era, and `UPDATE_FACTION` fires on a tier change.
+5. `UnitName`, `UnitClass`, `UnitRace` and `UnitIsAFK` for `"player"` never return secret values in normal play (a secret would only blank optional flavour; a secret `UnitName` would make the character key "Unknown-Realm").
+6. `ZONE_CHANGED*`, `GetRealZoneText`, `GetSubZoneText` and `C_Map.GetBestMapForUnit("player")` report Forever's zones; which uiMap and AreaTable IDs Forever uses (`/dawnward atlas export`).
+7. `QUEST_TURNED_IN`, `PLAYER_LEVEL_UP`, `PLAYER_DEAD`, `PLAYER_GUILD_UPDATE` fire as on Classic Era.
+8. `UIPanelScrollFrameTemplate`, `PlayerModel:SetUnit("player")` and the minimap button look and behave as on Classic Era (Forever's minimap is the Mainline one).
+9. The icons `INV_Misc_Book_09`, `INV_Misc_Map_01` and `INV_Misc_Gear_01` exist in Forever's game data.
+10. `GetQuestLogIndexByID` exists or not (Dawnward does not depend on it on Forever).
+11. A package built with `## X-Dawnward-Target: forever` shows no mismatch warning on Forever, and a Classic package shows one.
+
 ## Known issues
 
 ### KI-1: one-time return to character select after entering the world (v0.2 test session)
@@ -141,6 +214,8 @@ The owner tested the build of PR #9, PR #43 and PR #47 on a Human character in E
 Compatibility with 3.5.3 is **not claimed**, and won't be until its source has been audited and it has been tested at L3 or L4.
 
 ## Client APIs used in v0.1
+
+The Forever columns in this and the following per-version tables predate the Forever audit; [WoW Forever API compatibility](#wow-forever-api-compatibility-1601-build-70755) supersedes them.
 
 Every name below is also in the per-directory lists in `.luacheckrc`.
 

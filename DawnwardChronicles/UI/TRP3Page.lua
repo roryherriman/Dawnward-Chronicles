@@ -2000,7 +2000,24 @@ function TRP3Page.Shown(page, id)
 end
 
 --- Stages a choice (nothing is saved until Authorize).
+--- Why this Total RP 3 version keeps row id read-only (VersionProfiles
+-- readOnlyRows, e.g. the profile icon on 3.5.4), or nil. Pure (from view).
+function TRP3Page.ReadOnlyReason(view, id)
+	local vp = view and view.probe and view.probe.versionProfile
+	local rows = type(vp) == "table" and type(vp.readOnlyRows) == "table" and vp.readOnlyRows or nil
+	local why = rows and rows[id]
+	return type(why) == "string" and why or nil
+end
+
 function TRP3Page.Stage(page, id, policy)
+	-- A row this Total RP 3 version keeps read-only cannot be handed to
+	-- Dawnward from the page (the sync would never write it anyway).
+	local readOnly = TRP3Page.ReadOnlyReason(page.view, id)
+	if readOnly and policy == "dawnward" then
+		MainWindow.SetStatus("Read-only on this Total RP 3 version: " .. readOnly .. ". Nothing was changed.")
+		MainWindow.Refresh()
+		return
+	end
 	local saved = page.view and page.view.policies[id]
 	page.staged[id] = (policy ~= saved) and policy or nil
 	MainWindow.SetStatus(next(page.staged) and "Choice noted. Nothing changes until you Authorize."
@@ -2067,7 +2084,12 @@ function TRP3Page.RowText(page, id)
 	local row = diffRow(view, id)
 	local conflict = view.fieldConflicts[id]
 	local risk = view.risks and view.risks[id]
-	if staged and policy ~= "dawnward" and risk then
+	local readOnly = TRP3Page.ReadOnlyReason(view, id)
+	if readOnly then
+		-- VersionProfiles readOnlyRows: never written on this version, whatever
+		-- the saved choice says (Sync plans the row as "off").
+		detail = "Read-only on this Total RP 3 version · set it in Total RP 3 · " .. excerpt(readOnly, 60)
+	elseif staged and policy ~= "dawnward" and risk then
 		detail = "Dawnward's old value will be removed from TRP3 first (no longer in your profile)"
 	elseif policy == "off" then
 		detail = "Not synchronised"
@@ -2136,6 +2158,11 @@ function TRP3Page.RefreshMappings(page, view)
 			row.name:SetText(name)
 			row.detail:SetText(detail)
 			row.selector:Select(TRP3Page.Shown(page, row.id))
+			local readOnly = TRP3Page.ReadOnlyReason(view, row.id)
+			row.readOnly = readOnly
+			for _, b in ipairs(row.selector.buttons) do
+				b:SetEnabled(not (readOnly and b.segmentId == "dawnward"))
+			end
 			local m, rowFeature = ns.TRP3Sync.MappingOf(row.id)
 			local where = m and (m.key and ("Total RP 3 field " .. m.key) or "Total RP 3 additional information")
 			if rowFeature == "look" then
@@ -2146,6 +2173,10 @@ function TRP3Page.RefreshMappings(page, view)
 					.. "Total RP 3 unless you choose otherwise. " or "")
 				.. "Dawnward writes it only from your " .. m.label .. (rowFeature == "look" and " (above)" or "")
 				.. ", only while Total RP 3 still holds the value Dawnward last wrote.") or TRP3Page.EXPLAIN[row.id]
+			if readOnly then
+				about = "Read-only on this Total RP 3 version: " .. readOnly .. ". Dawnward does not write it here, "
+					.. "whatever is chosen below."
+			end
 			-- The detail line may be cut on the page; the tooltip has it whole.
 			Widgets.Tooltip(row.hover, name, detail .. "\n\n" .. about)
 			if row.import then

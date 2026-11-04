@@ -13,20 +13,48 @@ local function chatPrint(line)
 end
 
 local function addonMetadata(field)
-	local get = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-	return get and get(addonName, field) or nil
+	return ns.Compat.AddOnMetadata(addonName, field)
 end
 
+-- Returns the character's key ("Name-Realm") and, when the name or the
+-- realm could not be read (nil, empty, or a secret value), why: such a key
+-- ("Unknown-Realm", "Name-") could be shared by other characters, so the
+-- session must not write under it (see identityLock).
 local function characterKey()
-	local name = UnitName("player") or "Unknown"
-	local realm = GetNormalizedRealmName and GetNormalizedRealmName()
-	if not realm or realm == "" then
-		realm = (GetRealmName() or ""):gsub("[%s%-]", "")
+	local Compat = ns.Compat
+	local unknown
+	local name = Compat.Plain(Compat.Call(UnitName, "player"))
+	if type(name) ~= "string" or name == "" then
+		name = "Unknown"
+		unknown = "this character's name could not be read"
 	end
-	return name .. "-" .. realm
+	local realm = Compat.Plain(Compat.Call(GetNormalizedRealmName))
+	if type(realm) ~= "string" or realm == "" then
+		realm = Compat.Plain(Compat.Call(GetRealmName))
+		realm = (type(realm) == "string" and realm or ""):gsub("[%s%-]", "")
+	end
+	if realm == "" and not unknown then
+		unknown = "this character's realm could not be read"
+	end
+	return name .. "-" .. realm, unknown
+end
+
+-- When the character cannot be identified, nothing may be written: another
+-- character's record (or Total RP 3 connection) could sit under the same
+-- key. The session works on detached copies, read-only, so the saved
+-- variables and Total RP 3 stay exactly as they were.
+local function identityLock(why)
+	local reason = why .. " (Dawnward cannot tell whose data this is)"
+	local Util = ns.Util
+	ns.store = Store.new(Util.DeepCopy(ns.store.real), Util.DeepCopy(ns.store.sim),
+		{ realReadOnly = reason, simReadOnly = reason })
+	TRP3Bridge.ledger = Util.DeepCopy(TRP3Bridge.ledger)
+	TRP3Bridge.readOnly = TRP3Bridge.readOnly or reason
+	return reason
 end
 
 local loadInfo
+local identityLocked -- why this session cannot write (character not identified), or nil
 
 local function loadSavedVariables()
 	local realDB, realInfo = Migrations.Load(DawnwardChroniclesDB)
@@ -48,17 +76,28 @@ local function loadSavedVariables()
 end
 
 local function buildContext()
+	local key, unknown = characterKey()
+	if unknown then
+		identityLocked = identityLock(unknown)
+	end
 	local ctx = {
 		store = ns.store,
-		characterKey = characterKey(),
+		characterKey = key,
 		now = time,
 		print = chatPrint,
 		version = addonMetadata("Version") or "?",
+		-- The release name a package declares (packaging, tools/package.py):
+		-- "1.0.0 Beta" for the Forever package; the version otherwise.
+		displayVersion = addonMetadata("X-Display-Version") or addonMetadata("Version") or "?",
+		-- Which client the package was built for ("classic" or "forever").
+		packageTarget = addonMetadata("X-Dawnward-Target"),
 		formatDate = ns.Widgets.FormatDate,
 		-- The narrative clock (Core/NarrativeClock.lua, Platform/PlayClock.lua).
 		monotonic = ns.PlayClock.Monotonic,
 		narrative = ns.NarrativeClock.NewSession(),
-		client = Detect.Client(_G),
+		client = Detect.Client(_G, addonName),
+		-- What this client lacks (Platform/Compat.lua), for /dawnward status; nil when nothing.
+		compatSummary = ns.Compat.Summary,
 		trp3Status = function()
 			return TRP3Status.Read(_G)
 		end,
@@ -104,11 +143,25 @@ local function announceLoad()
 	if loadInfo.real.notes and #loadInfo.real.notes > 0 then
 		chatPrint(#loadInfo.real.notes .. " saved-data issue(s) were repaired on load.")
 	end
+	if identityLocked then
+		chatPrint("Saved data is read-only this session: " .. identityLocked .. ". Nothing will be saved or "
+			.. "sent to Total RP 3; log in again to retry.")
+	end
 	if loadInfo.sim.status == "readOnly" then
 		chatPrint("Simulation data is read-only this session (" .. loadInfo.sim.reason .. ").")
 	end
 	if TRP3Bridge.readOnly then
 		chatPrint("Total RP 3 sync is paused: " .. TRP3Bridge.readOnly .. ". Its saved data was left untouched.")
+	end
+	-- Client compatibility (Platform/Detect.lua, Platform/Compat.lua): said
+	-- once at login, only when something is off; nothing stops loading.
+	local targetWarning = Detect.TargetWarning(ns.ctx and ns.ctx.client)
+	if targetWarning then
+		chatPrint(targetWarning)
+	end
+	local missing = ns.Compat.Summary()
+	if missing then
+		chatPrint(missing .. ". See /dawnward status.")
 	end
 end
 

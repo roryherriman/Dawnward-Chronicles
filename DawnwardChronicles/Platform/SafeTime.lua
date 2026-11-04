@@ -39,14 +39,17 @@ local scheduled = false
 
 function SafeTime.Reasons()
 	local reasons = {}
-	if InCombatLockdown() then reasons[#reasons + 1] = "combat" end
-	if UnitIsDeadOrGhost("player") then reasons[#reasons + 1] = "dead" end
+	-- Platform/Compat.lua: a client that cannot say whether we are in combat
+	-- counts as in combat, so no card can appear at a bad moment.
+	if ns.Compat.InCombat(true) then reasons[#reasons + 1] = "combat" end
+	if ns.Compat.Plain(call(UnitIsDeadOrGhost, "player")) then reasons[#reasons + 1] = "dead" end
 	if busy.cinematic then reasons[#reasons + 1] = "cinematic" end
 	if busy.loading then reasons[#reasons + 1] = "loading" end
 	-- UnitIsAFK: UnitDocumentation.lua; IsInInstance: Classic UI code
 	-- (classic_era 1.15.9.70576). Both are also used elsewhere in Dawnward.
-	if call(UnitIsAFK, "player") then reasons[#reasons + 1] = "away" end
+	if ns.Compat.IsAway() then reasons[#reasons + 1] = "away" end
 	local inInstance, instanceType = call(IsInInstance)
+	inInstance, instanceType = ns.Compat.Plain(inInstance), ns.Compat.Plain(instanceType)
 	if inInstance and (instanceType == "party" or instanceType == "raid") then
 		reasons[#reasons + 1] = "instance"
 	end
@@ -93,10 +96,13 @@ local function retryAfterCooldown(ctx, due, now)
 		return
 	end
 	retryAt = due
-	C_Timer.After(math.max(1, due - now + 1), function()
+	-- Without a client timer the moment waits for the next calm event instead.
+	if not ns.Compat.After(math.max(1, due - now + 1), function()
 		retryAt = nil
 		SafeTime.Run(ctx)
-	end)
+	end) then
+		retryAt = nil
+	end
 end
 
 --- Why no card can appear now (simulation, read-only, or SafeTime.Reasons),
@@ -217,7 +223,10 @@ function SafeTime.Schedule(ctx, delay)
 		return
 	end
 	scheduled = true
-	C_Timer.After(delay or SafeTime.DELAY, function() SafeTime.Check(ctx) end)
+	if not ns.Compat.After(delay or SafeTime.DELAY, function() SafeTime.Check(ctx) end) then
+		-- No client timer: check now (Check only shows a card when it is safe).
+		SafeTime.Check(ctx)
+	end
 end
 
 SafeTime.TRIGGERS = {

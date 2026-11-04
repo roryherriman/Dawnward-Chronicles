@@ -427,6 +427,16 @@ function Adapter.ApplySetters(env, section, calls, expectedProfileId)
 	if status.error or not status.loaded or not VersionProfiles.Get(status.version).tiers.publicSetters then
 		return nil, "Dawnward has not checked Total RP 3's setters for this version"
 	end
+	-- A setter whose stored value differs from what it was given in this
+	-- version (3.5.4's SetCustomIcon) could never read back: refused here
+	-- as well as in the plan (VersionProfiles readOnlyRows).
+	local blocked = VersionProfiles.Get(status.version).blockedSetters
+	for _, c in ipairs(calls or {}) do
+		if blocked[c.setter] then
+			return nil, "Total RP 3 " .. tostring(status.version) .. "'s " .. tostring(c.setter)
+				.. " does not store what it is given, so Dawnward does not use it"
+		end
+	end
 	local ok, result, err = pcall(function()
 		local player, user = livePlayer(env)
 		if not player then
