@@ -31,6 +31,10 @@
 -- ID, so a relog, a /reload or a repeated event cannot record it twice.
 -- Character context: UnitLevel, UnitClass, UnitRace, UnitFactionGroup.
 -- Nothing here parses chat text or the combat log.
+--
+-- WoW Forever 1.60.1 (camelot) has no GetQuestLogTitle, GetNumFactions,
+-- GetFactionInfo or C_QuestLog.GetQuestInfo; Platform/Compat.lua uses its
+-- C_QuestLog and C_Reputation replacements there (docs/COMPATIBILITY.md).
 local _, ns = ...
 local Actions, Events = ns.Actions, ns.Events
 
@@ -39,20 +43,15 @@ ns.Observers = Observers
 
 local pendingQuest -- details cached at QUEST_COMPLETE, used at QUEST_TURNED_IN
 
--- Calls a client function safely, passing every return value through
--- (GetFactionInfo returns the faction ID as its 14th value).
-local function results(ok, ...)
-	if ok then
-		return ...
-	end
-	return nil
-end
+-- Client calls go through Platform/Compat.lua: errors, missing functions
+-- and (on Forever) secret values all read as nil.
+local Compat = ns.Compat
+local call, plain = Compat.Call, Compat.Plain
 
-local function call(fn, ...)
-	if type(fn) ~= "function" then
-		return nil
-	end
-	return results(pcall(fn, ...))
+-- A client token (class file, race file, faction group): text or nil.
+local function token(v)
+	v = plain(v)
+	return type(v) == "string" and v ~= "" and v or nil
 end
 
 --- Current context: zone, subzone, level and the client's class, race and
@@ -62,38 +61,23 @@ function Observers.Context()
 	local _, classToken = call(UnitClass, "player")
 	local _, raceToken = call(UnitRace, "player")
 	local faction = call(UnitFactionGroup, "player")
+	local level = plain(call(UnitLevel, "player"))
 	return {
-		zone = ns.Places.Bare(zone), subzone = ns.Places.Bare(subzone), level = call(UnitLevel, "player"),
-		class = classToken, race = raceToken, faction = faction,
+		zone = ns.Places.Bare(zone), subzone = ns.Places.Bare(subzone),
+		level = type(level) == "number" and level or nil,
+		class = token(classToken), race = token(raceToken), faction = token(faction),
 	}
 end
 
-local function questLevel(questId)
-	local index = call(GetQuestLogIndexByID, questId)
-	if type(index) == "number" and index > 0 then
-		local _, level = call(GetQuestLogTitle, index)
-		if type(level) == "number" and level > 0 then
-			return level
-		end
-	end
-	return nil
-end
-
-local function questTitle(questId)
-	if type(C_QuestLog) == "table" then
-		local title = call(C_QuestLog.GetQuestInfo, questId)
-		if type(title) == "string" and title ~= "" then
-			return title
-		end
-	end
-	return nil
-end
+-- Quest level and title: Classic Era's quest log functions, or Forever's
+-- C_QuestLog replacements (Platform/Compat.lua).
+local questLevel, questTitle = Compat.QuestLevel, Compat.QuestTitle
 
 Observers.HANDLERS = {
 	QUEST_COMPLETE = function()
-		local id = call(GetQuestID)
+		local id = plain(call(GetQuestID))
 		if type(id) == "number" and id > 0 then
-			local title = call(GetTitleText)
+			local title = plain(call(GetTitleText))
 			pendingQuest = { questId = id, title = type(title) == "string" and title ~= "" and title or nil,
 				questLevel = questLevel(id) }
 		end
@@ -129,24 +113,19 @@ Observers.HANDLERS = {
 }
 
 --- Reputation standings as listed by the client (factions under a collapsed
--- header are not listed, and are left unchanged).
+-- header are not listed, and are left unchanged): Classic Era's
+-- GetFactionInfo, or Forever's C_Reputation (Platform/Compat.lua). An empty
+-- list when the client has neither, which changes no snapshot.
 function Observers.ReadFactions()
-	local out = {}
-	local n = call(GetNumFactions) or 0
-	for i = 1, n do
-		local name, _, standing, _, _, _, _, _, isHeader, _, hasRep, _, _, factionId = call(GetFactionInfo, i)
-		if name and type(factionId) == "number" and type(standing) == "number" and (not isHeader or hasRep) then
-			out[#out + 1] = { id = factionId, name = name, standing = standing }
-		end
-	end
-	return out
+	return Compat.ReadFactions()
 end
 
 --- The guild, if the reading is conclusive: { name, rank }, false (not in a
 -- guild), or nil (unknown yet, e.g. guild data still loading at login).
 function Observers.ReadGuild()
-	local inGuild = call(IsInGuild)
+	local inGuild = plain(call(IsInGuild))
 	local name, rank = call(GetGuildInfo, "player")
+	name, rank = plain(name), plain(rank)
 	if type(name) == "string" and name ~= "" then
 		return { name = name, rank = rank }
 	end
@@ -167,7 +146,7 @@ local areaNames = {} -- AreaTable ID -> the client's own name (C_Map.GetAreaInfo
 
 local function areaName(id)
 	if areaNames[id] == nil then
-		local name = type(C_Map) == "table" and call(C_Map.GetAreaInfo, id) or nil
+		local name = plain(call(Compat.API("C_Map.GetAreaInfo"), id))
 		areaNames[id] = type(name) == "string" and name or false
 	end
 	return areaNames[id] or nil
@@ -178,8 +157,15 @@ local mapInfos = {} -- uiMapID -> { name, mapType } (C_Map.GetMapInfo), per sess
 local function mapInfo(id)
 	if not id then return nil end
 	if mapInfos[id] == nil then
-		local info = type(C_Map) == "table" and call(C_Map.GetMapInfo, id) or nil
-		mapInfos[id] = type(info) == "table" and { name = info.name, mapType = info.mapType } or false
+		-- A malformed reply (not a table, or fields of the wrong type) reads as no information.
+		local info = call(Compat.API("C_Map.GetMapInfo"), id)
+		if type(info) == "table" then
+			local name, mapType = plain(info.name), plain(info.mapType)
+			mapInfos[id] = { name = type(name) == "string" and name or nil,
+				mapType = type(mapType) == "number" and mapType or nil }
+		else
+			mapInfos[id] = false
+		end
 	end
 	return mapInfos[id] or nil
 end
@@ -195,7 +181,7 @@ function Observers.Location()
 		clientId = ns.Detect.Client(_G).id
 	end
 	data.client = clientId
-	local mapId = type(C_Map) == "table" and call(C_Map.GetBestMapForUnit, "player") or nil
+	local mapId = plain(call(Compat.API("C_Map.GetBestMapForUnit"), "player"))
 	data.mapId = type(mapId) == "number" and mapId or nil
 	local rawZone = data.zone
 	local interior
@@ -212,8 +198,10 @@ local function observeLocation(ctx, onQueued)
 		return
 	end
 	local inInstance, instanceType = call(IsInInstance)
+	inInstance, instanceType = plain(inInstance), plain(instanceType)
 	if inInstance and (instanceType == "party" or instanceType == "raid") then
-		data.instanceName = call(GetInstanceInfo) or data.zone
+		local instanceName = plain(call(GetInstanceInfo))
+		data.instanceName = type(instanceName) == "string" and instanceName ~= "" and instanceName or data.zone
 		data.instanceType = instanceType
 		data.source = "ZONE_CHANGED_NEW_AREA"
 		local record, reaction, outcome = Actions.RecordRealEvent(ctx, "instance", data)

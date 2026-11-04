@@ -13,15 +13,17 @@ local function chatPrint(line)
 end
 
 local function addonMetadata(field)
-	local get = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-	return get and get(addonName, field) or nil
+	return ns.Compat.AddOnMetadata(addonName, field)
 end
 
 local function characterKey()
-	local name = UnitName("player") or "Unknown"
-	local realm = GetNormalizedRealmName and GetNormalizedRealmName()
-	if not realm or realm == "" then
-		realm = (GetRealmName() or ""):gsub("[%s%-]", "")
+	local Compat = ns.Compat
+	local name = Compat.Plain(Compat.Call(UnitName, "player"))
+	if type(name) ~= "string" or name == "" then name = "Unknown" end
+	local realm = Compat.Plain(Compat.Call(GetNormalizedRealmName))
+	if type(realm) ~= "string" or realm == "" then
+		realm = Compat.Plain(Compat.Call(GetRealmName))
+		realm = (type(realm) == "string" and realm or ""):gsub("[%s%-]", "")
 	end
 	return name .. "-" .. realm
 end
@@ -58,7 +60,9 @@ local function buildContext()
 		-- The narrative clock (Core/NarrativeClock.lua, Platform/PlayClock.lua).
 		monotonic = ns.PlayClock.Monotonic,
 		narrative = ns.NarrativeClock.NewSession(),
-		client = Detect.Client(_G),
+		client = Detect.Client(_G, addonName),
+		-- What this client lacks (Platform/Compat.lua), for /dawnward status; nil when nothing.
+		compatSummary = ns.Compat.Summary,
 		trp3Status = function()
 			return TRP3Status.Read(_G)
 		end,
@@ -109,6 +113,16 @@ local function announceLoad()
 	end
 	if TRP3Bridge.readOnly then
 		chatPrint("Total RP 3 sync is paused: " .. TRP3Bridge.readOnly .. ". Its saved data was left untouched.")
+	end
+	-- Client compatibility (Platform/Detect.lua, Platform/Compat.lua): said
+	-- once at login, only when something is off; nothing stops loading.
+	local targetWarning = Detect.TargetWarning(ns.ctx and ns.ctx.client)
+	if targetWarning then
+		chatPrint(targetWarning)
+	end
+	local missing = ns.Compat.Summary()
+	if missing then
+		chatPrint(missing .. ". See /dawnward status.")
 	end
 end
 

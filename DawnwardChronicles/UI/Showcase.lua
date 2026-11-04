@@ -11,7 +11,7 @@
 -- the player wrote, as the mockup.
 --
 -- Client APIs (checked against the Classic Era 1.15.9.70576 UI source,
--- /home/user/gethe/wow-ui-source):
+-- Gethe/wow-ui-source, branch classic_era):
 --   SetPortraitTexture(texture, "player")   the game's round portrait, as on
 --                                           unit frames
 --   CreateFrame("PlayerModel")              the character model frame Blizzard's

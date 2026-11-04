@@ -22,7 +22,7 @@ end
 -- story. opts.theme: the character's theme before the window first opens.
 function Sweep.Sample(opts)
 	opts = opts or {}
-	local mock, env, ns = Boot.Start()
+	local mock, env, ns = Boot.Start(opts.boot) -- opts.boot: Boot options (e.g. the Forever mock)
 	if opts.theme then ns.Actions.SetTheme(ns.ctx, opts.theme) end
 	for _, line in ipairs({
 		"set name Aelin Brightwater", "set title Keeper of the Road", "set faith The Light",
