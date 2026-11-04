@@ -180,6 +180,9 @@ def main():
     print("\n== Zone Atlas tools")
     results.append(("atlas tools", run([sys.executable, "tools/atlas/client_db.py", "selftest"])))
 
+    print("\n== Packaging (both clients, verified)")
+    results.append(("packaging", run([sys.executable, "tools/package.py", "--allow-dirty"])))
+
     print("\n== Summary")
     for name, ok in results:
         print(f"  {'ok  ' if ok else 'FAIL'} {name}")

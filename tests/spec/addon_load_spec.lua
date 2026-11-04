@@ -134,6 +134,24 @@ return function(t, expect)
 			expect.deepEqual(fake.snapshot(), before)
 		end)
 
+		t:it("shows the release name a package declares, and its package version", function()
+			local mock = boot({ metadata = { Version = "1.0.0-beta", ["X-Display-Version"] = "1.0.0 Beta",
+				["X-Dawnward-Target"] = "forever" } })
+			login(mock)
+			local out = mock.Slash("status")
+			expect.truthy(out:find("Dawnward Chronicles 1.0.0 Beta", 1, true), out)
+			expect.truthy(out:find("Package version: 1.0.0-beta", 1, true), out)
+			-- Without a release name, the version is shown once.
+			local plain = boot({})
+			login(plain)
+			local line = plain.Slash("status")
+			expect.truthy(line:find("Dawnward Chronicles 0.10.3-dev", 1, true), line)
+			expect.falsy(line:find("Package version", 1, true))
+			-- A release build has no developer commands.
+			expect.falsy(mock.Slash("dev setup status"):find("Current wizard version", 1, true))
+			expect.truthy(plain.Slash("dev setup status"):find("Current wizard version", 1, true))
+		end)
+
 		t:it("labels a Forever interface as provisional", function()
 			local mock = boot({ interface = 16001, project = 2 })
 			login(mock)

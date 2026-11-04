@@ -202,7 +202,10 @@ handlers.fields = function(ctx)
 end
 
 handlers.status = function(ctx)
-	out(ctx, "Dawnward Chronicles " .. tostring(ctx.version) .. " - using " .. modeLabel(ctx))
+	out(ctx, "Dawnward Chronicles " .. tostring(ctx.displayVersion or ctx.version) .. " - using " .. modeLabel(ctx))
+	if ctx.displayVersion and ctx.displayVersion ~= ctx.version then
+		out(ctx, "Package version: " .. tostring(ctx.version))
+	end
 	if ctx.client then
 		out(ctx, string.format("Client: %s (interface %s)%s", ctx.client.label, tostring(ctx.client.interface),
 			ctx.client.verified and "" or " - not yet verified for this addon"))

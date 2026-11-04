@@ -54,6 +54,11 @@ local function buildContext()
 		now = time,
 		print = chatPrint,
 		version = addonMetadata("Version") or "?",
+		-- The release name a package declares (packaging, tools/package.py):
+		-- "1.0.0 Beta" for the Forever package; the version otherwise.
+		displayVersion = addonMetadata("X-Display-Version") or addonMetadata("Version") or "?",
+		-- Which client the package was built for ("classic" or "forever").
+		packageTarget = addonMetadata("X-Dawnward-Target"),
 		formatDate = ns.Widgets.FormatDate,
 		-- The narrative clock (Core/NarrativeClock.lua, Platform/PlayClock.lua).
 		monotonic = ns.PlayClock.Monotonic,

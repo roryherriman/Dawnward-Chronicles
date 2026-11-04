@@ -345,6 +345,9 @@ function Mock.new(opts)
 		},
 		C_AddOns = {
 			GetAddOnMetadata = function(name, field)
+				if name == "DawnwardChronicles" and opts.metadata and opts.metadata[field] ~= nil then
+					return opts.metadata[field]
+				end
 				if name == "DawnwardChronicles" and field == "Version" then
 					return opts.version or "0.10.3-dev"
 				end
