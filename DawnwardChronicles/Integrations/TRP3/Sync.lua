@@ -71,8 +71,9 @@ Sync.FEATURES = {
 	traits = {
 		section = "characteristics",
 		label = "personality traits",
-		plan = function(section, record, public)
-			return TraitPlan.Plan(section, record, TraitPlan.Desired(public))
+		plan = function(section, record, public, extra)
+			local opts = extra and extra.traitOptions
+			return TraitPlan.Plan(section, record, TraitPlan.Desired(public, opts), nil, opts)
 		end,
 		planned = "characteristics",
 	},
@@ -319,14 +320,25 @@ end
 
 -- The ownership policies a fields plan uses: the entry's, or every field
 -- "dawnward" when planning a release (remove everything Dawnward owns).
-local function fieldPolicies(entry)
+-- readOnly ({ [id] = reason }, VersionProfiles readOnlyRows): rows this
+-- Total RP 3 version must not be written through; they plan as "off" (left
+-- exactly as they are, Dawnward's earlier record kept).
+local function fieldPolicies(entry, readOnly)
 	local out = {}
 	for _, plan in pairs(ROW_FEATURES) do
 		for _, m in ipairs(plan.MAPPINGS) do
 			out[m.id] = Ledger.Policy(entry, m.id)
+			if readOnly and readOnly[m.id] and out[m.id] == "dawnward" then
+				out[m.id] = "off"
+			end
 		end
 	end
 	return out
+end
+
+-- The version profile of the Total RP 3 a run sees (the probe's, else read).
+local function versionOf(deps, probe)
+	return (probe and probe.versionProfile) or VersionProfiles.ForEnv(deps.env)
 end
 
 --- Works out what a run would do, without writing anything.
@@ -371,7 +383,8 @@ function Sync.Check(deps, feature, publicOverride, fieldScope)
 		return result
 	end
 	result.section = Util.DeepCopy(section)
-	local policies = fieldPolicies(entry)
+	local vp = versionOf(deps, probe)
+	local policies = fieldPolicies(entry, vp.readOnlyRows)
 	if fieldScope then
 		for id in pairs(policies) do
 			if not fieldScope[id] then policies[id] = "off" end
@@ -383,10 +396,21 @@ function Sync.Check(deps, feature, publicOverride, fieldScope)
 	local plan = spec.plan(section, record[feature], public,
 		{ policies = policies, paused = record.fieldConflicts, adopt = adopt,
 			defaults = FieldPlan.GameDefaults(deps.env), names = MiscPlan.PresetNames(deps.env),
-			icons = MiscPlan.PresetIcons(deps.env) })
+			icons = MiscPlan.PresetIcons(deps.env), traitOptions = TraitPlan.Options(vp.adapters) })
 	result.plan = plan
 	result.adopt = adopt
 	result.notes = {}
+	-- Rows the player handed to Dawnward that this Total RP 3 version keeps
+	-- read-only (VersionProfiles readOnlyRows): said, never written.
+	local rowPlan = ROW_FEATURES[feature]
+	if rowPlan then
+		for _, m in ipairs(rowPlan.MAPPINGS) do
+			local why = vp.readOnlyRows[m.id]
+			if why and Ledger.Policy(entry, m.id) == "dawnward" and (not fieldScope or fieldScope[m.id]) then
+				result.notes[#result.notes + 1] = why
+			end
+		end
+	end
 	if ROW_FEATURES[feature] then
 		for _, row in ipairs(plan.rows) do
 			if row.state == "conflict" then
@@ -1243,7 +1267,8 @@ local function ownOnly(deps, inputs)
 			data = stripped
 		end
 		if featureOn(entry, feature) then
-			local p = plan.Plan(data, nil, plan.Desired(public), fieldPolicies(entry), {})
+			local p = plan.Plan(data, nil, plan.Desired(public),
+				fieldPolicies(entry, versionOf(deps, inputs.probe).readOnlyRows), {})
 			data, newOwners[feature] = p[sectionKey], p.record
 			for id, reason in pairs(p.conflicts) do
 				conflicts = conflicts or {}
@@ -1297,20 +1322,22 @@ local function ownOnly(deps, inputs)
 		data = stripped
 	end
 	if featureOn(entry, "traits") then
-		local plan = TraitPlan.Plan(data, nil, TraitPlan.Desired(public))
+		local opts = TraitPlan.Options(versionOf(deps, inputs.probe).adapters)
+		local plan = TraitPlan.Plan(data, nil, TraitPlan.Desired(public, opts), nil, opts)
 		if plan.action ~= "conflict" then
 			data, newOwners.traits = plan.characteristics, plan.record
 		end
 	end
 	if featureOn(entry, "fields") then
 		local desired, unwritable = FieldPlan.Desired(public)
-		local plan = FieldPlan.Plan(data, nil, desired, fieldPolicies(entry), {}, unwritable,
-			{ defaults = FieldPlan.GameDefaults(deps.env) })
+		local plan = FieldPlan.Plan(data, nil, desired, fieldPolicies(entry, versionOf(deps, inputs.probe).readOnlyRows),
+			{}, unwritable, { defaults = FieldPlan.GameDefaults(deps.env) })
 		data, newOwners.fields, conflicts = plan.characteristics, plan.record, plan.conflicts
 	end
 	if featureOn(entry, "misc") then
 		local desired, unwritable = MiscPlan.Desired(public)
-		local plan = MiscPlan.Plan(data, nil, desired, fieldPolicies(entry), {}, unwritable,
+		local plan = MiscPlan.Plan(data, nil, desired, fieldPolicies(entry, versionOf(deps, inputs.probe).readOnlyRows),
+			{}, unwritable,
 			{ names = MiscPlan.PresetNames(deps.env), icons = MiscPlan.PresetIcons(deps.env) })
 		data, newOwners.misc = plan.characteristics, plan.record
 		for id, reason in pairs(plan.conflicts) do

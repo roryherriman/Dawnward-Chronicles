@@ -69,13 +69,24 @@ end
 -- (TRP3_API.GetMiscTypeInfo(type).icon: the preset's icon, or the custom
 -- type's TRP3_InterfaceIcons.Default). Read only; an id is missing when the
 -- icon cannot be read (TRP3 then shows the type's icon by itself).
+--
+-- Total RP 3 3.5.x (VersionProfiles adapters.iconStorage = "id") gives
+-- these icons as file IDs (numbers: TRP3_InterfaceIconIDs, 3.5.4
+-- Core/ProfileUtil.lua 28-98), and its editor stores them as
+-- tostring(id) (RegisterCharacteristics.lua 610-617 miscAdd ->
+-- TRP3_IconUtil.SerializeIcon); Dawnward stores the same string. A number
+-- is never accepted for a version that stores names.
 function MiscPlan.PresetIcons(env)
 	local out = {}
+	local ids = ns.TRP3VersionProfiles.Adapters(env).iconStorage == "id"
 	for _, m in ipairs(MiscPlan.MAPPINGS) do
 		local ok, info = pcall(function()
 			return env.TRP3_API.GetMiscTypeInfo(m.type or MiscPlan.CUSTOM)
 		end)
 		local icon = ok and type(info) == "table" and info.icon
+		if ids and type(icon) == "number" and icon > 0 and icon == math.floor(icon) and icon < 2 ^ 31 then
+			icon = string.format("%d", icon)
+		end
 		if type(icon) == "string" and icon:match("^[%w_%-]+$") then
 			out[m.id] = icon
 		end

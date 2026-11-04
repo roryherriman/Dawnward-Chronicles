@@ -4,7 +4,7 @@
 
 The sync is **built and tested against mocks only (L2)**:
 - It is **off by default**. A character connects once (setup's Total RP 3 stage, or Settings > Total RP 3 > Overview > **Connect everything…**), or authorises single mappings on the Mappings tab, or with `/dawnward trp3 enable about|traits|glance confirm` and `/dawnward trp3 field <name> dawnward confirm`.
-- It is **allowlisted for TRP3 3.4.1 only**.
+- It is **allowlisted for TRP3 3.4.1 and 3.5.4** (3.5.4 provisionally, as the substitute for the build WoW Forever runs; see [Total RP 3 3.5.x (WoW Forever)](#total-rp-3-35x-wow-forever)). Every other version is read-only.
 - **Nothing in this document about sync has been validated in game yet.** The checklist is in [TESTING.md](TESTING.md#v03-in-game-checklist-l3).
 
 Findings come from reading the TRP3 **3.4.1** Lua source (tag `3.4.1`, commit `4c25cb0`), compared with upstream `main`. TRP3 is Apache-2.0 and is not included in this repository.
@@ -117,6 +117,96 @@ A draft proposal is in [planning/living-character/trp3-upstream-proposal.md](pla
   - `HI` is the T3 history.
   - Traits are sent as `[trait value=V2/20 …]`.
 - So after an outside write, firing the event exactly as TRP3's setters do is what keeps MSP users up to date.
+
+## Total RP 3 3.5.x (WoW Forever)
+
+WoW Forever is a Mainline-based client (game type `camelot`). The Total RP 3 build installed on a Forever client is **not known yet**; the closest available substitute is upstream **3.5.4** (tag `3.5.4`, commit `2c921b0`), whose `totalRP3.toc` declares `## Interface: 120105, 16001` (line 1; 3.4.1 declared `120100, 11509, 20506, 50504`) and loads `Resources\Forever\*` with `[AllowLoadGameType forever]` (lines 74-81). Everything below is **provisional (substitute: upstream 3.5.4)**. Line numbers are 3.4.1 → 3.5.4.
+
+### Version gating
+
+- `VersionProfiles.KNOWN` lists exactly **3.4.1** and **3.5.4**. Only those two can be written to (`Integrations/TRP3/VersionProfiles.lua`).
+- Any other version is read-only: status and the copy-and-paste text only, no opt-in, no setter, no profile tool, no `ReadAudited`. This includes other 3.5.x builds ("3.5.3", "3.5.5"): `VersionProfiles.FAMILIES["3.5"]` labels them "a 3.5.x build Dawnward has not audited (only 3.5.4 of the 3.5 series has been audited) - status only, no writes". It also includes a source checkout that reports `@project-version@`. **L2** (`tests/spec/trp3_354_spec.lua`).
+- `/dawnward trp3 diagnose` prints the version profile, says "this Total RP 3 version is read-only for Dawnward: nothing is written to it" for an unknown version, lists each row the version keeps read-only, and prints `read-only:` notes under the affected feature (`Commands.lua` `TRP3Commands.VersionLines`). **L2**
+- 3.5.4 has `verified = nil`. No runtime pass is claimed.
+
+### Source diff, per area (3.4.1 vs 3.5.4)
+
+| Area | What Dawnward reads or writes | 3.4.1 | 3.5.4 | Result |
+|---|---|---|---|---|
+| Version string | `GetAddOnMetadata("totalRP3", "Version")` | toc 4 `@project-version@` (packager) | toc 4 same | unchanged |
+| Public API entry | `AddOn_TotalRP3.Player.GetCurrentUser` | `Core/Player.lua` | `Core/Player.lua` 514-519 | unchanged |
+| Profile identity | `GetProfileID`, `GetProfileName`, `IsProfileDefault`, `GetCharacterID`, `GetProfile` | `Player.lua` 372-397 | 368-393 | unchanged |
+| Character ID format | `TRP3_API.globals.player_id`, `TRP3_Characters[id]` | `Globals.lua` 97-100 (`name-realm`) | `Globals.lua` 101-102 via `TRP3_NameUtil.GetQualifiedName`; realm-less `"Given Family"` when `RegionalUniqueNamesEnabled()` (`NameUtil.lua` 93-136, 284-305) | **changed** (format only; Dawnward compares by value) |
+| Setters | `SetCurrentlyText`, `SetOutOfCharacterInfo`, `SetRoleplayStatus`, `SetWalkup`, `SetCustomClassColor` | `Player.lua` 419-490 | 415-486 | unchanged |
+| Profile icon setter | `SetCustomIcon` | `Player.lua` 462: stores `icon` | 458-460: stores `TRP3_IconUtil.SerializeIcon(icon)` | **changed** |
+| Icon storage | IC, LI, RI, PE IC, About IC | bare names (`TRP3_InterfaceIcons`) | `SerializeIcon` (`Core/IconUtil.lua` 39-56): a resolvable name or ID becomes `tostring(fileID)`, anything else is kept; `TRP3_InterfaceIcons` removed, `TRP3_InterfaceIconIDs` (numbers) added (`Resources/InterfaceIcons.lua` 9-42) | **changed** / `TRP3_InterfaceIcons` **removed** |
+| Icon display | names on traits, glance, About | `UI/IconTemplates.lua` 9 (LibRPMedia) | `IconTemplates.lua` 7 → `IconUtil.SetTextureToIcon` 61-76: an unresolvable icon shows the default question mark (no error) | changed (still accepts names) |
+| About layout | `{ v, TE, BK, MU, T1, T2, T3 }` | `RegisterAbout.lua` 95 | 95 | unchanged |
+| About save | wipe, copy, `incrementNumber(v, 2)`, `REGISTER_DATA_UPDATED(player_id, profileID, "about")` | 692-704 | 706-718 | unchanged |
+| About editor guard | `TRP3_RegisterAbout_AboutPanel_Edit`, `TRP3_RegisterAbout`, page `player_main` | `RegisterUIAbout.xml` 191, `RegisterUIMain.xml` 51 | same lines (XML diff: schema URL and one tooltip template only) | unchanged |
+| Characteristics save | as About, `"characteristics"` | `RegisterCharacteristics.lua` 1063-1076 | 1065-1078 | unchanged |
+| Characteristics editor guard | `TRP3_RegisterCharact_Edit_NamePanel`, `TRP3_RegisterCharact` | `RegisterCharacteristics.lua` 1092/1116, `RegisterUIMain.xml` 45 | 1094/1118, 45 | unchanged |
+| Profile fields | FT, RA, CL, AG, BP, FN, LN, TI, EC, HE, WE, RE, RS (top-level strings, RS number) | `saveInDraft` | same | unchanged |
+| New profile names | default FN / LN | `RegisterCharacteristics.lua` 48 `FN = Globals.player` | 48-50 `FN = player_given_name`, `LN = player_family_name` (`Globals.lua` 49-51) | **changed** |
+| Personality traits (PS) | `{ID, V2}` / `{LT, RT, LI, RI, V2}`, V2 0..20 | `Globals.lua` 68-69 | 71-72 | unchanged |
+| New custom trait icons | placeholder | `RegisterCharacteristics.lua` 690-692 `"INV_Misc_QuestionMark"` | 697-700 `SerializeIcon(TRP3_InterfaceIconIDs.Default)` = `"134400"` | **changed** |
+| Trait icons TRP3 lists | single-candidate icons | `InterfaceIcons.lua` (names) | `InterfaceIcons.lua` 52, 56, 104-105, 189, 192, 206 (`GetFirstValidIcon`, single candidate) | changed (evidence base) |
+| Additional information (MI) | `{ ID, NA, VA, IC }`, `GetMiscTypeInfo`, `MiscInfoType` | `ProfileUtil.lua` 9-21, 157 (icon a name) | 9-21, 157-160 (icon a number); `miscAdd` 610-617 stores `SerializeIcon(IC)` | **changed** (icon type) |
+| Misc section / At First Glance | `{ v, PE["1".."5"] = { IC, AC, TI, TX }, ST }`, editor `TRP3_AtFirstGlanceEditor` hidden | `RegisterMisc.lua` 18, 332-357; `RegisterUIMisc.xml` 239 | same lines; `applyPeekSlot` 346 stores `SerializeIcon(ic)` | changed (icon only) |
+| RP style (ST) | numbers by field id | `RegisterMisc.lua` | same | unchanged |
+| Character section | `{ v, RP, WU, CU, CO }` | `Dashboard.lua` 30 | 30 | unchanged |
+| Events | `REGISTER_DATA_UPDATED`, `REGISTER_PROFILES_LOADED`, `TRP3_API.RegisterCallback(TRP3_Addon, ...)` | `Core/Events.lua` 31, 34; `Core/Objects/Callback.lua` 57 | identical files | unchanged |
+| MSP refresh | rebuild on `REGISTER_DATA_UPDATED` with the player's unit ID | `RegisterMSP.lua` 662 | 676-685 (same condition; icons now resolved to IDs, `-0` normalised) | unchanged for Dawnward |
+| Profile tools | `getProfiles`, `isProfileNameAvailable`, `createProfile`, `selectProfile` | `Core/Profiles.lua` 76, 101, 144, 193 | 77, 102, 145, 194 | unchanged; TRP3's own "Create profile" button now opens `openCreateProfileFlow` (571-575, **new**) instead of these calls (`RegisterMain.lua` 750-753) |
+| Navigation | `navigation.page.getCurrentPageID/getCurrentContext`, `openMainFrame`, `menu.selectMenu("main_12_player_character")` | `MainStructure.lua` 165, 246, 251, 253 | 171, 252, 257, 259; `RegisterMain.lua` 773 | unchanged |
+| Version rule | `Utils.math.incrementNumber(v, 2)` | `Utils.lua` 424-431 | 380-387 | unchanged |
+| Import/export | not used by Dawnward (it reads live tables only) | `ProfileUtil.lua` Ace/PEM | PEM first, adds a `Flavor` header ("Forever" for `Camelot`, 229-238) and refuses a different flavour on import | changed, **not used** |
+| Forever-only code | none touched by Dawnward | - | `Resources/Forever/RaceIconAtlases.lua`, `InterfaceSounds.lua`; `Globals.lua` 78, 81 (`WOW_PROJECT_CAMELOT`); `WorldMapButton.lua` 109 | new, not used |
+
+Summary: **unchanged** - layouts of every section Dawnward writes, both save paths, the version rule, editor frames and page IDs, events, MSP trigger, profile functions, every setter but one. **Changed** - icon storage (everywhere TRP3 itself writes an icon), `SetCustomIcon`, the new-trait placeholder, `GetMiscTypeInfo().icon`'s type, new-profile names, character ID format, TRP3's own create-profile button, import/export format. **Removed** - `TRP3_InterfaceIcons` (Dawnward only cites it in comments). **New** - `TRP3_IconUtil`, `TRP3_InterfaceIconIDs`, `TRP3_NameUtil`, `openCreateProfileFlow`, Forever resources.
+
+### Adapters for 3.5.x
+
+| Change | Adapter |
+|---|---|
+| `SetCustomIcon` stores a file ID, so a write could never read back | `readOnlyRows.icon` (the "Profile icon" row plans as off, with a `read-only:` note) and `blockedSetters.SetCustomIcon` (`Adapter.ApplySetters` refuses it) |
+| New-trait placeholder `"134400"` | `TraitPlan.PLACEHOLDER_SETS.id`: both the name and `"134400"` count as TRP3's placeholder; on 3.4.1 `"134400"` stays the player's |
+| Trait icons unproven on Forever | `TraitPlan.VERIFIED_354`: only the six icons 3.5.4 lists as a single candidate are written; the others fall back to `spell_arcane_mindmastery` |
+| `GetMiscTypeInfo().icon` is a number | `MiscPlan.PresetIcons` stores `tostring(id)`, as `miscAdd` does; a number is never accepted on a version that stores names |
+| New profile FN/LN from the given and family name | `FieldPlan.GameDefaults` reads `TRP3_API.globals.player_given_name` / `player_family_name` as TRP3's own defaults (replaceable, LN never filled back) |
+| Re-applied glance slot gets a serialised icon | no adapter: Dawnward compares exactly, so the player's Apply becomes a conflict (never overwritten) |
+
+Ownership, conflict, backup, read-back and rollback are the same code for both versions.
+
+### Feature matrix (version-pinned)
+
+Evidence levels: **Static** (source, file:line above), **L2 mocked / automated** (`tests/spec/trp3_354_spec.lua` against `tests/fakes/trp3_354.lua`), **Pending Live Forever Verification** (needs the game). Nothing here has been run on a Forever client.
+
+| Feature | 3.4.1 | 3.5.4 (provisional substitute) | Evidence for 3.5.4 | In-game check on Forever |
+|---|---|---|---|---|
+| Version detection | write-enabled | write-enabled; other 3.5.x read-only | Static, L2 | `/dump C_AddOns.GetAddOnMetadata("totalRP3","Version")`; `/dawnward trp3 diagnose` shows the version profile line |
+| About page (T1/T2/T3) | write | write | Static, L2 | Write a public overview, `/dawnward trp3 sync`; open TRP3 > your profile > About: text present, `/reload` keeps it; a second client sees it |
+| About editor guard | yes | yes | Static, L2 | Open About in edit mode, change a Dawnward value, `/dawnward trp3 sync`: "waiting" and nothing written; Cancel, sync writes |
+| Personality traits | write | write, 3.5.x icon list | Static, L2 | Traits show Dawnward's words and values; icons at both ends are real icons (not green squares, not question marks) |
+| Trait endpoint icons | 12 icons | 6 proven + fallback | Static (single candidates), L2 | Open each Dawnward trait: courage, faith (right), sociability show distinct icons; record any missing; a green/blank square fails the check |
+| Placeholder replacement | name | name + `"134400"` | Static, L2 | Add a custom trait in TRP3, `/dump TRP3_API.profile.getPlayerCurrentProfile().player.characteristics.PS` shows `LI="134400"` |
+| Profile fields | write | write | Static, L2 | Set Age, sync, TRP3 shows it; edit it in TRP3: Dawnward pauses the field |
+| First/last name defaults | FN only | FN + LN | Static, L2 | `/dump TRP3_API.globals.player_given_name, TRP3_API.globals.player_family_name` on a new profile; whether Forever uses regional names |
+| Additional information (MI) | write | write (icon as ID string) | Static, L2 | Sync Pronouns: entry shows the Pronouns icon |
+| At First Glance | write | write | Static, L2 | Entries land in free slots only; Apply a Dawnward slot in TRP3, next sync reports a conflict |
+| Currently / OOC | write (setters) | write (setters) | Static, L2 | Set in Dawnward, sync, TRP3 toolbar shows it; nearby player sees it |
+| RP status / walk-up | write (setters) | write (setters) | Static, L2 | Toggle; TRP3 toolbar and tooltip agree |
+| Class colour | write (setter) | write (setter) | Static, L2 | Colour shows in TRP3 tooltip |
+| Profile icon | write (setter) | **read-only** | Static, L2 | none needed for Dawnward; diagnose shows `read-only on this version: icon` |
+| RP style | write | write | Static | Change one preference, sync, TRP3 shows it |
+| Profile create/select | yes | yes | Static, L2 (shared tests use 3.4.1 fake) | From the setup wizard on the default profile: create a profile; TRP3 > Profiles lists and selects it |
+| Hints (own vs other players) | yes | yes, also realm-less IDs | Static, L2 | `/dump TRP3_API.globals.player_id`; another player's update does not trigger a Dawnward sync |
+| Backup, read-back, rollback | yes | yes | L2 | `/dawnward trp3 rollback confirm` restores the previous text |
+| MSP (other RP addons) | rebuilds | rebuilds | Static | A MyRolePlay/XRP user sees the new description |
+| Missing / disabled / late TRP3 | read-only | read-only | L2 | Disable TRP3, `/reload`: Dawnward loads, diagnose says not loaded |
+| Unaudited version | read-only | read-only | L2 | n/a until another build is seen in game |
+
+Remaining risks: the Forever TRP3 build may not be 3.5.4 (then it is read-only until audited); LibRPMedia's icon data for Forever was not available here, so icon display is Pending Live Forever Verification; whether Forever enables regional unique names is unknown (`RegionalUniqueNamesEnabled` exists in the forever branch, e.g. `Blizzard_UnitPopupShared/UnitPopupShared.lua` 45, but its value is runtime state).
 
 ## The sync design (as built)
 

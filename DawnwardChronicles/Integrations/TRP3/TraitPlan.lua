@@ -87,33 +87,79 @@ TraitPlan.ICONS = {
 -- The verified icon for anything not on the list (never the question mark).
 TraitPlan.FALLBACK_ICON = "spell_arcane_mindmastery"
 
---- A verified icon: the name (lower case) when it is on the list, else the
--- fallback. Pure.
-function TraitPlan.SafeIcon(name)
-	if type(name) == "string" and TraitPlan.VERIFIED[name:lower()] then
+-- Total RP 3 3.5.x (VersionProfiles adapters.traitIcons = "trp354"): only
+-- icons that Total RP 3 3.5.4 lists as the ONLY candidate of one of its
+-- interface icons (Resources/InterfaceIcons.lua resolves each with
+-- GetFirstValidIcon, 13-28, and reports a missing one as an error), so
+-- every client 3.5.4 loads on (Mainline and Forever, totalRP3.toc 1) must
+-- have them. The other six ends have only an older-client candidate in
+-- 3.5.4, which proves nothing for Forever: they fall back to
+-- FALLBACK_ICON there until a live Forever check promotes them
+-- (docs/TRP3_INTEGRATION.md). Static evidence, 3.5.4 line numbers.
+TraitPlan.VERIFIED_354 = {
+	spell_shadow_brainwash = "ONLY InterfaceIcons.lua:189 TraitCautious",
+	ability_dualwield = "ONLY InterfaceIcons.lua:105 RelationUnfriendly",
+	ability_hunter_snipershot = "ONLY InterfaceIcons.lua:206 TraitVindictive",
+	ability_rogue_disguise = "ONLY InterfaceIcons.lua:104,192 RelationNone, TraitDeceitful",
+	achievement_guildperk_everybodysfriend = "ONLY InterfaceIcons.lua:56 PlayerScanIcon",
+	spell_arcane_mindmastery = "ONLY InterfaceIcons.lua:52 TraitSection",
+}
+
+-- Icon allowlists by VersionProfiles adapters.traitIcons.
+TraitPlan.ICON_SETS = { classic = TraitPlan.VERIFIED, trp354 = TraitPlan.VERIFIED_354 }
+
+-- What counts as TRP3's own new-trait placeholder, by VersionProfiles
+-- adapters.traitPlaceholders (keys lower case). 3.5.4's editor gives a new
+-- custom trait LI = RI = TRP3_IconUtil.SerializeIcon(TRP3_InterfaceIconIDs
+-- .Default) (RegisterCharacteristics.lua:697-700): the question mark's file
+-- ID as a string ("134400", Resources/InterfaceIcons.lua:7). Older traits
+-- keep the name.
+TraitPlan.PLACEHOLDER_SETS = {
+	name = { [TraitPlan.PLACEHOLDER:lower()] = true },
+	id = { [TraitPlan.PLACEHOLDER:lower()] = true, ["134400"] = true },
+}
+
+--- Options for a Total RP 3 version's adapters (VersionProfiles):
+-- { icons = allowlist, placeholders = set }. nil adapters: 3.4.1's.
+function TraitPlan.Options(adapters)
+	adapters = adapters or {}
+	return {
+		icons = TraitPlan.ICON_SETS[adapters.traitIcons] or TraitPlan.VERIFIED,
+		placeholders = TraitPlan.PLACEHOLDER_SETS[adapters.traitPlaceholders] or TraitPlan.PLACEHOLDER_SETS.name,
+	}
+end
+
+--- A verified icon: the name (lower case) when it is on the list (verified,
+-- default TraitPlan.VERIFIED), else the fallback. Pure.
+function TraitPlan.SafeIcon(name, verified)
+	verified = verified or TraitPlan.VERIFIED
+	if type(name) == "string" and verified[name:lower()] then
 		return name:lower()
 	end
 	return TraitPlan.FALLBACK_ICON
 end
 
---- An axis's icons: left, right (always verified ones).
-function TraitPlan.Icons(axisId)
+--- An axis's icons: left, right (always verified ones; verified as for
+-- SafeIcon).
+function TraitPlan.Icons(axisId, verified)
 	local icons = TraitPlan.ICONS[axisId] or {}
-	return TraitPlan.SafeIcon(icons.left), TraitPlan.SafeIcon(icons.right)
+	return TraitPlan.SafeIcon(icons.left, verified), TraitPlan.SafeIcon(icons.right, verified)
 end
 
 --- Whether an icon on a Dawnward trait may be replaced by Dawnward's: no
--- icon, TRP3's placeholder (any case; what Dawnward 0.10.1 wrote), or the
+-- icon, TRP3's placeholder (any case; what Dawnward 0.10.1 wrote; for 3.5.x
+-- also its file ID, placeholders = TraitPlan.PLACEHOLDER_SETS.id), or the
 -- icon Dawnward itself last wrote there (written, from the ledger). Any
 -- other icon is the player's choice in Total RP 3 and stays.
-function TraitPlan.Replaceable(current, written)
+function TraitPlan.Replaceable(current, written, placeholders)
 	if current == nil then
 		return true
 	end
 	if type(current) ~= "string" then
 		return false
 	end
-	return current:lower() == TraitPlan.PLACEHOLDER:lower() or (written ~= nil and current == written)
+	placeholders = placeholders or TraitPlan.PLACEHOLDER_SETS.name
+	return placeholders[current:lower()] == true or (written ~= nil and current == written)
 end
 
 --- Dawnward value (0 = left pole, 20 = right pole) to TRP3's V2.
@@ -132,15 +178,17 @@ function TraitPlan.FromTRP3(v2)
 end
 
 --- Desired owned traits from a public projection:
--- { [axisId] = { LT, RT, V2, LI, RI } } for public axes only.
-function TraitPlan.Desired(public)
+-- { [axisId] = { LT, RT, V2, LI, RI } } for public axes only. opts: from
+-- TraitPlan.Options (nil: 3.4.1's).
+function TraitPlan.Desired(public, opts)
+	local verified = opts and opts.icons
 	local out = {}
 	for axisId, entry in pairs(public and public.personality or {}) do
 		local axis = Schema.PERSONALITY_AXIS_BY_ID[axisId]
 		if axis then
 			-- The player's own words for the axis (#21), when the profile has them.
 			local words = public.axisWords and public.axisWords[axisId] or {}
-			local li, ri = TraitPlan.Icons(axisId)
+			local li, ri = TraitPlan.Icons(axisId, verified)
 			out[axisId] = { LT = words.left or axis.left, RT = words.right or axis.right,
 				V2 = TraitPlan.ToTRP3(entry.value), LI = li, RI = ri }
 		end
@@ -165,9 +213,9 @@ end
 
 -- The icons a desired trait carries (verified; the axis's own when the
 -- desired entry names none).
-local function desiredIcons(axisId, d)
-	local li, ri = TraitPlan.Icons(axisId)
-	return d.LI and TraitPlan.SafeIcon(d.LI) or li, d.RI and TraitPlan.SafeIcon(d.RI) or ri
+local function desiredIcons(axisId, d, verified)
+	local li, ri = TraitPlan.Icons(axisId, verified)
+	return d.LI and TraitPlan.SafeIcon(d.LI, verified) or li, d.RI and TraitPlan.SafeIcon(d.RI, verified) or ri
 end
 
 local function sortedKeys(t)
@@ -182,9 +230,13 @@ end
 -- record: ledger { owned = { [axisId] = { LT, RT, V2 } } } or nil.
 -- desired: from TraitPlan.Desired.
 -- maxTraits: the most traits TRP3 allows in the list (nil = no limit known).
+-- opts: from TraitPlan.Options (the Total RP 3 version's icon allowlist and
+-- placeholders; nil: 3.4.1's).
 -- Returns { action = "noop" | "write" | "conflict", characteristics, record,
 -- changes = { "added courage", ... }, reason }.
-function TraitPlan.Plan(characteristics, record, desired, maxTraits)
+function TraitPlan.Plan(characteristics, record, desired, maxTraits, opts)
+	local verified = opts and opts.icons
+	local placeholders = opts and opts.placeholders
 	characteristics.PS = characteristics.PS or {}
 	local list = characteristics.PS
 	local owned = record and record.owned or {}
@@ -256,12 +308,12 @@ function TraitPlan.Plan(characteristics, record, desired, maxTraits)
 			-- stays. The ledger keeps the icon Dawnward wrote, so a later
 			-- restyle by the player is recognised as theirs.
 			local o = owned[axisId]
-			local li, ri = desiredIcons(axisId, d)
+			local li, ri = desiredIcons(axisId, d, verified)
 			local restyled = false
-			if trait.LI ~= li and TraitPlan.Replaceable(trait.LI, o.LI) then
+			if trait.LI ~= li and TraitPlan.Replaceable(trait.LI, o.LI, placeholders) then
 				trait.LI, restyled = li, true
 			end
-			if trait.RI ~= ri and TraitPlan.Replaceable(trait.RI, o.RI) then
+			if trait.RI ~= ri and TraitPlan.Replaceable(trait.RI, o.RI, placeholders) then
 				trait.RI, restyled = ri, true
 			end
 			if restyled then
@@ -285,7 +337,7 @@ function TraitPlan.Plan(characteristics, record, desired, maxTraits)
 					reason = "Total RP 3 allows at most " .. maxTraits .. " personality traits" }
 			end
 			local d = desired[axisId]
-			local li, ri = desiredIcons(axisId, d)
+			local li, ri = desiredIcons(axisId, d, verified)
 			list[#list + 1] = { LT = d.LT, LI = li, RT = d.RT, RI = ri, V2 = d.V2 }
 			newOwned[axisId] = { LT = d.LT, RT = d.RT, V2 = d.V2, LI = li, RI = ri }
 			changes[#changes + 1] = "added " .. axisId

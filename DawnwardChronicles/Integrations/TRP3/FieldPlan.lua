@@ -86,10 +86,31 @@ FieldPlan.GAME_FILL = { FN = true, RA = true, CL = true }
 --- The game's own values for the replaceable defaults, read from env
 -- (UnitName, UnitRace, UnitClass through Character.GameValue). Read only;
 -- missing functions are skipped.
+--
+-- Total RP 3 3.5.x (VersionProfiles adapters.nameDefaults = "given_family")
+-- fills a new profile with FN = Globals.player_given_name and LN =
+-- Globals.player_family_name (3.5.4 RegisterCharacteristics.lua 48-50,
+-- Core/Profiles.lua 283-285; Core/Globals.lua 49-51 split the character's
+-- unmodified name at the client's surname separator, Core/NameUtil.lua
+-- 174-215). Those two are read from TRP3_API.globals (read only) and count
+-- as TRP3's own defaults; LN is never filled back in (not in GAME_FILL).
 function FieldPlan.GameDefaults(env)
 	local GameValue = ns.Character.GameValue
-	return { RS = FieldPlan.RELATIONSHIP_UNKNOWN, FN = env and GameValue("firstName", env) or nil,
+	local out = { RS = FieldPlan.RELATIONSHIP_UNKNOWN, FN = env and GameValue("firstName", env) or nil,
 		RA = env and GameValue("race", env) or nil, CL = env and GameValue("class", env) or nil }
+	if env and ns.TRP3VersionProfiles.Adapters(env).nameDefaults == "given_family" then
+		local ok, given, family = pcall(function()
+			local g = env.TRP3_API.globals
+			return g.player_given_name, g.player_family_name
+		end)
+		if ok and type(given) == "string" and given ~= "" then
+			out.FN = given
+		end
+		if ok and type(family) == "string" and family ~= "" then
+			out.LN = family
+		end
+	end
+	return out
 end
 FieldPlan.BY_ID = {}
 for _, m in ipairs(FieldPlan.MAPPINGS) do
