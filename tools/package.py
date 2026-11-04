@@ -140,6 +140,17 @@ def check_lua_syntax(files):
     return errors
 
 
+# An independent check of each target's interface number (the TARGETS table
+# alone could be edited wrongly, for example the two numbers swapped).
+EXPECTED_INTERFACE = {"classic": range(11300, 11600), "forever": range(16000, 16100)}
+
+
+def sanity(target, spec):
+    if spec["interface"] not in EXPECTED_INTERFACE[target]:
+        return [f"{target} interface {spec['interface']} is outside the expected range for that client"]
+    return []
+
+
 def verify(zip_path, target, spec):
     """Re-reads a written zip and checks it. Returns a list of problems."""
     problems = []
@@ -210,15 +221,25 @@ def build(target, files, source_toc, commit, dirty):
             info.external_attr = 0o644 << 16
             data = toc.encode("utf-8") if rel == toc_rel else (ROOT / rel).read_bytes()
             zf.writestr(info, data)
-    out.write_bytes(buf.getvalue())
-    problems = verify(out, target, spec)
-    digest = hashlib.sha256(out.read_bytes()).hexdigest()
+    # Written beside its final name and moved into place only once verified:
+    # a package that fails verification never sits in dist/ with a checksum.
+    for stale in (out, out_dir / (out.name + ".sha256"), out_dir / (out.name + ".manifest.json")):
+        if stale.exists():
+            stale.unlink()
+    pending = out_dir / (out.name + ".unverified")
+    pending.write_bytes(buf.getvalue())
+    problems = sanity(target, spec) + verify(pending, target, spec)
+    digest = hashlib.sha256(pending.read_bytes()).hexdigest()
     manifest = {
         "target": target, "file": out.name, "version": version,
         "displayVersion": field(toc, "X-Display-Version") or version,
         "interface": spec["interface"], "commit": commit, "dirty": dirty,
         "sha256": digest, "files": len(files),
     }
+    if problems:
+        pending.unlink()
+        return out, digest, problems, manifest
+    pending.replace(out)
     (out_dir / (out.name + ".sha256")).write_text(f"{digest}  {out.name}\n", encoding="utf-8")
     (out_dir / (out.name + ".manifest.json")).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return out, digest, problems, manifest
