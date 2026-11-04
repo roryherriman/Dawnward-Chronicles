@@ -38,10 +38,10 @@ end
 -- LOADING_SCREEN_ENABLED/DISABLED (LoadingScreenDocumentation.lua),
 -- CINEMATIC_STOP (Shared/CinematicFrame.lua).
 function SetupLaunch.Blocked()
-	if InCombatLockdown and InCombatLockdown() then
+	if ns.Compat.InCombat(false) then
 		return "combat"
 	end
-	if InCinematic and InCinematic() then
+	if ns.Compat.Plain(ns.Compat.Call(InCinematic)) then
 		return "cinematic"
 	end
 	if shown("CinematicFrame") or shown("MovieFrame") then
@@ -56,7 +56,8 @@ end
 local function schedule(delay)
 	generation = generation + 1
 	local mine = generation
-	C_Timer.After(delay, function()
+	-- Without a client timer the next loading-screen or combat-end event retries.
+	ns.Compat.After(delay, function()
 		if mine == generation then
 			SetupLaunch.Try()
 		end
@@ -66,7 +67,7 @@ end
 -- "Continue setting up …?" with the draft intact. Accept opens the wizard
 -- where it was left; anything else leaves it for Settings > Run setup.
 local function offer(ctx)
-	local name = UnitName and UnitName("player") or "this character"
+	local name = ns.Compat.Unit("UnitName") or "this character"
 	ctx.print("Setup for " .. tostring(name) .. " is unfinished. Resume it with /dawnward setup, or from "
 		.. "Settings > Run setup.")
 	ns.Widgets.Confirm("Continue setting up " .. tostring(name) .. "?\n\nYour answers so far are kept. "

@@ -80,6 +80,7 @@ Integrations\TRP3\Sync.lua
 Integrations\TRP3\Commands.lua
 
 Platform\Detect.lua
+Platform\Compat.lua
 Platform\Events.lua
 Platform\Observers.lua
 Platform\SafeTime.lua

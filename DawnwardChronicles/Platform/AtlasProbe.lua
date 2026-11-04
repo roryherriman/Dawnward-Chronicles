@@ -13,29 +13,22 @@ local Commands, Atlas = ns.Commands, ns.Atlas
 local AtlasProbe = {}
 ns.AtlasProbe = AtlasProbe
 
-local function results(ok, ...)
-	if ok then return ... end
-	return nil
-end
-
-local function call(fn, ...)
-	if type(fn) ~= "function" then return nil end
-	return results(pcall(fn, ...))
-end
-
-local function cmap(name)
-	return type(C_Map) == "table" and C_Map[name] or nil
-end
+-- Missing C_Map functions, errors, malformed replies and (Forever) secret
+-- values all read as "the client does not know" (Platform/Compat.lua).
+local call, plain, api = ns.Compat.Call, ns.Compat.Plain, ns.Compat.API
 
 --- The live client, wrapped for Core/Atlas.
 AtlasProbe.probe = {
 	areaName = function(id)
-		local name = call(cmap("GetAreaInfo"), id)
+		local name = plain(call(api("C_Map.GetAreaInfo"), id))
 		return type(name) == "string" and name ~= "" and name or nil
 	end,
 	mapInfo = function(id)
-		local info = call(cmap("GetMapInfo"), id)
-		return type(info) == "table" and info or nil
+		local info = call(api("C_Map.GetMapInfo"), id)
+		if type(info) ~= "table" then return nil end
+		local name, parent, mapType = plain(info.name), plain(info.parentMapID), plain(info.mapType)
+		return { name = type(name) == "string" and name or nil, parentMapID = type(parent) == "number" and parent or nil,
+			mapType = type(mapType) == "number" and mapType or nil }
 	end,
 }
 

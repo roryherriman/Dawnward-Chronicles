@@ -43,6 +43,8 @@ local WOW_READ = {
 	"IsShiftKeyDown", "GetTime", "UnitIsAFK", "RAID_CLASS_COLORS", "SetPortraitTexture", "CreateFont", "GetLocale",
 	-- v0.9 first-login setup (Platform/SetupLaunch.lua)
 	"InCinematic",
+	-- v1.0 WoW Forever compatibility (Platform/Compat.lua): secret values on the 12.x engine
+	"issecretvalue",
 }
 
 files["DawnwardChronicles/Platform/"] = {
