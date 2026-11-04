@@ -495,7 +495,7 @@ function Mock.new(opts)
 					return opts.metadata[field]
 				end
 				if name == "DawnwardChronicles" and field == "Version" then
-					return opts.version or "0.10.3-dev"
+					return opts.version or "0.10.4-dev"
 				end
 				-- The package target a packaged TOC may declare (tools/package.py).
 				if name == "DawnwardChronicles" and field == "X-Dawnward-Target" then

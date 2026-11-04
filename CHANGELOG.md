@@ -12,6 +12,29 @@ Every release entry has a **Verified** line naming the highest test level reache
 
 A feature is never called "tested" or "compatible" in this file unless it reached L3 or L4.
 
+## [Unreleased]: 0.10.4-dev (Classic Era) and 1.0.0 Beta (WoW Forever): two packages, one source
+
+**Verified: L2** (mocked) for WoW Forever and Total RP 3 3.5.4; nothing has run in a Forever client. Classic Era behaviour is unchanged (the whole suite runs on the Classic mock). Private beta: nothing is published.
+
+### Two packages from one source
+- `python tools/package.py` builds `DawnwardChronicles-ClassicEra-<version>.zip` (interface 11509) and `DawnwardChronicles-Forever-v1.0.0-Beta.zip` (interface 16001, version `1.0.0-beta`, shown as "1.0.0 Beta", no developer commands) from the same git-tracked files; only the TOC differs and names its target (`## X-Dawnward-Target`). Each zip is re-read and verified (one root folder, TOC entries with exact letter case, Lua 5.1 syntax, interface in its client's range, no test/tool/private files or local paths) before it is moved into `dist/` with its SHA-256 and a manifest naming the commit. `tools/check.py` builds and verifies both.
+- Interface 16001: WoW Forever 1.60.1 build 70755 (Blizzard's UI source, `forever` branch) and Total RP 3 3.5.4's TOC. Static evidence: confirm in game with `/dump select(4, GetBuildInfo())`.
+
+### WoW Forever client compatibility (`Platform/Compat.lua`)
+- Forever is a modern client (game type camelot, project 18). Quest level and title use `C_QuestLog`, reputation uses `C_Reputation` when the Classic functions are absent; the Classic functions are used whenever they exist.
+- Secret values (Forever's engine) are never tested or shown: unit, zone, map, guild, instance, quest and away state read as unknown; an unknown combat or away state holds story cards and Total RP 3 writes.
+- If the character's name or realm cannot be read, Dawnward does not write under a shared "Unknown" key: the session is read-only and asks you to log in again.
+- Missing client functions degrade one feature with a message (`/dawnward status`), never a Lua error. Forever is recognised by project 18 or interface 16001 and labelled provisional; a package loaded on the other client warns once.
+- Places on Forever are tracked by name and map without Classic atlas classification (no Forever place data is claimed).
+
+### Total RP 3 3.5.4 (provisional, for WoW Forever)
+- Audited from source against 3.4.1. Writes are allowed for 3.5.4 only, with adapters where it differs (icons stored as file IDs, the new trait placeholder, name defaults); the profile icon is read-only there. Every other Total RP 3 version, including other 3.5.x builds, is read-only and `/dawnward trp3 diagnose` says so.
+- Re-applying an unchanged At First Glance slot in Total RP 3 no longer reads as a conflict; About and At First Glance icons are limited to ones 3.5.4 lists.
+
+### Tests
+- Forever client mock exposing only what the Forever source shows; Forever + Total RP 3 3.5.4 end-to-end; seeded fuzz and adversarial tests (biographies, corrupted SavedVariables and ledgers, identity collisions, event storms, combat, secret values, publication and simulation isolation). Issue #24 matrix: [docs/FOREVER_LAUNCH_GATE.md](docs/FOREVER_LAUNCH_GATE.md).
+- Windows helpers (`tools/windows/`): a read-only installation and addon inventory, and a verified backup of Dawnward and Total RP 3 data per game flavour.
+
 ## [Unreleased]: 0.10.3-dev (automatic memories, narrative approval, pronouns)
 
 **Verified: L2** (mocked). Prompted by the owner's level 1-6 playthrough. Dawnward remembers what happened; the player decides what it meant.

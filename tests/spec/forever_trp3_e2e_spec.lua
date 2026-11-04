@@ -199,9 +199,9 @@ return function(t, expect)
 			expect.truthy(traits >= 2, "two Public traits")
 			local peek = player.misc.PE["1"]
 			expect.equal(peek.TI, "Ink-stained hands")
-			-- Dawnward writes the icon name it allows (TraitPlan/GlancePlan icon
-			-- sets); 3.5.4 resolves a name or a file ID when it draws it.
-			expect.truthy(peek.IC == "inv_misc_note_02" or peek.IC == "900014", tostring(peek.IC))
+			-- On 3.5.4 Dawnward writes only icons 3.5.4 lists (GlancePlan.VERIFIED_354);
+			-- inv_misc_note_02 is not proven there, so TRP3's default stands in.
+			expect.truthy(peek.IC == "inv_misc_questionmark" or peek.IC == "134400", tostring(peek.IC))
 			expect.equal(player.character.CU, "Reading by the fire.")
 			expect.equal(player.character.CO, "Happy to RP.")
 			-- The fake's profile already says "in character" (RP = 1), the
