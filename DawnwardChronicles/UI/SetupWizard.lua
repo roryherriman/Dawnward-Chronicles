@@ -708,7 +708,8 @@ local function characterName()
 		return typed
 	end
 	local ok, name = pcall(UnitName, "player")
-	return ok and type(name) == "string" and name or nil
+	name = ok and ns.Compat.Plain(name) or nil
+	return type(name) == "string" and name or nil
 end
 
 --- What the Total RP 3 stage shows: { chip, tone, line, warn, warnTone,
@@ -1024,7 +1025,8 @@ function SetupWizard.Open(opts)
 		saveDraft()
 	end
 	local char = Actions.Character(ctx)
-	local name = UnitName and UnitName("player") or nil
+	local name = ns.Compat.Plain(ns.Compat.Call(UnitName, "player"))
+	if type(name) ~= "string" then name = nil end
 	local values = Onboarding.DefaultValues(char, name, not Actions.MinimapSettings(ctx).hidden)
 	local page, edited = 1, {}
 	-- The draft holds only what the player changed; everything else comes

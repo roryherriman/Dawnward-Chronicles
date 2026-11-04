@@ -403,7 +403,8 @@ local function refreshIdentity(char)
 	local name = char and char.fields.name and char.fields.name.value
 	if not name then
 		local ok, unitName = pcall(UnitName, "player")
-		name = ok and unitName or "Your character"
+		unitName = ok and ns.Compat.Plain(unitName) or nil
+		name = type(unitName) == "string" and unitName or "Your character"
 	end
 	frame.charName:SetText(name)
 	local title = char and char.fields.title and char.fields.title.value

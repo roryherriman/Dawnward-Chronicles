@@ -11,7 +11,7 @@ local TRP3Commands = {}
 ns.TRP3Commands = TRP3Commands
 
 local HELP = {
-	"Total RP 3 sync (EXPERIMENTAL, off by default; Total RP 3 3.4.1 only):",
+	"Total RP 3 sync (EXPERIMENTAL, off by default; audited Total RP 3 versions only: see trp3 diagnose):",
 	"  trp3 preview | trp3 profile (everything you would publish) | trp3 sync | trp3 paste | trp3 backups | trp3 log",
 	"  trp3 enable about|traits|glance confirm | trp3 disable about|traits|glance",
 	"  trp3 fields (each mapping, who manages it, and what Total RP 3 holds vs your Dawnward value)",
