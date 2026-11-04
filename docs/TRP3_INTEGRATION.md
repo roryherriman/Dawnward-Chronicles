@@ -174,9 +174,34 @@ Summary: **unchanged** - layouts of every section Dawnward writes, both save pat
 | Trait icons unproven on Forever | `TraitPlan.VERIFIED_354`: only the six icons 3.5.4 lists as a single candidate are written; the others fall back to `spell_arcane_mindmastery` |
 | `GetMiscTypeInfo().icon` is a number | `MiscPlan.PresetIcons` stores `tostring(id)`, as `miscAdd` does; a number is never accepted on a version that stores names |
 | New profile FN/LN from the given and family name | `FieldPlan.GameDefaults` reads `TRP3_API.globals.player_given_name` / `player_family_name` as TRP3's own defaults (replaceable, LN never filled back) |
-| Re-applied glance slot gets a serialised icon | no adapter: Dawnward compares exactly, so the player's Apply becomes a conflict (never overwritten) |
+| Icons TRP3 re-stores as file IDs (At First Glance Apply, `RegisterMisc.lua` 346; an icon picked in the About editor, `RegisterAbout.lua` 398-401) | `VersionProfiles.IconEquivalence` (only when `adapters.iconStorage == "id"`): the icon TRP3 holds is the one Dawnward wrote when it is the same name, or a stringified file ID equal to what TRP3's own `TRP3_IconUtil.GetIconID(name)` returns (`Core/IconUtil.lua` 16-18, a read-only LibRPMedia lookup). Nothing is written to resolve it. A missing, failing or non-numeric resolver means "not the same" (a conflict, as before: safe). Used by `GlancePlan` (owned slots: Apply pressed unchanged no longer pauses glance sync; another icon still does) and `AboutDoc` (whether a template 2 frame is still in Dawnward's style; a frame the player gave the same icon is still Dawnward's to update or remove). On 3.4.1 there is no resolver: icons compare exactly, as before. |
+| About frame and heading icons unproven on Forever | `Presentation.ICONS_354` (`adapters.interfaceIcons = "trp354"`, via `Presentation.IconSet`): only icons 3.5.4 lists as a single candidate (`InterfaceIcons.lua` 38, 48-50, 52, 91) or its built-in default (6-7) are written; the rest fall back to `Presentation.FALLBACK_ICON_354` (`inv_misc_book_09`) |
+| At First Glance presets unproven on Forever | `GlancePlan.VERIFIED_354` (`adapters.interfaceIcons = "trp354"`, via `GlancePlan.Options`): a picker preset not on it is written as `inv_misc_questionmark` (3.5.4's default, `InterfaceIcons.lua` 6-7); an icon name the player typed that is not a preset is their own choice and is written as typed |
 
 Ownership, conflict, backup, read-back and rollback are the same code for both versions.
+
+#### Icons on 3.5.x (evidence rule and what changed)
+
+Dawnward writes an icon on 3.5.x only when Total RP 3 3.5.4 itself proves it on every client it loads on: the ONLY candidate of a `GetFirstValidIcon` entry in `Resources/InterfaceIcons.lua` (a missing one is reported as an error, 10-27), or the built-in default `inv_misc_questionmark` / 134400 (6-7, also TRP3's own failsafe in `Core/IconUtil.lua` 6, 64-70). An older-client candidate proves nothing for Forever. **Static**, **L2** (`tests/spec/trp3_354_spec.lua`); display on a Forever client is **Pending Live Forever Verification**. 3.4.1 keeps every earlier choice (no adapter).
+
+| Where | Icon (3.4.1 choice) | 3.5.4 evidence | On 3.5.x |
+|---|---|---|---|
+| About section icon: overview, `AboutBlock.FRAME_ICON` | `inv_misc_book_09` | ONLY 48 DirectorySection | unchanged |
+| About section icon: biography | `inv_misc_book_12` | ONLY 49 HistorySection | unchanged |
+| About section icon: motivation | `inv_misc_note_06` | ONLY 50 MiscInfoSection | unchanged |
+| About section icon: personality | `spell_arcane_mindmastery` | ONLY 52 TraitSection | unchanged |
+| About section icon: appearance | `spell_nature_strength` | older-client candidate only (51 PhysicalSection) | **`inv_misc_book_09`** |
+| About section icon: developments | `inv_scroll_02` | older-client candidate only (71 TargetNotes) | **`inv_misc_book_09`** |
+| About icon choice "Company" | `inv_misc_grouplooking` | ONLY 38, 91 | unchanged |
+| About icon choices "Strength", "Scroll" | `spell_nature_strength`, `inv_scroll_02` | older-client only | **`inv_misc_book_09`**, or the section's own icon when that is proven |
+| Arcane style inline heading icons | the section's icon | as above | as above (`style.iconSet`) |
+| At First Glance default | `inv_misc_questionmark` | DEFAULT 6-7 | unchanged |
+| At First Glance presets proven on 3.5.4 | `inv_misc_book_09`, `inv_misc_book_12`, `inv_misc_note_06`, `inv_misc_grouplooking`, `spell_arcane_mindmastery`, `spell_nature_sleep`, `spell_holy_silence`, `spell_nature_swiftness`, `inv_misc_coin_02`, `ability_rogue_disguise`, `ability_dualwield`, `inv_valentinescandy`, `inv_jewelry_ring_14`, `inv_misc_gift_02`, `inv_rosebouquet01`, `spell_holy_holyguidance`, `ability_hunter_snipershot`, `inv_misc_cape_18`, `inv_helmet_13` | ONLY (line per icon in `GlancePlan.VERIFIED_354`) | unchanged |
+| Every other At First Glance preset (the 1.15.9-UI icons and the older-client candidates: `inv_misc_note_02`, `inv_scroll_04`, `inv_misc_coin_01`, `inv_misc_pocketwatch_01`, `inv_misc_dice_02`, `inv_scroll_02`, `inv_scroll_01`, `inv_scroll_07`, `inv_misc_scrollunrolled01`, `inv_misc_map_01`, `inv_misc_gear_01`, `spell_nature_strength`, `spell_shadow_charm`, `spell_nature_massteleport`, `inv_misc_drum_06`, `inv_shirt_guildtabard_01`, `inv_jewelry_ring_36`, `inv_shield_35`, `spell_holy_auraoflight`, `inv_misc_food_02`, the six `spell_arcane_teleport*`, `inv_misc_head_gnome_01`, `inv_misc_head_troll_02`, `inv_helmet_20`) | as chosen | not proven | **`inv_misc_questionmark`** |
+| Trait icons | 12 icons | `TraitPlan.VERIFIED_354` | 6 proven + `spell_arcane_mindmastery` (unchanged by this rule) |
+| Template 3 part icons (`Presentation.T3_PARTS`) | preview only | Dawnward never writes T3 icons | n/a |
+
+Each icon compare site was checked for the file-ID re-storing: `GlancePlan` (owned slots; adapter above), `AboutDoc` (frame style; adapter above), `TraitPlan` (an icon that differs from Dawnward's is never a conflict, only kept as the player's, so no adapter: a re-picked same icon stays as TRP3 stored it), `MiscPlan` (owns the value, never compares icons), `StatusPlan` profile icon (read-only on 3.5.x), `AboutBlock.Plan` (the v0.3-v0.8 block, no longer planned by the sync; exact). Known limits: Dawnward's own pickers and its About preview still list and show the 3.4.1 choices; on 3.5.x an unproven choice is written as the fallback shown above.
 
 ### Feature matrix (version-pinned)
 
@@ -193,7 +218,8 @@ Evidence levels: **Static** (source, file:line above), **L2 mocked / automated**
 | Profile fields | write | write | Static, L2 | Set Age, sync, TRP3 shows it; edit it in TRP3: Dawnward pauses the field |
 | First/last name defaults | FN only | FN + LN | Static, L2 | `/dump TRP3_API.globals.player_given_name, TRP3_API.globals.player_family_name` on a new profile; whether Forever uses regional names |
 | Additional information (MI) | write | write (icon as ID string) | Static, L2 | Sync Pronouns: entry shows the Pronouns icon |
-| At First Glance | write | write | Static, L2 | Entries land in free slots only; Apply a Dawnward slot in TRP3, next sync reports a conflict |
+| At First Glance | write | write; unproven presets fall back | Static, L2 | Entries land in free slots only; open a Dawnward slot in TRP3 and press Apply without changing it: the next sync is "noop" (not a conflict); change its text or icon and Apply: the next sync reports a conflict |
+| About frame and heading icons | 3.4.1 choices | 3.5.4-proven + `inv_misc_book_09` fallback | Static, L2 | With template 2 (frames) and the Arcane style, every Dawnward frame and heading shows a real icon (no green square, no question mark); `/dump` of `about.T2[n].IC` shows the names Dawnward wrote |
 | Currently / OOC | write (setters) | write (setters) | Static, L2 | Set in Dawnward, sync, TRP3 toolbar shows it; nearby player sees it |
 | RP status / walk-up | write (setters) | write (setters) | Static, L2 | Toggle; TRP3 toolbar and tooltip agree |
 | Class colour | write (setter) | write (setter) | Static, L2 | Colour shows in TRP3 tooltip |

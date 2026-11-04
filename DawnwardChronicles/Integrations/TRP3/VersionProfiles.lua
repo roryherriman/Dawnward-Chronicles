@@ -22,6 +22,9 @@ VersionProfiles.BASE_ADAPTERS = {
 	-- TraitPlan.PLACEHOLDER_SETS).
 	traitIcons = "classic",
 	traitPlaceholders = "name",
+	-- Allowlist for the About frame and heading icons and the At First Glance
+	-- presets Dawnward writes (Presentation.IconSet, GlancePlan.Options).
+	interfaceIcons = "classic",
 	-- How TRP3 fills a new profile's first (and last) name: "unit" means
 	-- FN = Globals.player (UnitNameUnmodified), no LN.
 	nameDefaults = "unit",
@@ -75,9 +78,14 @@ VersionProfiles.KNOWN = {
 	--     Resources/InterfaceIcons.lua 9-42), so GetMiscTypeInfo(type).icon
 	--     is a number; a new entry gets tostring of it, as TRP3's miscAdd
 	--     does (RegisterCharacteristics.lua 610-617);
-	--   * trait icons: only icons 3.5.4 lists as the single candidate of an
+	--   * trait icons, About frame and heading icons and At First Glance
+	--     presets: only icons 3.5.4 lists as the single candidate of an
 	--     interface icon (so every client 3.5.4 loads on, Forever included,
 	--     must have them) are written; the rest fall back;
+	--   * an icon Dawnward wrote by name and TRP3 later re-stored as its file
+	--     ID (At First Glance Apply, RegisterMisc.lua 346; an icon picked in
+	--     an editor) is the same icon when TRP3's read-only resolver says so
+	--     (IconEquivalence below), not a change by the player;
 	--   * a new profile starts with FN = Globals.player_given_name and LN =
 	--     Globals.player_family_name (RegisterCharacteristics.lua 48-50,
 	--     Core/Globals.lua 49-51), which count as TRP3's own defaults.
@@ -91,6 +99,7 @@ VersionProfiles.KNOWN = {
 			iconStorage = "id",
 			traitIcons = "trp354",
 			traitPlaceholders = "id",
+			interfaceIcons = "trp354",
 			nameDefaults = "given_family",
 		},
 		readOnlyRows = {
@@ -167,4 +176,40 @@ end
 --- The adapters for the Total RP 3 in env (3.4.1's when unknown).
 function VersionProfiles.Adapters(env)
 	return VersionProfiles.ForEnv(env).adapters
+end
+
+--- How Dawnward tells that an icon TRP3 holds is one Dawnward wrote, for a
+-- Total RP 3 version that re-stores icons as file IDs (adapters.iconStorage
+-- = "id"). Returns function(stored, mine) -> boolean, or nil for every
+-- other version: they compare exactly, as 3.4.1 always did.
+--
+-- The same icon: the same name, or a stored stringified file ID (what
+-- TRP3_IconUtil.SerializeIcon makes, 3.5.4 Core/IconUtil.lua 39-56) that
+-- TRP3's own TRP3_IconUtil.GetIconID (Core/IconUtil.lua 16-18: a
+-- LibRPMedia lookup, which reads only) gives for Dawnward's name. Nothing is
+-- ever written to resolve it. A missing or failing resolver, or anything
+-- else, is "not the same", so the caller keeps treating it as the player's
+-- change (a conflict: safe).
+function VersionProfiles.IconEquivalence(env, adapters)
+	if not (adapters and adapters.iconStorage == "id") then
+		return nil
+	end
+	return function(stored, mine)
+		if stored == mine then
+			return stored ~= nil
+		end
+		if type(stored) ~= "string" or type(mine) ~= "string" or not stored:match("^%d+$") or #stored > 10 then
+			return false
+		end
+		local ok, id = pcall(function()
+			local util = env and env.TRP3_IconUtil
+			local get = type(util) == "table" and util.GetIconID
+			if type(get) ~= "function" then
+				return nil
+			end
+			return get(mine)
+		end)
+		return ok and type(id) == "number" and id > 0 and id == math.floor(id) and id < 2 ^ 31
+			and string.format("%d", id) == stored or false
+	end
 end

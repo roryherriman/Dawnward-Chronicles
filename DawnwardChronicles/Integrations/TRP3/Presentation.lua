@@ -146,6 +146,40 @@ Presentation.ICONS = {
 		.. "(TraitPlan.PLACEHOLDER, replaced since 0.10.2)",
 }
 
+-- Total RP 3 3.5.x (VersionProfiles adapters.interfaceIcons = "trp354"):
+-- the icons of the list above that Total RP 3 3.5.4 lists as the ONLY
+-- candidate of an interface icon (Resources/InterfaceIcons.lua resolves
+-- each with GetFirstValidIcon, 10-27, and reports a missing one as an
+-- error), so every client 3.5.4 loads on (Mainline and Forever) must have
+-- them, plus its built-in default (DEFAULT_ICON_NAME / DEFAULT_ICON_ID
+-- 134400, 6-7, which TRP3 itself falls back to: Core/IconUtil.lua 6, 64-70).
+-- spell_nature_strength (PhysicalSection, 51) and inv_scroll_02
+-- (TargetNotes, 71) are only older-client candidates there, which proves
+-- nothing for Forever: on 3.5.x they fall back to FALLBACK_ICON_354 until a
+-- live Forever check promotes them (docs/TRP3_INTEGRATION.md). Static
+-- evidence, 3.5.4 line numbers.
+Presentation.ICONS_354 = {
+	inv_misc_book_09 = "ONLY InterfaceIcons.lua:48 DirectorySection",
+	inv_misc_book_12 = "ONLY InterfaceIcons.lua:49 HistorySection",
+	inv_misc_note_06 = "ONLY InterfaceIcons.lua:50 MiscInfoSection",
+	spell_arcane_mindmastery = "ONLY InterfaceIcons.lua:52 TraitSection",
+	inv_misc_grouplooking = "ONLY InterfaceIcons.lua:38,91 ProfileDefault, ModeNormal",
+	inv_misc_questionmark = "DEFAULT InterfaceIcons.lua:6-7 (134400)",
+}
+-- The 3.5.x icon for a section whose own icon is not proven there: the
+-- closed book (DirectorySection), the icon of Dawnward's own frame.
+Presentation.FALLBACK_ICON_354 = "inv_misc_book_09"
+
+-- Icon allowlists by VersionProfiles adapters.interfaceIcons (nil: the
+-- 3.4.1 list above, unchanged).
+Presentation.ICON_SETS = { trp354 = Presentation.ICONS_354 }
+
+--- The icon allowlist for a Total RP 3 version's adapters: nil (3.4.1's
+-- choices, Presentation.ICONS) or a narrower list. Pure.
+function Presentation.IconSet(adapters)
+	return adapters and Presentation.ICON_SETS[adapters.interfaceIcons] or nil
+end
+
 -- Frame backgrounds Dawnward may give a frame it adds (an index into
 -- TRP3's tiled background list, Core/UITools.lua), each texture checked in
 -- the Classic Era 1.15.9 UI source.
@@ -188,12 +222,21 @@ function Presentation.SectionIcon(id)
 end
 
 --- An allowlisted icon: the chosen one when it is on the list, else the
--- section's default. Pure.
-function Presentation.SafeIcon(chosen, id)
-	if type(chosen) == "string" and Presentation.ICONS[chosen:lower()] then
+-- section's default. icons: a narrower list for the Total RP 3 version
+-- (Presentation.IconSet; nil: 3.4.1's), whose fallback is
+-- FALLBACK_ICON_354 when the section's default is not on it. Pure.
+function Presentation.SafeIcon(chosen, id, icons)
+	if not icons then
+		if type(chosen) == "string" and Presentation.ICONS[chosen:lower()] then
+			return chosen:lower()
+		end
+		return Presentation.SectionIcon(id)
+	end
+	if type(chosen) == "string" and Presentation.ICONS[chosen:lower()] and icons[chosen:lower()] then
 		return chosen:lower()
 	end
-	return Presentation.SectionIcon(id)
+	local own = Presentation.SectionIcon(id)
+	return icons[own] and own or Presentation.FALLBACK_ICON_354
 end
 
 --- An allowlisted background index: the chosen one, else the style's. Pure.
@@ -206,7 +249,9 @@ end
 
 --- A section heading line: {h2} (or {h3}) with the style's colour and, in
 -- the Arcane style, the section's icon. title is escaped (a player's own
--- heading can never become markup). icon: the section's chosen icon.
+-- heading can never become markup). icon: the section's chosen icon,
+-- allowlisted by style.iconSet (set by AboutDoc.Render for the Total RP 3
+-- version; nil: 3.4.1's list).
 function Presentation.SectionHeading(style, title, level, id, icon)
 	level = level == 3 and 3 or 2
 	local text = Presentation.Escape(title)
@@ -214,7 +259,7 @@ function Presentation.SectionHeading(style, title, level, id, icon)
 		text = "{col:" .. style.color .. "}" .. text .. "{/col}"
 	end
 	if style.icons then
-		text = "{icon:" .. Presentation.SafeIcon(icon, id) .. ":18} " .. text
+		text = "{icon:" .. Presentation.SafeIcon(icon, id, style.iconSet) .. ":18} " .. text
 	end
 	return "{h" .. level .. "}" .. text .. "{/h" .. level .. "}"
 end

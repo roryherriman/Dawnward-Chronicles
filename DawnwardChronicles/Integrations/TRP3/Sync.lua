@@ -52,10 +52,13 @@ end
 -- facts, stances and moments is no longer published. A record any earlier
 -- version wrote (v0.8 block, v0.9/v0.10 slots and frames) is replaced in
 -- place by AboutDoc.Plan, so the upgrade is one ordinary write.
+-- extra.aboutIcons and extra.sameIcon: the Total RP 3 version's icon
+-- allowlist and icon equivalence (Sync.Check; nil: 3.4.1's).
 local function planAbout(section, record, public, extra)
 	extra = extra or {}
 	return AboutDoc.Plan(section, record, AboutDoc.Build(public), { template = LAYOUT_TEMPLATE[public.trp3Layout],
-		style = public.trp3Style, accent = public.trp3Accent, adopt = extra.adopt })
+		style = public.trp3Style, accent = public.trp3Accent, adopt = extra.adopt, icons = extra.aboutIcons,
+		sameIcon = extra.sameIcon })
 end
 Sync.PlanAbout = planAbout
 
@@ -100,8 +103,9 @@ Sync.FEATURES = {
 	glance = {
 		section = "misc",
 		label = "At First Glance",
-		plan = function(section, record, public)
-			return GlancePlan.Plan(section, record, GlancePlan.Desired(public))
+		plan = function(section, record, public, extra)
+			local opts = extra and extra.glanceOptions
+			return GlancePlan.Plan(section, record, GlancePlan.Desired(public, opts), opts)
 		end,
 		planned = "misc",
 	},
@@ -396,7 +400,9 @@ function Sync.Check(deps, feature, publicOverride, fieldScope)
 	local plan = spec.plan(section, record[feature], public,
 		{ policies = policies, paused = record.fieldConflicts, adopt = adopt,
 			defaults = FieldPlan.GameDefaults(deps.env), names = MiscPlan.PresetNames(deps.env),
-			icons = MiscPlan.PresetIcons(deps.env), traitOptions = TraitPlan.Options(vp.adapters) })
+			icons = MiscPlan.PresetIcons(deps.env), traitOptions = TraitPlan.Options(vp.adapters),
+			glanceOptions = GlancePlan.Options(vp.adapters, deps.env), aboutIcons = Presentation.IconSet(vp.adapters),
+			sameIcon = VersionProfiles.IconEquivalence(deps.env, vp.adapters) })
 	result.plan = plan
 	result.adopt = adopt
 	result.notes = {}
@@ -1144,10 +1150,12 @@ function Sync.RollbackPreview(deps, backupId)
 		end
 	end
 	local preview = { backup = backup, items = items, ownPossible = true }
+	local vp = versionOf(deps, probe)
+	local sameIcon = VersionProfiles.IconEquivalence(deps.env, vp.adapters)
 	-- "Your own text only" needs Dawnward's old part to be separable.
-	local function separable(plan, owner)
+	local function separable(plan, owner, opts)
 		if preview.ownPossible and owner then
-			local ok, why = plan.WithoutOwned(data, owner)
+			local ok, why = plan.WithoutOwned(data, owner, opts)
 			if not ok then
 				preview.ownPossible, preview.ownReason = false, why
 			end
@@ -1156,11 +1164,11 @@ function Sync.RollbackPreview(deps, backupId)
 	if backup.section == "character" then
 		separable(StatusPlan.STATUS, owners.status)
 	elseif backup.section == "misc" then
-		separable(GlancePlan, owners.glance)
+		separable(GlancePlan, owners.glance, GlancePlan.Options(vp.adapters, deps.env))
 		separable(StylePlan, owners.style)
 	elseif backup.section == "about" then
 		if owners.about then
-			local ok, why = AboutDoc.Strip(data, owners.about)
+			local ok, why = AboutDoc.Strip(data, owners.about, sameIcon)
 			if not ok then
 				preview.ownPossible, preview.ownReason = false, why
 			end
@@ -1239,15 +1247,18 @@ local function ownOnly(deps, inputs)
 	local data = Util.DeepCopy(inputs.data)
 	local newOwners, conflicts = {}, nil
 	if backup.section == "about" then
+		local vp = versionOf(deps, inputs.probe)
+		local sameIcon = VersionProfiles.IconEquivalence(deps.env, vp.adapters)
 		if owners.about then
-			local stripped, why = AboutDoc.Strip(data, owners.about)
+			local stripped, why = AboutDoc.Strip(data, owners.about, sameIcon)
 			if not stripped then
 				return nil, "Dawnward's part of that backup cannot be separated (" .. tostring(why) .. ")"
 			end
 			data = stripped
 		end
 		if featureOn(entry, "about") then
-			local plan = planAbout(data, nil, public)
+			local plan = planAbout(data, nil, public, { aboutIcons = Presentation.IconSet(vp.adapters),
+				sameIcon = sameIcon })
 			if plan.action ~= "conflict" and plan.action ~= "unsupported" then
 				data, newOwners.about = plan.about, plan.record
 			end
@@ -1283,8 +1294,9 @@ local function ownOnly(deps, inputs)
 		return data, newOwners, conflicts
 	end
 	if backup.section == "misc" then
+		local glanceOptions = GlancePlan.Options(versionOf(deps, inputs.probe).adapters, deps.env)
 		if owners.glance then
-			local stripped, why = GlancePlan.WithoutOwned(data, owners.glance)
+			local stripped, why = GlancePlan.WithoutOwned(data, owners.glance, glanceOptions)
 			if not stripped then
 				return nil, "Dawnward's At First Glance entries in that backup cannot be separated (" .. why .. ")"
 			end
@@ -1293,7 +1305,7 @@ local function ownOnly(deps, inputs)
 		local ok, why = rows("style", "misc")
 		if not ok then return nil, why end
 		if featureOn(entry, "glance") then
-			local plan = GlancePlan.Plan(data, nil, GlancePlan.Desired(public))
+			local plan = GlancePlan.Plan(data, nil, GlancePlan.Desired(public, glanceOptions), glanceOptions)
 			if plan.action == "write" or plan.action == "noop" then
 				data, newOwners.glance = plan.misc, plan.record
 			end

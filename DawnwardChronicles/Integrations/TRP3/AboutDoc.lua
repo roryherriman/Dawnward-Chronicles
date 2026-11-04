@@ -396,13 +396,15 @@ end
 --- Renders a document for one template. Returns { T1 } (template 1),
 -- { frames = { {TX, IC, BK}, ... } } (template 2) or { PH, PS, HI }
 -- (template 3); a slot with nothing is "" (and absent frames are none).
--- styleId and accentId default to the document's own.
-function AboutDoc.Render(doc, template, styleId, accentId)
+-- styleId and accentId default to the document's own. icons: the icon
+-- allowlist for the Total RP 3 version (Presentation.IconSet; nil: 3.4.1's).
+function AboutDoc.Render(doc, template, styleId, accentId, icons)
 	local style = Presentation.Resolve(styleId or doc.style, accentId or doc.accent)
+	style.iconSet = icons
 	if template == 2 then
 		local frames = {}
 		for _, section in ipairs(doc) do
-			local icon = Presentation.SafeIcon(section.icon, section.id)
+			local icon = Presentation.SafeIcon(section.icon, section.id, icons)
 			local background = Presentation.SafeBackground(section.background, style)
 			for n, tx in ipairs(frameTexts(style, section)) do
 				frames[#frames + 1] = { TX = tx, IC = icon, BK = background,
@@ -527,6 +529,21 @@ local function styleKey(frame)
 end
 AboutDoc.StyleKey = styleKey
 
+-- Whether a frame is still in the style Dawnward recorded for it (was:
+-- "icon|background"). sameIcon (VersionProfiles.IconEquivalence; nil:
+-- exact, as 3.4.1) also accepts the icon as Total RP 3 3.5.x re-stores it
+-- (its file ID) when the player picked the same icon in its editor.
+local function inStyle(was, frame, sameIcon)
+	if was == styleKey(frame) then
+		return true
+	end
+	if not sameIcon or type(frame) ~= "table" then
+		return false
+	end
+	local icon, background = was:match("^(.*)|([^|]*)$")
+	return icon ~= nil and background == tostring(frame.BK) and sameIcon(frame.IC, icon) == true
+end
+
 -- The section a frame written before v0.10.1 (no frameIds in its record)
 -- held, from its first heading: a v0.10 section title, or the biography for
 -- any other heading (v0.9/v0.10 gave each of the player's chapters a frame).
@@ -545,9 +562,9 @@ end
 -- Whether the player restyled one of Dawnward's frames: it is not in the
 -- style Dawnward gave it (was), or (style unknown: a record from before
 -- v0.10.1) it has an icon or background Dawnward never writes.
-local function restyled(frame, was)
+local function restyled(frame, was, sameIcon)
 	if was and was ~= "" then
-		return was ~= styleKey(frame)
+		return not inStyle(was, frame, sameIcon)
 	end
 	return not (type(frame.IC) == "string" and Presentation.ICONS[frame.IC:lower()]
 		and Presentation.BACKGROUNDS[frame.BK])
@@ -566,7 +583,7 @@ end
 -- removed. A reused frame still in Dawnward's style takes the wanted icon
 -- and background; a restyled one keeps the player's. A restyled frame
 -- that is no longer needed is a conflict, never dropped.
-local function planFrames(frames, ownedList, wanted, mode, ownedStyles, ownedIds)
+local function planFrames(frames, ownedList, wanted, mode, ownedStyles, ownedIds, sameIcon)
 	frames = type(frames) == "table" and frames or {}
 	ownedList = ownedList or {}
 	ownedStyles = ownedStyles or {}
@@ -643,7 +660,7 @@ local function planFrames(frames, ownedList, wanted, mode, ownedStyles, ownedIds
 		end
 	end
 	for i = 1, #ownedList do
-		if not claimed[i] and restyled(frames[at[i]], ownedStyles[i]) then
+		if not claimed[i] and restyled(frames[at[i]], ownedStyles[i], sameIcon) then
 			return nil, "a frame Dawnward no longer needs has your own icon or background in Total RP 3; remove it "
 				.. "there yourself (or choose Keep yours) so your styling is not lost"
 		end
@@ -659,9 +676,15 @@ local function planFrames(frames, ownedList, wanted, mode, ownedStyles, ownedIds
 			local was = ownedStyles[i] or ""
 			-- In Dawnward's style: the one it recorded, or (no record: a frame
 			-- written before v0.10.1) an icon and background it writes.
-			if (was ~= "" and was == styleKey(base)) or (was == "" and not restyled(base, "")) then
-				copy.IC, copy.BK = want.IC, want.BK
-				was = styleKey(copy)
+			if (was ~= "" and inStyle(was, base, sameIcon)) or (was == "" and not restyled(base, "")) then
+				if sameIcon and base.BK == want.BK and base.IC ~= want.IC and sameIcon(base.IC, want.IC) then
+					-- Already the wanted icon, as Total RP 3 3.5.x stores it:
+					-- kept as it is (no write), recorded by Dawnward's name.
+					was = styleKey(want)
+				else
+					copy.IC, copy.BK = want.IC, want.BK
+					was = styleKey(copy)
+				end
 			end
 			built[k], styles[k] = copy, was
 		else
@@ -699,8 +722,8 @@ local function planFrames(frames, ownedList, wanted, mode, ownedStyles, ownedIds
 end
 
 -- Removes Dawnward's content from a copy of the About section. Returns the
--- copy, or nil plus a reason.
-local function stripInto(about, record)
+-- copy, or nil plus a reason. sameIcon: as for planFrames (nil: exact).
+local function stripInto(about, record, sameIcon)
 	record = AboutDoc.Upgrade(record)
 	if not record then
 		return about
@@ -714,7 +737,8 @@ local function stripInto(about, record)
 		h.TX = text ~= "" and text or nil
 	end
 	if record.frames and #record.frames > 0 then
-		local frames, err = planFrames(about.T2, record.frames, {}, record.mode, record.frameStyles, record.frameIds)
+		local frames, err = planFrames(about.T2, record.frames, {}, record.mode, record.frameStyles, record.frameIds,
+			sameIcon)
 		if not frames then
 			return nil, err
 		end
@@ -725,8 +749,9 @@ end
 
 --- A copy of the About section without Dawnward's content (any record
 -- version), or nil plus a reason when it cannot be separated exactly.
-function AboutDoc.Strip(about, record)
-	return stripInto(Util.DeepCopy(about), record)
+-- sameIcon: VersionProfiles.IconEquivalence (nil: exact, as 3.4.1).
+function AboutDoc.Strip(about, record, sameIcon)
+	return stripInto(Util.DeepCopy(about), record, sameIcon)
 end
 
 --- Plans the About page.
@@ -735,7 +760,8 @@ end
 -- doc: from Build. opts: { template = 1|2|3|nil (nil: keep Total RP 3's
 -- current template; a number switches it, an explicit player choice),
 -- style = id, accent = id (default: the document's), adopt = true (first
--- takeover) }.
+-- takeover), icons = Presentation.IconSet (nil: 3.4.1's), sameIcon =
+-- VersionProfiles.IconEquivalence (nil: icons compare exactly) }.
 -- Returns { action, about, record, reason } like AboutBlock.Plan.
 function AboutDoc.Plan(about, record, doc, opts)
 	opts = opts or {}
@@ -757,7 +783,7 @@ function AboutDoc.Plan(about, record, doc, opts)
 	-- A different template chosen in Dawnward: take Dawnward's content out of
 	-- the old one, then write the new one fresh.
 	if record and record.template ~= target then
-		local stripped, err = stripInto(about, record)
+		local stripped, err = stripInto(about, record, opts.sameIcon)
 		if not stripped then
 			return { action = "conflict", record = record, reason = err }
 		end
@@ -769,7 +795,7 @@ function AboutDoc.Plan(about, record, doc, opts)
 			mode = "append"
 		end
 	end
-	local rendered = AboutDoc.Render(doc, target, opts.style, opts.accent)
+	local rendered = AboutDoc.Render(doc, target, opts.style, opts.accent, opts.icons)
 	local newRecord = { template = target, mode = mode, slots = {}, frames = {} }
 	local before = Util.DeepCopy(about)
 	if target == 2 then
@@ -783,7 +809,7 @@ function AboutDoc.Plan(about, record, doc, opts)
 		local adoptFirst = mode == "adopt" and not (record and record.mode == "adopt")
 		local frames, owned, styles, ids = planFrames(about.T2, adoptFirst and {} or ownedFrames, rendered.frames,
 			adoptFirst and "adopt" or (record and record.mode or mode), record and record.frameStyles,
-			record and record.frameIds)
+			record and record.frameIds, opts.sameIcon)
 		if not frames then
 			return { action = "conflict", record = record, reason = owned }
 		end

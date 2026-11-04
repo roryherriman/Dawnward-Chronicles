@@ -635,4 +635,188 @@ return function(t, expect)
 			end)
 		end)
 	end)
+
+	-- Review finding M3: 3.5.4 turns every icon it stores through its own
+	-- editors into a file ID (TRP3_IconUtil.SerializeIcon, Core/IconUtil.lua
+	-- 39-56; At First Glance Apply, RegisterMisc.lua 346). An icon Dawnward
+	-- wrote by name is the same icon when TRP3's own read-only resolver
+	-- (TRP3_IconUtil.GetIconID, Core/IconUtil.lua 16-18) gives the stored ID.
+	t:describe("Total RP 3 3.5.x: icon equivalence (L2, fake 3.5.4)", function()
+		local function glanceWorld(fakeOpts, FakeModule)
+			local w = world(fakeOpts, FakeModule)
+			w.glance(1, "Silver scar", "Across the jaw.")
+			w.enable("glance")
+			expect.equal(w.run("glance").state, "written")
+			return w
+		end
+		local function applyUnchanged(w, ic)
+			local slot = w.player().misc.PE["1"]
+			w.fake.applyPeekSlot("1", ic or slot.IC, slot.AC, slot.TI, slot.TX)
+		end
+
+		t:it("Apply pressed unchanged on Dawnward's slot (icon now a file ID) keeps it Dawnward's", function()
+			local w = glanceWorld()
+			applyUnchanged(w)
+			expect.equal(w.player().misc.PE["1"].IC, "134400", "3.5.4 stored the question mark's file ID")
+			local check = w.Sync.Check(w.deps, "glance")
+			expect.equal(check.state, "noop", table.concat(check.reasons or {}, "; "))
+			expect.equal(w.run("glance").state, "noop", "no conflict and no churn")
+			expect.falsy(w.record().conflicts.glance, "glance sync is not paused")
+			-- Dawnward's next change still reaches the slot.
+			w.glance(1, "Silver scar", "Healed now.")
+			expect.equal(w.run("glance").state, "written")
+			expect.equal(w.player().misc.PE["1"].TX, "Healed now.")
+			expect.equal(w.record().glance.slots["1"].IC, "inv_misc_questionmark", "the ledger keeps the name")
+		end)
+
+		t:it("a different icon picked in Total RP 3 is still the player's: a conflict", function()
+			local w = glanceWorld()
+			applyUnchanged(w, "inv_misc_bone_01")
+			expect.equal(w.player().misc.PE["1"].IC, "900015")
+			local before = w.fake.snapshot()
+			expect.equal(w.run("glance").state, "conflict")
+			expect.deepEqual(w.fake.snapshot(), before, "nothing written")
+		end)
+
+		t:it("without a working TRP3_IconUtil.GetIconID a file ID is never guessed: a conflict", function()
+			for _, broken in ipairs({ "missing", "raises", "not a number", "no IconUtil" }) do
+				local w = glanceWorld()
+				applyUnchanged(w)
+				local util = w.fake.env.TRP3_IconUtil
+				if broken == "missing" then util.GetIconID = nil
+				elseif broken == "raises" then util.GetIconID = function() error("boom") end
+				elseif broken == "not a number" then util.GetIconID = function() return "134400" end
+				else w.fake.env.TRP3_IconUtil = nil end
+				expect.equal(w.run("glance").state, "conflict", broken)
+				expect.equal(w.player().misc.PE["1"].IC, "134400", broken .. ": the slot is kept")
+			end
+		end)
+
+		t:it("resolving an icon only reads: GetIconID is the one TRP3 call, and nothing changes", function()
+			local w = glanceWorld()
+			applyUnchanged(w)
+			local calls = {}
+			local util = w.fake.env.TRP3_IconUtil
+			local get = util.GetIconID
+			util.GetIconID = function(icon) calls[#calls + 1] = icon; return get(icon) end
+			util.SerializeIcon = function() error("Dawnward must not serialise icons") end
+			local before = w.fake.snapshot()
+			expect.equal(w.run("glance").state, "noop")
+			expect.deepEqual(w.fake.snapshot(), before)
+			expect.truthy(#calls > 0, "the resolver was asked")
+			for _, icon in ipairs(calls) do expect.equal(icon, "inv_misc_questionmark", "only Dawnward's own icon") end
+		end)
+
+		t:it("Classic (3.4.1) keeps the exact comparison: no resolver, a file ID is a conflict", function()
+			local w = glanceWorld({}, Fake341)
+			local VP = w.ns.TRP3VersionProfiles
+			expect.equal(VP.IconEquivalence(w.fake.env, VP.Get("3.4.1").adapters), nil)
+			expect.equal(type(VP.IconEquivalence(w.fake.env, VP.Get("3.5.4").adapters)), "function")
+			expect.equal(VP.IconEquivalence(w.fake.env, VP.Get("3.5.9").adapters), nil, "unaudited: none")
+			-- Even with a resolver present, 3.4.1 never uses it.
+			w.fake.env.TRP3_IconUtil = { GetIconID = function() return 134400 end }
+			applyUnchanged(w, "134400")
+			expect.equal(w.run("glance").state, "conflict")
+		end)
+
+		t:it("pure: IconEquivalence matches the same name or the same resolved file ID, nothing else", function()
+			local w = world()
+			local VP = w.ns.TRP3VersionProfiles
+			local same = VP.IconEquivalence(w.fake.env, VP.Get("3.5.4").adapters)
+			expect.truthy(same("inv_misc_questionmark", "inv_misc_questionmark"))
+			expect.truthy(same("134400", "inv_misc_questionmark"))
+			expect.truthy(same("900018", "inv_misc_book_09"))
+			expect.falsy(same("900015", "inv_misc_book_09"))
+			expect.falsy(same("134400", "not_an_icon"), "unresolvable: not the same")
+			expect.falsy(same("INV_Misc_QuestionMark", "inv_misc_questionmark"), "a different name is not the same")
+			expect.falsy(same(nil, "inv_misc_questionmark"))
+			expect.falsy(same(134400, "inv_misc_questionmark"), "only TRP3's stringified ID")
+			expect.falsy(same("134400.0", "inv_misc_questionmark"))
+		end)
+
+		t:it("an About frame the player gave the same icon in 3.5.4 is still Dawnward's to remove", function()
+			for _, case in ipairs({ { state = "written" }, { icon = "inv_misc_bone_01", state = "conflict" } }) do
+				local w = world({ about = { v = 2, TE = 2, T2 = {} } })
+				w.overview("A wandering scholar.")
+				w.field("appearance", "Grey eyes.")
+				w.enable("about")
+				expect.equal(w.run("about").state, "written")
+				local frames = w.player().about.T2
+				expect.equal(#frames, 2, "overview and appearance")
+				-- RegisterAbout.lua 398-401: an icon picked for a frame is SerializeIcon(iconInfo.id).
+				frames[2].IC = Fake.SerializeIcon(case.icon or frames[2].IC)
+				w.char().story.prefs.trp3Sections = { on = { appearance = false } }
+				expect.equal(w.run("about").state, case.state, case.icon or "the same icon")
+				if case.state == "written" then
+					expect.equal(#w.player().about.T2, 1, "the frame Dawnward no longer needs is removed")
+				else
+					expect.equal(w.player().about.T2[2].IC, "900015", "the player's own icon is kept")
+				end
+			end
+		end)
+	end)
+
+	-- Icons Dawnward names on 3.5.x must be ones 3.5.4 itself proves on every
+	-- client it loads on (the ONLY candidate of an interface icon,
+	-- Resources/InterfaceIcons.lua, or its built-in default 134400 /
+	-- inv_misc_questionmark, lines 6-7), as for trait icons (VERIFIED_354).
+	t:describe("Total RP 3 3.5.x: About and At First Glance icon evidence (L2, fake 3.5.4)", function()
+		t:it("About frames and Arcane headings use only 3.5.4-proven icons; 3.4.1's choices are unchanged", function()
+			local w = world({ about = { v = 2, TE = 2, T2 = {} } })
+			local P = w.ns.TRP3Presentation
+			w.overview("A wandering scholar.")
+			w.field("appearance", "Grey eyes.")
+			w.char().story.prefs.trp3Style = "arcane"
+			w.enable("about")
+			expect.equal(w.run("about").state, "written")
+			local frames = w.player().about.T2
+			expect.equal(#frames, 2)
+			for _, f in ipairs(frames) do
+				expect.truthy(P.ICONS_354[f.IC], tostring(f.IC) .. " is proven on 3.5.4")
+				for icon in f.TX:gmatch("{icon:([^:}]+):") do
+					expect.truthy(P.ICONS_354[icon:lower()], icon .. " (inline) is proven on 3.5.4")
+				end
+			end
+			expect.equal(frames[2].IC, P.FALLBACK_ICON_354, "appearance: spell_nature_strength is unproven")
+			expect.falsy(contains(w.player().about, "spell_nature_strength"))
+			expect.equal(w.run("about").state, "noop", "no churn")
+			-- 3.4.1 (and Dawnward's own preview) keep the original choices.
+			expect.equal(P.SafeIcon(nil, "appearance"), "spell_nature_strength")
+			expect.equal(P.SafeIcon(nil, "developments"), "inv_scroll_02")
+			expect.equal(P.SafeIcon("inv_scroll_02", "overview", P.ICONS_354), "inv_misc_book_09")
+			expect.equal(P.SafeIcon("inv_misc_note_06", "overview", P.ICONS_354), "inv_misc_note_06")
+			expect.equal(P.SafeIcon(nil, "developments", P.ICONS_354), P.FALLBACK_ICON_354)
+			expect.equal(P.IconSet(w.ns.TRP3VersionProfiles.Get("3.4.1").adapters), nil)
+			expect.equal(P.IconSet(w.ns.TRP3VersionProfiles.Get("3.5.4").adapters), P.ICONS_354)
+			for name in pairs(P.ICONS_354) do expect.truthy(P.ICONS[name], name .. " is also on the 3.4.1 list") end
+		end)
+
+		t:it("At First Glance presets unproven on 3.5.4 fall back; the player's typed icon is kept", function()
+			for _, case in ipairs({ { icon = "spell_nature_strength", want = "inv_misc_questionmark" },
+				{ icon = "inv_misc_note_02", want = "inv_misc_questionmark" },
+				{ icon = "spell_arcane_mindmastery", want = "spell_arcane_mindmastery" },
+				{ icon = "inv_misc_bone_01", want = "inv_misc_bone_01" } }) do
+				local w = world()
+				w.glance(1, "Silver scar")
+				assert(w.ns.Glance.SetIcon(w.char(), 1, case.icon, 1))
+				w.enable("glance")
+				expect.equal(w.run("glance").state, "written")
+				expect.equal(w.player().misc.PE["1"].IC, case.want, case.icon)
+				expect.equal(w.run("glance").state, "noop", case.icon .. ": no churn")
+				-- 3.4.1 writes the chosen icon as before.
+				local c = world(nil, Fake341)
+				c.glance(1, "Silver scar")
+				assert(c.ns.Glance.SetIcon(c.char(), 1, case.icon, 1))
+				c.enable("glance")
+				expect.equal(c.run("glance").state, "written")
+				expect.equal(c.player().misc.PE["1"].IC, case.icon, case.icon .. " on 3.4.1")
+			end
+			local w = world()
+			local choices = {}
+			for _, choice in ipairs(w.ns.Glance.ICON_CHOICES) do choices[choice] = true end
+			for name in pairs(w.ns.TRP3GlancePlan.VERIFIED_354) do
+				expect.truthy(choices[name], name .. " is one of Dawnward's presets")
+			end
+		end)
+	end)
 end
