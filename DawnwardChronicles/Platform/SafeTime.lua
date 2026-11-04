@@ -47,8 +47,9 @@ function SafeTime.Reasons()
 	if busy.loading then reasons[#reasons + 1] = "loading" end
 	-- UnitIsAFK: UnitDocumentation.lua; IsInInstance: Classic UI code
 	-- (classic_era 1.15.9.70576). Both are also used elsewhere in Dawnward.
-	if call(UnitIsAFK, "player") then reasons[#reasons + 1] = "away" end
+	if ns.Compat.IsAway() then reasons[#reasons + 1] = "away" end
 	local inInstance, instanceType = call(IsInInstance)
+	inInstance, instanceType = ns.Compat.Plain(inInstance), ns.Compat.Plain(instanceType)
 	if inInstance and (instanceType == "party" or instanceType == "raid") then
 		reasons[#reasons + 1] = "instance"
 	end

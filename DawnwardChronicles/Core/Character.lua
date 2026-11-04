@@ -187,6 +187,9 @@ function Character.GameValue(key, env)
 		return nil
 	end
 	local ok, value = pcall(fn, "player")
+	-- A secret value (WoW Forever) reads as nothing (Platform/Compat.lua);
+	-- comparing one could raise an error.
+	if ok and ns.Compat and ns.Compat.Plain then value = ns.Compat.Plain(value) end
 	if ok and type(value) == "string" and value ~= "" then
 		return value
 	end

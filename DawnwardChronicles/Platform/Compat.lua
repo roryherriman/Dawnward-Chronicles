@@ -224,6 +224,21 @@ function Compat.After(delay, fn)
 	return ok
 end
 
+--- Whether the player is away (UnitIsAFK). Forever documents UnitIsAFK as
+-- SecretInChatMessagingLockdown (Blizzard_APIDocumentationGenerated/
+-- UnitDocumentation.lua): a secret result is never tested directly (that
+-- can raise an error) and counts as away, so nothing that waits for the
+-- player's attention fires. A missing or failing function counts as not
+-- away, as before.
+function Compat.IsAway()
+	local fn = api("UnitIsAFK")
+	if not fn then return false end
+	local ok, v = pcall(fn, "player")
+	if not ok or v == nil then return false end
+	if plain(v) == nil then return true end
+	return v and true or false
+end
+
 --- Whether the player is in combat. When the client cannot say,
 -- returns ifUnknown (callers that write choose true: wait, never risk it).
 function Compat.InCombat(ifUnknown)

@@ -66,7 +66,7 @@ end
 
 function PlayClock.Init(ctx)
 	PlayClock.Read(ctx)
-	PlayClock.SetAway(ctx, call(UnitIsAFK, "player") and true or false)
+	PlayClock.SetAway(ctx, ns.Compat.IsAway())
 	local frame = CreateFrame("Frame")
 	frame:RegisterEvent("PLAYER_LOGOUT")
 	frame:RegisterEvent("PLAYER_FLAGS_CHANGED")
@@ -76,7 +76,7 @@ function PlayClock.Init(ctx)
 			if event == "PLAYER_LOGOUT" then
 				PlayClock.Read(ctx)
 			elseif unit == nil or unit == "player" then
-				PlayClock.SetAway(ctx, call(UnitIsAFK, "player") and true or false)
+				PlayClock.SetAway(ctx, ns.Compat.IsAway())
 			end
 		end)
 	end)

@@ -269,6 +269,7 @@ Mock.FOREVER_ENGINE_GLOBALS = {
 	date = "Lua global (Blizzard_SharedXML/TimeUtil.lua:47)",
 	time = "Lua global (Blizzard_FriendsFrame/Mainline/FriendsListUtil.lua:277)",
 	tinsert = "Lua global alias",
+	type = "Lua global (the mock reports a secret value's hidden type, as the client does)",
 }
 -- Classic Era globals that the forever branch neither documents nor calls
 -- from camelot-loaded code: removed from a Forever mock. GetQuestLogIndexByID
@@ -293,10 +294,33 @@ function Mock.MakeForever(mock, env, opts)
 	mock.clientApi = FOREVER_API
 	mock.knownEvents = FOREVER_API._events
 	mock.secrets = setmetatable({}, { __mode = "k" })
+	-- Secrets handed out, in order, and whether issecretvalue saw each: a
+	-- secret the addon used without asking first shows up in
+	-- mock.UncheckedSecrets() (a boolean test of a secret cannot raise an
+	-- error in plain Lua, so this is how the tests catch one).
+	mock.secretList, mock.secretChecked = {}, setmetatable({}, { __mode = "k" })
+	local rawType = type
 	function mock.Secret(v)
 		local s = setmetatable({}, SecretMT)
 		mock.secrets[s] = v == nil and true or v
+		mock.secretList[#mock.secretList + 1] = s
 		return s
+	end
+	function mock.UncheckedSecrets()
+		local n = 0
+		for _, s in ipairs(mock.secretList) do
+			if not mock.secretChecked[s] then n = n + 1 end
+		end
+		return n
+	end
+	-- In the client type() of a secret is the type of the value it hides;
+	-- only comparing, concatenating or indexing it fails.
+	env.type = function(v)
+		local hidden = mock.secrets[v]
+		if hidden ~= nil then
+			return hidden == true and "boolean" or rawType(hidden)
+		end
+		return rawType(v)
 	end
 	env.WOW_PROJECT_MAINLINE = 1
 	env.WOW_PROJECT_CLASSIC = 2
@@ -305,7 +329,13 @@ function Mock.MakeForever(mock, env, opts)
 	env.GetBuildInfo = function()
 		return "1.60.1", "70755", "Nov 3 2026", opts.interface or 16001, "1.60.1", "Release"
 	end
-	env.issecretvalue = function(v) return mock.secrets[v] ~= nil end
+	env.issecretvalue = function(v)
+		if mock.secrets[v] ~= nil then
+			mock.secretChecked[v] = true
+			return true
+		end
+		return false
+	end
 	for _, name in ipairs(Mock.FOREVER_REMOVED) do
 		env[name] = nil
 	end
